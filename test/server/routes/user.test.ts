@@ -1,3 +1,5 @@
+import { gzipSync } from 'node:zlib';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 import { setupTestServer } from '../../util/testServer';
@@ -43,6 +45,23 @@ describe('User Routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('email');
+    });
+
+    it('continues serving after a gzip frame followed by invalid trailing bytes', async () => {
+      const body = Buffer.concat([
+        gzipSync('{"email":"test@example.com"}'),
+        Buffer.from([0]),
+        Buffer.alloc(128 * 1024, 0x58),
+      ]);
+      await api
+        .post('/api/user/email')
+        .set('Content-Type', 'application/json')
+        .set('Content-Encoding', 'gzip')
+        .serialize((bytes) => bytes)
+        .send(body)
+        .expect(200);
+      expect(mockedSetUserEmail).toHaveBeenCalledWith('test@example.com');
+      await api.get('/health').expect(200);
     });
 
     it('should return 200 when email is valid', async () => {

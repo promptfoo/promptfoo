@@ -956,9 +956,11 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       ...(isCohereV2EmbeddingApiUrl(apiUrl) && { embedding_types: ['float'] }),
     };
 
-    let data;
+    let data,
+      status: number | undefined,
+      statusText = '';
     try {
-      ({ data } = (await fetchWithCache(
+      ({ data, status, statusText } = (await fetchWithCache(
         apiUrl,
         {
           method: 'POST',
@@ -983,6 +985,16 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       options?.abortSignal?.throwIfAborted();
       logger.error(`API call error: ${err}`);
       throw err;
+    }
+
+    // Same error reporting as the chat methods above, so a rejected request (bad key, quota)
+    // carries Cohere's own message instead of "No embedding found".
+    if (status !== undefined && (status < 200 || status >= 300)) {
+      throw new Error(
+        `API error: ${status} ${statusText}\n${
+          typeof data === 'string' ? data : JSON.stringify(data)
+        }`,
+      );
     }
 
     const embedding = Array.isArray(data?.embeddings)

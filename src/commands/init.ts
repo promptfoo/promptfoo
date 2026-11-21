@@ -226,7 +226,7 @@ export async function getExamplesList(): Promise<string[]> {
 }
 
 interface ExampleDownloadSelection {
-  exampleName: string | undefined;
+  exampleName: string;
   downloadRefs: string[];
 }
 
@@ -260,14 +260,10 @@ function resolveExampleSelection(example: string): ExampleDownloadSelection {
         chalk.yellow(`Note: '${example}' has been renamed to '${resolved}'. Using new name.`),
       );
     }
-    return {
-      exampleName: resolved,
-      downloadRefs: DEFAULT_EXAMPLE_REFS,
-    };
   }
 
   return {
-    exampleName: example,
+    exampleName: resolved || example,
     downloadRefs: DEFAULT_EXAMPLE_REFS,
   };
 }
@@ -320,37 +316,26 @@ async function logExampleInstructions(
   }
 }
 
-async function selectExample(): Promise<string> {
+async function selectExample(): Promise<ExampleDownloadSelection> {
   const examples = await getExamplesList();
-  const choices = [
-    { name: 'None (initialize with dummy files)', value: '' },
-    ...examples.map((ex) => ({ name: ex, value: ex })),
-  ];
-
-  const selectedExample = await select({
+  const exampleName = await select({
     message: 'Choose an example to download:',
-    choices,
+    choices: [{ name: 'None (initialize with dummy files)', value: '' }, ...examples],
   });
-  return selectedExample;
+  return { exampleName, downloadRefs: DEFAULT_EXAMPLE_REFS };
 }
 
 export async function handleExampleDownload(
   directory: string | null,
   example: string | boolean | undefined,
 ): Promise<string | undefined> {
-  let exampleName: string | undefined;
-  let downloadRefs = DEFAULT_EXAMPLE_REFS;
-
-  if (example === true) {
-    exampleName = await selectExample();
-  } else if (typeof example === 'string') {
-    const selection = resolveExampleSelection(example);
-    exampleName = selection.exampleName;
-    downloadRefs = selection.downloadRefs;
+  if (example !== true && typeof example !== 'string') {
+    return;
   }
 
-  let attemptDownload = true;
-  while (attemptDownload && exampleName) {
+  let selection = example === true ? await selectExample() : resolveExampleSelection(example);
+  while (selection.exampleName) {
+    const { exampleName, downloadRefs } = selection;
     const targetDir = path.join(directory || '.', exampleName);
     try {
       await downloadExample(exampleName, targetDir, downloadRefs);
@@ -360,22 +345,17 @@ export async function handleExampleDownload(
           chalk.yellow(`Downloaded legacy example '${exampleName}' from ref '${downloadRefs[0]}'.`),
         );
       }
-      attemptDownload = false;
     } catch (error) {
       logger.error(`Failed to download example: ${error instanceof Error ? error.message : error}`);
       if (getUnsupportedExampleReason(exampleName)) {
         process.exitCode = 1;
         return exampleName;
       }
-      attemptDownload = await confirm({
+      const retry = await confirm({
         message: 'Would you like to try downloading a different example?',
         default: true,
       });
-      if (attemptDownload) {
-        exampleName = await selectExample();
-        downloadRefs = DEFAULT_EXAMPLE_REFS;
-      } else {
-        // User declined to try downloading a different example
+      if (!retry) {
         logger.info(
           dedent`
 
@@ -388,16 +368,13 @@ export async function handleExampleDownload(
         );
         return exampleName;
       }
+      selection = await selectExample();
+      continue;
     }
+
+    await logExampleInstructions(exampleName, directory, downloadRefs);
+    return exampleName;
   }
-
-  if (!exampleName) {
-    return;
-  }
-
-  await logExampleInstructions(exampleName, directory, downloadRefs);
-
-  return exampleName;
 }
 
 interface InitCommandOptions {
