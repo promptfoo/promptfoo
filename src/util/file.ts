@@ -108,6 +108,11 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
   return env;
 }
 
+interface ExternalFileLoadOptions {
+  /** The caller already rendered the path; do not evaluate templates introduced by its values. */
+  skipPathRendering?: boolean;
+}
+
 /**
  * Loads content from an external file if the input is a file path, otherwise
  * returns the input as-is. Supports Nunjucks templating for file paths.
@@ -116,6 +121,7 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  * an array of file paths, or any other type of data.
  * @param context - Optional context to control file loading behavior. 'assertion' context
  * preserves Python/JS file references instead of loading their content.
+ * @param options - Controls whether already-rendered file paths are preserved literally.
  * @returns The loaded content if the input was a file path, otherwise the original input.
  * For JSON and YAML files, the content is parsed into an object.
  * For other file types, the raw file content is returned as a string.
@@ -125,10 +131,11 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
   context?: 'assertion' | 'general' | 'vars',
+  options?: ExternalFileLoadOptions,
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path, context);
+      const content: any = maybeLoadFromExternalFile(path, context, options);
       return content;
     });
   }
@@ -141,9 +148,10 @@ export function maybeLoadFromExternalFile(
   }
 
   // Render the file path using Nunjucks
-  const renderedFilePath = getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')
-    ? filePath
-    : getNunjucksEngineForFilePath().renderString(filePath, {});
+  const renderedFilePath =
+    options?.skipPathRendering || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')
+      ? filePath
+      : getNunjucksEngineForFilePath().renderString(filePath, {});
 
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
@@ -544,6 +552,7 @@ export function maybeLoadResponseFormatFromExternalFile(
  * @param tools - The tools configuration object or array to process.
  * @param vars - Variables to use for rendering.
  * @param abortSignal - Prevents starting executable tool functions after cancellation.
+ * @param options - Controls additional file-path rendering after the supplied vars are rendered.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
  * @throws {Error} If the loaded tools are in an invalid format
  */
@@ -551,6 +560,7 @@ export async function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, VarValue>,
   abortSignal?: AbortSignal,
+  options?: ExternalFileLoadOptions,
 ): Promise<any> {
   abortSignal?.throwIfAborted();
   const rendered = renderVarsInObject(tools, vars);
@@ -649,7 +659,7 @@ export async function maybeLoadToolsFromExternalFile(
   // Array entries are already rendered; only load their file references.
   if (Array.isArray(rendered)) {
     const results = await Promise.all(
-      rendered.map((item) => maybeLoadToolsFromExternalFile(item, undefined, abortSignal)),
+      rendered.map((item) => maybeLoadToolsFromExternalFile(item, undefined, abortSignal, options)),
     );
     // Flatten if all items are arrays (common case: multiple file:// references)
     if (results.every((r) => Array.isArray(r))) {
@@ -664,7 +674,7 @@ export async function maybeLoadToolsFromExternalFile(
   }
 
   // Standard loading for JSON/YAML files
-  const loaded = maybeLoadFromExternalFile(rendered);
+  const loaded = maybeLoadFromExternalFile(rendered, undefined, options);
 
   // Validate the loaded result - tools must be an array or object, not a string
   if (loaded !== undefined && loaded !== null && typeof loaded === 'string') {
