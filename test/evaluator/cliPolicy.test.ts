@@ -154,7 +154,7 @@ describe('CLI progress policy', () => {
       'finalization failed',
     );
     expect(vi.mocked(CIProgressReporter).mock.results[0].value.error).toHaveBeenCalledWith(
-      'Evaluation failed: Error: finalization failed',
+      'Evaluation failed',
     );
   });
 });

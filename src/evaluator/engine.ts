@@ -4076,7 +4076,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       });
       return this.store.evaluation;
     } catch (error) {
-      cleanupProgressAfterError(progressBarManager, ciProgressReporter, error);
+      cleanupProgressAfterError(progressBarManager, ciProgressReporter);
       throw error;
     }
   }

@@ -53,11 +53,10 @@ export function updateComparisonReporterProgress({
 export function cleanupProgressAfterError(
   progressBarManager: ProgressBarManager | null,
   ciProgressReporter: CIProgressReporter | null,
-  error: unknown,
 ) {
   progressBarManager?.removeLogInterceptor();
   progressBarManager?.stop();
-  ciProgressReporter?.error(`Evaluation failed: ${String(error)}`);
+  ciProgressReporter?.error('Evaluation failed');
 }
 
 export function logWebUiEvalStepStart(
