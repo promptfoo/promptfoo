@@ -195,6 +195,7 @@ const inFlightBackgroundResponses = new Map<
   string,
   {
     promise: Promise<BackgroundResponseResult>;
+    committing: boolean;
     controller: AbortController;
     subscribers: number;
     billed: boolean;
@@ -596,6 +597,7 @@ async function resolveBackgroundResponse(
   updateCache: FetchWithCacheResult<OpenAIResponsesResponse>['updateCache'],
   cancelOnStop: boolean,
   deadline = Date.now() + timeout,
+  onCommit?: () => void,
 ): Promise<BackgroundResponseResult> {
   let polled = await pollBackgroundResponse(
     initial,
@@ -662,7 +664,7 @@ async function resolveBackgroundResponse(
       try {
         polled.shared = !(await claimBackgroundUsageOnce(
           `openai:background-billing:${billingIdentity.key}`,
-          { signal: request.signal, deadline },
+          { signal: request.signal, deadline, onCommit },
         ));
       } catch (error) {
         if (!request.signal?.aborted && Date.now() >= deadline) {
@@ -721,8 +723,11 @@ async function coalesceBackgroundResponse(
       updateCache,
       cancelOnStop,
       deadline,
+      () => {
+        inFlight!.committing = true;
+      },
     );
-    inFlight = { promise, controller, subscribers: 0, billed: false };
+    inFlight = { promise, controller, subscribers: 0, billed: false, committing: false };
     inFlightBackgroundResponses.set(cacheKey, inFlight);
     void promise
       .finally(() => {
@@ -744,6 +749,9 @@ async function coalesceBackgroundResponse(
     released = true;
     inFlight.subscribers--;
     if (inFlight.subscribers === 0 && callerSignal?.aborted) {
+      if (inFlightBackgroundResponses.get(cacheKey) === inFlight) {
+        inFlightBackgroundResponses.delete(cacheKey);
+      }
       inFlight.controller.abort(callerSignal.reason);
       return true;
     }
@@ -754,8 +762,15 @@ async function coalesceBackgroundResponse(
       return;
     }
     onAbort = () => {
-      if (release() && cancelOnStop) {
-        void deleteFromCache?.();
+      if (release()) {
+        // A successful commit is irreversible. Let the last subscriber receive
+        // its billed result. The shared abort still stops retries if COMMIT fails.
+        if (inFlight.committing) {
+          return;
+        }
+        if (cancelOnStop) {
+          void deleteFromCache?.();
+        }
       }
       reject(getAbortError(callerSignal));
     };
@@ -1485,7 +1500,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           ? 'beta=true'
           : undefined,
       );
-      const backgroundDeadline = body.background && !body.stream ? Date.now() + timeout : undefined;
+      const backgroundDeadline = body.background ? Date.now() + timeout : undefined;
       const hasCustomHeader = (name: string) =>
         Object.keys(customHeaders).some((header) => header.toLowerCase() === name);
       const buildHeaders = (key: string | undefined) => ({

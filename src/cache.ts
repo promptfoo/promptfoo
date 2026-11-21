@@ -659,7 +659,7 @@ export function claimCacheKeyOnce(cacheKey: string): boolean {
  */
 export async function claimBackgroundUsageOnce(
   cacheKey: string,
-  options: { signal?: AbortSignal; deadline?: number } = {},
+  options: { signal?: AbortSignal; deadline?: number; onCommit?: () => void } = {},
 ): Promise<boolean> {
   const deadline = options.deadline ?? Date.now() + 5000;
   const checkDeadline = () => {
@@ -712,6 +712,9 @@ export async function claimBackgroundUsageOnce(
               args: [Buffer.from(hash, 'hex')],
             });
             checkDeadline();
+            if (result.rowsAffected === 1) {
+              options.onCommit?.();
+            }
             await transaction.commit();
             return result.rowsAffected === 1;
           } finally {
@@ -743,7 +746,11 @@ export async function claimBackgroundUsageOnce(
       client?.close();
     }
   }
-  return claimCacheKeyOnce(cacheKey);
+  const claimed = claimCacheKeyOnce(cacheKey);
+  if (claimed) {
+    options.onCommit?.();
+  }
+  return claimed;
 }
 
 function getSanitizedResponse(

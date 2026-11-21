@@ -2991,6 +2991,58 @@ describe('OpenAiResponsesProvider request building', () => {
     }
   });
 
+  it('delivers billed usage if cancellation races an irreversible commit', async () => {
+    mockBackgroundCreateAndPoll('resp_commit', 'Completed task', {
+      input_tokens: 10,
+      output_tokens: 5,
+      total_tokens: 15,
+    });
+    const controller = new AbortController();
+    vi.spyOn(cache, 'claimBackgroundUsageOnce').mockImplementationOnce(async (_key, options) => {
+      options?.onCommit?.();
+      controller.abort();
+      return true;
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', createTenantBackgroundOptions());
+    await expect(
+      provider.callApi('Complete this task', undefined, { abortSignal: controller.signal }),
+    ).resolves.toMatchObject({
+      cached: false,
+      output: 'Completed task',
+      tokenUsage: { total: 15 },
+    });
+  });
+
+  it('starts a new claim when an aborted SQLite operation is still settling', async () => {
+    const completed = { ...createCompletedResponse('Ready', 5, 15), id: 'resp_cancelled_claim' };
+    const queued = { id: completed.id, status: 'queued', output: [], usage: null };
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) =>
+      createMockFetchResponse(options?.method === 'POST' ? queued : completed),
+    );
+    const entered = createDeferred<void>();
+    const claim = createDeferred<boolean>();
+    const spy = vi
+      .spyOn(cache, 'claimBackgroundUsageOnce')
+      .mockImplementationOnce(() => {
+        entered.resolve();
+        return claim.promise;
+      })
+      .mockResolvedValueOnce(true);
+    const controller = new AbortController();
+    const provider = new OpenAiResponsesProvider('gpt-4.1', createTenantBackgroundOptions());
+    const pending = provider.callApi('Same job', undefined, { abortSignal: controller.signal });
+    await entered.promise;
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    const next = provider.callApi('Same job');
+    try {
+      await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+      await expect(next).resolves.toMatchObject({ output: 'Ready', cached: false });
+    } finally {
+      claim.resolve(false);
+    }
+  });
+
   it('preserves the claim deadline of a later shared subscriber', async () => {
     setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '100' });
     const started = Date.now();

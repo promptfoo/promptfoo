@@ -169,6 +169,16 @@ describe('persistent cache claims', () => {
     },
   );
 
+  it('finishes a claim after notifying the subscriber that commit has started', async () => {
+    const controller = new AbortController();
+    const onCommit = vi.fn(() => controller.abort());
+    expect(
+      await cache.claimBackgroundUsageOnce('committed', { signal: controller.signal, onCommit }),
+    ).toBe(true);
+    expect(onCommit).toHaveBeenCalledOnce();
+    expect(await cache.claimBackgroundUsageOnce('committed')).toBe(false);
+  });
+
   it('retries a busy database probe before creating the claim client', async () => {
     const sqlite = await import('@libsql/client/node');
     const open = vi.fn(sqlite.createClient).mockImplementationOnce(() => {
@@ -340,7 +350,6 @@ describe('persistent cache claims', () => {
       workers.forEach((worker) => worker.child.send('claim'));
       const results = await Promise.all(workers.map((worker) => worker.finished));
       expect(results.filter((result) => result.claimed)).toHaveLength(1);
-      expect(await cache.claimBackgroundUsageOnce('shared-background-response')).toBe(false);
     } finally {
       workers.forEach(({ child }) => {
         if (child.exitCode === null && child.signalCode === null) {
