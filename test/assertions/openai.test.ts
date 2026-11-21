@@ -1198,6 +1198,20 @@ describe('OpenAI assertions', () => {
       createValidToolsCallCheck(),
     );
 
+    it.each([
+      { message: 'MCP Tool Result (ping): done' },
+      { content: 'The response contains MCP Tool Result (ping): done' },
+      { content: 'MCP Tool Result (ping): done', tool_calls: [] },
+    ])('rejects unstructured evidence alongside invalid calls', async (output) => {
+      const result = await runAssertion({
+        assertion: toolsAssertion,
+        provider: mockProvider,
+        test: {},
+        providerResponse: { output },
+      });
+      expect(result.pass).toBe(false);
+    });
+
     it('should handle object output with MCP content', async () => {
       const outputObject = {
         content: 'MCP Tool Result (ask_question): React is a JavaScript library.',
