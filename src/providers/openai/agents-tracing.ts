@@ -610,36 +610,21 @@ function parseStructuredJson(value: string): unknown {
   });
 }
 
-function sanitizeCredentialText(
-  value: string,
-  inspectEncoding = true,
-  context?: AttributeContext,
-): string {
-  if (value.length > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
-    return '<redacted>';
+// Withhold the whole string when a credential has no reliable closing delimiter.
+function mustWithholdCredentialText(value: string): boolean {
+  if (
+    /\b(?:authorization|cookie)[ \t]*:[^\r\n]*\r?\n[ \t]/i.test(value) ||
+    /^\s*(?:Bearer|Basic)[ \t]+[A-Za-z\d._~+/-]{20,}=*\s*$/i.test(value) ||
+    /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY(?: BLOCK)?-----/.test(value) ||
+    hasCredentialNamedPayload(value)
+  ) {
+    return true;
   }
-  // A folded header can continue onto several lines.
-  if (/\b(?:authorization|cookie)[ \t]*:[^\r\n]*\r?\n[ \t]/i.test(value)) {
-    return '<redacted>';
-  }
-
-  if (/^\s*(?:Bearer|Basic)[ \t]+[A-Za-z\d._~+/-]{20,}=*\s*$/i.test(value)) {
-    return '<redacted>';
-  }
-
-  if (/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY(?: BLOCK)?-----/.test(value)) {
-    return '<redacted>';
-  }
-
-  if (hasCredentialNamedPayload(value)) {
-    return '<redacted>';
-  }
-
   for (const [, key] of value.matchAll(
     /^[ \t]*(?:export[ \t]+)?(?:const|let|var)[ \t]+([A-Za-z_$][\w$]*)[ \t]*:[^=\r\n]*=/gm,
   )) {
     if (isCredentialAttributeKey(key)) {
-      return '<redacted>';
+      return true;
     }
   }
 
@@ -648,14 +633,14 @@ function sanitizeCredentialText(
     /"tag"\s*:\s*"[^"]+"/.test(value) &&
     /"(?:protected|unprotected|recipients|header)"\s*:/.test(value)
   ) {
-    return '<redacted>';
+    return true;
   }
 
   if (
     /"kty"\s*:\s*"(?:RSA|EC|OKP|oct)"/.test(value) &&
     /"(?:d|p|q|dp|dq|qi|oth|k)"\s*:/.test(value)
   ) {
-    return '<redacted>';
+    return true;
   }
 
   // YAML values can span lines, including flow collections under credential keys.
@@ -663,7 +648,7 @@ function sanitizeCredentialText(
     /(?:^|[\r\n])[ \t]*(?:-[ \t]+)?(["']?)([A-Za-z_][A-Za-z\d_.-]*)\1[ \t]*:[ \t]*([^\r\n]*)/g,
   )) {
     if (isCredentialAttributeKey(key) && !/^[ \t]*["']/.test(scalar)) {
-      return '<redacted>';
+      return true;
     }
   }
 
@@ -671,7 +656,7 @@ function sanitizeCredentialText(
     /[,{\[]\s*(["']?)([A-Za-z_][A-Za-z\d_.-]*)\1\s*:\s*(?=(\S|$))/g,
   )) {
     if (isCredentialAttributeKey(key) && first !== '"' && first !== "'") {
-      return '<redacted>';
+      return true;
     }
   }
 
@@ -682,7 +667,7 @@ function sanitizeCredentialText(
       /(?:machine\s+\S+|default)\s+(?:password|account)\b/i.test(netrc)) &&
     /(?:^|\s)(?:password|account)\s+\S/i.test(netrc)
   ) {
-    return '<redacted>';
+    return true;
   }
 
   // Simple quoted fields can retain surrounding text. For ambiguous fields
@@ -695,8 +680,20 @@ function sanitizeCredentialText(
       continue;
     }
     if (isCredentialAttributeKey(key.replace(/(?<!\\)\\+$/, ''))) {
-      return '<redacted>';
+      return true;
     }
+  }
+
+  return false;
+}
+
+function sanitizeCredentialText(
+  value: string,
+  inspectEncoding = true,
+  context?: AttributeContext,
+): string {
+  if (value.length > MAX_STRUCTURED_ATTRIBUTE_BYTES || mustWithholdCredentialText(value)) {
+    return '<redacted>';
   }
 
   const options =
@@ -844,6 +841,13 @@ const FILE_COMMAND = /(?:^|[/\\])(?:rg|ag|[ef]?grep|findstr|ls)(?:\.exe)?$/i;
 const COMMAND_PREFIX =
   /^(?:\w+=[\s\S]*|-i|--ignore-environment|--|(?:.*[/\\])?(?:env|command|exec|git))$/;
 
+function classifyExecutable(word: string, arg = unquoteShellWord(word)) {
+  if (COMMAND_PREFIX.test(arg)) {
+    return 'start';
+  }
+  return FILE_COMMAND.test(arg) || FILE_COMMAND.test(word) ? 'operands' : 'unknown';
+}
+
 function curlArgumentRedactor(context?: AttributeContext) {
   let mode: 'start' | 'unknown' | 'operands' | 'curl' | 'expanded' =
     context === 'operands' || context === 'curl' ? context : 'start';
@@ -862,8 +866,8 @@ function curlArgumentRedactor(context?: AttributeContext) {
       return;
     }
     const arg = unquoteShellWord(word);
-    if (mode === 'start' && !COMMAND_PREFIX.test(arg)) {
-      mode = FILE_COMMAND.test(arg) || FILE_COMMAND.test(word) ? 'operands' : 'unknown';
+    if (mode === 'start') {
+      mode = classifyExecutable(word, arg);
     }
     if (containsCurl(word, arg)) {
       // A quoted shell program can hide both the option and its operand in one word.
@@ -1135,7 +1139,7 @@ function attributeContext(key: string, source?: Record<string, unknown>): Attrib
       if (program.length > MAX_STRUCTURED_ATTRIBUTE_BYTES || containsCurl(program)) {
         return 'curl';
       }
-      if (FILE_COMMAND.test(unquoteShellWord(program)) || FILE_COMMAND.test(program)) {
+      if (classifyExecutable(program) === 'operands') {
         context = 'operands';
       }
     }
@@ -1213,113 +1217,86 @@ function isJwe(value: unknown, budget: { remaining: number }): boolean {
   );
 }
 
-function sanitizeStructuredAttribute(
-  value: Record<string, unknown> | unknown[],
-  context?: AttributeContext,
-): Record<string, unknown> | unknown[] | string {
-  try {
+type StructuredValue = Record<string, unknown> | unknown[];
+
+function sanitizeStructuredAttribute(value: StructuredValue, context?: AttributeContext) {
+  const budget = { remaining: MAX_STRUCTURED_ATTRIBUTE_NODES };
+  let characters = MAX_STRUCTURED_ATTRIBUTE_BYTES;
+
+  function charge(nodes: number, size = 0) {
+    budget.remaining -= nodes;
+    characters -= size;
+    if (budget.remaining < 0 || characters < 0) {
+      throw new RangeError('Trace attribute exceeds sanitization limits');
+    }
+  }
+
+  function copyValue(value: unknown, context: AttributeContext, depth: number): unknown {
+    if (typeof value === 'function' || ArrayBuffer.isView(value)) {
+      return '<redacted>';
+    }
+    if (typeof value === 'string') {
+      return sanitizeSerializedAttribute(value, context);
+    }
+    if (value instanceof Date) {
+      return new Date(Date.prototype.getTime.call(value));
+    }
+    if (losslessJson.isRawJSON?.(value)) {
+      const { rawJSON } = value as { rawJSON: string };
+      charge(0, rawJSON.length);
+      return rawJSON.startsWith('"') ? '<redacted>' : value;
+    }
+    if (Array.isArray(value) || isRecord(value)) {
+      return copy(value, context, depth);
+    }
+    return typeof value === 'bigint' ? String(value) : value;
+  }
+
+  function copy(
+    source: StructuredValue,
+    context: AttributeContext,
+    depth: number,
+  ): StructuredValue | string {
     if (
-      !(value instanceof Date) &&
-      typeof (value as Record<string, unknown>).toJSON === 'function'
+      depth > MAX_STRUCTURED_ATTRIBUTE_DEPTH ||
+      typeof (source as Record<string, unknown>).toJSON === 'function' ||
+      isJwe(source, budget)
     ) {
       return '<redacted>';
     }
-    return sanitizeStructuredAttributeValue(value, context);
-  } catch {
-    return '<redacted>';
-  }
-}
-
-function sanitizeStructuredAttributeValue(
-  value: Record<string, unknown> | unknown[],
-  context: AttributeContext,
-): Record<string, unknown> | unknown[] | string {
-  const budget = { remaining: MAX_STRUCTURED_ATTRIBUTE_NODES };
-  if (isJwe(value, budget)) {
-    return '<redacted>';
-  }
-  type StructuredValue = Record<string, unknown> | unknown[];
-  const root: StructuredValue = Array.isArray(value) ? [] : {};
-  const stack: Array<{
-    source: StructuredValue;
-    target: StructuredValue;
-    depth: number;
-    context: AttributeContext;
-  }> = [{ source: value, target: root, depth: 0, context }];
-
-  while (stack.length > 0) {
-    const { source, target, depth, context } = stack.pop()!;
-    // Array holes also consume work when JSON.stringify serializes the copy.
-    if (Array.isArray(source)) {
-      budget.remaining -= source.length;
-      if (budget.remaining < 0) {
-        return '<redacted>';
-      }
-      (target as unknown[]).length = source.length;
-    }
-    const headers = context === 'headers' && Array.isArray(source);
-    const fields = Array.isArray(source) ? undefined : source;
-    const redactCurl = fields ? undefined : curlArgumentRedactor(context);
+    // Charge sparse array holes before allocating the copy.
+    const array = Array.isArray(source);
+    charge(array ? source.length : 0);
+    const target = array ? new Array<unknown>(source.length) : {};
+    const headers = array && context === 'headers';
+    const redactCurl = array ? curlArgumentRedactor(context) : undefined;
     for (const [key, value] of structuredAttributeEntries(source)) {
-      if (
-        --budget.remaining < 0 ||
-        key.length > MAX_STRUCTURED_ATTRIBUTE_BYTES ||
-        (typeof value === 'string' && value.length > MAX_STRUCTURED_ATTRIBUTE_BYTES)
-      ) {
-        return '<redacted>';
-      }
-
+      charge(1, key.length + (typeof value === 'string' ? value.length : 0));
       const entry = redactCurl?.(value) ?? value;
-      const nestedContext = headers ? 'headers' : attributeContext(key, fields);
-      let sanitized: unknown;
-      if (
-        typeof entry === 'function' ||
-        ArrayBuffer.isView(entry) ||
-        ((isRecord(entry) || Array.isArray(entry)) &&
-          !(entry instanceof Date) &&
-          typeof (entry as Record<string, unknown>).toJSON === 'function') ||
-        isCredentialPairValue(source, key, headers) ||
+      const nested = headers ? 'headers' : attributeContext(key, array ? undefined : source);
+      const sensitive =
         isCredentialAttributeKey(key) ||
-        isPrivateJwkParameter(source, key) ||
-        isJwe(entry, budget)
-      ) {
-        sanitized = '<redacted>';
-      } else if (losslessJson.isRawJSON?.(entry) || entry instanceof Date) {
-        sanitized = entry instanceof Date ? new Date(Date.prototype.getTime.call(entry)) : entry;
-      } else if (isRecord(entry) || Array.isArray(entry)) {
-        if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {
-          sanitized = '<redacted>';
-        } else {
-          const child: StructuredValue = Array.isArray(entry) ? [] : {};
-          stack.push({
-            source: entry,
-            target: child,
-            depth: depth + 1,
-            context: nestedContext,
-          });
-          sanitized = child;
-        }
-      } else if (typeof entry === 'string') {
-        sanitized = sanitizeSerializedAttribute(entry, nestedContext);
-      } else {
-        sanitized = typeof entry === 'bigint' ? String(entry) : entry;
-      }
-
-      const sanitizedKey = sanitizeSerializedAttribute(key);
-      Object.defineProperty(target, sanitizedKey, {
+        isCredentialPairValue(source, key, headers) ||
+        isPrivateJwkParameter(source, key);
+      Object.defineProperty(target, sanitizeSerializedAttribute(key), {
         configurable: true,
         enumerable: true,
-        value: sanitized,
+        value: sensitive ? '<redacted>' : copyValue(entry, nested, depth + 1),
         writable: true,
       });
     }
+    return target;
   }
 
-  if (Buffer.byteLength(safeJsonStringify(root), 'utf8') > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
+  try {
+    const root = copy(value, context, 0);
+    return Buffer.byteLength(JSON.stringify(root), 'utf8') <= MAX_STRUCTURED_ATTRIBUTE_BYTES
+      ? root
+      : '<redacted>';
+  } catch {
+    // A malformed or oversized value must not discard other spans in the batch.
     return '<redacted>';
   }
-
-  return root;
 }
 
 function* structuredAttributeEntries(

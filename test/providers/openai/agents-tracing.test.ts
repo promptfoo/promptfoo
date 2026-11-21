@@ -1993,6 +1993,9 @@ describe('OTLPTracingExporter', () => {
   it.each(formats)(
     'sanitizes custom linkage and bounds native arrays without consuming trailing code in %s',
     async (format) => {
+      const aggregate = Array<string>(70).fill('x'.repeat(1024));
+      const unread = vi.fn();
+      Object.defineProperty(aggregate, 69, { get: unread });
       const payload = await exportSpans(format, [
         {
           spanData: {
@@ -2002,7 +2005,7 @@ describe('OTLPTracingExporter', () => {
               'evaluation.id': 'sk-abcdefghijklmnopqrstuvwxyz',
               'test.case.id': 'sk-abcdefghijklmnopqrstuvwxyz',
               chunks: ['x'.repeat(65_537)],
-              aggregate: Array.from({ length: 65 }, () => 'x'.repeat(1024)),
+              aggregate,
               script: 'document.cookie = serializePreferences(settings); return response;',
               bytes: { nested: Buffer.from('opaque-bytes') },
             },
@@ -2021,7 +2024,8 @@ describe('OTLPTracingExporter', () => {
       expect.soft(attributes['evaluation.id']).toBe('<REDACTED_API_KEY>');
       expect.soft(attributes['test.case.id']).toBe('<REDACTED_API_KEY>');
       expect.soft(attributes.chunks === '<redacted>').toBe(true);
-      expect.soft(attributes.aggregate === '<redacted>').toBe(true);
+      expect(attributes.aggregate).toBe('<redacted>');
+      expect(unread).not.toHaveBeenCalled();
       expect.soft(attributes.script).toBe('document.cookie = <redacted>; return response;');
       expect.soft(attributes.bytes).toBe('{"nested":"<redacted>"}');
       expect(getAttributes(spans[1])).toMatchObject({
