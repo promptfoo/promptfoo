@@ -322,15 +322,14 @@ export default function Media() {
       return;
     }
 
-    // Only fetch if we're done loading and the item wasn't found in the current list
     if (!isLoading) {
-      // Item not in current list, fetch by hash directly
       void resolveDeepLinkByHash(hashParam);
-      return () => {
-        deepLinkRequestGenerationRef.current += 1;
-        setIsDeepLinkLoading(false);
-      };
     }
+    // A manual retry can start while the list is still loading.
+    return () => {
+      deepLinkRequestGenerationRef.current += 1;
+      setIsDeepLinkLoading(false);
+    };
   }, [hashParam, items, isLoading, resolveDeepLinkByHash]);
 
   const handleTypeFilterChange = useCallback(
@@ -401,6 +400,8 @@ export default function Media() {
   }, []);
 
   useEffect(() => {
+    // A confirmation applies only to the items shown when it was opened.
+    setShowBulkDownloadConfirm(false);
     setSelectedHashes((previous) => {
       if (previous.size === 0) {
         return previous;
@@ -434,10 +435,9 @@ export default function Media() {
 
   const handleBulkDownload = useCallback(async () => {
     // Use selected items if in selection mode, otherwise all items
-    const itemsToDownload =
-      isSelectionMode && selectedHashes.size > 0
-        ? items.filter((item) => selectedHashes.has(item.hash))
-        : items;
+    const itemsToDownload = isSelectionMode
+      ? items.filter((item) => selectedHashes.has(item.hash))
+      : items;
 
     if (itemsToDownload.length === 0) {
       return;
@@ -446,7 +446,7 @@ export default function Media() {
     // Track bulk download usage
     recordEvent('feature_used', {
       feature: 'media_library_download',
-      downloadType: isSelectionMode && selectedHashes.size > 0 ? 'selected' : 'all',
+      downloadType: isSelectionMode ? 'selected' : 'all',
       count: itemsToDownload.length,
     });
 
@@ -759,16 +759,13 @@ export default function Media() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                Download{' '}
-                {isSelectionMode && selectedHashes.size > 0 ? selectedHashes.size : items.length}{' '}
-                files?
+                Download {isSelectionMode ? selectedHashes.size : items.length} files?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                This will download{' '}
-                {isSelectionMode && selectedHashes.size > 0 ? selectedHashes.size : items.length}{' '}
-                files to your computer. Each file will be saved separately. Large downloads may take
-                a while and could be interrupted by your browser.
-                {!(isSelectionMode && selectedHashes.size > 0) && hasMore && (
+                This will download {isSelectionMode ? selectedHashes.size : items.length} files to
+                your computer. Each file will be saved separately. Large downloads may take a while
+                and could be interrupted by your browser.
+                {!isSelectionMode && hasMore && (
                   <> Scroll down to load more items before downloading if you need all {total}.</>
                 )}
               </AlertDialogDescription>
@@ -781,7 +778,7 @@ export default function Media() {
                   handleBulkDownload();
                 }}
               >
-                Download {isSelectionMode && selectedHashes.size > 0 ? 'Selected' : 'All'}
+                Download {isSelectionMode ? 'Selected' : 'All'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

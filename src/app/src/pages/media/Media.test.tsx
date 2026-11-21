@@ -75,7 +75,7 @@ const makeItem = (hash: string, description = `Item ${hash}`): MediaItem => ({
 
 const mockItems = [makeItem('aaa111', 'First item'), makeItem('bbb222', 'Second item')];
 
-function mockApiResponses(items: MediaItem[] = mockItems) {
+function mockApiResponses(items: MediaItem[] = mockItems, pendingList?: Promise<void>) {
   vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
     if (url.includes('/blobs/library/evals')) {
       return {
@@ -104,6 +104,9 @@ function mockApiResponses(items: MediaItem[] = mockItems) {
         } as Response;
       }
 
+      if (pendingList) {
+        await pendingList;
+      }
       return {
         ok: true,
         json: async () => ({
@@ -190,6 +193,30 @@ describe('Media page URL state machine', () => {
       expect(screen.getByText('1 of 1 selected')).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: 'Download (1)' })).toBeEnabled();
+  });
+
+  it('closes download confirmation when a pending sort replaces the selected page', async () => {
+    const user = userEvent.setup();
+    mockApiResponses(Array.from({ length: 11 }, (_, i) => makeItem(String(i), `Item ${i}`)));
+    renderMedia();
+    await screen.findByText('Item 0');
+    await user.click(screen.getAllByRole('button', { name: /^Download$/ })[0]);
+    await user.click(screen.getByRole('menuitem', { name: /Select Items/i }));
+    await user.click(screen.getByRole('button', { name: 'Select All' }));
+    let finish!: () => void;
+    mockApiResponses(
+      mockItems,
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await user.click(screen.getAllByRole('combobox')[0]);
+    await user.click(await screen.findByRole('option', { name: 'Oldest first' }));
+    await user.click(screen.getByRole('button', { name: 'Download (11)' }));
+    expect(screen.getByRole('alertdialog')).toBeVisible();
+    await act(async () => finish());
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(downloadFile).not.toHaveBeenCalled();
   });
 
   it('allows the header actions to wrap while a bulk download is running', async () => {
@@ -409,7 +436,7 @@ describe('Media page URL state machine', () => {
     expect(screen.queryByText('Loading media item...')).not.toBeInTheDocument();
   });
 
-  it('deep-link error: ignores a retry response after filters clear the requested hash', async () => {
+  it('deep-link error: ignores a retry response after navigation clears the hash during a sort', async () => {
     const user = userEvent.setup();
     const recoveredItem = makeItem('recovered', 'Recovered item');
     let resolveRetry!: (
@@ -432,11 +459,12 @@ describe('Media page URL state machine', () => {
       await screen.findByText('Server error while loading media item. Please try again later.'),
     ).toBeInTheDocument();
 
+    mockApiResponses(mockItems, new Promise<void>(() => {}));
+    await user.click(screen.getAllByRole('combobox')[0]);
+    await user.click(await screen.findByRole('option', { name: 'Oldest first' }));
     await user.click(screen.getByRole('button', { name: 'Retry' }));
-    await user.click(screen.getByRole('tab', { name: /Videos/i }));
-
+    act(() => navigateTo('/media'));
     await waitFor(() => {
-      expect(screen.getByTestId('location')).toHaveTextContent('type=video');
       expect(screen.getByTestId('location')).not.toHaveTextContent('hash=');
     });
 

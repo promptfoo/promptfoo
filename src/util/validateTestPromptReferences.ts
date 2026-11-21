@@ -35,12 +35,10 @@ function unquote(value: string): string {
   return value;
 }
 
-type SectionItem = { description?: string; location?: string };
-
 // While scanning we track an exact list-item match separately from a looser
 // substring match, so a valid prompt whose name *contains* the missing ref
 // (e.g. `- GhostBuster` when `Ghost` is missing) can't steal the location.
-type WorkingItem = SectionItem & { looseLocation?: string };
+type SectionItem = { description?: string; location?: string; looseLocation?: string };
 
 function refLocation(
   source: PromptReferenceSource,
@@ -67,7 +65,7 @@ function collectSectionItems(
   let inSection = false;
   let itemIndent: number | undefined;
   let promptsIndent: number | undefined;
-  const items: WorkingItem[] = [{}];
+  const items: SectionItem[] = [{}];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -122,10 +120,7 @@ function collectSectionItems(
     }
   }
 
-  return items.map((item) => ({
-    description: item.description,
-    location: item.location ?? item.looseLocation,
-  }));
+  return items;
 }
 
 /**
@@ -142,17 +137,13 @@ function findPromptReferenceLocation(
   let fallback: string | undefined;
 
   for (const source of sources ?? []) {
-    const withRef = collectSectionItems(source, ref, context.section).filter(
-      (item) => item.location,
-    );
-    const match =
-      targetDescription === undefined
-        ? withRef[0]
-        : withRef.find((item) => item.description === targetDescription);
-    if (match) {
-      return match.location;
+    for (const item of collectSectionItems(source, ref, context.section)) {
+      const location = item.location ?? item.looseLocation;
+      if (location && (targetDescription === undefined || item.description === targetDescription)) {
+        return location;
+      }
+      fallback ??= location;
     }
-    fallback ??= withRef[0]?.location;
   }
 
   return fallback;
