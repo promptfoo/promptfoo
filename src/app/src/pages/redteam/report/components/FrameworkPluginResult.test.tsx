@@ -128,6 +128,25 @@ describe('FrameworkPluginResult', () => {
     expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
   });
 
+  it('includes both aliases when opening combined results', async () => {
+    const alias = 'promptfoo:redteam:intent';
+    renderWithProviders(
+      <FrameworkPluginResult
+        evalId="example"
+        plugin="intent"
+        type="failed"
+        getPluginASR={() => ({ asr: 50, total: 2, failCount: 1, alias })}
+      />,
+    );
+    await userEvent.click(screen.getByText('intent'));
+    const { searchParams } = new URL(mockNavigate.mock.calls[0][0], 'https://example.com');
+    expect(searchParams.get('mode')).toBe('failures');
+    expect(JSON.parse(searchParams.get('filter')!)).toEqual([
+      { type: 'plugin', operator: 'equals', value: 'intent', logicOperator: 'or' },
+      { type: 'plugin', operator: 'equals', value: alias, logicOperator: 'or' },
+    ]);
+  });
+
   it('opens the aggregate harmful rows without expanding to child plugins', async () => {
     renderWithProviders(
       <FrameworkPluginResult

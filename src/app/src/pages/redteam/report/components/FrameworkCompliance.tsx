@@ -14,6 +14,7 @@ import FrameworkCard from './FrameworkCard';
 import {
   categorizePlugins,
   expandPluginCollections,
+  getFrameworkPluginStats,
   getPluginSeverity,
   type PluginCategories,
   type TestResultStats,
@@ -120,7 +121,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
     let totalTests = 0;
     let totalFailedTests = 0;
     pluginsWithData.forEach((plugin) => {
-      const stats = categoryStats[plugin];
+      const stats = getFrameworkPluginStats(plugin, categoryStats);
       totalTests += stats.total;
       totalFailedTests += stats.failCount;
     });

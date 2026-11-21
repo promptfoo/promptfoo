@@ -21,10 +21,11 @@ import {
   categorizePlugins,
   expandPluginCollections,
   FRAMEWORK_DESCRIPTIONS,
+  getFrameworkPluginStats,
   getPluginSeverity,
   type PluginCategories,
 } from './FrameworkComplianceUtils';
-import FrameworkPluginResult from './FrameworkPluginResult';
+import FrameworkPluginResult, { type FrameworkPluginResultProps } from './FrameworkPluginResult';
 
 // Maps severity to badge variants and styling
 const severityBadgeVariants: Record<
@@ -121,7 +122,7 @@ interface FrameworkPluginSectionProps {
   evalId: string;
   framework: string;
   categoryId: string;
-  getPluginASR: (plugin: string) => { asr: number; total: number; failCount: number };
+  getPluginASR: FrameworkPluginResultProps['getPluginASR'];
   type: PluginResultType;
 }
 
@@ -189,13 +190,9 @@ const FrameworkCard = ({
    * @returns The ASR for the given plugin.
    */
   const getPluginASR = useCallback(
-    (plugin: string): { asr: number; total: number; failCount: number } => {
-      const stats = categoryStats[plugin];
-      return {
-        asr: stats ? calculateAttackSuccessRate(stats.total, stats.failCount) : 0,
-        total: stats ? stats.total : 0,
-        failCount: stats ? stats.failCount : 0,
-      };
+    (plugin: string) => {
+      const { total, failCount, alias } = getFrameworkPluginStats(plugin, categoryStats);
+      return { asr: calculateAttackSuccessRate(total, failCount), total, failCount, alias };
     },
     [categoryStats],
   );

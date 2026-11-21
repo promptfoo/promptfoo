@@ -37,7 +37,7 @@ describe('framework CSV export', () => {
     restoreBrowserMocks();
   });
 
-  it('exports one harmful row with the short alias stats and correct severity', async () => {
+  it('exports one harmful row with both aliases combined and correct severity', async () => {
     const rows = await exportRows({
       'promptfoo:redteam:harmful:hate': { pass: 0, total: 10, failCount: 10 },
       'harmful:hate': { pass: 10, total: 10, failCount: 0 },
@@ -45,7 +45,7 @@ describe('framework CSV export', () => {
     });
 
     expect(rows.filter((row) => row.includes(',Hate Speech,'))).toEqual([
-      'MITRE ATLAS,N/A,Hate Speech,critical,10,0,0.00,Pass',
+      'MITRE ATLAS,N/A,Hate Speech,critical,20,10,50.00,Fail',
     ]);
     expect(rows.some((row) => row.includes('unmapped-plugin'))).toBe(false);
     expect(rows.every((row, index) => index === 0 || row.startsWith('MITRE ATLAS,'))).toBe(true);

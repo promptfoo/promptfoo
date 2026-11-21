@@ -274,6 +274,20 @@ describe('FrameworkCompliance', () => {
     );
   });
 
+  it('counts failures under either alias once in framework totals', () => {
+    renderFrameworkCompliance(
+      {
+        intent: { pass: 1, total: 1, failCount: 0 },
+        'promptfoo:redteam:intent': { pass: 0, total: 1, failCount: 1 },
+      },
+      0.9,
+      { redteam: { frameworks: ['owasp:agentic'] } },
+    );
+
+    expect(screen.getByText('Framework Compliance (0/1 tested)')).toBeInTheDocument();
+    expect(screen.getByText(/1\/2 tests failed across 1 plugin/)).toBeInTheDocument();
+  });
+
   it('should expand mapped plugin collections before determining framework compliance', () => {
     const categoryStats = {
       'harmful:violent-crime': { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },

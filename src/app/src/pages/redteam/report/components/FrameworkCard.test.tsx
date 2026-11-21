@@ -149,13 +149,11 @@ describe('FrameworkCard', () => {
         'harmful:hate': { pass: 10, total: 10, failCount: 0 },
         'promptfoo:redteam:harmful:hate': { pass: 0, total: 10, failCount: 10 },
       },
-      pluginCategories: categories(['harmful:hate']),
+      pluginCategories: categories([], ['harmful:hate']),
     });
 
-    // Both alias forms describe the same logical plugin, so each category listing it
-    // must render one row, not one per alias: owasp:llm:01 via the 'harmful'
-    // collection and owasp:llm:04 via an explicit 'harmful:hate' entry. The exact
-    // short key wins; the prefixed alias must not appear as a separate row.
+    // The collection and explicit mapping each show the combined counts.
+    expect(screen.getAllByLabelText('10/20 attacks successful')).toHaveLength(2);
     expect(screen.getAllByText('harmful:hate')).toHaveLength(2);
     expect(screen.queryByText('promptfoo:redteam:harmful:hate')).not.toBeInTheDocument();
   });

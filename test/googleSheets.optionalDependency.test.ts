@@ -1,18 +1,33 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from './util/utils';
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1234567890/edit';
 
+function mockAuthenticatedRead() {
+  vi.doMock('google-auth-library', () => ({
+    GoogleAuth: class {
+      getUniverseDomain = vi.fn().mockResolvedValue('googleapis.com');
+      request = vi
+        .fn()
+        .mockResolvedValueOnce({ data: { sheets: [{ properties: { title: 'Sheet1' } }] } })
+        .mockResolvedValueOnce({ data: { values: [['header'], ['value']] } });
+    },
+  }));
+}
+
 describe('Google Sheets optional dependency', () => {
+  beforeEach(() => mockProcessEnv({ GOOGLE_CLOUD_UNIVERSE_DOMAIN: 'googleapis.com' }));
+
   afterEach(() => {
-    vi.doUnmock('@googleapis/sheets');
+    vi.doUnmock('google-auth-library');
     vi.doUnmock('../src/util/fetch/index');
     vi.doUnmock('../src/util/packageImportErrors');
     vi.resetModules();
   });
 
   it('explains how to install the authenticated Sheets dependency', async () => {
-    vi.doMock('@googleapis/sheets', () => {
-      throw new Error('Cannot find package @googleapis/sheets');
+    vi.doMock('google-auth-library', () => {
+      throw new Error('Cannot find package google-auth-library');
     });
     vi.doMock('../src/util/packageImportErrors', () => ({
       isMissingPackageImportError: () => true,
@@ -22,7 +37,7 @@ describe('Google Sheets optional dependency', () => {
     const fetchPromise = fetchCsvFromGoogleSheetAuthenticated(SHEET_URL);
 
     await expect(fetchPromise).rejects.toThrow(
-      /The @googleapis\/sheets package is required for authenticated Google Sheets access\.[\s\S]*npm install @googleapis\/sheets/,
+      /The google-auth-library package is required for authenticated Google Sheets access\.[\s\S]*npm install google-auth-library/,
     );
   });
 
@@ -89,27 +104,7 @@ describe('Google Sheets optional dependency', () => {
       });
 
     vi.doMock('../src/util/fetch/index', () => ({ fetchWithProxy }));
-    vi.doMock('@googleapis/sheets', () => ({
-      auth: {
-        GoogleAuth: class {},
-      },
-      sheets: () => ({
-        spreadsheets: {
-          get: vi.fn().mockResolvedValue({
-            data: {
-              sheets: [{ properties: { title: 'Sheet1' } }],
-            },
-          }),
-          values: {
-            get: vi.fn().mockResolvedValue({
-              data: {
-                values: [['header'], ['value']],
-              },
-            }),
-          },
-        },
-      }),
-    }));
+    mockAuthenticatedRead();
 
     const { fetchCsvFromGoogleSheet } = await import('../src/googleSheets');
 
@@ -130,27 +125,7 @@ describe('Google Sheets optional dependency', () => {
       });
 
     vi.doMock('../src/util/fetch/index', () => ({ fetchWithProxy }));
-    vi.doMock('@googleapis/sheets', () => ({
-      auth: {
-        GoogleAuth: class {},
-      },
-      sheets: () => ({
-        spreadsheets: {
-          get: vi.fn().mockResolvedValue({
-            data: {
-              sheets: [{ properties: { title: 'Sheet1' } }],
-            },
-          }),
-          values: {
-            get: vi.fn().mockResolvedValue({
-              data: {
-                values: [['header'], ['value']],
-              },
-            }),
-          },
-        },
-      }),
-    }));
+    mockAuthenticatedRead();
 
     const { fetchCsvFromGoogleSheet } = await import('../src/googleSheets');
 
@@ -174,27 +149,7 @@ describe('Google Sheets optional dependency', () => {
       });
 
     vi.doMock('../src/util/fetch/index', () => ({ fetchWithProxy }));
-    vi.doMock('@googleapis/sheets', () => ({
-      auth: {
-        GoogleAuth: class {},
-      },
-      sheets: () => ({
-        spreadsheets: {
-          get: vi.fn().mockResolvedValue({
-            data: {
-              sheets: [{ properties: { title: 'Sheet1' } }],
-            },
-          }),
-          values: {
-            get: vi.fn().mockResolvedValue({
-              data: {
-                values: [['header'], ['value']],
-              },
-            }),
-          },
-        },
-      }),
-    }));
+    mockAuthenticatedRead();
 
     const { fetchCsvFromGoogleSheet } = await import('../src/googleSheets');
 

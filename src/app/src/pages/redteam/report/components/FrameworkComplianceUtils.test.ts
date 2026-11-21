@@ -71,8 +71,6 @@ describe('expandPluginCollections', () => {
 
     const result = expandPluginCollections(['harmful'], categoryStats);
 
-    // Exact short key wins over its prefixed alias; plugins present only in
-    // prefixed form keep that form.
     expect(result).toEqual(new Set(['harmful:hate', 'promptfoo:redteam:harmful:self-harm']));
   });
 

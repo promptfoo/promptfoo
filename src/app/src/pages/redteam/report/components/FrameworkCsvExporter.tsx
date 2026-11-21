@@ -14,6 +14,7 @@ import {
   type CategoryStats,
   categorizePlugins,
   expandPluginCollections,
+  getFrameworkPluginStats,
   getPluginDisplayName,
   getPluginSeverity,
 } from './FrameworkComplianceUtils';
@@ -58,7 +59,7 @@ const CSVExporter = ({
 
       // Add tested plugins
       testedPlugins.forEach((plugin) => {
-        const stats = categoryStats[plugin];
+        const stats = getFrameworkPluginStats(plugin, categoryStats);
         const pluginSeverity = getPluginSeverity(plugin);
         const pluginName = getPluginDisplayName(plugin);
         const attacksSuccessful = stats.failCount;
