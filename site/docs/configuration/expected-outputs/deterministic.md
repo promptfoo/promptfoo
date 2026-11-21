@@ -1543,14 +1543,14 @@ For additional context, read about the metric on [Wikipedia](https://en.wikipedi
 METEOR requires `natural`, which is not included in the default installation. Install it with Promptfoo in your project:
 
 ```bash
-npm install natural@^8.2.6
+npm install promptfoo natural@^8.2.6
 ```
 
-For a global installation, use `npm install -g promptfoo natural@^8.2.3`.
+For a global installation, use the same package manager for both packages. With npm, run `npm install -g promptfoo natural@^8.2.6`.
 
-For a one-off eval, run `npx --package=promptfoo --package=natural@^8.2.3 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml` from an empty directory outside an npm project. If either package is installed locally, use the project installation command above.
+For a one-off eval, run `npx --package=promptfoo --package=natural@^8.2.6 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml` from an empty directory outside an npm project. If either package is installed locally, use the project installation command above.
 
-If `natural` is missing or outside the supported `^8.2.3` range, METEOR assertions return `pass: false` and `score: 0`, with installation instructions in the reason. Other assertions work normally.
+If `natural` is missing or outside the supported `^8.2.6` range, METEOR assertions return `pass: false` and `score: 0`, with installation instructions in the reason. Other assertions work normally.
 :::
 
 #### How METEOR Works
