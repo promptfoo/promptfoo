@@ -334,6 +334,33 @@ describe('HydraProvider', () => {
       }
     });
 
+    it('keeps the last verified snapshot and reports a later target error separately', async () => {
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({ output: 'First' })
+        .mockResolvedValueOnce({ output: 'Second' })
+        .mockResolvedValueOnce({ output: 'Third' });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: 'Blue', prompt: 'First', sessionId: 'one' })
+        .mockResolvedValueOnce({ output: 'Green', prompt: 'Second', sessionId: 'one' })
+        .mockResolvedValueOnce({ error: 'Network error' });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 3, stateful: true });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: '{{input}}', label: 'fixture' },
+      });
+      expect(result).toMatchObject({
+        error: 'Network error',
+        output: 'Green',
+        metadata: { redteamFinalPrompt: 'Second', redteamVerifiedContext: { turns: 2 } },
+      });
+      expect(result.metadata.messages).toHaveLength(4);
+      expect(result.metadata.messages.at(-1)).toMatchObject({
+        role: 'assistant',
+        content: 'Green',
+      });
+    });
+
     it('returns the externalized output bound to its stored grade', async () => {
       const enabled = vi.spyOn(blobExtractor, 'isBlobStorageEnabled').mockReturnValue(true);
       const externalize = vi

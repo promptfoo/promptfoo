@@ -357,6 +357,7 @@ export class HydraProvider implements ApiProvider {
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let lastResponseMessages: Message[] = [];
+    let completedResponse: TargetResponse | undefined;
     let verifiedTurns = 0;
     let verifiedContext: { turns: number; hash: string } | undefined;
     let backtrackCount = 0;
@@ -648,15 +649,9 @@ export class HydraProvider implements ApiProvider {
           hasAudio: !!lastTransformResult.audio,
           hasImage: !!lastTransformResult.image,
         });
-
-        // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
-        if (lastTransformResult.displayVars) {
-          lastTransformDisplayVars = lastTransformResult.displayVars;
-        }
       }
 
-      // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
-      lastFinalAttackPrompt =
+      const currentPrompt =
         lastTransformResult?.prompt ||
         getTargetConversation(this.conversationHistory).lastUserPrompt ||
         nextMessage;
@@ -684,12 +679,13 @@ export class HydraProvider implements ApiProvider {
       const priorSession = this.sessionId;
       // An interrupted, cached, or failed probe cannot extend live session history.
       verifiedTurns = 0;
-      verifiedContext = undefined;
+      // Keep a failed attempt and its error provenance separate from the last
+      // completed response. A transport error provides no assistant turn.
       lastTargetResponse = targetResponse;
-      lastResponseMessages = [
-        ...this.conversationHistory,
-        { role: 'assistant', content: targetResponse.output || '' },
-      ];
+      if (!completedResponse) {
+        lastFinalAttackPrompt = currentPrompt;
+        lastResponseMessages = [...this.conversationHistory];
+      }
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
       if (targetResponse.error && options?.abortSignal?.aborted) {
         break;
@@ -778,7 +774,7 @@ export class HydraProvider implements ApiProvider {
       const reportedCurrent = last?.role === 'user' ? last.content : reported;
       if (
         reported !== undefined &&
-        reportedCurrent !== lastFinalAttackPrompt &&
+        reportedCurrent !== currentPrompt &&
         !(typeof reported === 'string' && !this.stateful && reported === finalTargetPrompt)
       ) {
         lastTargetResponse = {
@@ -789,8 +785,8 @@ export class HydraProvider implements ApiProvider {
       }
       if (
         !targetResponse.cached &&
-        reportedCurrent === lastFinalAttackPrompt &&
-        this.conversationHistory.at(-1)?.content === lastFinalAttackPrompt
+        reportedCurrent === currentPrompt &&
+        this.conversationHistory.at(-1)?.content === currentPrompt
       ) {
         if (this.stateful && targetResponse.sessionId) {
           verifiedTurns = targetResponse.sessionId === priorSession ? priorVerifiedTurns + 1 : 1;
@@ -849,6 +845,10 @@ export class HydraProvider implements ApiProvider {
 
       // Externalization can replace the response object. Return the same output we grade.
       lastTargetResponse = targetResponse;
+      completedResponse = targetResponse;
+      lastFinalAttackPrompt = currentPrompt;
+      lastTransformDisplayVars = lastTransformResult?.displayVars;
+      verifiedContext = undefined;
       const historyOutput =
         isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()
           ? scrubOutputForHistory(targetResponse.output)
@@ -1130,7 +1130,7 @@ export class HydraProvider implements ApiProvider {
 
     return preserveSelectedError(
       {
-        output: lastTargetResponse?.output || '',
+        output: completedResponse?.output ?? lastTargetResponse?.output ?? '',
         ...(failClosedError
           ? { error: failClosedError }
           : lastTargetResponse?.error
@@ -1155,7 +1155,7 @@ export class HydraProvider implements ApiProvider {
           redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
         },
         tokenUsage: totalTokenUsage,
-        guardrails: lastTargetResponse?.guardrails,
+        guardrails: (completedResponse ?? lastTargetResponse)?.guardrails,
       },
       failClosedError ? undefined : lastTargetResponse,
     );
