@@ -93,15 +93,17 @@ Toggle with **Show Charts**.
 
 ### Pass Rate
 
-Percentage of tests where all [assertions](/docs/configuration/expected-outputs) passed.
+The chart and table divide passes by all results, including runtime errors. The chart uses the full eval. The table also shows the rate for filtered results. A result passes according to its [assertions and thresholds](/docs/configuration/expected-outputs).
 
 ### Score Distribution
 
-Histogram of scores per prompt. Each test score = mean of its assertion scores. See [weighted assertions](/docs/configuration/expected-outputs#weighted-assertions).
+Histogram of scores per prompt on the loaded results page. Scores use the configured [assertion weights](/docs/configuration/expected-outputs#weighted-assertions) or [custom scoring function](/docs/configuration/expected-outputs#custom-assertion-scoring).
+
+When the loaded page has at most three distinct scores and the eval has multiple named metrics, a **Relative metric scores** chart appears instead. It uses named and derived metric values across the full eval. Each metric is divided by its largest positive value across prompts, or its largest absolute value when all values are non-positive. Hover over a bar to see the original score. Missing metrics have no bar.
 
 ### Scatter Plot
 
-Compare two prompts head-to-head. Click to select prompts.
+Compare two prompts head-to-head using the loaded results page. Click to select prompts. Filters and pagination change the loaded page; charts labeled **Full eval** retain the full eval scope.
 
 - **Green** = Prompt 2 scored higher
 - **Red** = Prompt 1 scored higher

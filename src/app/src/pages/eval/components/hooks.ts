@@ -44,6 +44,12 @@ export function usePassingTestCounts(): MetricValue[] {
   }, [table, filteredMetrics]);
 }
 
+function testCount(metrics?: PromptMetrics | null) {
+  return (
+    (metrics?.testPassCount ?? 0) + (metrics?.testFailCount ?? 0) + (metrics?.testErrorCount ?? 0)
+  );
+}
+
 /**
  * Returns the total number of tests for each prompt, with both total and filtered counts.
  *
@@ -54,23 +60,15 @@ export function useTestCounts(): MetricValue[] {
 
   return useMemo(() => {
     return table
-      ? table.head.prompts.map((prompt, idx) => {
-          const totalCount =
-            (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0);
-          const filteredCount = filteredMetrics?.[idx]
-            ? (filteredMetrics[idx].testPassCount ?? 0) + (filteredMetrics[idx].testFailCount ?? 0)
-            : null;
-
-          return {
-            total: totalCount,
-            filtered: filteredCount,
-          };
-        })
+      ? table.head.prompts.map((prompt, idx) => ({
+          total: testCount(prompt.metrics),
+          filtered: filteredMetrics?.[idx] ? testCount(filteredMetrics[idx]) : null,
+        }))
       : [];
   }, [table, filteredMetrics]);
 }
 
-const passRate = (passed: number, count: number) => (count === 0 ? 0 : (passed / count) * 100);
+const passRate = (passed: number, count: number) => (count <= 0 ? 0 : (passed / count) * 100);
 
 /** Returns the counts and pass rate for each prompt, including active filtered metrics. */
 export function usePromptPassMetrics() {
