@@ -16,11 +16,14 @@ export async function onRequest(context: CFContext): Promise<Response> {
     return response;
   }
   const country = context.request.headers.get('CF-IPCountry') || '';
-  if (country) {
+  if (/^[A-Z]{2}$/.test(country)) {
     response.headers.append(
       'Set-Cookie',
       `pf_country=${country};Path=/;SameSite=Lax;Secure;Max-Age=86400`,
     );
+  } else if (/(?:^|;\s*)pf_country=/.test(context.request.headers.get('Cookie') ?? '')) {
+    // Never apply a previous visit's automatic grants when location is unknown.
+    response.headers.append('Set-Cookie', 'pf_country=;Path=/;SameSite=Lax;Secure;Max-Age=0');
   }
   return response;
 }
