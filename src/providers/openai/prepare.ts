@@ -36,16 +36,17 @@ function isFileReference(value: unknown): value is string {
   return typeof value === 'string' && value.startsWith('file://');
 }
 
-/** Render authored values once. Loaded files are new authored input, not rendered output. */
+function loadDefinition(reference: string, vars: Record<string, VarValue>) {
+  const loaded: unknown = maybeLoadFromExternalFile(reference, undefined, {
+    skipPathRendering: true,
+  });
+  // A script reference can be returned verbatim. Only fresh definitions get a render pass.
+  return typeof loaded === 'object' ? renderVarsInObject(loaded, vars) : loaded;
+}
+
 function loadAndRender(value: unknown, vars: Record<string, VarValue>) {
   const rendered = renderVarsInObject(value, vars);
-  if (isFileReference(rendered)) {
-    const loaded: unknown = maybeLoadFromExternalFile(rendered, undefined, {
-      skipPathRendering: true,
-    });
-    return renderVarsInObject(loaded, vars);
-  }
-  return rendered;
+  return isFileReference(rendered) ? loadDefinition(rendered, vars) : rendered;
 }
 
 export function prepareOpenAiResponseFormat(value: unknown, vars: Record<string, VarValue> = {}) {
@@ -56,13 +57,8 @@ export function prepareOpenAiResponseFormat(value: unknown, vars: Record<string,
   if (isRecord(loaded) && loaded.type === 'json_schema') {
     const nested = isRecord(loaded.json_schema) ? loaded.json_schema : undefined;
     const schema = loaded.schema ?? nested?.schema;
-    // The format's single pass already rendered the path. Only render the newly
-    // loaded document here; inline schema values must never be rendered twice.
     if (isFileReference(schema)) {
-      const document: unknown = maybeLoadFromExternalFile(schema, undefined, {
-        skipPathRendering: true,
-      });
-      const resolved = renderVarsInObject(document, vars);
+      const resolved = loadDefinition(schema, vars);
       return ResponseFormat.parse(
         loaded.schema === undefined
           ? { ...loaded, json_schema: { ...nested, schema: resolved } }

@@ -381,6 +381,29 @@ describe('portable config enters real OpenAI constructors', () => {
       expect(fetchWithCache).not.toHaveBeenCalled();
     },
   );
+  it.each([
+    ['chat', { functions: '{{ reference }}' }],
+    ['chat', { response_format: '{{ reference }}' }],
+    ['responses', { response_format: '{{ reference }}' }],
+    [
+      'chat',
+      { response_format: { type: 'json_schema', json_schema: { schema: '{{ reference }}' } } },
+    ],
+    ['responses', { response_format: { type: 'json_schema', schema: '{{ reference }}' } }],
+  ] as const)(
+    'rejects a script reference without re-rendering it in %s %j',
+    async (endpoint, config) => {
+      const provider = await loadOpenAiProvider(endpoint, { apiKey: 'fixture-key', ...config });
+      const call = provider.callApi(
+        'fixture',
+        context({ reference: 'file://{% include env.CONSTRUCTOR_TEMPLATE_SECRET %}.js:make' }),
+      );
+      await expect(call).rejects.not.toThrow('fixture-sensitive-value');
+      await expect(call).rejects.toThrow(/expected .*array|expected object|expected record/i);
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
   it('validates function calls using a fully templated provider-level reference', async () => {
     const provider = await loadOpenAiProvider('chat', {
       apiKey: 'fixture-key',
