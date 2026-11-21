@@ -131,6 +131,7 @@ export async function materializeMcpToolCallRemote(
     version: VERSION,
     ...remoteGenerationContextPayload(options.redteamGenerationContext ?? options.targetId),
   };
+  let tokenUsage: ProviderResponse['tokenUsage'];
 
   try {
     const response = await fetchWithCache<{
@@ -147,7 +148,10 @@ export async function materializeMcpToolCallRemote(
       getRequestTimeoutMs(),
       'json',
       true,
+      // An automatic HTTP retry would discard any usage billed on the first attempt.
+      0,
     );
+    tokenUsage = response.data?.tokenUsage;
 
     if (response.status !== 200) {
       throw new Error(`API call failed with status ${response.status}: ${response.statusText}`);
@@ -162,13 +166,20 @@ export async function materializeMcpToolCallRemote(
     return {
       cached: response.cached,
       prompt: stringifyMcpToolCall(toolCall),
-      tokenUsage: response.data.tokenUsage,
+      tokenUsage,
     };
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       throw err;
     }
-    throw new Error(`Remote MCP materialization failed: ${String(err)}`);
+    const materializationError = new Error(`Remote MCP materialization failed: ${String(err)}`, {
+      cause: err,
+    });
+    const failedTokenUsage = tokenUsage ?? getErrorTokenUsage(err);
+    if (failedTokenUsage) {
+      Object.assign(materializationError, { tokenUsage: failedTokenUsage });
+    }
+    throw materializationError;
   }
 }
 
