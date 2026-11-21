@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { setReceivedSpanOwnership } from './otlpOwnership';
 import { createTraceProvider, isExternalTraceProvider } from './providers';
 import {
   type FetchTraceOptions,
@@ -431,9 +432,13 @@ async function fetchFromExternalProvider(
         continue;
       }
 
-      const storedSpans = redactAttributes?.length
-        ? validSpans.map((span) => redactExternalSpan(span, redactAttributes))
-        : validSpans;
+      const storedSpans = validSpans.map((span) => {
+        const external = redactAttributes?.length
+          ? redactExternalSpan(span, redactAttributes)
+          : { ...span, attributes: span.attributes && { ...span.attributes } };
+        setReceivedSpanOwnership({ traceId, span }, external.attributes);
+        return external;
+      });
 
       if (!(await storeExternalSpans(traceId, storedSpans))) {
         return null;

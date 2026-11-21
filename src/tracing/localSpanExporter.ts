@@ -2,6 +2,7 @@ import { TraceFlags } from '@opentelemetry/api';
 import { ExportResultCode, getNumberFromEnv } from '@opentelemetry/core';
 import logger from '../logger';
 import { runWithAbort, sleepWithAbort } from '../util/time';
+import { SPAN_ORIGIN_ATTRIBUTE } from './otlpOwnership';
 import { getTraceStore, type SpanData, type TraceStore, UNRELIABLE_SPAN_ATTRIBUTE } from './store';
 import type { ExportResult } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
@@ -70,7 +71,11 @@ export class LocalSpanExporter implements SpanExporter {
       span.droppedAttributesCount > 0 ||
       (Number.isFinite(this.attributeValueLengthLimit) &&
         this.attributeValueLengthLimit > 0 &&
-        reachesAttributeLimit(span.attributes, this.attributeValueLengthLimit))
+        Object.entries(span.attributes).some(
+          ([key, value]) =>
+            key !== SPAN_ORIGIN_ATTRIBUTE &&
+            reachesAttributeLimit(value, this.attributeValueLengthLimit),
+        ))
     );
   }
 
@@ -81,6 +86,7 @@ export class LocalSpanExporter implements SpanExporter {
         toStoredAttribute(value),
       ]),
     );
+    delete attributes[SPAN_ORIGIN_ATTRIBUTE];
     // Persist with the span even when a delayed child outlives its row tracker.
     // A caller-provided false value cannot override detected attribute loss.
     if (this.hasUnreliableAttributes(span)) {

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 import express from 'express';
 import logger from '../logger';
+import { setReceivedSpanOwnership } from './otlpOwnership';
 import {
   bytesToHex,
   type DecodedAttribute,
@@ -214,6 +215,24 @@ function normalizeAcceptFormats(acceptFormats?: OTLPFormat[]): OTLPFormat[] {
   return normalized.length > 0 ? normalized : [...DEFAULT_ACCEPT_FORMATS];
 }
 
+function getProtectedStrings(value: object, cache: WeakMap<object, Set<string>>): Set<string> {
+  const cached = cache.get(value);
+  if (cached) {
+    return cached;
+  }
+  const strings = new Set<string>();
+  const visit = (item: unknown): void => {
+    if (typeof item === 'string') {
+      strings.add(item);
+    } else if (item && typeof item === 'object') {
+      Object.values(item).forEach(visit);
+    }
+  };
+  visit(value);
+  cache.set(value, strings);
+  return strings;
+}
+
 function normalizeRedactAttributePatterns(redactAttributes?: string[]): string[] {
   return [
     ...new Set(
@@ -357,30 +376,49 @@ export class OTLPReceiver {
     return redacted;
   }
 
-  private redactSpan(span: SpanData, redactAttributePatterns: string[]): SpanData {
+  private prepareReceivedSpan(
+    traceId: string,
+    span: SpanData,
+    redactAttributePatterns: string[],
+    protectedStrings: WeakMap<object, Set<string>>,
+  ): SpanData {
+    const attributes = span.attributes ?? {};
+    let { name, statusMessage } = span;
+    // Resource arrays and maps are shared across the request's spans. Index a
+    // protected value only once, before removing wire ownership attributes.
+    const scrubEchoes = (value: unknown, hidden: boolean): void => {
+      if (hidden) {
+        const strings =
+          value && typeof value === 'object'
+            ? getProtectedStrings(value, protectedStrings)
+            : undefined;
+        if (value === name || strings?.has(name)) {
+          name = '[REDACTED]';
+        }
+        if (
+          statusMessage !== undefined &&
+          (value === statusMessage || strings?.has(statusMessage))
+        ) {
+          statusMessage = '[REDACTED]';
+        }
+      } else if (value && typeof value === 'object') {
+        for (const [key, item] of Object.entries(value)) {
+          scrubEchoes(item, this.shouldRedactAttribute(key, redactAttributePatterns));
+        }
+      }
+    };
+    if (redactAttributePatterns.length > 0) {
+      scrubEchoes(attributes, false);
+    }
+    setReceivedSpanOwnership({ traceId, span });
     if (redactAttributePatterns.length === 0) {
       return span;
     }
-    const attributes = span.attributes ?? {};
-    // Collect the values of attributes whose KEY will be redacted. A span `name` or
-    // `statusMessage` that echoes one of those values (e.g. an exporter copies a redacted
-    // attribute such as `otel.log.body` or `event.name` into the span name, or echoes a
-    // credential into an error message) must be scrubbed too — otherwise the secret leaks
-    // through a span field the operator believes `redactAttributes` covers.
-    const redactedSourceValues = new Set<string>();
-    for (const [key, value] of Object.entries(attributes)) {
-      if (typeof value === 'string' && this.shouldRedactAttribute(key, redactAttributePatterns)) {
-        redactedSourceValues.add(value);
-      }
-    }
-    // `redactedSourceValues` only holds strings, so an undefined statusMessage passes through.
-    const scrubEcho = <T extends string | undefined>(value: T): T =>
-      typeof value === 'string' && redactedSourceValues.has(value) ? ('[REDACTED]' as T) : value;
 
     return {
       ...span,
-      name: scrubEcho(span.name),
-      statusMessage: scrubEcho(span.statusMessage),
+      name,
+      statusMessage,
       attributes: this.redactAttributes(attributes, redactAttributePatterns),
     };
   }
@@ -618,13 +656,13 @@ export class OTLPReceiver {
   }
 
   private async storeSpans(traces: GroupedTraces): Promise<void> {
+    const protectedStrings = new WeakMap<object, Set<string>>();
     for (const [traceId, { spans, info }] of traces) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
       const redactAttributePatterns = await this.getRedactAttributePatterns(traceId, info);
-      const sanitized =
-        redactAttributePatterns.length > 0
-          ? spans.map((span) => this.redactSpan(span, redactAttributePatterns))
-          : spans;
+      const sanitized = spans.map((span) =>
+        this.prepareReceivedSpan(traceId, span, redactAttributePatterns, protectedStrings),
+      );
       await this.traceStore.addSpans(traceId, sanitized, {
         skipTraceCheck: false,
         warnIfMissingTrace: false,
