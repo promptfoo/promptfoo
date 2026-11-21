@@ -98,6 +98,34 @@ providers:
 
 When using Claude 5, omit `temperature`, `topP`, and `topK`.
 
+### GPT-6.2
+
+Use `vercel:openai/gpt-6.2-astra` or `vercel:openai/gpt-6.2-sol`. For Fast mode, append `-fast` to either model ID. For Ultrafast, set `providerOptions.openai.serviceTier` to `ultrafast`. Both options reduce latency at a higher per-token price. [Vercel model catalog](https://vercel.com/ai-gateway/models/labs/openai) · [GPT-6.2 announcement](https://vercel.com/changelog/gpt-6-2-astra-and-sol-now-available-on-ai-gateway)
+
+```yaml
+providers:
+  - id: vercel:openai/gpt-6.2-astra
+    config:
+      providerOptions:
+        openai:
+          reasoningEffort: high
+          serviceTier: ultrafast
+```
+
+For tool calls, use the same gateway key with Promptfoo's OpenAI Responses provider. [Vercel's Responses endpoint](https://vercel.com/docs/ai-gateway/sdks-and-apis/responses)
+
+```yaml
+providers:
+  - id: openai:responses:openai/gpt-6.2-sol
+    config:
+      apiBaseUrl: https://ai-gateway.vercel.sh/v1
+      apiKeyEnvar: VERCEL_AI_GATEWAY_API_KEY
+      tools:
+        - type: web_search
+```
+
+The `vercel:` provider reports the gateway's USD charge from `providerMetadata.gateway.cost` for text generation and streaming. If the gateway omits the charge, the cost remains unknown. [Vercel AI Gateway pricing](https://vercel.com/academy/ai-gateway/ai-gateway-pricing)
+
 ### Configuration Parameters
 
 | Parameter          | Type     | Description                                     |
@@ -107,6 +135,7 @@ When using Claude 5, omit `temperature`, `topP`, and `topK`.
 | `temperature`      | number   | Controls randomness; range depends on the model |
 | `maxTokens`        | number   | Maximum number of tokens to generate            |
 | `maxRetries`       | number   | Retry attempts for a failed request             |
+| `providerOptions`  | object   | OpenAI `reasoningEffort` and `serviceTier`      |
 | `topP`             | number   | Nucleus sampling parameter                      |
 | `topK`             | number   | Top-k sampling parameter                        |
 | `frequencyPenalty` | number   | Penalizes frequent tokens                       |

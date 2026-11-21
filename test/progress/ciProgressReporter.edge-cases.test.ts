@@ -112,7 +112,7 @@ describe('CIProgressReporter - Edge Cases', () => {
       );
     });
 
-    it('should handle multiple updates to same percentage', () => {
+    it('logs a milestone only once even when the total changes', () => {
       const reporter = new CIProgressReporter(100);
       reporter.start();
       vi.clearAllMocks();
@@ -123,7 +123,8 @@ describe('CIProgressReporter - Edge Cases', () => {
 
       vi.clearAllMocks();
       reporter.update(25);
-      reporter.update(25);
+      reporter.updateTotalTests(200);
+      reporter.update(50);
 
       // Should not log milestone again
       expect(logger.info).not.toHaveBeenCalled();

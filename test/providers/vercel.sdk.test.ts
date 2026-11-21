@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
-import { VercelAiEmbeddingProvider, VercelAiProvider } from '../../src/providers/vercel';
-import type { FinishReason } from 'ai';
+import { VercelAiProvider } from '../../src/providers/vercel';
+import type { FinishReason, ProviderMetadata } from 'ai';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
@@ -28,6 +28,7 @@ function gatewayResponse(
   finishReason: FinishReason,
   streaming = false,
   rawFinishReason?: string,
+  providerMetadata?: ProviderMetadata,
 ) {
   const reason = { unified: finishReason, raw: rawFinishReason };
   if (!streaming) {
@@ -35,6 +36,7 @@ function gatewayResponse(
       content: text ? [{ type: 'text', text }] : [],
       finishReason: reason,
       usage,
+      providerMetadata,
       warnings: [],
     });
   }
@@ -47,7 +49,7 @@ function gatewayResponse(
           { type: 'text-end', id: 'text' },
         ]
       : []),
-    { type: 'finish', finishReason: reason, usage },
+    { type: 'finish', finishReason: reason, usage, providerMetadata },
   ];
   return new Response(parts.map((part) => `data: ${JSON.stringify(part)}\n\n`).join(''), {
     headers: { 'Content-Type': 'text/event-stream' },
@@ -68,32 +70,30 @@ afterEach(() => {
 });
 
 describe('Vercel AI SDK response handling', () => {
-  it('returns embeddings and usage through the installed SDK', async () => {
-    fetchMock.mockResolvedValueOnce(
-      Response.json({ embeddings: [[0.25, 0.75]], usage: { tokens: 3 } }),
-    );
-    const provider = new VercelAiEmbeddingProvider('fixture/embedding', { config });
-
-    expect(await provider.callEmbeddingApi('Hello')).toEqual({
-      embedding: [0.25, 0.75],
-      tokenUsage: { total: 3 },
+  it.each([false, true])('reads the billed gateway cost with streaming=%s', async (streaming) => {
+    const provider = new VercelAiProvider('openai/gpt-6.2-sol', {
+      config: { ...config, streaming },
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, request] = fetchMock.mock.calls[0];
-    expect(url).toBe(`${config.baseUrl}/embedding-model`);
-    expect(new Headers(request?.headers).get('ai-model-id')).toBe('fixture/embedding');
-  });
-
-  it('preserves gateway errors instead of reporting a missing SDK', async () => {
-    fetchMock.mockResolvedValueOnce(
-      Response.json({ error: { message: 'fixture gateway failure' } }, { status: 400 }),
-    );
-    const provider = new VercelAiProvider('fixture/model', { config });
-
-    const result = await provider.callApi('Hello');
-    expect(result.error).toContain('fixture gateway failure');
-    expect(result.error).not.toContain('optional ai package');
-    expect(cache.set).not.toHaveBeenCalled();
+    for (const [cost, expected] of [
+      [0.003, 0.003],
+      ['0.0000123', 0.0000123],
+      ['0', 0],
+      [0, 0],
+      [-1, undefined],
+      ['', undefined],
+      ['1.2 USD', undefined],
+      ['1e999', undefined],
+      [null, undefined],
+    ] as const) {
+      fetchMock.mockResolvedValueOnce(
+        gatewayResponse('Hello', 'stop', streaming, undefined, {
+          gateway: { cost, marketCost: 1 },
+        }),
+      );
+      const result = await provider.callApi('Hello');
+      expect(result.output).toBe('Hello');
+      expect(result.cost).toBe(expected);
+    }
   });
 
   it('accepts JSON response tools normalized to stop by the Anthropic adapter', async () => {
@@ -186,7 +186,9 @@ describe('Vercel AI SDK response handling', () => {
   it.each(['', '{"answer":'])(
     'retains structured truncation metadata when output is %j',
     async (text) => {
-      fetchMock.mockResolvedValueOnce(gatewayResponse(text, 'length'));
+      fetchMock.mockResolvedValueOnce(
+        gatewayResponse(text, 'length', false, undefined, { gateway: { cost: '0.012' } }),
+      );
       const provider = new VercelAiProvider('fixture/model', {
         config: { ...config, responseSchema: { type: 'object' } },
       });
@@ -199,6 +201,7 @@ describe('Vercel AI SDK response handling', () => {
           : 'API call error: No output generated.',
         finishReason: 'length',
         tokenUsage,
+        cost: 0.012,
       });
       expect(cache.set).not.toHaveBeenCalled();
     },

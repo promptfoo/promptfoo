@@ -8,39 +8,16 @@
  */
 
 import { setTimeout as delay } from 'node:timers/promises';
-import { spawn, spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getOpenAiMissingApiKeyMessage } from '../providers/openai/shared';
+import { CLI_PATH, runCli } from './runCli';
 
-// Path to the built CLI binary
-const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
-const ROOT_DIR = path.resolve(__dirname, '../..');
 const FIXTURES_DIR = path.resolve(__dirname, 'fixtures');
 const OUTPUT_DIR = path.resolve(__dirname, '.temp-output-configs');
-
-/**
- * Helper to run the CLI and capture output
- */
-function runCli(
-  args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
-): { stdout: string; stderr: string; exitCode: number } {
-  const result = spawnSync('node', [CLI_PATH, ...args], {
-    cwd: options.cwd || ROOT_DIR,
-    encoding: 'utf-8',
-    env: { ...process.env, ...options.env, NO_COLOR: '1' },
-    timeout: 60000,
-  });
-
-  return {
-    stdout: result.stdout || '',
-    stderr: result.stderr || '',
-    exitCode: result.status ?? 1,
-  };
-}
 
 describe('Config Format Smoke Tests', () => {
   beforeAll(() => {
