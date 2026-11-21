@@ -1118,6 +1118,26 @@ describe('suite environment loading', () => {
     },
   );
 
+  it('rejects fallback file sources before external test rows can expand them', async () => {
+    const configPath = writeConfig('external-fallback', { tests: 'cases.yaml' });
+    const dir = path.dirname(configPath);
+    fs.writeFileSync(path.join(dir, 'script.cjs'), 'fixture text');
+    fs.writeFileSync(
+      path.join(dir, 'cases.yaml'),
+      JSON.stringify([
+        {
+          assert: [
+            { type: 'not-equals', value: 'file://script.cjs', fallback: 'next' },
+            { type: 'equals', value: 'expected' },
+          ],
+        },
+      ]),
+    );
+    await expect(resolveConfigs({ config: [configPath] }, {})).rejects.toThrow(
+      'fallback sources require literal',
+    );
+  });
+
   it.each(['top', 'scenario', 'external-scenario'] as const)(
     'retains a later config source and generator inputs during %s replay',
     async (location) => {

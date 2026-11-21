@@ -1044,6 +1044,10 @@
             {}
           ]
         },
+        "fallback": {
+          "type": "string",
+          "const": "next"
+        },
         "value": {},
         "config": {
           "type": "object",
