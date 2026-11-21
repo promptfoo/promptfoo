@@ -60,7 +60,7 @@ describe('ReportIndex virtualization layout', () => {
     expect(dataTableRoot).toHaveClass('flex-1', 'min-h-0');
 
     const card = dataTableRoot?.parentElement;
-    expect(card).toHaveClass('flex-1', 'min-h-0', 'flex', 'flex-col');
+    expect(card).toHaveClass('flex-1', 'min-h-96', 'flex', 'flex-col');
 
     const renderedRows = container.querySelectorAll('tbody tr[data-rowindex]');
     expect(renderedRows.length).toBeGreaterThan(0);
