@@ -429,7 +429,8 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": { "url": { "type": ["string", "null"] } }
+                  "properties": { "url": { "type": "string" } },
+                  "required": ["url"]
                 }
               }
             }
@@ -452,8 +453,62 @@
               }
             }
           },
+          "401": {
+            "description": "The share server rejected the saved credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not permitted to share this evaluation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
           "404": {
             "description": "Evaluation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sharing is disabled or the evaluation has no results",
             "content": {
               "application/json": {
                 "schema": {
