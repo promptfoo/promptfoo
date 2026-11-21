@@ -254,6 +254,7 @@ export const FINANCIAL_PLUGINS = [
   'financial:hallucination',
   'financial:impartiality',
   'financial:japan-fiea-suitability',
+  'financial:korea-consumer-protection',
   'financial:misconduct',
   'financial:sox-compliance',
   'financial:sycophancy',
