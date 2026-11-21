@@ -8,11 +8,15 @@ export const handleRegex = ({
   outputString,
   inverse,
 }: AssertionParams): GradingResult => {
-  invariant(renderedValue, '"regex" assertion type must have a string value');
-  invariant(typeof renderedValue === 'string', '"regex" assertion type must have a string value');
+  invariant(
+    (typeof renderedValue === 'string' && renderedValue.length > 0) ||
+      Number.isFinite(renderedValue),
+    '"regex" assertion type must have a non-empty string or finite number value',
+  );
+  const pattern = String(renderedValue);
   let regex: RegExp;
   try {
-    regex = new RegExp(renderedValue);
+    regex = new RegExp(pattern);
   } catch (error) {
     return {
       pass: false,
@@ -27,7 +31,7 @@ export const handleRegex = ({
     score: pass ? 1 : 0,
     reason: pass
       ? 'Assertion passed'
-      : `Expected output to ${inverse ? 'not ' : ''}match regex "${renderedValue}"`,
+      : `Expected output to ${inverse ? 'not ' : ''}match regex "${pattern}"`,
     assertion,
   };
 };

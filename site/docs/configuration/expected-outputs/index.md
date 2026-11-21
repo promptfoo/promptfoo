@@ -124,7 +124,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [equals](/docs/configuration/expected-outputs/deterministic/#equality)                                             | output matches exactly                                                          |
 | [contains](/docs/configuration/expected-outputs/deterministic/#contains)                                           | output contains a string or number as text                                      |
 | [icontains](/docs/configuration/expected-outputs/deterministic/#contains)                                          | output contains a string or number as text, case insensitive                    |
-| [regex](/docs/configuration/expected-outputs/deterministic/#regex)                                                 | output matches regex                                                            |
+| [regex](/docs/configuration/expected-outputs/deterministic/#regex)                                                 | output matches regex (value may be a string or a finite number, matched as text) |
 | [starts-with](/docs/configuration/expected-outputs/deterministic/#starts-with)                                     | output starts with string                                                       |
 | [contains-any](/docs/configuration/expected-outputs/deterministic/#contains-any)                                   | output contains any of the listed substrings                                    |
 | [contains-all](/docs/configuration/expected-outputs/deterministic/#contains-all)                                   | output contains all list of substrings                                          |

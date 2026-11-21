@@ -165,6 +165,8 @@ Compact assertion strings in CSV, XLSX, and Google Sheets `__expected` columns u
 
 The `regex` assertion checks if the LLM output matches the provided regular expression.
 
+The `value` can be a string or a finite number. Numbers are matched as text: `value: 123` matches output containing `123`. The same conversion applies to `not-regex`.
+
 Example:
 
 ```yaml
