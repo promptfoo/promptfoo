@@ -104,35 +104,30 @@ describe('consent.js', () => {
   });
 
   describe('migration from old format', () => {
-    it('migrates pf_consent=1 to v1 format with all on', () => {
+    it('asks opt-in visitors with a legacy grant for a fresh choice', () => {
       setCookie('pf_country', 'DE');
       setCookie('pf_consent', '1');
+      setCookie('_ga', 'old');
       runConsent();
-      const consent = getCookie('pf_consent');
-      expect(consent).toBe('v1.i.1.1');
+      expect(document.getElementById('cc-banner')).toBeInTheDocument();
+      expect(getCookie('pf_consent')).toBeNull();
+      expect(getCookie('_ga')).toBeNull();
+      expect(document.querySelector('script[src]')).toBeNull();
     });
 
-    it('migrates pf_consent=0 to v1 format with all off', () => {
+    it('preserves a legacy refusal', () => {
       setCookie('pf_country', 'DE');
       setCookie('pf_consent', '0');
       runConsent();
-      const consent = getCookie('pf_consent');
-      expect(consent).toBe('v1.i.0.0');
+      expect(getCookie('pf_consent')).toBe('v1.i.0.0');
+      expect(document.querySelector('script[src]')).toBeNull();
     });
 
-    it('loads scripts after migrating pf_consent=1', () => {
-      setCookie('pf_country', 'FR');
+    it('migrates a legacy grant outside opt-in regions as analytics only', () => {
+      setCookie('pf_country', 'US');
       setCookie('pf_consent', '1');
       runConsent();
-      expect((window as any).__pf_analytics_loaded).toBe(true);
-      expect((window as any).__pf_marketing_loaded).toBe(true);
-    });
-
-    it('does not load scripts after migrating pf_consent=0', () => {
-      setCookie('pf_country', 'FR');
-      setCookie('pf_consent', '0');
-      runConsent();
-      expect((window as any).__pf_analytics_loaded).toBe(false);
+      expect(getCookie('pf_consent')).toBe('v1.o.1.0');
       expect((window as any).__pf_marketing_loaded).toBe(false);
     });
 
@@ -236,13 +231,27 @@ describe('consent.js', () => {
       expect((window as any).__pf_marketing_loaded).toBe(false);
     });
 
-    it('manage preferences opens panel instead of banner', () => {
-      setCookie('pf_country', 'DE');
-      runConsent();
-      document.getElementById('cc-manage')!.click();
-      expect(document.getElementById('cc-banner')).toBeNull();
-      expect(document.getElementById('cc-overlay')).not.toBeNull();
-    });
+    it.each(['cc-prefs-close', 'cc-overlay', 'Escape'])(
+      'restores the first-visit banner and focus on %s',
+      (action) => {
+        setCookie('pf_country', 'DE');
+        runConsent();
+        const manage = document.getElementById('cc-manage')!;
+        manage.focus();
+        manage.click();
+        expect(document.getElementById('cc-banner')).toBeNull();
+        if (action === 'Escape') {
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: action }));
+        } else {
+          document.getElementById(action)!.click();
+        }
+        expect(document.getElementById('cc-overlay')).toBeNull();
+        expect(document.activeElement).toBe(manage);
+        expect(getCookie('pf_consent')).toBeNull();
+        document.getElementById('cc-decline')!.click();
+        expect(getCookie('pf_consent')).toBe('v1.i.0.0');
+      },
+    );
 
     it('analytics-only via preferences panel', () => {
       setCookie('pf_country', 'DE');
@@ -598,6 +607,7 @@ describe('consent.js', () => {
       setCookie('pf_country', 'DE');
       setCookie('pf_consent', consent as string);
       runConsent();
+      document.querySelector('script[src*="googletagmanager"]')!.dispatchEvent(new Event('load'));
       const gtag = vi.spyOn(window as any, 'gtag');
       for (const [index, method] of ['pushState', 'replaceState', 'popstate'].entries()) {
         Object.assign(window.location, {

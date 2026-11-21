@@ -81,6 +81,8 @@ describe('maybeFilePath', () => {
   it('should recognize function references when the path is not the first colon-delimited token', () => {
     expect(maybeFilePath('label:path/to/filename.py:functionName')).toBe(true);
     expect(maybeFilePath('label:path/to/filename.js:functionName')).toBe(true);
+    expect(maybeFilePath('label:filename.jsonl:functionName')).toBe(true);
+    expect(maybeFilePath('filename.jsonl:label:functionName')).toBe(false);
   });
 
   // Additional tests

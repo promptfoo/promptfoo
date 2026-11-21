@@ -52,6 +52,25 @@ describe('tracking script consent', () => {
     vi.restoreAllMocks();
   });
 
+  it('does not queue analytics before a delayed tag loads after withdrawal', () => {
+    document.cookie = 'pf_country=DE;path=/';
+    document.cookie = 'pf_consent=v1.i.1.1;path=/';
+    runScript('consent');
+    runScript('scripts-analytics');
+    const google = document.querySelector('script[src*="googletagmanager"]')!;
+    const gtag = (window as any).gtag;
+    expect(gtag.mock.calls.map(([cmd]: string[]) => cmd)).toEqual(['js']);
+    (window as any).__pf_manage_cookies();
+    (document.getElementById('cc-analytics') as HTMLInputElement).checked = false;
+    document.getElementById('cc-save')!.click();
+    google.dispatchEvent(new Event('load'));
+    expect(gtag).toHaveBeenCalledTimes(2);
+    expect(gtag).toHaveBeenLastCalledWith('config', 'AW-17347444171', { anonymize_ip: true });
+    expect((window as any)['ga-disable-G-3TS8QLZQ93']).toBe(true);
+    expect((window as any)['ga-disable-G-3YM29CN26E']).toBe(true);
+    expect((window as any)['ga-disable-AW-17347444171']).toBe(false);
+  });
+
   it.each(['scripts-analytics', 'scripts-marketing'])(
     'does not execute %s before consent exists',
     (name) => {

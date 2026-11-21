@@ -1,4 +1,4 @@
-// Analytics scripts: GA4 + PostHog
+// PostHog
 // Loaded by consent.js when analytics consent is granted.
 
 (function () {
@@ -7,9 +7,6 @@
     window.__pf_analytics_loaded = false;
     return;
   }
-
-  gtag('config', 'G-3TS8QLZQ93', { anonymize_ip: true });
-  gtag('config', 'G-3YM29CN26E', { anonymize_ip: true });
 
   // PostHog
   !(function (t, e) {

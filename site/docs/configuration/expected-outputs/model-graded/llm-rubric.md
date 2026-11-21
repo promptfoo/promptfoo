@@ -7,7 +7,7 @@ description: 'Create flexible custom rubrics using natural language to evaluate 
 
 `llm-rubric` is promptfoo's general-purpose grader for "LLM as a judge" evaluation.
 
-It is similar to OpenAI's [model-graded-closedqa](/docs/configuration/expected-outputs) prompt, but can be more effective and robust in certain cases.
+See also [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa), which uses a different grading prompt.
 
 ## How to use it
 

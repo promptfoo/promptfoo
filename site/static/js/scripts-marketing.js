@@ -1,4 +1,4 @@
-// Marketing scripts: Google Ads + Vector.co + Reo.dev
+// Vector.co and Reo.dev
 // Loaded by consent.js when marketing consent is granted.
 
 (function () {
@@ -7,8 +7,6 @@
     window.__pf_marketing_loaded = false;
     return;
   }
-
-  gtag('config', 'AW-17347444171', { anonymize_ip: true });
 
   // Vector.co
   !(function (e, r) {
