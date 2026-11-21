@@ -6,7 +6,6 @@ import type { OtelConfig } from '../../src/tracing/otelConfig';
 const mockRegister = vi.fn();
 const mockShutdown = vi.fn().mockResolvedValue(undefined);
 const mockForceFlush = vi.fn().mockResolvedValue(undefined);
-const mockAddSpanProcessor = vi.fn();
 const mockSetLogger = vi.fn();
 const mockSetGlobalPropagator = vi.fn();
 const mockPropagationDisable = vi.fn();
@@ -23,17 +22,15 @@ let localExporterCalls: unknown[] = [];
 let batchProcessorCalls: unknown[] = [];
 let resourceCalls: unknown[] = [];
 
-vi.mock('@opentelemetry/sdk-trace-node', () => {
+vi.mock('@opentelemetry/sdk-trace', () => {
   // Use a class-like constructor function
   return {
-    NodeTracerProvider: class MockNodeTracerProvider {
+    TracerProvider: class MockTracerProvider {
       constructor(options: unknown) {
         nodeTracerProviderCalls.push(options);
       }
-      register = mockRegister;
       shutdown = mockShutdown;
       forceFlush = mockForceFlush;
-      addSpanProcessor = mockAddSpanProcessor;
     },
     BatchSpanProcessor: class MockBatchSpanProcessor {
       exporter: unknown;
@@ -63,6 +60,8 @@ vi.mock('node:module', async (importOriginal) => {
 });
 
 vi.mock('@opentelemetry/core', () => ({
+  getStringFromEnv: vi.fn(),
+  getNumberFromEnv: vi.fn(),
   W3CTraceContextPropagator: class MockW3CTraceContextPropagator {},
 }));
 
@@ -86,12 +85,14 @@ vi.mock('@opentelemetry/api', () => ({
   DiagLogLevel: {
     DEBUG: 0,
   },
+  context: { setGlobalContextManager: vi.fn() },
   propagation: {
     setGlobalPropagator: mockSetGlobalPropagator,
     disable: mockPropagationDisable,
     _getGlobalPropagator: () => globalPropagator,
   },
   trace: {
+    setGlobalTracerProvider: mockRegister,
     getTracerProvider: () => ({ getDelegate: () => globalDelegate }),
     disable: mockTraceDisable,
   },
@@ -149,8 +150,8 @@ describe('otelSdk', () => {
     mockShutdown.mockResolvedValue(undefined);
     mockForceFlush.mockResolvedValue(undefined);
     globalDelegate = undefined;
-    mockRegister.mockImplementation(function (this: unknown) {
-      globalDelegate ??= this;
+    mockRegister.mockImplementation((provider: unknown) => {
+      globalDelegate ??= provider;
     });
     globalPropagator = undefined;
     mockSetGlobalPropagator.mockImplementation((propagator: unknown) => {

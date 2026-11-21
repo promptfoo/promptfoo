@@ -1,5 +1,5 @@
 import { context, type ProxyTracerProvider, propagation, trace } from '@opentelemetry/api';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { initializeOtel, shutdownOtel } from '../../src/tracing/otelSdk';
 
@@ -70,7 +70,7 @@ describe('OpenTelemetry SDK lifecycle', () => {
   });
 
   it('keeps tracing for an evaluation that is still running when another finishes', async () => {
-    const shutdown = vi.spyOn(NodeTracerProvider.prototype, 'shutdown');
+    const shutdown = vi.spyOn(TracerProvider.prototype, 'shutdown');
     initializeOtel(config);
     initializeOtel(config);
     const provider = globalDelegate();
