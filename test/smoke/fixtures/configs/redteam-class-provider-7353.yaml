@@ -4,7 +4,7 @@
 #
 # The bug was: wrapProviderWithRateLimiting used spread operator which doesn't copy
 # prototype methods like id(), causing "TypeError: redteamProvider.id is not a function"
-# in strategies that call TokenUsageTracker.trackUsage(provider.id(), ...).
+# in provider accounting that calls provider.id().
 #
 # Uses contracts plugin (local generation) and base64 strategy (local transform)
 # so the test completes without any remote API calls.

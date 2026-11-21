@@ -2,7 +2,7 @@ import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { sleep } from '../../util/time';
-import { TokenUsageTracker } from '../../util/tokenUsage';
+import { trackResponseUsage } from '../../util/tokenUsage';
 import { accumulateGradingResponseTokenUsage } from '../../util/tokenUsageUtils';
 import { isBasicRefusal } from '../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './crescendo/prompts';
@@ -60,7 +60,7 @@ export async function getRefusalScore(
     },
     options,
   );
-  TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), refusalResponse);
+  trackResponseUsage(scoringProvider.id(), refusalResponse);
   accumulateGradingResponseTokenUsage(tokenUsage, refusalResponse);
   if (scoringProvider.delay) {
     logger.debug(`[${context.logPrefix}] Sleeping for ${scoringProvider.delay}ms`);
@@ -124,7 +124,7 @@ export async function getEvalScore(
     },
     options,
   );
-  TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
+  trackResponseUsage(scoringProvider.id(), evalResponse);
   accumulateGradingResponseTokenUsage(tokenUsage, evalResponse);
   if (scoringProvider.delay) {
     logger.debug(`[${context.logPrefix}] Sleeping for ${scoringProvider.delay}ms`);

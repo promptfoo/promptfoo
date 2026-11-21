@@ -1423,12 +1423,6 @@ describe('RedteamGoatProvider', () => {
   });
 
   describe('Token Counting', () => {
-    beforeEach(async () => {
-      // Reset TokenUsageTracker between tests to ensure clean state
-      const { TokenUsageTracker } = await import('../../../src/util/tokenUsage');
-      TokenUsageTracker.getInstance().resetAllUsage();
-    });
-
     it('should correctly track token usage from target provider', async () => {
       const provider = new RedteamGoatProvider({
         injectVar: 'goal',
