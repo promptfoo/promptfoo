@@ -24,8 +24,6 @@ export function formatLegacyCompletionPrompt(prompt: string): string {
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.
-  // Fast mode on Fable/Mythos 5.2 ($16/$80) is not encoded here; set `inputCost` and
-  // `outputCost` to track it.
   ...modelsWithCost(['claude-fable-5-2', 'claude-mythos-5-2'], {
     input: 8 / 1e6, // $8 / MTok
     output: 40 / 1e6, // $40 / MTok
@@ -288,6 +286,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   // sampling params and forced `tool_choice` return 400, and cache reads cost 0.025x input.
   {
     match: CLAUDE_FABLE_MYTHOS_52_PATTERN,
+    fastModePriceMultiplier: 2,
     warningName: 'Claude Fable 5.2 and Claude Mythos 5.2',
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
@@ -984,11 +983,27 @@ export function calculateAnthropicCost(
       : undefined);
   const totalInputTokens =
     (promptTokens ?? 0) + (cacheReadTokens ?? 0) + (cacheCreationTokens ?? 0);
-  const modelInfo =
+  let modelInfo =
     registeredModel?.cost.longContext &&
     totalInputTokens > registeredModel.cost.longContext.threshold
       ? { ...registeredModel, cost: registeredModel.cost.longContext }
       : registeredModel;
+  // Adjust the model rates before applying either per-direction override.
+  if (reportedSpeed === 'fast' && modelInfo) {
+    const multiplier = CLAUDE_MODEL_FAMILIES.find((family) =>
+      family.match.test(pricingModelName),
+    )?.fastModePriceMultiplier;
+    if (multiplier) {
+      modelInfo = {
+        id: modelInfo.id,
+        cost: {
+          input: modelInfo.cost.input * multiplier,
+          output: modelInfo.cost.output * multiplier,
+        },
+      };
+    }
+  }
+
   // A model name that normalizeAnthropicModelName rewrote carries a Bedrock
   // prefix. Bare and geo-prefixed Bedrock IDs bill at the regional premium;
   // only the `global.` endpoint bills at base rate.
@@ -1009,22 +1024,8 @@ export function calculateAnthropicCost(
     effectiveConfig.inputCost == null &&
     effectiveConfig.outputCost == null;
   const inferenceGeoMultiplier = usesUsInferenceGeo ? CLAUDE_US_INFERENCE_GEO_MULTIPLIER : 1;
-  // Fast mode bills a multiple of the standard rates, with the cache and data residency
-  // multipliers on top. Explicit pricing overrides are taken as the rates actually paid.
-  const fastModeMultiplier =
-    reportedSpeed === 'fast' &&
-    effectiveConfig.cost == null &&
-    effectiveConfig.inputCost == null &&
-    effectiveConfig.outputCost == null
-      ? (CLAUDE_MODEL_FAMILIES.find(
-          (family) =>
-            family.fastModePriceMultiplier !== undefined && family.match.test(pricingModelName),
-        )?.fastModePriceMultiplier ?? 1)
-      : 1;
   const withPricingMultipliers = (cost: number | undefined): number | undefined =>
-    cost == null
-      ? cost
-      : cost * regionalPremiumMultiplier * inferenceGeoMultiplier * fastModeMultiplier;
+    cost == null ? cost : cost * regionalPremiumMultiplier * inferenceGeoMultiplier;
 
   // An explicit flat `cost` (with no separate input/output rates) intentionally overrides
   // tier-specific and cache pricing, so it short-circuits straight to the base calculation.

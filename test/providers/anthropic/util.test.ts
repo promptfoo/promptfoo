@@ -2931,72 +2931,36 @@ describe('Anthropic utilities', () => {
   });
 
   describe('fast mode', () => {
-    it('bills fast mode at twice the standard rates on Opus 5.5, Opus 5, and Opus 4.8', () => {
-      for (const [model, standard] of [
-        ['claude-opus-5-5', 4e-6 * 1000 + 20e-6 * 100],
-        ['claude-opus-5', 5e-6 * 1000 + 25e-6 * 100],
-        ['claude-opus-4-8', 5e-6 * 1000 + 25e-6 * 100],
-      ] as const) {
-        expect(
-          calculateAnthropicCost(
-            model,
-            {},
-            1000,
-            100,
-            undefined,
-            undefined,
-            undefined,
-            null,
-            'fast',
-          ),
-        ).toBeCloseTo(standard * 2, 10);
-        expect(
-          calculateAnthropicCost(
-            model,
-            {},
-            1000,
-            100,
-            undefined,
-            undefined,
-            undefined,
-            null,
-            'standard',
-          ),
-        ).toBeCloseTo(standard, 10);
-      }
+    it.each([
+      ['claude-fable-5-2', 48, 96],
+      ['claude-mythos-5-2', 48, 96],
+      ['claude-opus-5-5', 24, 48],
+      ['claude-opus-5', 30, 60],
+      ['claude-opus-4-8', 30, 60],
+      ['claude-sonnet-5-5', 12, 12],
+    ] as const)('bills %s at its reported speed', (model, standard, fast) => {
+      const cost = (speed: string) =>
+        calculateAnthropicCost(model, {}, 1e6, 1e6, 0, 0, 0, null, speed);
+      expect(cost('fast')).toBeCloseTo(fast, 10);
+      expect(cost('standard')).toBeCloseTo(standard, 10);
     });
 
-    it('applies the cache and US-only multipliers on top of fast mode prices', () => {
-      // Opus 5.5 fast: input $8, cache read $0.40 (0.05x), output $40, then 1.1x for US-only.
+    it('applies cache and US-only multipliers to fast mode rates', () => {
       expect(
-        calculateAnthropicCost(
-          'claude-opus-5-5',
-          {},
-          1_000_000,
-          1_000_000,
-          1_000_000,
-          0,
-          0,
-          'us',
-          'fast',
-        ),
+        calculateAnthropicCost('claude-opus-5-5', {}, 1e6, 1e6, 1e6, 0, 0, 'us', 'fast'),
       ).toBeCloseTo((8 + 0.4 + 40) * 1.1, 10);
     });
 
-    it('takes explicit pricing overrides as the rates paid', () => {
-      expect(
-        calculateAnthropicCost(
-          'claude-opus-5-5',
-          { inputCost: 1e-6, outputCost: 1e-6 },
-          1000,
-          1000,
-          undefined,
-          undefined,
-          undefined,
-          null,
-          'fast',
-        ),
-      ).toBeCloseTo(0.002, 10);
+    it.each([
+      [{ inputCost: 6e-6 }, 6 + 40, 0.3],
+      [{ outputCost: 30e-6 }, 8 + 30, 0.4],
+      [{ inputCost: 0, outputCost: 30e-6 }, 30, 0],
+      [{ cost: 1e-6 }, 2, 0],
+    ] as const)('preserves only the overridden rates in %j', (config, base, cache) => {
+      const cost = (reads: number) =>
+        calculateAnthropicCost('claude-opus-5-5', config, 1e6, 1e6, reads, 0, 0, null, 'fast');
+      expect(cost(0)).toBeCloseTo(base, 10);
+      expect(cost(1e6)).toBeCloseTo(base + cache, 10);
     });
   });
 

@@ -482,11 +482,7 @@ export function getBedrockPricing(
   return undefined;
 }
 
-export function selectBedrockTokenRates(
-  _normalizedModelId: string,
-  pricing: BedrockPricing,
-  totalInputTokens: number,
-) {
+export function selectBedrockTokenRates(pricing: BedrockPricing, totalInputTokens: number) {
   return pricing.longContext && totalInputTokens > pricing.longContext.threshold
     ? pricing.longContext
     : pricing;
@@ -681,7 +677,7 @@ export function calculateBedrockCost(
   // Long-context tiers are billed on total input size, which for Anthropic means the uncached
   // prompt plus any cache reads and writes (`input_tokens` excludes cached tokens).
   const totalInputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
-  const tier = selectBedrockTokenRates(normalizedModelId, pricing, totalInputTokens);
+  const tier = selectBedrockTokenRates(pricing, totalInputTokens);
 
   const inputRate = (tier.input / 1_000_000) * pricingMultiplier;
   const inputCost = normalizedModelId.includes('anthropic.claude')
