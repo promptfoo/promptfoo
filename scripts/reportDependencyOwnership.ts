@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
-import { escape as escapeGlob, globSync } from 'glob';
+import { escape as escapeGlob, globSync } from 'glob/raw';
 import { minimatch } from 'minimatch';
 import { type Comment, type Node, parseSync, Visitor } from 'oxc-parser';
 import { z } from 'zod';
