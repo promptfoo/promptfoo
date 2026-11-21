@@ -1,62 +1,28 @@
 import { spawn } from 'node:child_process';
-import { existsSync, realpathSync } from 'node:fs';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 
 /** npm global mode ignores project .npmrc; retain launch cwd and settings for user config. */
 export function createUpdateContext(sourceEnvironment: NodeJS.ProcessEnv, projectRoot: string) {
-  const root = realpathSync(projectRoot);
-  const runtimeBin = realpathSync(path.dirname(process.execPath));
-  let enclosingProject: string | undefined;
-  for (let directory = root; ; directory = path.dirname(directory)) {
-    if (
-      existsSync(path.join(directory, 'package.json')) ||
-      existsSync(path.join(directory, '.git'))
-    ) {
-      enclosingProject = directory;
-    }
-    if (path.dirname(directory) === directory) {
-      break;
-    }
-  }
-  const entries = (sourceEnvironment.PATH ?? '/usr/bin:/bin').split(path.delimiter);
-  const trustedPaths = entries.flatMap((entry) => {
-    if (!path.isAbsolute(entry) || entry.includes('/node_modules/.bin')) {
-      return [];
-    }
-    try {
-      const canonical = realpathSync(entry);
-      if (canonical.includes('/node_modules/.bin')) {
-        return [];
-      }
-      const insideProject =
-        enclosingProject !== undefined &&
-        (canonical === enclosingProject ||
-          canonical.startsWith(
-            enclosingProject.endsWith(path.sep)
-              ? enclosingProject
-              : `${enclosingProject}${path.sep}`,
-          ));
-      return canonical === runtimeBin || !insideProject ? [canonical] : [];
-    } catch {
-      return [];
-    }
-  });
-  if (!trustedPaths.length) {
-    throw new Error('No trusted npm executable directory found in the launch PATH.');
-  }
-  return {
-    cwd: projectRoot,
-    env: { ...sourceEnvironment, PATH: [...new Set(trustedPaths)].join(path.delimiter) },
+  const runtimeBin = path.dirname(realpathSync(process.execPath));
+  // Reuse the active Node installation, even in a checkout without a
+  // package.json or .git marker. Never discover npm on the launch PATH.
+  const env: NodeJS.ProcessEnv = {
+    ...sourceEnvironment,
+    PATH: [...new Set([runtimeBin, '/usr/bin', '/bin'])].join(path.delimiter),
   };
+  for (const name of Object.keys(env)) {
+    if (/^(?:LD_|DYLD_|NODE_OPTIONS$|NODE_PATH$|BASH_ENV$|ENV$)/i.test(name)) {
+      delete env[name];
+    }
+  }
+  return { npm: path.join(runtimeBin, 'npm'), cwd: projectRoot, env };
 }
 
-export async function runNpmUpdate(
-  sourceEnvironment: NodeJS.ProcessEnv,
-  projectRoot: string,
-): Promise<void> {
-  const context = createUpdateContext(sourceEnvironment, projectRoot);
-  const child = spawn('npm', ['install', '--global', 'promptfoo@latest'], {
-    ...context,
+export async function runNpmUpdate(context: ReturnType<typeof createUpdateContext>): Promise<void> {
+  const child = spawn(process.execPath, [context.npm, 'install', '--global', 'promptfoo@latest'], {
+    cwd: context.cwd,
+    env: context.env,
     // Own the process group so terminal Ctrl-C reaches npm only through forwarding.
     // Closed stdin also prevents background terminal reads from stopping the group.
     stdio: ['ignore', 'inherit', 'inherit'],

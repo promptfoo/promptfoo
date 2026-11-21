@@ -6,10 +6,9 @@ import { parseEnvBool } from '../envars';
 import { getUpdateCommands } from './updateCommands';
 import { createUpdateContext } from './updateCommandUtils';
 
-export interface InstallationInfo {
-  canUpdate: boolean;
-  message: string;
-}
+type InstallationInfo =
+  | { canUpdate: false; message: string }
+  | { canUpdate: true; message: string; context: ReturnType<typeof createUpdateContext> };
 
 const MANUAL_UPDATE = 'Update Promptfoo with the package manager that installed it.';
 
@@ -63,7 +62,20 @@ export function getInstallationInfo(
       return manual('For a source checkout, pull the latest changes and rebuild Promptfoo.');
     }
     const context = createUpdateContext(sourceEnvironment, projectRoot);
-    const globalRoot = execFileSync('npm', ['root', '--global'], {
+    context.npm = realpathSync(context.npm);
+    if (!context.npm.endsWith('/npm/bin/npm-cli.js')) {
+      return manual(MANUAL_UPDATE);
+    }
+    // Do not execute a runtime or npm installation supplied by the project.
+    for (let dir = realpathSync(projectRoot); dir !== path.dirname(dir); dir = path.dirname(dir)) {
+      if (
+        (existsSync(path.join(dir, '.git')) || existsSync(path.join(dir, 'package.json'))) &&
+        [context.npm, process.execPath].some((file) => file.startsWith(`${dir}/`))
+      ) {
+        return manual(MANUAL_UPDATE);
+      }
+    }
+    const globalRoot = execFileSync(process.execPath, [context.npm, 'root', '--global'], {
       cwd: context.cwd,
       env: context.env,
       encoding: 'utf8',
@@ -73,9 +85,9 @@ export function getInstallationInfo(
     if (!path.isAbsolute(globalRoot)) {
       return manual(MANUAL_UPDATE);
     }
-    const packageRoot = realpathSync(path.join(globalRoot, 'promptfoo'));
-    if (cliPath.startsWith(`${packageRoot}/`)) {
-      return { canUpdate: true, message: 'Global npm installation confirmed.' };
+    const entryDir = path.join(realpathSync(globalRoot), 'promptfoo', 'dist', 'src');
+    if (['entrypoint.js', 'main.js'].some((name) => cliPath === path.join(entryDir, name))) {
+      return { canUpdate: true, message: 'Global npm installation confirmed.', context };
     }
   } catch {
     // Leave unverified installations to their package manager.

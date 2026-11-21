@@ -16,6 +16,10 @@ vi.mock('node:fs', async (importOriginal) => ({
   existsSync: vi.fn(),
   realpathSync: vi.fn(),
 }));
+const npm = '/usr/local/lib/node_modules/npm/bin/npm-cli.js';
+function runtimePath(value: unknown) {
+  return String(value).endsWith('/npm') ? npm : String(value);
+}
 let directory: string;
 beforeEach(() => {
   directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-install-test-'));
@@ -26,7 +30,7 @@ beforeEach(() => {
     .mockImplementation((value) =>
       value === process.argv[1]
         ? '/usr/local/lib/node_modules/promptfoo/dist/src/main.js'
-        : String(value),
+        : runtimePath(value),
     );
   vi.mocked(execFileSync).mockReset().mockReturnValue('/usr/local/lib/node_modules\n');
 });
@@ -39,8 +43,8 @@ describe('global npm verification', () => {
   it('requires the CLI path to belong to the reported global package root', () => {
     expect(getInstallationInfo('/workspace', { TMPDIR: directory }).canUpdate).toBe(true);
     expect(execFileSync).toHaveBeenCalledWith(
-      'npm',
-      ['root', '--global'],
+      process.execPath,
+      [npm, 'root', '--global'],
       expect.objectContaining({ timeout: 1000 }),
     );
     expect(readdirSync(directory)).toEqual([]);
@@ -51,7 +55,7 @@ describe('global npm verification', () => {
     '/usr/local/lib/node_modules/promptfoo-extra/dist/main.js',
   ])('rejects a different package root: %s', (cliPath) => {
     vi.mocked(realpathSync).mockImplementation((value) =>
-      value === process.argv[1] ? cliPath : String(value),
+      value === process.argv[1] ? cliPath : runtimePath(value),
     );
     expect(getInstallationInfo('/workspace', { TMPDIR: directory }).canUpdate).toBe(false);
   });
@@ -61,9 +65,23 @@ describe('global npm verification', () => {
     vi.mocked(realpathSync).mockImplementation((value) =>
       value === process.argv[1]
         ? '/real/lib/node_modules/promptfoo/dist/src/main.js'
-        : '/real/lib/node_modules/promptfoo',
+        : value === '/linked/lib/node_modules'
+          ? '/real/lib/node_modules'
+          : runtimePath(value),
     );
     expect(getInstallationInfo('/workspace', { TMPDIR: directory }).canUpdate).toBe(true);
+  });
+
+  it('rejects an npm symlink into the enclosing project before probing', () => {
+    vi.mocked(existsSync).mockImplementation((p) => p === '/workspace/.git');
+    vi.mocked(realpathSync).mockImplementation((p) => {
+      if (p === process.argv[1]) {
+        return '/usr/local/lib/node_modules/promptfoo/dist/src/main.js';
+      }
+      return String(p).endsWith('/npm') ? '/workspace/npm/bin/npm-cli.js' : String(p);
+    });
+    expect(getInstallationInfo('/workspace/nested', {}).canUpdate).toBe(false);
+    expect(execFileSync).not.toHaveBeenCalled();
   });
 
   it('fails closed when npm cannot confirm the root', () => {
@@ -92,7 +110,7 @@ describe('manual installation guidance', () => {
     ['/workspace/promptfoo/dist/src/main.js', 'source checkout'],
   ])('does not probe a global npm root for %s', (cliPath, message) => {
     vi.mocked(realpathSync).mockImplementation((value) =>
-      value === process.argv[1] ? cliPath : String(value),
+      value === process.argv[1] ? cliPath : runtimePath(value),
     );
     expect(
       getInstallationInfo('/workspace', {

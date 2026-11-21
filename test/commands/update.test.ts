@@ -16,6 +16,7 @@ vi.mock('../../src/updates/updateCheck', () => ({
 vi.mock('../../src/logger', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
+const verifiedContext = { npm: '/node/lib/node_modules/npm/bin/npm-cli.js', cwd: '/tmp', env: {} };
 const info = {
   message: 'Update available',
   update: { name: 'promptfoo', current: '1.0.0', latest: '1.2.3' },
@@ -27,7 +28,7 @@ beforeEach(() => {
   originalExitCode = process.exitCode;
   vi.mocked(getInstallationInfo)
     .mockReset()
-    .mockReturnValue({ canUpdate: true, message: 'Global npm' });
+    .mockReturnValue({ canUpdate: true, message: 'Global npm', context: verifiedContext });
   vi.mocked(checkForUpdates).mockReset().mockResolvedValue(info);
   vi.mocked(runNpmUpdate).mockReset().mockResolvedValue(undefined);
   vi.clearAllMocks();
@@ -55,7 +56,7 @@ describe('update command', () => {
     await run([], env);
     expect(checkForUpdates).not.toHaveBeenCalled();
     expect(getInstallationInfo).toHaveBeenCalledWith(process.cwd(), env);
-    expect(runNpmUpdate).toHaveBeenCalledWith(env, process.cwd());
+    expect(runNpmUpdate).toHaveBeenCalledWith(verifiedContext);
   });
   it('prints manual guidance for unsupported installations', async () => {
     vi.mocked(getInstallationInfo).mockReturnValue({
@@ -78,7 +79,7 @@ describe('update command', () => {
     const env = { PROMPTFOO_DISABLE_UPDATE: '1' };
     await run(['--force'], env);
     expect(checkForUpdates).not.toHaveBeenCalled();
-    expect(runNpmUpdate).toHaveBeenCalledWith(env, process.cwd());
+    expect(runNpmUpdate).toHaveBeenCalledWith(verifiedContext);
   });
   it('reports check-only lookup failures without starting an installer', async () => {
     vi.mocked(checkForUpdates).mockRejectedValue(new Error('offline'));

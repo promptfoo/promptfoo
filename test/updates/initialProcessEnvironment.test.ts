@@ -4,6 +4,7 @@ import { mockProcessEnv } from '../util/utils';
 let restoreEnvironment: (() => void) | undefined;
 
 afterEach(() => {
+  vi.restoreAllMocks();
   restoreEnvironment?.();
   vi.doUnmock('../../src/util/envFile');
   vi.resetModules();
@@ -11,6 +12,7 @@ afterEach(() => {
 
 it('captures launch settings before importing environment-file configuration', async () => {
   vi.resetModules();
+  vi.spyOn(process, 'argv', 'get').mockReturnValue(['node', 'promptfoo', 'update']);
   restoreEnvironment = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: 'true' });
   vi.doMock('../../src/util/envFile', () => ({
     loadEnvFiles: () => mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: 'false' }),

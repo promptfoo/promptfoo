@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -14,7 +14,8 @@ let directory: string;
 let restoreEnvironment: (() => void) | undefined;
 let originalExitCode: typeof process.exitCode;
 let child: EventEmitter & { pid: number };
-const launchEnvironment = { PATH: path.dirname(process.execPath) };
+const runtime = path.dirname(realpathSync(process.execPath));
+const launchEnvironment = { PATH: runtime };
 beforeEach(() => {
   directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-update-test-'));
   originalExitCode = process.exitCode;
@@ -49,74 +50,31 @@ describe('update execution context', () => {
     };
     const context = createUpdateContext(source, directory);
     expect(context.cwd).toBe(directory);
-    expect(context.env).toEqual({ ...source, PATH: realpathSync(source.PATH) });
+    expect(context.env).toEqual({
+      ...source,
+      PATH: [...new Set([runtime, '/usr/bin', '/bin'])].join(path.delimiter),
+    });
     expect(context.env).not.toBe(source);
   });
 
-  it('filters project directories even when PATH uses a symlink outside the project', () => {
-    const project = path.join(directory, 'project');
-    const projectBin = path.join(project, 'bin');
-    const alias = path.join(directory, 'alias');
-    mkdirSync(projectBin, { recursive: true });
-    writeFileSync(path.join(project, 'package.json'), '{}');
-    symlinkSync(projectBin, alias, 'junction');
-    const runtimeBin = path.dirname(process.execPath);
+  it('ignores project paths and loader settings even without a project marker', () => {
     const context = createUpdateContext(
-      { PATH: ['.', projectBin, alias, runtimeBin].join(path.delimiter) },
-      project,
+      { PATH: directory, LD_PRELOAD: 'untrusted', NODE_OPTIONS: '--require=untrusted' },
+      directory,
     );
-    expect(context.env.PATH).toBe(realpathSync(runtimeBin));
-  });
-
-  it.each(['package.json', '.git'])(
-    'filters enclosing project paths from a nested package using %s',
-    (marker) => {
-      const project = path.join(directory, 'project');
-      const projectBin = path.join(project, 'bin');
-      const nested = path.join(project, 'packages', 'app', 'src');
-      mkdirSync(projectBin, { recursive: true });
-      mkdirSync(nested, { recursive: true });
-      writeFileSync(path.join(project, marker), '{}');
-      writeFileSync(path.join(project, 'packages', 'app', 'package.json'), '{}');
-      const runtimeBin = path.dirname(process.execPath);
-      const context = createUpdateContext(
-        { PATH: [projectBin, runtimeBin].join(path.delimiter) },
-        nested,
-      );
-      expect(context.env.PATH).toBe(realpathSync(runtimeBin));
-      expect(context.cwd).toBe(nested);
-    },
-  );
-
-  it('preserves version-manager shims when invoked from a home directory', () => {
-    const shims = path.join(directory, '.asdf', 'shims');
-    mkdirSync(shims, { recursive: true });
-    expect(createUpdateContext({ PATH: shims }, directory).env.PATH).toBe(realpathSync(shims));
-  });
-
-  it('preserves a symlink to the active runtime when invoked from its home directory', () => {
-    const runtimeBin = realpathSync(path.dirname(process.execPath));
-    const alias = path.join(directory, 'runtime');
-    symlinkSync(runtimeBin, alias, 'junction');
-    expect(createUpdateContext({ PATH: alias }, path.dirname(runtimeBin)).env.PATH).toBe(
-      runtimeBin,
-    );
-  });
-
-  it('fails closed when no launch PATH entries are eligible', () => {
-    writeFileSync(path.join(directory, 'package.json'), '{}');
-    expect(() =>
-      createUpdateContext({ PATH: ['.', directory].join(path.delimiter) }, directory),
-    ).toThrow('No trusted npm');
+    expect(context.npm).toBe(path.join(runtime, 'npm'));
+    expect(context.env.PATH?.split(path.delimiter)).not.toContain(directory);
+    expect(context.env.NODE_OPTIONS).toBeUndefined();
+    expect(context.env.LD_PRELOAD).toBeUndefined();
   });
 });
 
 describe('npm update lifecycle', () => {
   it('uses the npm latest tag and keeps the launch cwd', async () => {
-    const result = runNpmUpdate(launchEnvironment, directory);
+    const result = runNpmUpdate(createUpdateContext(launchEnvironment, directory));
     expect(spawn).toHaveBeenCalledWith(
-      'npm',
-      ['install', '--global', 'promptfoo@latest'],
+      process.execPath,
+      [path.join(runtime, 'npm'), 'install', '--global', 'promptfoo@latest'],
       expect.objectContaining({
         cwd: directory,
         shell: false,
@@ -133,7 +91,7 @@ describe('npm update lifecycle', () => {
     ['SIGTERM', 143],
   ] as const)('forwards %s and waits for the child before cleanup', async (signal, exitCode) => {
     const existing = process.listeners(signal);
-    const result = runNpmUpdate(launchEnvironment, directory);
+    const result = runNpmUpdate(createUpdateContext(launchEnvironment, directory));
     const added = process.listeners(signal).find((listener) => !existing.includes(listener));
     expect(added).toBeDefined();
     process.emit(signal, signal);
@@ -150,7 +108,7 @@ describe('npm update lifecycle', () => {
 
   it('does not report success if the child exits cleanly after interruption', async () => {
     const existing = process.listeners('SIGINT');
-    const result = runNpmUpdate(launchEnvironment, directory);
+    const result = runNpmUpdate(createUpdateContext(launchEnvironment, directory));
     process.listeners('SIGINT').find((listener) => !existing.includes(listener))!('SIGINT');
     const rejection = expect(result).rejects.toThrow('Update stopped by SIGINT');
     child.emit('close', 0, null);
@@ -162,7 +120,7 @@ describe('npm update lifecycle', () => {
     [null, 'SIGTERM'],
     [null, null],
   ])('rejects unsuccessful close (%s, %s)', async (code, signal) => {
-    const result = runNpmUpdate(launchEnvironment, directory);
+    const result = runNpmUpdate(createUpdateContext(launchEnvironment, directory));
     const rejection = expect(result).rejects.toThrow('Update');
     child.emit('close', code, signal);
     await rejection;
@@ -170,7 +128,7 @@ describe('npm update lifecycle', () => {
 
   it('removes signal listeners when a spawn error is followed by close', async () => {
     const listeners = process.listeners('SIGTERM');
-    const result = runNpmUpdate(launchEnvironment, directory);
+    const result = runNpmUpdate(createUpdateContext(launchEnvironment, directory));
     const rejection = expect(result).rejects.toThrow('spawn failed');
     child.emit('error', new Error('spawn failed'));
     child.emit('close', -2, null);
@@ -183,7 +141,9 @@ describe('npm update lifecycle', () => {
     vi.mocked(spawn).mockImplementation(() => {
       throw new Error('spawn failed');
     });
-    await expect(runNpmUpdate(launchEnvironment, directory)).rejects.toThrow('spawn failed');
+    await expect(runNpmUpdate(createUpdateContext(launchEnvironment, directory))).rejects.toThrow(
+      'spawn failed',
+    );
     expect(process.listeners('SIGTERM')).toEqual(listeners);
   });
 });

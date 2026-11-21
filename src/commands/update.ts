@@ -39,7 +39,7 @@ export function updateCommand(
           return;
         }
         logger.info('Installing the latest Promptfoo release from your npm registry...');
-        await runNpmUpdate(sourceEnvironment, projectRoot);
+        await runNpmUpdate(installation.context);
         logger.info('Promptfoo updated. The next command will use the new version.');
       } catch (error) {
         logger.error(`Update failed: ${error instanceof Error ? error.message : String(error)}`);
