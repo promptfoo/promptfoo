@@ -14,7 +14,7 @@ import {
   HttpRateLimitError,
   isAbortError,
 } from '../../util/fetch/errors';
-import { fetchWithRetries } from '../../util/fetch/index';
+import { fetchWithRetries, readBoundedErrorBody } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
@@ -1538,6 +1538,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                   }
                 },
                 {
+                  signal: controller.signal,
                   multiAgent,
                   preserveFailedOutput: this.usesGatewayErrorFormat(),
                   requireTerminalEvent: this.requiresResponsesStreamTerminalEvent(),
@@ -1545,12 +1546,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 },
               );
             } else {
-              const text = await response.text();
-              try {
-                responseData = JSON.parse(text);
-              } catch {
-                responseData = text as OpenAIResponsesResponse;
-              }
+              responseData = (await readBoundedErrorBody(
+                response,
+                controller.signal,
+              )) as OpenAIResponsesResponse;
             }
             return {
               data: responseData,
@@ -1559,10 +1558,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               headers: Object.fromEntries(response.headers.entries()),
             };
           } catch (err) {
+            const timedOut = controller.signal.aborted && !abortSignal?.aborted;
+            controller.abort();
             if (backgroundResponseId) {
               await cancelBackgroundResponse(backgroundResponseId, url, request);
             }
-            if (controller.signal.aborted && !abortSignal?.aborted) {
+            if (timedOut) {
               throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
             }
             throw err;
@@ -1585,41 +1586,31 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           ? AbortSignal.any([controller.signal, abortSignal])
           : controller.signal;
         try {
-          const response = await fetchWithCache<string>(
+          const response = await fetchWithRetries(
             url,
             { ...request, signal },
             timeout,
-            'text',
-            true,
             config.maxRetries,
           );
           status = response.status;
           statusText = response.statusText;
-          responseHeaders = response.headers;
+          responseHeaders = Object.fromEntries(response.headers.entries());
           if (status >= 200 && status < 300) {
-            data = await readResponsesStream(
-              new Response(response.data),
-              'OpenAI',
-              logger,
-              undefined,
-              {
-                multiAgent,
-                preserveFailedOutput: this.usesGatewayErrorFormat(),
-                requireTerminalEvent: this.requiresResponsesStreamTerminalEvent(),
-                classifyError: classifyOpenAiGatewayStreamError,
-              },
-            );
+            data = await readResponsesStream(response, 'OpenAI', logger, undefined, {
+              signal,
+              multiAgent,
+              requireTerminalEvent: this.requiresResponsesStreamTerminalEvent(),
+              preserveFailedOutput: this.usesGatewayErrorFormat(),
+              classifyError: classifyOpenAiGatewayStreamError,
+            });
           } else {
-            try {
-              data = JSON.parse(response.data);
-            } catch {
-              data = response.data as OpenAIResponsesResponse;
-            }
+            data = (await readBoundedErrorBody(response, signal)) as OpenAIResponsesResponse;
           }
         } catch (err) {
           if (controller.signal.aborted) {
             throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
           }
+          controller.abort();
           throw err;
         } finally {
           clearTimeout(timeoutHandle);
