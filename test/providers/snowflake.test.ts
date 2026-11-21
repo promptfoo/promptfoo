@@ -122,28 +122,37 @@ describe('Snowflake Cortex Provider', () => {
       },
     );
 
-    it.each(['Authorization', 'authorization'])(
-      'preserves a custom %s header without an API key',
-      async (headerName) => {
-        const provider = new SnowflakeCortexProvider('mistral-large2', {
-          config: {
-            accountIdentifier: 'myorg-myaccount',
-            headers: { [headerName]: 'Bearer custom-token' },
-          },
-          env: { SNOWFLAKE_API_KEY: '' },
-        });
-        mockFetchWithCache.mockResolvedValueOnce(
-          createMockFetchResponse({ choices: [{ message: { content: 'Test response' } }] }),
-        );
+    it.each([
+      ['Authorization', ''],
+      ['Authorization', 'ambient'],
+      ['authorization', 'ambient'],
+    ])('preserves a custom %s header with key %s', async (headerName, apiKey) => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: {
+          accountIdentifier: 'myorg-myaccount',
+          headers: { [headerName]: 'Bearer custom-token' },
+        },
+        env: { SNOWFLAKE_API_KEY: apiKey },
+      });
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({ choices: [{ message: { content: 'Test response' } }] }),
+      );
 
-        const result = await provider.callApi('Test prompt');
+      const result = await provider.callApi('Test prompt');
 
-        expect(result.output).toBe('Test response');
-        expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-        const headers = new Headers(mockFetchWithCache.mock.calls[0][1]?.headers);
-        expect(headers.get('Authorization')).toBe('Bearer custom-token');
-      },
-    );
+      expect(result.output).toBe('Test response');
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      const headers = new Headers(mockFetchWithCache.mock.calls[0][1]?.headers);
+      expect(headers.get('Authorization')).toBe('Bearer custom-token');
+    });
+
+    it('rejects a blank explicit Authorization header without sending ambient credentials', async () => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: { headers: { authorization: '  ' } },
+      });
+      await expect(provider.callApi('Test prompt')).rejects.toThrow('Authorization header');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
 
     it('omits the bearer header when API key authentication is explicitly disabled', async () => {
       const provider = new SnowflakeCortexProvider('mistral-large2', {

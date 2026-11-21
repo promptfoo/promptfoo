@@ -151,6 +151,13 @@ describe('gateway provider config handling', () => {
       expect(provider).toHaveProperty('config.apiKeyEnvar', 'CDP_TOKEN');
     });
 
+    it('does not fall back to the ambient domain when the scoped domain is empty', async () => {
+      vi.stubEnv('CDP_DOMAIN', 'process.example.com');
+      await expect(
+        loadApiProvider('cloudera:my-model', { options: { env: { CDP_DOMAIN: '' } } }),
+      ).rejects.toThrow(/Cloudera provider requires a domain/);
+    });
+
     it('reads a scoped domain and token after config validation', async () => {
       vi.stubEnv('CDP_DOMAIN', 'process.example.com');
       const options = ProviderOptionsSchema.parse({

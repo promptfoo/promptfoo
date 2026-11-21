@@ -130,11 +130,12 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       callApiOptions?.abortSignal,
     );
     throwIfAborted(callApiOptions?.abortSignal);
-    const apiKey = this.getApiKey();
-    const hasAuthorization = Object.entries(config.headers ?? {}).some(
-      ([name, value]) => name.toLowerCase() === 'authorization' && value.trim(),
-    );
-    if (this.requiresApiKey() && !apiKey && !hasAuthorization) {
+    const authorization = new Headers(config.headers).get('Authorization');
+    if (authorization === '') {
+      throw new Error('Snowflake Authorization header must be nonempty');
+    }
+    const apiKey = authorization ? undefined : this.getApiKey();
+    if (this.requiresApiKey() && !apiKey && !authorization) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
