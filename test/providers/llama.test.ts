@@ -63,7 +63,7 @@ describe('LlamaProvider', () => {
       const provider = new LlamaProvider(modelName, { config });
       await provider.callApi(prompt);
       expect(fetchWithCache).toHaveBeenCalledWith(
-        `${process.env.LLAMA_BASE_URL || 'http://localhost:8080'}/completion`,
+        `${process.env.LLAMA_BASE_URL || 'http://localhost:9931'}/completion`,
         {
           method: 'POST',
           headers: {
