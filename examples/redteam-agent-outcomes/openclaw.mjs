@@ -14,7 +14,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 
-const version = '2026.11.4';
+export const version = '2026.11.4';
 const exec = promisify(execFile);
 const content = z.union([
   z.string(),
@@ -181,6 +181,8 @@ export async function runOpenClaw({ prompt, tools, call, model, signal, record, 
   if (!model || !key)
     throw new Error('Set AGENT_MODEL and provide OPENAI_API_KEY for hosted inference');
   const entry = await resolveEntry();
+  const deadline = AbortSignal.timeout((seconds + 60) * 1000);
+  const stop = signal ? AbortSignal.any([signal, deadline]) : deadline;
   const directory = await mkdtemp(path.join(tmpdir(), 'agent-outcome-'));
   const workspace = path.join(directory, 'workspace');
   const messageFile = path.join(directory, 'message.txt');
@@ -207,10 +209,9 @@ export async function runOpenClaw({ prompt, tools, call, model, signal, record, 
       String(seconds),
       '--json',
     ];
-    signal?.throwIfAborted();
+    stop.throwIfAborted();
     const command = exec(process.execPath, args, {
       cwd: workspace,
-      timeout: (seconds + 60) * 1000,
       killSignal: 'SIGKILL',
       env: {
         PATH: process.env.PATH,
@@ -223,8 +224,8 @@ export async function runOpenClaw({ prompt, tools, call, model, signal, record, 
       },
     });
     // execFile aborts with SIGTERM and rejects before the child closes. Wait for exit before cleanup.
-    const cancellation = signal && addAbortListener(signal, () => command.child.kill('SIGKILL'));
-    const { stdout } = await command.finally(() => cancellation?.[Symbol.dispose]());
+    const cancellation = addAbortListener(stop, () => command.child.kill('SIGKILL'));
+    const { stdout } = await command.finally(() => cancellation[Symbol.dispose]());
     const result = JSON.parse(stdout);
     if (!result.ok || typeof result.final !== 'string')
       throw new Error('OpenClaw returned no final reply');
@@ -238,7 +239,7 @@ export async function runOpenClaw({ prompt, tools, call, model, signal, record, 
     });
     return result.final;
   } catch (error) {
-    const reason = signal?.aborted ? signal.reason : error;
+    const reason = stop.aborted ? stop.reason : error;
     const message = String(reason?.message ?? reason).replaceAll(key, '[redacted]');
     throw new Error(message.slice(-1200));
   } finally {
