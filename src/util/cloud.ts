@@ -8,8 +8,8 @@ import { type UnifiedConfig, UnifiedConfigSchema } from '../types/index';
 import { ProviderOptionsSchema } from '../validators/providers';
 import { fetchWithProxy } from './fetch/index';
 import invariant from './invariant';
+import { sanitizeProviderIdForLog } from './provider';
 import { normalizeProviderRef } from './providerRef';
-import { sanitizeUrl } from './sanitizer';
 import { checkServerFeatureSupport } from './server';
 import { isUuid } from './uuid';
 
@@ -682,14 +682,9 @@ function convertErrorsToReadableMessage(
   return errors.map((error) => `${error.type} ${error.id}: ${error.message}`).join(', ');
 }
 
-function permissionIdentity(id: string) {
-  // A webhook can contain userinfo and secret path segments under an opaque outer scheme.
-  return /^webhook:/i.test(id.trim()) ? 'webhook' : sanitizeUrl(id);
-}
-
 function permissionCheckProvider(provider: unknown): string | ProviderOptions {
   if (typeof provider === 'string') {
-    return permissionIdentity(provider);
+    return sanitizeProviderIdForLog(provider);
   }
 
   const ref = normalizeProviderRef(provider);
@@ -707,9 +702,9 @@ function permissionCheckProvider(provider: unknown): string | ProviderOptions {
         : undefined;
   const linkedTargetId = isRecord(config) ? config.linkedTargetId : undefined;
   return {
-    id: permissionIdentity(id),
+    id: sanitizeProviderIdForLog(id),
     ...(typeof linkedTargetId === 'string'
-      ? { config: { linkedTargetId: permissionIdentity(linkedTargetId) } }
+      ? { config: { linkedTargetId: sanitizeProviderIdForLog(linkedTargetId) } }
       : {}),
   };
 }

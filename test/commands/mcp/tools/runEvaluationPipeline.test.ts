@@ -241,7 +241,7 @@ describe('MCP evaluation execution contract', () => {
     },
   );
 
-  it('keeps detailed filter errors out of logs when provider URLs contain credentials', async () => {
+  it('redacts provider credentials in filter errors and logs', async () => {
     const log = vi.spyOn(logger, 'error');
     const providerId =
       'https://fixture-user:fixture-password@example.test/eval?api_key=fixture-query-secret';
@@ -253,12 +253,13 @@ describe('MCP evaluation execution contract', () => {
     });
     const response = await run({ providerFilter: filter });
     expect(response.success).toBe(false);
-    expect(response.error).toContain(`No providers matched filter: ${filter}`);
-    expect(response.error).toContain(`Available providers: ${providerId}`);
+    expect(response.error).toContain('No providers matched filter');
+    expect(response.error).toContain('example.test/eval');
     expect(log).toHaveBeenCalled();
     const logs = JSON.stringify(log.mock.calls);
     for (const secret of ['fixture-user', 'fixture-password', 'fixture-query-secret', filter]) {
       expect(logs).not.toContain(secret);
+      expect(response.error).not.toContain(secret);
     }
   });
 
@@ -288,8 +289,13 @@ describe('MCP evaluation execution contract', () => {
         tests: [{ assert: [{ type: 'equals', value: 'expected output' }] }],
       });
 
-      const response = await run({ ...filters, write: false });
+      const response = await run({
+        ...filters,
+        ...('testCaseIndices' in filters && { providerFilter: providerId }),
+        write: false,
+      });
       expect(response.success, response.error).toBe(true);
+      expect(JSON.stringify(response)).not.toContain(secret);
       expect(response.data.results.stats).toMatchObject({ successes: 0, failures: 1, errors: 0 });
       expect(requests).toEqual([`/eval?api_key=${secret}`]);
       // String messages bypass logger context sanitization.

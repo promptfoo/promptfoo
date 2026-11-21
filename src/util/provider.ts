@@ -1,6 +1,6 @@
 import { isApiProvider, isProviderOptions, type TestCase } from '../types';
 import { canonicalizeProviderId, normalizeProviderRef } from './providerRef';
-import { sanitizeUrl } from './sanitizer';
+import { sanitizeUrlForLogging } from './sanitizer';
 
 import type { ApiProvider } from '../types/providers';
 
@@ -61,14 +61,18 @@ export function getProviderDescription(provider: ApiProvider): string {
 }
 
 export function sanitizeProviderIdForLog(providerId: string): string {
-  const descriptionMatch = providerId.match(/^(\S+)(\s+\(.+\))$/);
+  // Webhook credentials can live in arbitrary path segments under an opaque URL scheme.
+  if (/^webhook:/i.test(providerId.trim())) {
+    return 'webhook';
+  }
+  const descriptionMatch = providerId.match(/^(.+?)\s+\(([^()]+)\)$/);
   if (descriptionMatch) {
     const [, id, description] = descriptionMatch;
-    return `${sanitizeProviderIdForLog(id)}${description}`;
+    return `${sanitizeProviderIdForLog(id)} (${sanitizeProviderIdForLog(description)})`;
   }
 
   return providerId.includes('://') || providerId.startsWith('/')
-    ? sanitizeUrl(providerId)
+    ? sanitizeUrlForLogging(providerId)
     : providerId;
 }
 

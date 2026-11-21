@@ -5,8 +5,11 @@ import logger from '../../../logger';
 import { doEval } from '../../../node/doEval';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { filterPrompts } from '../../../util/eval/filterPrompts';
-import { escapeRegExp } from '../../../util/text';
-import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
+import {
+  formatEvaluationResults,
+  formatPromptsSummary,
+  formatProviderId,
+} from '../lib/resultFormatter';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -19,15 +22,15 @@ function selectProviders(providers: TestSuite['providers'], filter: string | str
   if (providers.length === 0) {
     throw new Error('No providers defined in configuration. Add providers to filter.');
   }
-  const filters = Array.isArray(filter) ? filter : [filter];
-  const pattern = new RegExp(filters.map(escapeRegExp).join('|'), 'i');
+  const filters = (Array.isArray(filter) ? filter : [filter]).map((f) => f.toLowerCase());
   const selected = providers.filter((provider) => {
-    const id = typeof provider.id === 'function' ? provider.id() : provider.id;
-    return pattern.test(provider.label || id || '') || pattern.test(id || '');
+    const id = (typeof provider.id === 'function' ? provider.id() : provider.id).toLowerCase();
+    const label = provider.label?.toLowerCase();
+    return filters.some((value) => id.includes(value) || label?.includes(value));
   });
   if (selected.length === 0) {
     throw new Error(
-      `No providers matched filter: ${filters.join(', ')}. Available providers: ${providers.map((provider) => (typeof provider.id === 'function' ? provider.id() : provider.id)).join(', ')}`,
+      `No providers matched filter. Available providers: ${providers.map(formatProviderId).join(', ')}`,
     );
   }
   return selected;
@@ -265,7 +268,13 @@ export function registerRunEvaluationTool(server: McpServer) {
             testCases: {
               total: selection ? selection.original.tests?.length || 0 : summary.results.length,
               ...(selection ? { filtered: selection.filtered.tests?.length || 0 } : {}),
-              filters: { testCaseIndices, promptFilter, providerFilter },
+              filters: {
+                testCaseIndices,
+                promptFilter,
+                providerFilter: Array.isArray(providerFilter)
+                  ? providerFilter.map(formatProviderId)
+                  : providerFilter && formatProviderId(providerFilter),
+              },
             },
             ...(selection
               ? {
@@ -279,9 +288,7 @@ export function registerRunEvaluationTool(server: McpServer) {
                   providers: {
                     total: selection.original.providers.length,
                     filtered: selection.filtered.providers.length,
-                    ids: selection.filtered.providers.map((p) =>
-                      typeof p.id === 'function' ? p.id() : p.id,
-                    ),
+                    ids: selection.filtered.providers.map(formatProviderId),
                   },
                 }
               : {}),
