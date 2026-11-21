@@ -711,20 +711,16 @@ function restorePromptFunctions(returnedPrompts: Prompt[], originalPrompts: Prom
   // A prompt function that was neither restored nor returned by the hook means the
   // prompt will render its raw source as text — the original #9653 symptom. Surface
   // why, so users get a breadcrumb instead of a silent behavior change.
-  const labelsWithFunction = new Set<string>();
   const returnedLabels = new Set<string>();
   for (const prompt of restored) {
     if (prompt?.label != null) {
       returnedLabels.add(prompt.label);
       if (typeof prompt.function === 'function') {
-        labelsWithFunction.add(prompt.label);
+        originalsByLabel.delete(prompt.label);
       }
     }
   }
   for (const [label, original] of originalsByLabel) {
-    if (labelsWithFunction.has(label)) {
-      continue;
-    }
     if (original === null) {
       if (returnedLabels.has(label)) {
         logger.warn(
