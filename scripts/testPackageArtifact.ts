@@ -1647,6 +1647,20 @@ async function main(): Promise<void> {
         ),
       );
     }
+    for (const [parser, version] of Object.entries({
+      'pdf-parse': '^2.4.5',
+      'node-sql-parser': '^5.4.0',
+    })) {
+      await timeAsyncPhase(`check optional ${parser}`, () =>
+        runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
+          name: parser,
+          package: parser,
+          version,
+          script: 'optional-parsers.cjs',
+          env: { PARSER: parser, PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' },
+        }),
+      );
+    }
     await timeAsyncPhase('check optional JKS support', () =>
       runOptionalJksChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default'),
     );

@@ -26,6 +26,7 @@ import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
+import { importParser } from './util/parserPackages';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
@@ -35,16 +36,14 @@ type FileMetadata = Record<string, { path: string; type: string; format?: string
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
   try {
-    const { PDFParse } = await import('pdf-parse');
-    const dataBuffer = await fs.readFile(pdfPath);
-    const parser = new PDFParse({ data: dataBuffer });
-    const result = await parser.getText();
-    await parser.destroy();
-    return result.text.trim();
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("Cannot find module 'pdf-parse'")) {
-      throw new Error('pdf-parse is not installed. Please install it with: npm install pdf-parse');
+    const { PDFParse } = (await importParser('pdf-parse')) as typeof import('pdf-parse');
+    const parser = new PDFParse({ data: await fs.readFile(pdfPath) });
+    try {
+      return (await parser.getText()).text.trim();
+    } finally {
+      await parser.destroy();
     }
+  } catch (error) {
     throw new Error(
       `Failed to extract text from PDF ${pdfPath}: ${error instanceof Error ? error.message : String(error)}`,
     );

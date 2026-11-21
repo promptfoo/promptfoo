@@ -53,11 +53,13 @@ A wide variety of LLM APIs are supported, including local models. See [providers
 Create test cases to validate the generated SQL queries. Each test case includes:
 
 - **vars**: Variables used in the prompt template.
-- **assert**: Assertions to used to validate the output.
+- **assert**: Assertions used to validate the output.
 
 #### Basic SQL Validation
 
-This test checks produces a query for `bananas` (remember our prompt above) and confirms that the generated output is valid SQL.
+SQL assertions require the optional `node-sql-parser` package. Install it with Promptfoo using `npm install promptfoo node-sql-parser@^5.4.0`. Use the same package manager and installation scope for both packages.
+
+This test asks for a query about `bananas` and checks that the output is valid SQL.
 
 ```yaml
 - vars:
