@@ -8,6 +8,7 @@ import { createDiskCache } from './cache/storage';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './providers/shared';
+import { registerCacheNamespace, trackCacheClear } from './util/cacheOperationScope';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
@@ -123,9 +124,10 @@ function getCacheInstance() {
         ttl: getCacheTtlMs(),
         refreshThreshold: 0, // Disable background refresh
       });
-    const clear = cacheInstance.clear.bind(cacheInstance);
-    cacheInstance.clear = async () => {
-      const result = await clear();
+    const cache = cacheInstance;
+    const clear = cache.clear.bind(cache);
+    cache.clear = async () => {
+      const result = await trackCacheClear(cache, '', clear);
       cacheClearGeneration += 1;
       return result;
     };
@@ -163,7 +165,7 @@ function getNamespacedCache(namespace: string) {
     },
     mdel: (keys: string[]) => cache.mdel(keys.map((key) => getScopedCacheKey(key, namespace))),
     ttl: (key: string) => cache.ttl(getScopedCacheKey(key, namespace)),
-    clear: () => clearNamespacedCache(cache, namespace),
+    clear: () => trackCacheClear(cache, namespace, () => clearNamespacedCache(cache, namespace)),
     wrap: (...args: Parameters<Cache['wrap']>) =>
       cache.wrap(
         getScopedCacheKey(args[0] as string, namespace),
@@ -173,6 +175,7 @@ function getNamespacedCache(namespace: string) {
       ),
   } as Cache;
 
+  registerCacheNamespace(namespacedCache, cache, (key) => getScopedCacheKey(key, namespace));
   namespacedCacheInstances.set(namespace, namespacedCache);
   return namespacedCache;
 }
