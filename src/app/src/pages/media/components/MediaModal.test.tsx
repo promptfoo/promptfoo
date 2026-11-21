@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { mockMatchMedia } from '@app/tests/browserMocks';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,6 +16,7 @@ vi.mock('@app/utils/api', () => ({
 
 // Mock the media utilities
 vi.mock('@app/utils/media', () => ({
+  hashToNumber: () => 0,
   downloadMediaItem: vi.fn(),
   formatBytes: (bytes: number) => `${bytes} B`,
   formatCost: (cost: number) => `$${cost.toFixed(2)}`,
@@ -27,11 +28,6 @@ vi.mock('@app/utils/media', () => ({
   MEDIA_MIN_ZOOM: 1,
   MEDIA_ZOOM_STEP: 1.5,
   MEDIA_ZOOM_WHEEL_STEP: 1.1,
-}));
-
-// Mock AudioWaveform
-vi.mock('./AudioWaveform', () => ({
-  AudioWaveform: () => <div data-testid="audio-waveform" />,
 }));
 
 // Wrapper with router context (required for Link components)
@@ -115,11 +111,20 @@ describe('MediaModal', () => {
       expect(img).toHaveAttribute('src', 'http://localhost:3000/api/blobs/abc123def456');
     });
 
-    it('renders audio waveform for audio kind', () => {
+    it('animates the expanded waveform while audio plays', () => {
       const item = createMockItem({ kind: 'audio', mimeType: 'audio/mp3' });
       renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
 
-      expect(screen.getByTestId('audio-waveform')).toBeInTheDocument();
+      const dialog = screen.getByRole('dialog');
+      const audio = dialog.querySelector('audio')!;
+      act(() => {
+        audio.dispatchEvent(new Event('play'));
+      });
+      expect(dialog.querySelectorAll('.animate-pulse')).toHaveLength(12);
+      act(() => {
+        audio.dispatchEvent(new Event('pause'));
+      });
+      expect(dialog.querySelectorAll('.animate-pulse')).toHaveLength(0);
     });
 
     it('renders file icon for other kind', () => {
