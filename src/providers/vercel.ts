@@ -1,12 +1,17 @@
 import { createHmac } from 'crypto';
 
 import { context as otelContext, propagation, ROOT_CONTEXT, trace } from '@opentelemetry/api';
+import semverSatisfies from 'semver/functions/satisfies.js';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvOverrides, getEnvString, getProviderEnvString } from '../envars';
 import { getExplicitProviderEnv } from '../envOverrides';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { normalizeFinishReason } from '../util/finishReason';
+import {
+  isMissingPackageImportError,
+  optionalPackageInstallHint,
+} from '../util/packageImportErrors';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import { hasActiveTracingSpan } from './tracing';
 import type { LanguageModelUsage, ProviderMetadata } from 'ai';
@@ -103,9 +108,36 @@ function resolveBaseUrl(config: VercelAiConfig, env?: EnvOverrides): string | un
   );
 }
 
-async function createGatewayInstance(config: VercelAiConfig, env?: EnvOverrides) {
-  const { createGateway } = await import('ai');
-  return createGateway({
+const sdkVersion = '^6.0.286';
+const installHint = () => optionalPackageInstallHint(`npm install promptfoo "ai@${sdkVersion}"`);
+
+async function loadAiSdk() {
+  try {
+    const { default: metadata } = await import(/* webpackIgnore: true */ 'ai/package.json', {
+      with: { type: 'json' },
+    });
+    if (!semverSatisfies(metadata.version, sdkVersion)) {
+      throw new Error(
+        `The installed ai package (${metadata.version}) is incompatible with the Vercel provider. ${installHint()}`,
+      );
+    }
+    return await import(/* webpackIgnore: true */ 'ai');
+  } catch (error) {
+    if (isMissingPackageImportError(error, 'ai')) {
+      throw new Error(
+        `The Vercel AI Gateway provider requires the optional ai package. ${installHint()}`,
+      );
+    }
+    throw error;
+  }
+}
+
+function createGatewayInstance(
+  sdk: typeof import('ai'),
+  config: VercelAiConfig,
+  env?: EnvOverrides,
+) {
+  return sdk.createGateway({
     apiKey: config.apiKey,
     baseURL: resolveBaseUrl(config, env),
     headers: config.headers,
@@ -352,8 +384,9 @@ export class VercelAiProvider implements ApiProvider {
     let streamError: { error: unknown } | undefined;
 
     try {
-      const gateway = await createGatewayInstance(config, this.env);
-      const { streamText } = await import('ai');
+      const sdk = await loadAiSdk();
+      const gateway = createGatewayInstance(sdk, config, this.env);
+      const { streamText } = sdk;
 
       logger.debug('Calling Vercel AI Gateway (streaming)', {
         model: this.modelName,
@@ -483,8 +516,8 @@ export class VercelAiProvider implements ApiProvider {
     let response: ProviderResponse = {};
 
     try {
-      const gateway = await createGatewayInstance(config, this.env);
-      sdk = await import('ai');
+      sdk = await loadAiSdk();
+      const gateway = createGatewayInstance(sdk, config, this.env);
       const { generateText, Output, jsonSchema } = sdk;
 
       logger.debug('Calling Vercel AI Gateway', {
@@ -625,8 +658,9 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     const { signal, cleanup } = createTimeoutController(timeout, options?.abortSignal);
 
     try {
-      const gateway = await createGatewayInstance(config, this.env);
-      const { embed } = await import('ai');
+      const sdk = await loadAiSdk();
+      const gateway = createGatewayInstance(sdk, config, this.env);
+      const { embed } = sdk;
 
       logger.debug('Calling Vercel AI Gateway for embedding', { model: this.modelName });
 
