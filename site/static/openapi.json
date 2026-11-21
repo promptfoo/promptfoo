@@ -129,6 +129,190 @@
         }
       }
     },
+    "/api/results/{id}/tools": {
+      "get": {
+        "operationId": "getResultTools",
+        "tags": ["Results"],
+        "summary": "Get saved tool definitions for an evaluation",
+        "parameters": [
+          {
+            "schema": { "type": "string", "minLength": 1 },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "data": { "type": "array", "items": {} } },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Result not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/results/{id}/rows/{testIdx}/{promptIdx}": {
+      "get": {
+        "operationId": "getResultRow",
+        "tags": ["Results"],
+        "summary": "Get one evaluation result row",
+        "parameters": [
+          {
+            "schema": { "type": "string", "minLength": 1 },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": { "type": "integer", "minimum": 0 },
+            "required": true,
+            "name": "testIdx",
+            "in": "path"
+          },
+          {
+            "schema": { "type": "integer", "minimum": 0 },
+            "required": true,
+            "name": "promptIdx",
+            "in": "path"
+          },
+          {
+            "schema": { "type": "string", "minLength": 1 },
+            "required": false,
+            "name": "resultId",
+            "in": "query"
+          },
+          {
+            "schema": { "type": ["integer", "null"], "minimum": 0 },
+            "required": false,
+            "name": "legacyResultIndex",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": { "schema": { "type": "object", "properties": { "data": {} } } }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Result row not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/results/{id}": {
       "get": {
         "operationId": "getResult",
@@ -140,6 +324,20 @@
             "required": true,
             "name": "id",
             "in": "path"
+          },
+          {
+            "schema": {
+              "oneOf": [{ "type": "boolean" }, { "type": "string", "enum": ["true", "false"] }]
+            },
+            "required": false,
+            "name": "includeTraces",
+            "in": "query"
+          },
+          {
+            "schema": { "type": "string", "enum": ["full", "redteamReport"], "default": "full" },
+            "required": false,
+            "name": "resultProjection",
+            "in": "query"
           }
         ],
         "responses": {
@@ -169,6 +367,24 @@
           },
           "404": {
             "description": "Result not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
             "content": {
               "application/json": {
                 "schema": {

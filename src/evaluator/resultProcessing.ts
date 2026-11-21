@@ -696,7 +696,7 @@ export const PROMPTFOO_METADATA_KEY = '__promptfoo';
 const TRACE_LINKAGE_KEY = 'traceLinkage';
 const REPEAT_LINKAGE_KEY = 'repeatLinkage';
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
+export function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;

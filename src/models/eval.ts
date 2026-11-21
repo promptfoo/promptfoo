@@ -82,6 +82,7 @@ import EvalResult, {
 } from './evalResult';
 import { generateIdFromPrompt } from './prompt';
 import {
+  jsonObjectFieldOrEmpty,
   MAX_REPORT_TEXT_LENGTH,
   reportConfigProjection,
   selectReportRows,

@@ -3,6 +3,7 @@ import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extrac
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import {
+  asRecord,
   getStripFlags,
   persistRepeatMetadata,
   persistTraceMetadata,

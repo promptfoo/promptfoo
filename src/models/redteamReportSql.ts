@@ -54,7 +54,7 @@ function jsonObjectOrEmpty(value: SQLWrapper): SQL {
   return sql`CASE WHEN json_valid(${value}) THEN CASE WHEN json_type(${value}) = 'object' THEN ${value} ELSE json('{}') END ELSE json('{}') END`;
 }
 
-function jsonObjectFieldOrEmpty(value: SQLWrapper, path: string): SQL {
+export function jsonObjectFieldOrEmpty(value: SQLWrapper, path: string): SQL {
   const object = jsonObjectOrEmpty(value);
   return sql`CASE WHEN json_type(${object}, ${path}) = 'object' THEN json_extract(${object}, ${path}) ELSE json('{}') END`;
 }
