@@ -46,6 +46,16 @@ vi.mock('../../src/logger', () => ({
 // Get the mocked module - initialized in beforeAll
 let mockedTraceStore: typeof import('../../src/tracing/store');
 
+const hostedOwner = {
+  key: 'promptfoo.openai.hosted_trace',
+  value: { stringValue: 'eeeeeeeeeeeeeeee' },
+};
+const hostedRequest = {
+  key: 'promptfoo.openai.hosted_trace_requested',
+  value: { boolValue: true },
+};
+const hostedClaims = [hostedOwner, hostedRequest];
+
 describe('OTLPReceiver', () => {
   let receiver: OTLPReceiver;
   let mockTraceStore: {
@@ -130,7 +140,7 @@ describe('OTLPReceiver', () => {
   });
 
   describe('Trace ingestion', () => {
-    it('ignores a claimed grader role in received span and resource attributes', async () => {
+    it('ignores claimed grader and hosted ownership in span and resource attributes', async () => {
       const grader = { key: SPAN_ROLE_ATTRIBUTE, value: { stringValue: 'grader' } };
       const tool = { key: 'gen_ai.tool.name', value: { stringValue: 'delete_file' } };
       const scope = { name: PROMPTFOO_TRACER_NAME };
@@ -150,12 +160,18 @@ describe('OTLPReceiver', () => {
               scopeSpans: [
                 {
                   scope,
-                  spans: [{ ...span, spanId: '2222222222222222', attributes: [grader, tool] }],
+                  spans: [
+                    {
+                      ...span,
+                      spanId: '2222222222222222',
+                      attributes: [grader, tool, ...hostedClaims],
+                    },
+                  ],
                 },
               ],
             },
             {
-              resource: { attributes: [grader] },
+              resource: { attributes: [grader, ...hostedClaims] },
               scopeSpans: [
                 { scope, spans: [{ ...span, spanId: '3333333333333333', attributes: [tool] }] },
               ],
@@ -166,7 +182,9 @@ describe('OTLPReceiver', () => {
       const [, stored] = mockTraceStore.addSpans.mock.calls[0];
       expect(stored).toHaveLength(2);
       for (const received of stored) {
-        expect(received.attributes).not.toHaveProperty([SPAN_ROLE_ATTRIBUTE]);
+        for (const { key } of [grader, ...hostedClaims]) {
+          expect(received.attributes).not.toHaveProperty([key]);
+        }
         expect(received.attributes).toMatchObject({ 'gen_ai.tool.name': 'delete_file' });
         expect(received.parentSpanId).toBe(span.parentSpanId);
       }
@@ -183,20 +201,22 @@ describe('OTLPReceiver', () => {
       const name = 'invoke_agent';
       const attributes = {
         [SPAN_ROLE_ATTRIBUTE]: 'grader',
+        [hostedRequest.key]: true,
       };
       mockTraceStore.getTraceMetadata.mockResolvedValueOnce({
         otlpHttpRedactAttributes: ['private.alias'],
       });
       try {
         const span = provider.getTracer(PROMPTFOO_TRACER_NAME).startSpan(name, {
-          attributes: { ...attributes, 'private.alias': name },
+          attributes: { ...attributes, [hostedOwner.key]: 'forged-owner', 'private.alias': name },
         });
-        markEvaluatorSpan(span, 'grader', name);
+        markEvaluatorSpan(span, 'grader', name, undefined, true);
         span.end();
         await provider.forceFlush();
         const [[traceId, [received]]] = mockTraceStore.addSpans.mock.calls;
         expect(received.name).toBe('[REDACTED]');
         expect(received.attributes).toMatchObject(attributes);
+        expect(received.attributes).not.toHaveProperty([hostedOwner.key]);
         expect(received.attributes[SPAN_ORIGIN_ATTRIBUTE]).toBeUndefined();
 
         // A sender replaying the wrapper ID and scope after the SDK request has completed
@@ -218,6 +238,7 @@ describe('OTLPReceiver', () => {
                         startTimeUnixNano: '1000000',
                         attributes: [
                           { key: SPAN_ROLE_ATTRIBUTE, value: { stringValue: 'grader' } },
+                          ...hostedClaims,
                         ],
                       },
                     ],
@@ -227,9 +248,10 @@ describe('OTLPReceiver', () => {
             ],
           })
           .expect(200);
-        expect(mockTraceStore.addSpans.mock.calls[1][1][0].attributes).not.toHaveProperty([
-          SPAN_ROLE_ATTRIBUTE,
-        ]);
+        const replay = mockTraceStore.addSpans.mock.calls[1][1][0];
+        for (const key of [SPAN_ROLE_ATTRIBUTE, hostedOwner.key, hostedRequest.key]) {
+          expect(replay.attributes).not.toHaveProperty([key]);
+        }
       } finally {
         await provider.shutdown();
         await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -1713,6 +1735,7 @@ describe('OTLPReceiver', () => {
             { key: 'tool_name', value: { stringValue: 'Bash' } },
             { key: 'duration_ms', value: { intValue: '342' } },
             { key: SPAN_ROLE_ATTRIBUTE, value: { stringValue: 'grader' } },
+            ...hostedClaims,
           ],
         },
       ]);
@@ -1732,7 +1755,9 @@ describe('OTLPReceiver', () => {
       expect(span.parentSpanId).toBe(hexParentSpanId);
       expect(span.attributes['tool_name']).toBe('Bash');
       expect(span.attributes['duration_ms']).toBe(342);
-      expect(span.attributes).not.toHaveProperty([SPAN_ROLE_ATTRIBUTE]);
+      for (const key of [SPAN_ROLE_ATTRIBUTE, hostedOwner.key, hostedRequest.key]) {
+        expect(span.attributes).not.toHaveProperty([key]);
+      }
       expect(span.attributes['otel.log.body']).toBe('Tool execution complete');
       expect(span.attributes['service.name']).toBe('claude-agent-sdk');
       // Time conversion: nanos → ms, plus a 1ms nominal duration.

@@ -67,6 +67,7 @@ import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
+import { prepareHostedTraceAssertion } from './hostedTrace';
 import { handleContainsHtml, handleIsHtml } from './html';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
@@ -783,7 +784,7 @@ async function runAssertionInternal({
 
   const assertionParams: AssertionParams = {
     assertion,
-    baseType: getAssertionBaseType(assertion),
+    baseType,
     providerCallContext,
     assertionValueContext: context,
     cost,
@@ -807,7 +808,7 @@ async function runAssertionInternal({
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (handler) {
-    const traceError = getTraceEvidenceError(
+    const evidenceError = getTraceEvidenceError(
       assertionParams,
       traceId,
       traceUnavailable,
@@ -815,9 +816,10 @@ async function runAssertionInternal({
     );
     // Validate deterministic matchers on partial captures. Never run a model judge
     // against incomplete evidence or award a pass for missing spans.
-    if (traceError && context.trace && assertionParams.baseType !== 'trajectory:goal-success') {
+    if (evidenceError && context.trace && assertionParams.baseType !== 'trajectory:goal-success') {
       await handler(assertionParams);
     }
+    const traceError = evidenceError ?? prepareHostedTraceAssertion(assertionParams);
     const result: GradingResult = traceError
       ? { pass: false, score: 0, reason: traceError, assertion }
       : await handler(assertionParams);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isRelevantSpan, matchesSpanFilter } from '../../src/tracing/spanFilter';
+import { filterTargetSpans, isRelevantSpan, matchesSpanFilter } from '../../src/tracing/spanFilter';
 
 describe('trace span relevance', () => {
   it.each([
@@ -94,4 +94,38 @@ describe('trace span name filters', () => {
   it('accepts a span when any configured filter matches', () => {
     expect(matchesSpanFilter('chat gpt-4.1-mini', ['guardrail*', 'chat*'])).toBe(true);
   });
+});
+
+it('keeps old receiver spans with a forged hosted owner and withholds native spans awaiting their owner', () => {
+  const owner = { 'promptfoo.openai.hosted_trace': 'missing-wrapper' };
+  const external = {
+    spanId: 'from-http',
+    attributes: { ...owner, 'otel.span.kind_code': 1, 'tool.name': 'delete_file' },
+  };
+  const native = { spanId: 'from-native-import', attributes: owner };
+  expect(filterTargetSpans([external, native])).toEqual([
+    { ...external, attributes: { 'otel.span.kind_code': 1, 'tool.name': 'delete_file' } },
+  ]);
+  expect(external.attributes).toHaveProperty(['promptfoo.openai.hosted_trace']);
+});
+
+it('distinguishes old foreign receiver roles from a possible Promptfoo export', () => {
+  const received = (scope: string) => ({
+    spanId: scope,
+    attributes: {
+      'otel.scope.name': scope,
+      'otel.span.kind_code': 1,
+      'promptfoo.span.role': 'grader',
+    },
+  });
+  const child = { spanId: 'tool', parentSpanId: 'application' };
+  expect(
+    filterTargetSpans([received('application'), child, received('promptfoo.providers')]),
+  ).toEqual([
+    {
+      spanId: 'application',
+      attributes: { 'otel.scope.name': 'application', 'otel.span.kind_code': 1 },
+    },
+    child,
+  ]);
 });

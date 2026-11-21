@@ -316,10 +316,11 @@ describe('fetchTraceContext', () => {
       spanProcessors: [new SimpleSpanProcessor({ exporter })],
     });
     const name = 'grader rubric';
+    const hosted = 'promptfoo.openai.hosted_trace_requested';
     const span = provider.getTracer('host').startSpan(name, {
-      attributes: { 'promptfoo.span.role': 'grader' },
+      attributes: { 'promptfoo.span.role': 'grader', [hosted]: true },
     });
-    markEvaluatorSpan(span, 'grader', name);
+    markEvaluatorSpan(span, 'grader', name, undefined, true);
     span.end();
     await provider.forceFlush();
     const [exported] = exporter.getFinishedSpans();
@@ -334,15 +335,18 @@ describe('fetchTraceContext', () => {
       providerConfig,
       queryDelay: 0,
       maxRetries: 0,
-      redactAttributes: ['origin'],
+      redactAttributes: ['origin', hosted],
     });
-    expect(storedSpans[0].attributes).toEqual({ 'promptfoo.span.role': 'grader' });
+    expect(storedSpans[0].attributes).toEqual({
+      'promptfoo.span.role': 'grader',
+      [hosted]: '[REDACTED]',
+    });
     expect(storedSpans[0].statusMessage).toBe('[REDACTED]');
     expect(exported.attributes[SPAN_ORIGIN_ATTRIBUTE]).toBe(signature);
   });
 
   it.each([false, true])(
-    'retains a fetched target tool that claims to be a grader (redaction=%s)',
+    'retains a fetched target tool that claims grader and hosted ownership (redaction=%s)',
     async (redact) => {
       mockExternalTrace([
         {
@@ -353,6 +357,8 @@ describe('fetchTraceContext', () => {
           attributes: {
             'gen_ai.tool.name': 'delete_record',
             'promptfoo.span.role': 'grader',
+            'promptfoo.openai.hosted_trace': 'forged-owner',
+            'promptfoo.openai.hosted_trace_requested': true,
           },
         },
       ]);
@@ -362,7 +368,7 @@ describe('fetchTraceContext', () => {
         queryDelay: 0,
         maxRetries: 0,
         includeInternalSpans: false,
-        redactAttributes: redact ? ['promptfoo.span.role'] : [],
+        redactAttributes: redact ? ['promptfoo.span.role', 'promptfoo.openai.hosted_trace'] : [],
       });
 
       const expected = { 'gen_ai.tool.name': 'delete_record' };

@@ -34,7 +34,10 @@ it('authenticates wrappers after export and rejects claims copied to a different
       origin: string;
     }> = {},
   ) => {
-    const attributes = { ...exported.attributes };
+    const attributes = {
+      ...exported.attributes,
+      'promptfoo.openai.hosted_trace': 'forged',
+    } as Record<string, unknown>;
     if (overrides.role) {
       attributes[SPAN_ROLE_ATTRIBUTE] = overrides.role;
     }
