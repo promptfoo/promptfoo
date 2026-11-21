@@ -1,3 +1,5 @@
+import { realpath } from 'node:fs/promises';
+
 import { LRUCache } from 'lru-cache';
 import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
@@ -7,9 +9,18 @@ import { FILE_METADATA_KEY } from '../constants';
 import { getEnvBool, getEnvInt } from '../envars';
 import { collectFileMetadata, renderPrompt } from '../evaluatorHelpers';
 import logger from '../logger';
-import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers/agentWorkspace';
+import {
+  type AgentWorkspace,
+  createAgentWorkspaceForConfig,
+  resolveConfiguredWorkingDir,
+} from '../providers/agentWorkspace';
 import { providerRegistry } from '../providers/providerRegistry';
 import { maybeWrapMcpProviderForRedteam } from '../redteam/mcpTargetProvider';
+import { hasCodingAgentAssertion } from '../redteam/plugins/codingAgent/assertions';
+import {
+  type CodingAgentHostEvidence,
+  withCodingAgentHostEvidence,
+} from '../redteam/plugins/codingAgent/hostEvidence';
 import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLength';
 import { getSessionId } from '../redteam/util';
 import { createProviderRateLimitOptions, sleepWithAbort } from '../scheduler';
@@ -167,7 +178,19 @@ export const deferredGradingPromises = new WeakMap<EvaluateResult, Promise<void>
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!checkResult.pass) {
     row.error = checkResult.reason;
-    row.failureReason = ResultFailureReason.ASSERT;
+    const failedChecks = (checkResult.componentResults ?? [checkResult]).filter(
+      (check) => !check.pass && !check.componentResults?.length,
+    );
+    row.failureReason =
+      failedChecks.length > 0 &&
+      failedChecks.every(
+        (check) =>
+          check.assertion?.type.startsWith('promptfoo:redteam:coding-agent:') &&
+          check.metadata?.verifierStatus === 'incomplete' &&
+          check.metadata?.graderError === true,
+      )
+        ? ResultFailureReason.ERROR
+        : ResultFailureReason.ASSERT;
   }
   row.success = checkResult.pass;
   row.score = checkResult.score;
@@ -1372,13 +1395,40 @@ export async function runEvalInternal(
       vars: state.vars,
     });
     setup = rendered.setup;
+    let hostEvidence: CodingAgentHostEvidence | undefined;
     if (!test.providerOutput) {
-      const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
-      workspace = await createAgentWorkspaceForConfig(
-        { ...activeProvider.config, ...rendered.setup.prompt.config },
-        state.vars,
-        abortSignal,
-      );
+      const override = isApiProvider(test.provider) ? test.provider : undefined;
+      // Red team strategies delegate to the original target, which owns the workspace.
+      const target =
+        override && !override.id().startsWith('promptfoo:redteam:') ? override : provider;
+      const config = { ...target.config, ...rendered.setup.prompt.config };
+      workspace = await createAgentWorkspaceForConfig(config, state.vars, abortSignal);
+      if (hasCodingAgentAssertion(test.assert)) {
+        const directory =
+          workspace?.dir ??
+          resolveConfiguredWorkingDir(config.working_dir, state.vars, config.basePath);
+        const { snapshotCodingAgentArtifacts } = await import(
+          '../redteam/plugins/codingAgent/verifiers'
+        );
+        hostEvidence = await snapshotCodingAgentArtifacts(
+          { ...test, vars: state.vars },
+          directory ?? process.cwd(),
+        );
+        if (directory) {
+          const extra: unknown[] = Array.isArray(config.additional_directories)
+            ? config.additional_directories
+            : [];
+          const roots = new Set([hostEvidence.workingDir, directory]);
+          for (const dir of extra) {
+            const resolved = resolveConfiguredWorkingDir(dir, state.vars, config.basePath);
+            if (resolved) {
+              roots.add(resolved);
+              roots.add(await realpath(resolved).catch(() => resolved));
+            }
+          }
+          hostEvidence.readRoots = [...roots];
+        }
+      }
     }
     const stepWorkspace = workspace;
 
@@ -1426,7 +1476,25 @@ export async function runEvalInternal(
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
-            response.metadata = { ...response.metadata, ...(await stepWorkspace.metadata()) };
+            const observed = await stepWorkspace.metadata();
+            // Workspace evidence and its completeness come from the evaluator.
+            const {
+              workspaceDiff: _providerDiff,
+              workspaceDiffError: _providerDiffError,
+              ...providerMetadata
+            } = response.metadata ?? {};
+            response.metadata = { ...providerMetadata, ...observed };
+            if (hostEvidence) {
+              hostEvidence.workspaceDiffError = observed.workspaceDiffError;
+              // A partial file patch can omit removals or truncate a token into a false match.
+              hostEvidence.workspaceDiff =
+                observed.workspaceDiffError === 'truncated'
+                  ? observed.workspaceDiff
+                      ?.split(/(?=^diff --git )/m)
+                      .slice(0, -1)
+                      .join('')
+                  : observed.workspaceDiff;
+            }
           }
 
           updateConversationHistory({
@@ -1507,6 +1575,9 @@ export async function runEvalInternal(
         },
         (rows) => deferredGradingPromises.get(rows[0]),
       );
+    const runRow = hostEvidence
+      ? () => withCodingAgentHostEvidence(hostEvidence, runExecution)
+      : runExecution;
     const rows = executionTraceContext
       ? await withProviderCallTracingContext(
           {
@@ -1515,9 +1586,9 @@ export async function runEvalInternal(
             withGraderSpan,
             withProviderSpan: withTracedProviderCall,
           },
-          runExecution,
+          runRow,
         )
-      : await runExecution();
+      : await runRow();
     // Deferred assertions still need the workspace, so they remove it when they finish.
     const deferredGrading = deferredGradingPromises.get(rows[0]);
     if (workspace && deferredGrading) {

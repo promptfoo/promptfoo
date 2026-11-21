@@ -10,6 +10,7 @@ import cliState from '../cliState';
 import { getEnvString, getProcessEnv } from '../envars';
 import { importModule } from '../esm';
 import logger, { getLogLevel } from '../logger';
+import { hasCodingAgentAssertion } from '../redteam/plugins/codingAgent/assertions';
 import {
   cacheResponse,
   generateCacheKey,
@@ -23,6 +24,7 @@ import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
 import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
+  AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
@@ -516,7 +518,7 @@ interface OpenCodeAssistantMessage {
 }
 
 interface OpenCodeSessionMessage {
-  info?: { id?: string };
+  info?: { id?: string; parentID?: string; role?: string };
   parts?: OpenCodePromptPart[];
 }
 
@@ -524,7 +526,10 @@ interface OpenCodePromptPart {
   type: string;
   text?: string;
   tool?: string;
+  callID?: string;
   state?: {
+    output?: string;
+    error?: string;
     status?: string;
     input?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
@@ -1822,7 +1827,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   }
 
   /**
-   * Fetches the session message history and returns only the parts that belong
+   * Fetches the session message history and returns only the messages that belong
    * to the current prompt, bounded by parentID (start) and assistantMessage.id
    * (end) to prevent skill calls from other prompts bleeding in.
    *
@@ -1832,30 +1837,32 @@ export class OpenCodeSDKProvider implements ApiProvider {
    * Over-attributing skill calls from earlier or concurrent prompts in a
    * shared session would be worse than missing intermediate-turn calls.
    */
-  private async fetchCurrentPromptParts(
+  private async fetchCurrentPromptMessages(
     client: OpenCodeClient,
     session: OpenCodeSessionContext,
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
+    captureTools: boolean,
     abortSignal?: AbortSignal,
-  ): Promise<OpenCodePromptPart[]> {
+  ): Promise<OpenCodeSessionMessage[]> {
     const assistantMessage = unwrapOpenCodeResult(response)?.info;
     const parentId = assistantMessage?.parentID;
     const assistantId = assistantMessage?.id;
     if (!parentId || !assistantId) {
       logger.debug(
-        '[OpenCode SDK] Assistant message is missing a history anchor; skipping session history fetch for skill tracking',
+        '[OpenCode SDK] Assistant message is missing a history anchor; skipping current prompt history fetch',
       );
       return [];
     }
+    const query = captureTools ? { ...session.sessionQuery, limit: 100 } : session.sessionQuery;
     const messagesResult =
       this.opencodeModule?.apiVersion === 'v2'
         ? await client.session.messages(
-            { sessionID: session.sessionId, ...session.sessionQuery },
+            { sessionID: session.sessionId, ...query },
             abortSignal ? { signal: abortSignal } : undefined,
           )
         : await client.session.messages({
             path: getSessionPath(session.sessionId),
-            query: session.sessionQuery,
+            query,
             ...(abortSignal ? { signal: abortSignal } : {}),
           });
     const messages = unwrapOpenCodeResult(messagesResult) ?? [];
@@ -1867,22 +1874,22 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const startIndex = messages.findIndex((m) => m.info?.id === parentId);
     if (startIndex === -1) {
       logger.debug(
-        `[OpenCode SDK] Parent message ${parentId} not found in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+        `[OpenCode SDK] Parent message ${parentId} not found in ${messages.length} fetched messages; falling back to final-message parts`,
       );
       return [];
     }
     const endIndex = messages.findIndex((m) => m.info?.id === assistantId);
     if (endIndex < startIndex) {
       logger.debug(
-        `[OpenCode SDK] Assistant message ${assistantId} not found after its parent in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+        `[OpenCode SDK] Assistant message ${assistantId} not found after its parent in ${messages.length} fetched messages; falling back to final-message parts`,
       );
       return [];
     }
     const relevantMessages = messages.slice(startIndex, endIndex + 1);
     logger.debug(
-      `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} (start=${startIndex} end=${endIndex}) for skill tracking`,
+      `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} (start=${startIndex} end=${endIndex}) for current prompt grading`,
     );
-    return relevantMessages.flatMap((m) => m.parts ?? []);
+    return relevantMessages;
   }
 
   private getSessionQueueKey(
@@ -1899,7 +1906,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     config: OpenCodeSDKConfig,
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
     sessionId: string,
-    allSessionParts: OpenCodePromptPart[],
+    history: OpenCodeSessionMessage[],
+    captureTools: boolean,
   ): ProviderResponse {
     const responseData = unwrapOpenCodeResult(response);
     const assistantMessage = responseData?.info;
@@ -1924,7 +1932,35 @@ export class OpenCodeSDKProvider implements ApiProvider {
     // Prefer full session history when available so skill calls from intermediate
     // turns are captured. OpenCode is multi-turn: the skill tool is typically
     // invoked before the final response, so its tool part is absent from `parts`.
+    const allSessionParts = history.flatMap((m) => m.parts ?? []);
     const skillCalls = this.deriveSkillCalls(allSessionParts.length > 0 ? allSessionParts : parts);
+
+    // The final response already carries its own parts in raw. Keep only tool calls
+    // from intermediate assistant messages belonging to this prompt.
+    const toolCalls = captureTools
+      ? history
+          .slice(1, -1)
+          .filter(
+            (m) => m.info?.role === 'assistant' && m.info.parentID === assistantMessage?.parentID,
+          )
+          .flatMap((m) => m.parts ?? [])
+          .flatMap((part) => {
+            const state = part.state;
+            if (part.type !== 'tool' || !part.tool || !state) {
+              return [];
+            }
+            const exit = state.metadata?.exit;
+            return [
+              {
+                id: part.callID,
+                name: part.tool,
+                input: state.input,
+                output: state.output ?? state.error,
+                is_error: state.status === 'error' || (typeof exit === 'number' && exit !== 0),
+              },
+            ];
+          })
+      : [];
 
     return {
       output,
@@ -1932,7 +1968,17 @@ export class OpenCodeSDKProvider implements ApiProvider {
       ...(assistantMessage?.cost === undefined ? {} : { cost: assistantMessage.cost }),
       raw: JSON.stringify(response),
       sessionId,
-      ...(skillCalls.length === 0 ? {} : { metadata: { skillCalls } }),
+      ...(skillCalls.length || captureTools
+        ? {
+            metadata: {
+              ...(skillCalls.length && { skillCalls }),
+              ...(toolCalls.length && { toolCalls }),
+              ...(captureTools && {
+                codingAgentToolHistory: history.length ? 'complete' : 'unavailable',
+              }),
+            },
+          }
+        : {}),
     };
   }
 
@@ -2007,6 +2053,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const { config, inIsolatedWorkspace, isTempDir, workingDir } = this.prepareCall(context);
     const perCallTracing = Boolean(config.restart_server_per_call);
+    const test: AtomicTestCase | undefined = context?.test;
+    const captureTools = hasCodingAgentAssertion(test?.assert);
 
     try {
       this.buildEffectivePermissionRules(config);
@@ -2047,7 +2095,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
           ? { shouldReadCache: false, shouldWriteCache: false }
           : await initializeAgenticCache(
               {
-                cacheKeyPrefix: 'opencode:sdk',
+                cacheKeyPrefix: captureTools ? 'opencode:sdk:coding-agent' : 'opencode:sdk',
                 workingDir: config.working_dir ? workingDir : undefined,
                 bustCache: context?.bustCache,
                 mcp: mcpConfig,
@@ -2129,23 +2177,19 @@ export class OpenCodeSDKProvider implements ApiProvider {
             return { error: 'OpenCode SDK call aborted' };
           }
 
-          // Fetch only the parts that belong to the current prompt from the session
-          // history so that deriveSkillCalls captures skill calls from intermediate
-          // turns. Gated on the effective tool policy, so the extra round trip is
-          // skipped whenever the skill tool is denied and no skill parts can exist.
-          let allSessionParts: OpenCodePromptPart[] = [];
-          if (this.isSkillToolEnabled(config)) {
+          // Intermediate tool results are absent from OpenCode's final prompt response.
+          let history: OpenCodeSessionMessage[] = [];
+          if (captureTools || this.isSkillToolEnabled(config)) {
             try {
-              allSessionParts = await this.fetchCurrentPromptParts(
+              history = await this.fetchCurrentPromptMessages(
                 client,
                 session,
                 response,
+                captureTools,
                 abortSignal,
               );
             } catch (e) {
-              logger.debug(
-                `[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`,
-              );
+              logger.debug(`[OpenCode SDK] Could not fetch current prompt history: ${e}`);
             }
             if (abortSignal?.aborted) {
               return { error: 'OpenCode SDK call aborted' };
@@ -2156,9 +2200,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
             config,
             response,
             session.sessionId,
-            allSessionParts,
+            history,
+            captureTools,
           );
-          await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
+          if (providerResponse.metadata?.codingAgentToolHistory !== 'unavailable') {
+            await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
+          }
           logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
           return providerResponse;
         } finally {

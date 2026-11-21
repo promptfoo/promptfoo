@@ -33,7 +33,11 @@ export interface AgentWorkspace {
   readonly dir: string;
   readonly strategy: 'git' | 'copy';
   /** Response metadata describing the workspace, including the agent's diff for git workspaces. */
-  metadata(): Promise<{ workingDir: string; workspaceDiff?: string }>;
+  metadata(): Promise<{
+    workingDir: string;
+    workspaceDiff?: string;
+    workspaceDiffError?: 'truncated' | 'unavailable';
+  }>;
   /** Delete the workspace. Never throws. */
   remove(): Promise<void>;
 }
@@ -612,7 +616,7 @@ async function getWorkspaceDiff(
       );
     }
     await git(['-c', 'core.fsmonitor=false', 'add', '--update'], { env, signal });
-    const diff = await git(
+    return await git(
       [
         '-c',
         'core.fsmonitor=false',
@@ -625,9 +629,6 @@ async function getWorkspaceDiff(
       ],
       { env, signal },
     );
-    return diff.length > MAX_DIFF_LENGTH
-      ? `${diff.slice(0, MAX_DIFF_LENGTH)}\n[diff truncated after ${MAX_DIFF_LENGTH} characters]`
-      : diff;
   } finally {
     await fs.rm(scratch, { recursive: true, force: true, maxRetries: 3 });
   }
@@ -735,17 +736,38 @@ export async function createAgentWorkspace(
         return { workingDir: dir };
       }
       try {
-        return { workingDir: dir, workspaceDiff: await getWorkspaceDiff(dir, repo, signal) };
+        const diff = await getWorkspaceDiff(dir, repo, signal);
+        if (diff.length > MAX_DIFF_LENGTH) {
+          return {
+            workingDir: dir,
+            workspaceDiff: `${diff.slice(0, MAX_DIFF_LENGTH)}\n[diff truncated after ${MAX_DIFF_LENGTH} characters]`,
+            workspaceDiffError: 'truncated',
+          };
+        }
+        return { workingDir: dir, workspaceDiff: diff };
       } catch (error) {
         signal?.throwIfAborted();
         if (error instanceof Error && 'killed' in error && error.killed) {
           throw error;
         }
         logger.warn(`[copy_working_dir] Could not compute the workspace diff: ${error}`);
-        return { workingDir: dir };
+        return { workingDir: dir, workspaceDiffError: 'unavailable' };
       }
     },
   };
+}
+
+export function resolveConfiguredWorkingDir(
+  configured: unknown,
+  vars?: Record<string, VarValue>,
+  configuredBase?: unknown,
+): string | undefined {
+  const workingDir = renderVarsInObject(configured, vars);
+  const basePath =
+    typeof configuredBase === 'string' && configuredBase ? configuredBase : cliState.basePath;
+  return typeof workingDir === 'string'
+    ? resolveAgenticWorkingDir(workingDir, basePath)
+    : undefined;
 }
 
 /**
@@ -753,7 +775,7 @@ export async function createAgentWorkspace(
  * prompt config, sets `copy_working_dir`.
  */
 export async function createAgentWorkspaceForConfig(
-  config: { copy_working_dir?: unknown; working_dir?: unknown } | undefined,
+  config: { copy_working_dir?: unknown; working_dir?: unknown; basePath?: unknown } | undefined,
   vars?: Record<string, VarValue>,
   signal?: AbortSignal,
 ): Promise<AgentWorkspace | undefined> {
@@ -761,13 +783,9 @@ export async function createAgentWorkspaceForConfig(
   if (!mode) {
     return undefined;
   }
-  const workingDir = renderVarsInObject(config?.working_dir, vars);
-  if (typeof workingDir !== 'string' || !workingDir) {
+  const workingDir = resolveConfiguredWorkingDir(config?.working_dir, vars, config?.basePath);
+  if (!workingDir) {
     throw new Error('copy_working_dir requires working_dir');
   }
-  return createAgentWorkspace(
-    resolveAgenticWorkingDir(workingDir, cliState.basePath) as string,
-    mode,
-    signal,
-  );
+  return createAgentWorkspace(workingDir, mode, signal);
 }
