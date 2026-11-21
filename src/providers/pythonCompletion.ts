@@ -3,8 +3,9 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
+import { getEnvInt } from '../envars';
 import logger from '../logger';
-import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
+import { getConfiguredPythonPath } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
@@ -60,12 +61,9 @@ export class PythonProvider implements ApiProvider {
 
   private scriptPath: string;
   private functionName: string | null;
-  private cleanupGeneration = 0;
-  private configResolved = false;
-  private configAbortController: AbortController | null = null;
-  private poolPromise: Promise<PythonWorkerPool> | null = null;
-  private ownedPool: PythonWorkerPool | null = null;
-  private shutdownPromise: Promise<void> | null = null;
+  private isInitialized: boolean = false;
+  private initializationPromise: Promise<void> | null = null;
+  private initializationGeneration = 0;
   public label: string | undefined;
 
   constructor(
@@ -110,24 +108,61 @@ export class PythonProvider implements ApiProvider {
       return this.getPool();
     }
 
-    // Register before startup so shutdownAll also owns an initializing provider.
-    providerRegistry.register(this);
-    const cleanupGeneration = this.cleanupGeneration;
-    this.poolPromise = (async () => {
-      if (!this.configResolved) {
-        this.configAbortController = new AbortController();
-        try {
-          const config = await processConfigFileReferences(
-            this.config,
-            this.options?.config.basePath || '',
-            this.configAbortController.signal,
-          );
-          this.configAbortController.signal.throwIfAborted();
-          this.config = config;
-          this.configResolved = true;
-        } finally {
-          this.configAbortController = null;
+    const generation = ++this.initializationGeneration;
+    this.initializationPromise = (async () => {
+      let pool: PythonWorkerPool | undefined;
+      try {
+        const config = await processConfigFileReferences(
+          this.config,
+          this.options?.config.basePath || '',
+        );
+        if (generation !== this.initializationGeneration) {
+          throw new Error('Python provider initialization interrupted by cleanup');
         }
+        this.config = config;
+
+        // Initialize worker pool
+        const workerCount = this.getWorkerCount();
+        const absPath = path.resolve(
+          path.join(this.options?.config.basePath || '', this.scriptPath),
+        );
+
+        pool = new PythonWorkerPool(
+          absPath,
+          this.functionName || 'call_api',
+          workerCount,
+          getConfiguredPythonPath(
+            this.config.pythonExecutable,
+            this.options?.env?.PROMPTFOO_PYTHON,
+          ),
+          this.config.timeout,
+        );
+        this.pool = pool;
+        providerRegistry.register(this);
+
+        await pool.initialize();
+        if (generation !== this.initializationGeneration) {
+          throw new Error('Python provider initialization interrupted by cleanup');
+        }
+
+        this.isInitialized = true;
+        logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
+      } catch (error) {
+        if (generation === this.initializationGeneration) {
+          this.initializationPromise = null;
+          if (pool && this.pool === pool) {
+            this.pool = null;
+            providerRegistry.unregister(this);
+            try {
+              await pool.shutdown();
+            } catch (shutdownError) {
+              logger.warn('Failed to shut down a Python provider after initialization failed', {
+                error: shutdownError,
+              });
+            }
+          }
+        }
+        throw error;
       }
 
       // Initialize worker pool
@@ -183,8 +218,12 @@ export class PythonProvider implements ApiProvider {
     }
 
     // 2. Environment variable (explicit Python-specific setting)
-    const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
-    if (envWorkers !== undefined) {
+    const providerWorkers = this.options?.env?.PROMPTFOO_PYTHON_WORKERS;
+    const envWorkers =
+      providerWorkers === undefined
+        ? getEnvInt('PROMPTFOO_PYTHON_WORKERS')
+        : Number.parseInt(providerWorkers, 10);
+    if (envWorkers !== undefined && !Number.isNaN(envWorkers)) {
       if (envWorkers < 1) {
         logger.warn(
           `Invalid worker count ${envWorkers} in PROMPTFOO_PYTHON_WORKERS, using minimum of 1`,
@@ -316,30 +355,13 @@ export class PythonProvider implements ApiProvider {
   }
 
   async shutdown(): Promise<void> {
-    if (!this.shutdownPromise) {
-      this.cleanupGeneration++;
-      this.configAbortController?.abort();
-      const initializing = this.poolPromise;
-      this.poolPromise = null;
-      this.shutdownPromise = Promise.resolve().then(async () => {
-        try {
-          // Stop owned workers before joining startup, which may be waiting for
-          // their READY message. Keep ownership if stopping the workers fails.
-          await this.ownedPool?.shutdown();
-          this.ownedPool = null;
-          await initializing?.catch(() => null);
-          this.poolPromise = null;
-          providerRegistry.unregister(this);
-        } catch (error) {
-          // Global cleanup releases its snapshot before awaiting providers. A pool
-          // that could not stop still needs ownership and a later cleanup attempt.
-          providerRegistry.register(this);
-          throw error;
-        } finally {
-          this.shutdownPromise = null;
-        }
-      });
-    }
-    return this.shutdownPromise;
+    this.initializationGeneration++;
+    const initialization = this.initializationPromise;
+    this.initializationPromise = null;
+    this.isInitialized = false;
+    const pool = this.pool;
+    this.pool = null;
+    providerRegistry.unregister(this);
+    await Promise.all([pool?.shutdown(), initialization?.catch(() => {})]);
   }
 }

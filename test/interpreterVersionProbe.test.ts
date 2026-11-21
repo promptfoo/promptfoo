@@ -73,7 +73,11 @@ describe('interpreter version probe lifetime', () => {
       expect(await result).toBeNull();
       expect(record.closed, 'a timed-out version probe must await child termination').toBe(true);
       expect(record.child.killed).toBe(true);
-      expect(record.options).toEqual({ timeout: 2500, killSignal: 'SIGKILL' });
+      expect(record.options).toEqual({
+        env: expect.any(Object),
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
     },
   );
 });
