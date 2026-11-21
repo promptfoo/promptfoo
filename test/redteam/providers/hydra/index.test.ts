@@ -1012,14 +1012,15 @@ describe('HydraProvider', () => {
         maxTurns: 2,
         maxBacktracks: 1,
       });
+      const test: AtomicTestCase = {
+        assert: [{ type: 'promptfoo:redteam:pii' }],
+        metadata: { goal: 'test goal', pluginId: 'pii:social' },
+      };
       const result = await provider.callApi('', {
         originalProvider: mockTargetProvider,
         vars: { input: 'test goal' },
         prompt: { raw: '{{input}}', label: 'test' },
-        test: {
-          assert: [{ type: 'promptfoo:redteam:pii' }],
-          metadata: { goal: 'test goal', pluginId: 'pii:social' },
-        },
+        test,
       });
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
       expect(result.metadata?.hydraBacktrackCount).toBe(0);
