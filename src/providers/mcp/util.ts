@@ -4,6 +4,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
 import {
+  isCredentialHeader,
   isSecretEnvVarName,
   looksLikeSecret,
   normalizeFieldName,
@@ -28,7 +29,10 @@ export type { OAuthTokenResult };
 const MAX_TOOL_DEPTH = 64;
 const OMITTED_TOOL_DATA = '[MCP tool data omitted: it could not be sanitized]';
 
-function isCredentialContainer(name: string): boolean {
+function isCredentialContainer(name: string, headers: boolean): boolean {
+  if (headers && isCredentialHeader(name, '')) {
+    return true;
+  }
   const compact = normalizeFieldName(name);
   if (
     /^(?:token(?:usages?|counts?|budgets?|settings|ids)|passwordpolic(?:y|ies)|signaturealgorithms?|cookiesettings)$/.test(
@@ -68,7 +72,7 @@ function isOpaque(text: string): boolean {
 /** Keep nested public arguments while omitting credentials from saved results and traces. */
 export function sanitizeMcpToolData<T>(value: T): T | typeof OMITTED_TOOL_DATA {
   let budget = 4 * 1024 * 1024;
-  const visit = (item: unknown, depth: number): unknown => {
+  const visit = (item: unknown, depth: number, headers = false): unknown => {
     if (depth >= MAX_TOOL_DEPTH) {
       return '[...]';
     }
@@ -84,29 +88,40 @@ export function sanitizeMcpToolData<T>(value: T): T | typeof OMITTED_TOOL_DATA {
         } catch {
           return REDACTED;
         }
-        return JSON.stringify(visit(parsed, depth + 1));
+        return JSON.stringify(visit(parsed, depth + 1, headers));
       }
-      return isOpaque(item) ? REDACTED : item;
+      return isOpaque(item) || (headers && isCredentialHeader('', item)) ? REDACTED : item;
     }
     if (Array.isArray(item)) {
-      if (item.length === 2 && typeof item[0] === 'string' && isCredentialContainer(item[0])) {
+      if (
+        item.length === 2 &&
+        typeof item[0] === 'string' &&
+        isCredentialContainer(item[0], headers)
+      ) {
         return REDACTED;
       }
-      return item.map((child) => visit(child, depth + 1));
+      return item.map((child) => visit(child, depth + 1, headers));
     }
     if (!item || typeof item !== 'object') {
       return typeof item === 'function' ? REDACTED : item;
     }
     const entries = Object.entries(item);
+    const headerEntry =
+      headers || entries.some(([key, value]) => key === 'in' && value === 'header');
     // Header lists and form entries commonly identify a credential via a name
     // or key and put the credential itself in an otherwise innocuous sibling.
     if (
-      entries.some(([key]) => /(?:values?$|^(?:val|data|content|text|raw)$)/i.test(key)) &&
+      entries.some(([key]) =>
+        /(?:values?$|^(?:val|data|content|text|raw|default|examples?|const|enum|schema)$)/i.test(
+          key,
+        ),
+      ) &&
       entries.some(
         ([key, label]) =>
           /^(?:name|key|field|header|parameter)$/i.test(key) &&
           typeof label === 'string' &&
-          (isOpaque(label) || isCredentialContainer(label)),
+          (isOpaque(label) ||
+            isCredentialContainer(label, headerEntry || key.toLowerCase() === 'header')),
       )
     ) {
       return REDACTED;
@@ -120,14 +135,19 @@ export function sanitizeMcpToolData<T>(value: T): T | typeof OMITTED_TOOL_DATA {
         if (isOpaque(key) || /^\s*[[{"]/.test(key)) {
           return [];
         }
+        const fieldName = normalizeFieldName(key);
         const count =
           typeof child === 'number' &&
           /^(?:(?:max|min)(?:output|completion)?|prompt|completion|input|output|total|cached)tokens$/.test(
-            normalizeFieldName(key),
+            fieldName,
           );
         const sensitive =
-          child != null && typeof child !== 'boolean' && !count && isCredentialContainer(key);
-        return [[key, sensitive ? REDACTED : visit(child, depth + 1)]];
+          child != null &&
+          typeof child !== 'boolean' &&
+          !count &&
+          isCredentialContainer(key, headers);
+        const childHeaders = headers || /headers?(?:map|list)?$/.test(fieldName);
+        return [[key, sensitive ? REDACTED : visit(child, depth + 1, childHeaders)]];
       }),
     );
   };

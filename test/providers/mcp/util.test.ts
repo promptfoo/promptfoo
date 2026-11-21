@@ -735,6 +735,13 @@ describe('sanitizeMcpToolData', () => {
     });
   });
 
+  it('checks aliased header maps without dropping public headers', () => {
+    const headers = { 'X-Goog-Iap-Jwt-Assertion': 'short', accept: 'application/json' };
+    expect(sanitizeMcpToolData({ requestHeaders: headers })).toEqual({
+      requestHeaders: { ...headers, 'X-Goog-Iap-Jwt-Assertion': '[REDACTED]' },
+    });
+  });
+
   it.each([
     'basicAuth',
     'myAuth',
@@ -762,6 +769,11 @@ describe('sanitizeMcpToolData', () => {
       { name: 'databasePassword', value: 'private-fixture' },
       { key: 'apiKey', value: 'private-fixture' },
       { header: 'Authorization', values: ['private-fixture'] },
+      { name: 'apiKey', default: 'private-fixture' },
+      { name: 'X-Goog-Iap-Jwt-Assertion', in: 'header', example: 'private-fixture' },
+      { name: 'Authorization', schema: { example: 'private-fixture' } },
+      { request_headers: JSON.stringify({ 'X-Honeycomb-Team': 'private-fixture' }) },
+      { extraHeaders: [['X-Goog-Iap-Jwt-Assertion', 'private-fixture']] },
       { name: 'authorAccessToken', fieldValue: 'private-fixture' },
       ['Authorization', 'private-fixture'],
       'Bearer private-fixture',
