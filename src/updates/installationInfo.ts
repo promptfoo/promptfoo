@@ -2,7 +2,10 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
+import semverGt from 'semver/functions/gt.js';
 import { parseEnvBool } from '../envars';
+import { getLatestVersion } from '../updates';
+import { VERSION } from '../version';
 import { getUpdateCommands } from './updateCommands';
 import { createUpdateContext } from './updateCommandUtils';
 
@@ -12,13 +15,32 @@ type InstallationInfo =
 
 const MANUAL_UPDATE = 'Update Promptfoo with the package manager that installed it.';
 
-export function isContainerInstallation(sourceEnvironment: NodeJS.ProcessEnv): boolean {
-  return (
-    parseEnvBool(sourceEnvironment.PROMPTFOO_OFFICIAL_DOCKER_IMAGE) ||
-    parseEnvBool(sourceEnvironment.PROMPTFOO_RUNNING_IN_DOCKER) ||
-    sourceEnvironment.DOCKER === 'true' ||
-    existsSync('/.dockerenv')
-  );
+function getContainerInstructions(env: NodeJS.ProcessEnv): string | undefined {
+  const isOfficialDockerImage = parseEnvBool(env.PROMPTFOO_OFFICIAL_DOCKER_IMAGE);
+  const isContainer =
+    isOfficialDockerImage ||
+    parseEnvBool(env.PROMPTFOO_RUNNING_IN_DOCKER) ||
+    env.DOCKER === 'true' ||
+    existsSync('/.dockerenv');
+  if (!isContainer) {
+    return undefined;
+  }
+  const commands = getUpdateCommands({ isContainer, isOfficialDockerImage, isNpx: false });
+  return commands.isCustomContainer
+    ? 'Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the container.'
+    : `Run ${commands.primary}. For a derived image, update its Promptfoo base, rebuild, and redeploy.`;
+}
+
+// Check-only mode never executes a package manager.
+export async function getUpdateMessage(env: NodeJS.ProcessEnv): Promise<string> {
+  const latestVersion = await getLatestVersion();
+  if (!semverGt(latestVersion, VERSION)) {
+    return 'You are running the latest version of Promptfoo.';
+  }
+  const instructions =
+    getContainerInstructions(env) ??
+    'For global npm installations on macOS or Linux, run "promptfoo update". For temporary installations, invoke the latest package (for example, "npx promptfoo@latest"). Otherwise, update with the package manager that installed Promptfoo.';
+  return `Promptfoo update available! ${VERSION} → ${latestVersion}\n${instructions}`;
 }
 
 export function getInstallationInfo(
@@ -26,14 +48,9 @@ export function getInstallationInfo(
   sourceEnvironment: NodeJS.ProcessEnv,
 ): InstallationInfo {
   const manual = (message: string): InstallationInfo => ({ canUpdate: false, message });
-  const isOfficialDockerImage = parseEnvBool(sourceEnvironment.PROMPTFOO_OFFICIAL_DOCKER_IMAGE);
-  if (isContainerInstallation(sourceEnvironment)) {
-    const commands = getUpdateCommands({ isContainer: true, isOfficialDockerImage, isNpx: false });
-    return manual(
-      commands.isCustomContainer
-        ? 'Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the container.'
-        : `Run ${commands.primary}. For a derived image, update its Promptfoo base, rebuild, and redeploy.`,
-    );
+  const containerInstructions = getContainerInstructions(sourceEnvironment);
+  if (containerInstructions) {
+    return manual(containerInstructions);
   }
   if (process.platform !== 'darwin' && process.platform !== 'linux') {
     return manual(MANUAL_UPDATE);

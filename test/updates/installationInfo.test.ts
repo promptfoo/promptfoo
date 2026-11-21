@@ -4,8 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getInstallationInfo } from '../../src/updates/installationInfo';
+import { getLatestVersion } from '../../src/updates';
+import { getInstallationInfo, getUpdateMessage } from '../../src/updates/installationInfo';
 
+vi.mock('../../src/updates', () => ({ getLatestVersion: vi.fn() }));
+vi.mock('../../src/version', () => ({ VERSION: '1.0.0' }));
 vi.mock('node:path', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:path')>();
   return { ...actual, default: actual.posix };
@@ -138,6 +141,43 @@ describe('manual installation guidance', () => {
   it('does not execute a package manager on Windows', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
     expect(getInstallationInfo('/workspace', {}).canUpdate).toBe(false);
+    expect(execFileSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('update availability checks', () => {
+  beforeEach(() => {
+    vi.mocked(getLatestVersion).mockReset().mockResolvedValue('1.1.0');
+  });
+
+  it('describes the available release without executing npm', async () => {
+    const message = await getUpdateMessage({});
+    expect(message).toContain('1.0.0 → 1.1.0');
+    expect(message).toContain('global npm installations on macOS or Linux');
+    expect(message).toContain('npx promptfoo@latest');
+    expect(execFileSync).not.toHaveBeenCalled();
+  });
+
+  it.each(['1.0.0', '0.99.0'])('skips installation advice for %s', async (version) => {
+    vi.mocked(getLatestVersion).mockResolvedValue(version);
+    await expect(getUpdateMessage({})).resolves.toBe(
+      'You are running the latest version of Promptfoo.',
+    );
+  });
+
+  it.each([
+    { DOCKER: 'true' },
+    { PROMPTFOO_RUNNING_IN_DOCKER: '1' },
+    { PROMPTFOO_OFFICIAL_DOCKER_IMAGE: 'true' },
+    {},
+  ])('gives consistent container instructions for %j', async (env) => {
+    vi.mocked(existsSync).mockImplementation(
+      (file) => !Object.keys(env).length && file === '/.dockerenv',
+    );
+    const message = await getUpdateMessage(env);
+    expect(message).toContain(getInstallationInfo('/workspace', env).message);
+    expect(message).toContain('redeploy');
+    expect(message).not.toContain('promptfoo update');
     expect(execFileSync).not.toHaveBeenCalled();
   });
 });

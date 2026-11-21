@@ -1,8 +1,7 @@
 import { Command } from 'commander';
 import { getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
-import { getInstallationInfo } from '../updates/installationInfo';
-import { checkForUpdates, getUpdateInstructions } from '../updates/updateCheck';
+import { getInstallationInfo, getUpdateMessage } from '../updates/installationInfo';
 import { runNpmUpdate } from '../updates/updateCommandUtils';
 
 export function updateCommand(
@@ -25,11 +24,7 @@ export function updateCommand(
         }
         if (options.check) {
           logger.info('Checking for updates...');
-          const info = await checkForUpdates({ throwOnError: true });
-          logger.info(info?.message ?? 'You are running the latest version of Promptfoo.');
-          if (info) {
-            logger.info(getUpdateInstructions());
-          }
+          logger.info(await getUpdateMessage(sourceEnvironment));
           return;
         }
         const projectRoot = process.cwd();

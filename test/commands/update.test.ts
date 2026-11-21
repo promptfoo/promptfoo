@@ -2,25 +2,19 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { updateCommand } from '../../src/commands/update';
 import logger from '../../src/logger';
-import { getInstallationInfo } from '../../src/updates/installationInfo';
-import { checkForUpdates } from '../../src/updates/updateCheck';
+import { getInstallationInfo, getUpdateMessage } from '../../src/updates/installationInfo';
 import { runNpmUpdate } from '../../src/updates/updateCommandUtils';
 import { mockProcessEnv } from '../util/utils';
 
-vi.mock('../../src/updates/installationInfo', () => ({ getInstallationInfo: vi.fn() }));
-vi.mock('../../src/updates/updateCommandUtils', () => ({ runNpmUpdate: vi.fn() }));
-vi.mock('../../src/updates/updateCheck', () => ({
-  checkForUpdates: vi.fn(),
-  getUpdateInstructions: vi.fn(),
+vi.mock('../../src/updates/installationInfo', () => ({
+  getInstallationInfo: vi.fn(),
+  getUpdateMessage: vi.fn(),
 }));
+vi.mock('../../src/updates/updateCommandUtils', () => ({ runNpmUpdate: vi.fn() }));
 vi.mock('../../src/logger', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 const verifiedContext = { npm: '/node/lib/node_modules/npm/bin/npm-cli.js', cwd: '/tmp', env: {} };
-const info = {
-  message: 'Update available',
-  update: { name: 'promptfoo', current: '1.0.0', latest: '1.2.3' },
-};
 let originalExitCode: typeof process.exitCode;
 let restoreEnvironment: () => void;
 beforeEach(() => {
@@ -29,7 +23,7 @@ beforeEach(() => {
   vi.mocked(getInstallationInfo)
     .mockReset()
     .mockReturnValue({ canUpdate: true, message: 'Global npm', context: verifiedContext });
-  vi.mocked(checkForUpdates).mockReset().mockResolvedValue(info);
+  vi.mocked(getUpdateMessage).mockReset().mockResolvedValue('Update available');
   vi.mocked(runNpmUpdate).mockReset().mockResolvedValue(undefined);
   vi.clearAllMocks();
 });
@@ -46,7 +40,8 @@ async function run(args: string[], env: NodeJS.ProcessEnv = {}) {
 
 describe('update command', () => {
   it('checks without detecting or changing an installation', async () => {
-    await run(['--check']);
+    await run(['--check'], { DOCKER: 'true' });
+    expect(getUpdateMessage).toHaveBeenCalledWith({ DOCKER: 'true' });
     expect(logger.info).toHaveBeenCalledWith('Update available');
     expect(getInstallationInfo).not.toHaveBeenCalled();
     expect(runNpmUpdate).not.toHaveBeenCalled();
@@ -54,7 +49,7 @@ describe('update command', () => {
   it('delegates version selection to the verified npm installation', async () => {
     const env = { PATH: '/trusted/bin' };
     await run([], env);
-    expect(checkForUpdates).not.toHaveBeenCalled();
+    expect(getUpdateMessage).not.toHaveBeenCalled();
     expect(getInstallationInfo).toHaveBeenCalledWith(process.cwd(), env);
     expect(runNpmUpdate).toHaveBeenCalledWith(verifiedContext);
   });
@@ -71,18 +66,18 @@ describe('update command', () => {
     'respects launch disable for $args',
     async ({ args }) => {
       await run(args, { PROMPTFOO_DISABLE_UPDATE: '1' });
-      expect(checkForUpdates).not.toHaveBeenCalled();
+      expect(getUpdateMessage).not.toHaveBeenCalled();
       expect(runNpmUpdate).not.toHaveBeenCalled();
     },
   );
   it('lets --force update when checks are disabled without a metadata lookup', async () => {
     const env = { PROMPTFOO_DISABLE_UPDATE: '1' };
     await run(['--force'], env);
-    expect(checkForUpdates).not.toHaveBeenCalled();
+    expect(getUpdateMessage).not.toHaveBeenCalled();
     expect(runNpmUpdate).toHaveBeenCalledWith(verifiedContext);
   });
   it('reports check-only lookup failures without starting an installer', async () => {
-    vi.mocked(checkForUpdates).mockRejectedValue(new Error('offline'));
+    vi.mocked(getUpdateMessage).mockRejectedValue(new Error('offline'));
     await run(['--check']);
     expect(runNpmUpdate).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
