@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
-import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
@@ -372,18 +371,18 @@ async function fetchRemoteTestCases(
   provider?: ApiProvider,
 ): Promise<TestCase[]> {
   invariant(
-    !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
+    !neverGenerateRemote(),
     'fetchRemoteTestCases should never be called when remote generation is disabled',
   );
 
   // Health check remote before generating test cases
-  const remoteHealth = await checkRemoteHealth(
-    getRemoteHealthUrl() as string, // Only returns null if remote gen is disabled
-  );
-
-  if (remoteHealth.status !== 'OK') {
-    logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
-    return [];
+  const healthUrl = getRemoteHealthUrl();
+  if (healthUrl) {
+    const remoteHealth = await checkRemoteHealth(healthUrl);
+    if (remoteHealth.status !== 'OK') {
+      logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
+      return [];
+    }
   }
 
   // Strip graderExamples before sending - they're not used during generation,

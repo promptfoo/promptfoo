@@ -36,6 +36,11 @@ const StatusIndicator = ({ status }: { status: ApiHealthStatus | 'loading' }) =>
     loading: { colorClass: 'text-blue-500', text: 'Checking connection...', Icon: Circle },
     unknown: { colorClass: 'text-gray-400', text: 'Checking connection status...', Icon: Circle },
     disabled: { colorClass: 'text-gray-400', text: 'Remote generation is disabled', Icon: Circle },
+    skipped: {
+      colorClass: 'text-gray-400',
+      text: 'Cloud health check skipped (no-network mode)',
+      Icon: Circle,
+    },
   };
 
   const config = statusConfig[status];
@@ -118,9 +123,15 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
           </div>
 
           {message && status !== 'unknown' && !isChecking && (
-            <Alert variant={status === 'connected' ? 'success' : 'destructive'}>
+            <Alert
+              variant={
+                status === 'connected' ? 'success' : status === 'skipped' ? 'info' : 'destructive'
+              }
+            >
               {status === 'connected' ? (
                 <CheckCircle className="size-4" />
+              ) : status === 'skipped' ? (
+                <Circle className="size-4" />
               ) : (
                 <AlertCircle className="size-4" />
               )}

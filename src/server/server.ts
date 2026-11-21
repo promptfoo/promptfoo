@@ -21,12 +21,12 @@ import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
 import { invalidateEvaluationCache, invalidateEvaluationCaches } from '../models/evalMutation';
-import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
+import { getRemoteHealthUrl, neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import { ServerSchemas } from '../types/api/server';
-import { checkRemoteHealth } from '../util/apiHealth';
+import { checkRemoteHealth, isNetworkEgressDisabled } from '../util/apiHealth';
 import {
   getPromptsForTestCasesHash,
   getStandaloneEvals,
@@ -139,6 +139,34 @@ export function createApp() {
   });
 
   app.get('/api/remote-health', async (_req: Request, res: Response): Promise<void> => {
+    // An explicit remote-generation disable wins over the no-network skip:
+    // the UI must keep remote-only controls disabled when both flags are set,
+    // so answer DISABLED here instead of letting the no-network branch below
+    // collapse the two cases into one.
+    if (neverGenerateRemote()) {
+      res.json(
+        ServerSchemas.RemoteHealth.Response.parse({
+          status: 'DISABLED',
+          message: 'remote generation and grading are disabled',
+        }),
+      );
+      return;
+    }
+
+    // PROMPTFOO_NO_NETWORK promises no non-eval egress: answer from the
+    // local process instead of forwarding the poll to api.promptfoo.app.
+    // This is a skipped poll, not a disabled check, so it gets its own
+    // status: local and self-hosted generation stay available.
+    if (isNetworkEgressDisabled()) {
+      res.json(
+        ServerSchemas.RemoteHealth.Response.parse({
+          status: 'SKIPPED',
+          message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+        }),
+      );
+      return;
+    }
+
     const apiUrl = getRemoteHealthUrl();
 
     if (apiUrl === null) {
@@ -364,11 +392,54 @@ export function createApp() {
   // Configure proper MIME types for JavaScript files
   app.use(setJavaScriptMimeType);
 
-  app.use(express.static(staticDir, { dotfiles: 'allow' }));
+  const indexPath = path.join(staticDir, 'index.html');
+  const noNetworkIndex =
+    isNetworkEgressDisabled() && fs.existsSync(indexPath)
+      ? fs
+          .readFileSync(indexPath, 'utf8')
+          .replace(/<head>/i, '<head><meta name="promptfoo-no-network">')
+      : undefined;
 
-  // Handle client routing, return all requests to the app
-  app.get('/*splat', (_req: Request, res: Response): void => {
-    res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
+  function serveNoNetworkIndex(res: Response): void {
+    res.setHeader('Cache-Control', 'no-store');
+    res.type('html').send(noNetworkIndex);
+  }
+
+  if (noNetworkIndex !== undefined) {
+    // Express decodes wildcard segments. Normalize them before static serving
+    // so encoded paths and redundant separators cannot expose the unmarked entry.
+    app.use('/{*entryPath}', (req, res, next) => {
+      if (req.method === 'GET' || req.method === 'HEAD') {
+        const requested = path.normalize(`/${(req.params.entryPath ?? []).join('/')}`);
+        if (
+          requested === path.sep ||
+          requested.toLowerCase() === path.join(path.sep, 'index.html')
+        ) {
+          serveNoNetworkIndex(res);
+          return;
+        }
+      }
+      next();
+    });
+  }
+  const serveStatic = express.static(staticDir, {
+    dotfiles: 'allow',
+    index: noNetworkIndex === undefined ? 'index.html' : false,
+  });
+  app.use(serveStatic);
+
+  // Use the same static-file handling and cache validators for client-side routes.
+  app.get('/*splat', (req, res, next) => {
+    if (noNetworkIndex !== undefined) {
+      serveNoNetworkIndex(res);
+      return;
+    }
+    const originalUrl = req.url;
+    req.url = '/index.html';
+    serveStatic(req, res, (err) => {
+      req.url = originalUrl;
+      next(err ?? Object.assign(new Error('Web UI entry page not found'), { status: 404 }));
+    });
   });
   app.use(defaultErrorHandler);
   return app;

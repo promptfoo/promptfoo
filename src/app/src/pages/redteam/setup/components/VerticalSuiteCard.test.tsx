@@ -11,7 +11,8 @@ import VerticalSuiteCard from './VerticalSuiteCard';
 import type { Plugin } from '@promptfoo/redteam/constants';
 
 // Mock dependencies
-vi.mock('@app/hooks/useApiHealth', () => ({
+vi.mock('@app/hooks/useApiHealth', async (importOriginal) => ({
+  ...(await importOriginal()),
   useApiHealth: () => ({
     data: { status: 'connected', message: null },
     refetch: vi.fn(),

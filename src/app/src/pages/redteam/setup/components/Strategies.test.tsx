@@ -25,7 +25,8 @@ const renderWithProviders = (ui: React.ReactElement) => {
 
 // Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');
-vi.mock('@app/hooks/useApiHealth', () => ({
+vi.mock('@app/hooks/useApiHealth', async (importOriginal) => ({
+  ...(await importOriginal()),
   useApiHealth: vi.fn(),
 }));
 vi.mock('@app/hooks/useTelemetry');
@@ -162,6 +163,22 @@ describe('Strategies', () => {
       const metaAgentCard = screen.getByRole('button', { name: 'Meta Agent' });
       expect(metaAgentCard).toBeDisabled();
       expect(metaAgentCard).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('keeps remote-requiring hero strategies enabled when the health check is skipped', () => {
+      (useApiHealth as any).mockReturnValue({
+        data: {
+          status: 'skipped',
+          message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+        },
+        isLoading: false,
+        refetch: vi.fn(),
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      const metaAgentCard = screen.getByRole('button', { name: 'Meta Agent' });
+      expect(metaAgentCard).toBeEnabled();
     });
   });
 

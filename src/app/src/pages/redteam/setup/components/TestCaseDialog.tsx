@@ -20,7 +20,7 @@ import {
 import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { isApiHealthAvailable, useApiHealth } from '@app/hooks/useApiHealth';
 import ChatMessages, {
   type LoadedMessage,
   type LoadingMessage,
@@ -266,7 +266,7 @@ export const TestCaseGenerateButton: React.FC<{
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
-  const isRemoteDisabled = apiHealthStatus !== 'connected';
+  const isRemoteDisabled = !isApiHealthAvailable(apiHealthStatus);
   const { targetConfigError } = useRedTeamTargetConfigValidation();
 
   // Tooltip component uses controlled state in order to imperatively close it when the Test Case

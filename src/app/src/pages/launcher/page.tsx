@@ -6,7 +6,7 @@ import { Card } from '@app/components/ui/card';
 import { GlobeIcon, TerminalIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { EVAL_ROUTES } from '@app/constants/routes';
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { isApiHealthAvailable, useApiHealth } from '@app/hooks/useApiHealth';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import useApiConfig from '@app/stores/apiConfig';
@@ -23,7 +23,10 @@ export default function LauncherPage() {
     data: { status: healthStatus },
     refetch: checkHealth,
   } = useApiHealth();
-  const isConnecting = healthStatus !== 'connected';
+  // A skipped poll means the local server answered under PROMPTFOO_NO_NETWORK:
+  // the server is reachable, so the launcher is ready. Only a genuinely
+  // disabled, blocked, or unknown check keeps the launcher connecting.
+  const isConnecting = !isApiHealthAvailable(healthStatus);
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
   usePageMeta({ title: 'Launcher', description: 'Connect to your API server' });
 
