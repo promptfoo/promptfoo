@@ -45,6 +45,8 @@ The [five-agent comparison](https://github.com/promptfoo/promptfoo/tree/main/exa
 | `model`       | Value for the agent's advertised ACP model selector. For agents without this selector, choose the model in the agent's own settings.                                                       |
 | `timeout_ms`  | Deadline for startup, authentication, and the prompt turn. Defaults to 120000.                                                                                                             |
 
+For bare commands, Promptfoo searches absolute PATH directories outside the workspace. Use an explicit path only for a launcher you trust.
+
 For a Copilot CLI [bring-your-own-key provider](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-llm-models), configure the CLI's `providers.json` or include `COPILOT_PROVIDER_BASE_URL`, `COPILOT_PROVIDER_API_KEY`, `COPILOT_PROVIDER_TYPE`, and `COPILOT_MODEL` in `pass_env`.
 
 To use another ACP v1 agent, set `id: acp` and provide its launch command. For example, this runs the Copilot preset's underlying transport directly:
