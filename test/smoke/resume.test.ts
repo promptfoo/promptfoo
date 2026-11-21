@@ -404,6 +404,20 @@ describe('Resume E2E Tests', () => {
   });
 
   describe('Flag conflict detection', () => {
+    it('can observe a CLI exit after the process has already closed', async () => {
+      const cli = spawnCli(['eval', '--resume', '--no-write', '--no-cache']);
+      try {
+        const firstExit = await cli.waitForExit();
+        expect(firstExit.exitCode).not.toBe(0);
+        expect(firstExit.stdout + firstExit.stderr).toContain(
+          'Cannot use --resume with --no-write',
+        );
+        await expect(cli.waitForExit()).resolves.toEqual(firstExit);
+      } finally {
+        cli.kill();
+      }
+    });
+
     it('--resume with --no-write should error', () => {
       const { exitCode, stdout, stderr } = runCli(['eval', '--resume', '--no-write', '--no-cache']);
 

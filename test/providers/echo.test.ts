@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EchoProvider } from '../../src/providers/echo';
+import * as time from '../../src/util/time';
 
 describe('EchoProvider', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('constructor', () => {
@@ -125,6 +127,57 @@ describe('EchoProvider', () => {
       await responsePromise;
 
       expect(Date.now() - startTime).toBe(100);
+    });
+
+    it('cancels an active delay and clears its timer', async () => {
+      vi.useFakeTimers();
+      const provider = new EchoProvider({ delay: 60_000 });
+      const controller = new AbortController();
+      const response = provider.callApi('Test input', {}, { abortSignal: controller.signal });
+      const reason = new Error('pause this evaluation');
+      const rejection = expect(response).rejects.toBe(reason);
+
+      await vi.advanceTimersByTimeAsync(100);
+      controller.abort(reason);
+
+      await rejection;
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('does not start a delay when the signal is already aborted', async () => {
+      vi.useFakeTimers();
+      const provider = new EchoProvider({ delay: 60_000 });
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        provider.callApi('Test input', {}, { abortSignal: controller.signal }),
+      ).rejects.toBe(controller.signal.reason);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('preserves delay errors unrelated to cancellation', async () => {
+      const provider = new EchoProvider({ delay: 100 });
+      const controller = new AbortController();
+      const error = new Error('delay failed');
+      vi.spyOn(time, 'sleepWithAbort').mockRejectedValueOnce(error);
+
+      await expect(
+        provider.callApi('Test input', {}, { abortSignal: controller.signal }),
+      ).rejects.toBe(error);
+      expect(controller.signal.aborted).toBe(false);
+    });
+
+    it('completes a delay with an active signal', async () => {
+      vi.useFakeTimers();
+      const provider = new EchoProvider({ delay: 100 });
+      const controller = new AbortController();
+      const response = provider.callApi('Test input', {}, { abortSignal: controller.signal });
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      await expect(response).resolves.toMatchObject({ output: 'Test input', cost: 0 });
+      expect(vi.getTimerCount()).toBe(0);
     });
 
     it('should handle empty input', async () => {
