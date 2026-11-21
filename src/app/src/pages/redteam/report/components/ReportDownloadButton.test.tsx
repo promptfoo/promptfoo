@@ -139,11 +139,15 @@ describe('ReportDownloadButton', () => {
     },
   );
 
-  it('exports full result status while neutralizing CSV formulas', async () => {
-    const pluginId = '=HYPERLINK("https://evil.example","click")';
+  it.each([undefined, 'true'])('honors CSV escaping opt-out %s', async (disabled) => {
+    const prefix = disabled ? '' : "'";
+    const pluginId = '=1+1';
     const evalData = {
       ...compactEvalData,
-      config: { redteam: { injectVar: 'attackInput' } },
+      config: {
+        redteam: { injectVar: 'attackInput' },
+        env: { PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING: disabled },
+      },
       results: {
         ...compactEvalData.results,
         results: [
@@ -185,11 +189,11 @@ describe('ReportDownloadButton', () => {
     const row = Object.fromEntries(headers.map((header, index) => [header, values[index]]));
 
     expect(row).toMatchObject({
-      Plugin: `'${pluginId}`,
-      'Plugin ID': `'${pluginId}`,
-      Strategy: "'@SUM(A1)",
+      Plugin: prefix + pluginId,
+      'Plugin ID': prefix + pluginId,
+      Strategy: prefix + '@SUM(A1)',
       Target: '+3.14',
-      Prompt: "'=FINAL_LAYER_ATTACK",
+      Prompt: prefix + '=FINAL_LAYER_ATTACK',
       Response: '-5.25',
       Pass: 'Fail (0)',
       Score: '0',

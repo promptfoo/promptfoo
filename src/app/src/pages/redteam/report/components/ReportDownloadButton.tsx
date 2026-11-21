@@ -23,7 +23,7 @@ import {
   getReportPrompt,
   getStrategyIdFromTest,
 } from '../components/shared';
-import type { EvaluateResult, ResultsFile, SharedResults } from '@promptfoo/types';
+import type { EnvOverrides, EvaluateResult, ResultsFile, SharedResults } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {
   evalId: string;
@@ -76,9 +76,8 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
       };
     });
 
-    const escapedRows = isCsvEscapingDisabled(
-      evalData.config.env?.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING,
-    )
+    const env: EnvOverrides | undefined = evalData.config.env;
+    const escapedRows = isCsvEscapingDisabled(env?.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING)
       ? rows
       : rows.map((row) =>
           Object.fromEntries(
