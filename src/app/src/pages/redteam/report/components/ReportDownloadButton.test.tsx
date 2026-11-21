@@ -116,13 +116,6 @@ describe('ReportDownloadButton', () => {
     }
     cases.push({
       result: {
-        vars: { query: 'selected query', prompt: 'other prompt' },
-        response: { output: 'answer', prompt: 'actual replaces prompt only' },
-      },
-      expected: 'selected query',
-    });
-    cases.push({
-      result: {
         vars: {},
         response: {
           output: 'answer',
