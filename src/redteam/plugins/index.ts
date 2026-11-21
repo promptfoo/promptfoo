@@ -291,22 +291,24 @@ function dedupeTestCases(testCases: TestCase[]): TestCase[] {
   return deduped;
 }
 
-function buildMaxCharsRetryInstructions(rejectedPromptLengths: number[], limit?: number): string {
-  const longestRejectedPromptText =
-    rejectedPromptLengths.length > 0
-      ? `${Math.max(...rejectedPromptLengths)} characters`
-      : 'unknown length';
-
+function buildMaxCharsRetryInstructions(count: number, longest: number, limit: number): string {
   return dedent`
-    Your previous response included ${rejectedPromptLengths.length} generated prompt${
-      rejectedPromptLengths.length === 1 ? '' : 's'
-    } that exceeded the ${limit ?? 'configured'}-character limit.
-    The longest rejected prompt was ${longestRejectedPromptText}.
+    Your previous response included ${count} generated prompt${count === 1 ? '' : 's'} that exceeded the ${limit}-character limit.
+    The longest rejected prompt was ${longest} characters.
     Generate replacement prompts only, and keep every user message within the character limit.
   `.trim();
 }
 
-function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
+// Generators that choose among candidates can check lengths before selection.
+// Keep this callback out of plugin configuration and remote requests.
+interface LocalPluginFactory extends PluginFactory {
+  action: (
+    params: PluginActionParams,
+    acceptPrompt?: (text: string) => boolean,
+  ) => Promise<TestCase[]>;
+}
+
+function withMaxCharsRetries(pluginFactory: LocalPluginFactory): PluginFactory {
   return {
     ...pluginFactory,
     action: async (params: PluginActionParams) => {
@@ -318,34 +320,32 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
       let retryInstructions: string | undefined;
       const generateValidTestCases = async (currentTestCases: TestCase[]): Promise<TestCase[]> => {
         const retryConfig = buildRetryConfig(params.config, retryInstructions);
-        const generatedTestCases = await pluginFactory.action({
-          ...params,
-          n: Math.max(params.n - currentTestCases.length, 0),
-          config: retryConfig,
-        });
-
-        const validTestCases: TestCase[] = [];
-        const rejectedPromptLengths: number[] = [];
-        let rejectedPromptLimit: number | undefined;
-
-        for (const testCase of generatedTestCases) {
-          const violation = getGeneratedPromptOverLimit(
-            String(testCase.vars?.[params.injectVar] ?? ''),
-            maxCharsPerMessage,
-          );
-          if (violation) {
-            rejectedPromptLengths.push(violation.length);
-            rejectedPromptLimit = violation.limit;
-            continue;
+        const accepted = new Set<string>();
+        let rejected = 0;
+        let longest = 0;
+        const acceptPrompt = (text: string) => {
+          if (accepted.has(text)) {
+            return true;
           }
-
-          validTestCases.push(stripRetryModifier(testCase));
-        }
-
-        retryInstructions =
-          rejectedPromptLengths.length > 0
-            ? buildMaxCharsRetryInstructions(rejectedPromptLengths, rejectedPromptLimit)
-            : undefined;
+          const violation = getGeneratedPromptOverLimit(text, maxCharsPerMessage);
+          if (violation) {
+            rejected++;
+            longest = Math.max(longest, violation.length);
+            return false;
+          }
+          accepted.add(text);
+          return true;
+        };
+        const generatedTestCases = await pluginFactory.action(
+          { ...params, n: Math.max(params.n - currentTestCases.length, 0), config: retryConfig },
+          acceptPrompt,
+        );
+        const validTestCases = generatedTestCases
+          .filter((test) => acceptPrompt(String(test.vars?.[params.injectVar] ?? '')))
+          .map(stripRetryModifier);
+        retryInstructions = rejected
+          ? buildMaxCharsRetryInstructions(rejected, longest, maxCharsPerMessage)
+          : undefined;
 
         return validTestCases;
       };
@@ -592,9 +592,9 @@ const pluginFactories: PluginFactory[] = [
   })),
 ];
 
-const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
+const piiPlugins = PII_PLUGINS.map<LocalPluginFactory>((category) => ({
   key: category,
-  action: async (params: PluginActionParams) => {
+  action: async (params, acceptPrompt) => {
     if (shouldGenerateRemote()) {
       const pluginId = getShortPluginId(category);
       const testCases = await fetchRemoteTestCases(
@@ -609,7 +609,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
       return addPluginMetadata(testCases, pluginId, () => params.config);
     }
     logger.debug(`Using local redteam generation for ${category}`);
-    const testCases = await getPiiLeakTestsForCategory(params, category);
+    const testCases = await getPiiLeakTestsForCategory(params, category, acceptPrompt);
     return testCases.map((testCase) => ({
       ...testCase,
       metadata: {

@@ -171,6 +171,7 @@ const PII_TEMPLATE = dedent`
 export async function getPiiLeakTestsForCategory(
   { provider, purpose, injectVar, n, config }: PluginActionParams,
   categoryKey: string,
+  acceptPrompt = (text: string) => !getGeneratedPromptOverLimit(text, config?.maxCharsPerMessage),
 ): Promise<TestCase[]> {
   const category = PII_CATEGORIES.find((cat) => cat.key === categoryKey);
   if (!category) {
@@ -202,10 +203,7 @@ export async function getPiiLeakTestsForCategory(
   const eligible = getPromptOutputFormatter(config ?? {})
     .parse(generatedPrompts, config ?? {})
     .map(({ __prompt }) => __prompt.trim())
-    .filter(
-      (text) =>
-        text && (multiInput || !getGeneratedPromptOverLimit(text, config?.maxCharsPerMessage)),
-    );
+    .filter((text) => text && (multiInput || acceptPrompt(text)));
   const unique = [...new Set(eligible)];
   const inputs = config?.inputs as Inputs | undefined;
   const prompts = unique.slice(0, n);
