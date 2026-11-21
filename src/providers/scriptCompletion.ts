@@ -7,10 +7,12 @@ import { getProcessEnv } from '../envars';
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { waitForPromiseWithAbort } from './shared';
 
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
@@ -59,77 +61,77 @@ export class ScriptCompletionProvider implements ApiProvider {
     return `exec:${this.scriptPath}`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const scriptParts = parseScriptParts(this.scriptPath);
-    const fileHashes = getFileHashes(scriptParts);
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
+    signal?.throwIfAborted();
+    const parts = parseScriptParts(this.scriptPath);
+    const [command, ...args] = parts;
+    invariant(command, 'No command found in script path');
 
-    if (fileHashes.length === 0) {
-      logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
-    }
-
-    const cacheKey = `exec:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
-
-    let cachedResult;
-    if (fileHashes.length > 0 && isCacheEnabled()) {
-      const cache = await getCache();
-      cachedResult = await cache.get(cacheKey);
-
-      if (cachedResult) {
-        logger.debug(`Returning cached result for script ${this.scriptPath}: ${cachedResult}`);
-        return { ...JSON.parse(cachedResult as string), cached: true };
+    const hashes = isCacheEnabled() ? getFileHashes(parts) : [];
+    const cache = hashes.length > 0 ? await getCache() : undefined;
+    const cacheKey = `exec:${this.scriptPath}:${hashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
+    if (cache) {
+      const cached = await waitForPromiseWithAbort(cache.get<string>(cacheKey), signal);
+      signal?.throwIfAborted();
+      if (cached) {
+        return { ...JSON.parse(cached), cached: true };
       }
-    } else if (fileHashes.length === 0 && isCacheEnabled()) {
-      logger.warn(
-        `Could not hash any files for command ${this.scriptPath}, caching will not be used`,
-      );
+    } else if (isCacheEnabled()) {
+      logger.warn('No script files could be hashed. Skipping the exec provider cache.');
     }
 
-    return new Promise<ProviderResponse>((resolve, reject) => {
-      const command = scriptParts.shift();
-      invariant(command, 'No command found in script path');
-      // Remove properties not useful in shell scripts and non-serializable objects
-      // These can contain circular references (e.g., Timeout objects) that break JSON serialization
-      delete context?.getCache;
-      delete context?.logger;
-      delete context?.filters; // NunjucksFilterMap contains functions
-      delete context?.originalProvider; // ApiProvider object with methods
-      const scriptArgs = scriptParts.concat([
-        prompt,
-        safeJsonStringify(this.options || {}) as string,
-        safeJsonStringify(context || {}) as string,
-      ]);
-      const options = {
-        ...(this.options?.config.basePath && { cwd: this.options.config.basePath }),
-        env: getProcessEnv(),
-      };
-
-      const child = execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
-        if (error) {
-          logger.debug(`Error running script ${this.scriptPath}: ${error.message}`);
-          reject(error);
-          return;
-        }
-        const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
-        const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
-        if (errorOutput) {
-          logger.debug(`Error output from script ${this.scriptPath}: ${errorOutput}`);
-          if (!standardOutput) {
-            reject(new Error(errorOutput));
+    // Exclude callbacks and circular provider references without mutating the caller's context.
+    const {
+      getCache: _getCache,
+      logger: _logger,
+      filters: _filters,
+      originalProvider: _provider,
+      ...scriptContext
+    } = context ?? {};
+    args.push(
+      prompt,
+      safeJsonStringify(this.options ?? {}) as string,
+      safeJsonStringify(scriptContext) as string,
+    );
+    signal?.throwIfAborted();
+    const output = await new Promise<string>((resolve, reject) => {
+      const child = execFile(
+        command,
+        args,
+        {
+          cwd: this.options?.config?.basePath,
+          env: getProcessEnv(),
+          signal,
+          killSignal: 'SIGKILL',
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            reject(error);
             return;
           }
-        }
-        logger.debug(`Output from script ${this.scriptPath}: ${standardOutput}`);
-        const result = { output: standardOutput };
-        if (fileHashes.length > 0 && isCacheEnabled()) {
-          const cache = await getCache();
-          await cache.set(cacheKey, JSON.stringify(result));
-        }
-        resolve(result);
-      });
-      // Close stdin immediately so child processes that read stdin don't hang.
-      // execFile pipes stdin by default but never writes to it, causing tools
-      // like opencode to block forever waiting for input.
+          const text = stripText(stdout.toString().trim());
+          const errorText = stripText(stderr.toString().trim());
+          if (!text && errorText) {
+            reject(new Error(errorText));
+          } else {
+            resolve(text);
+          }
+        },
+      );
+      // Let commands that read stdin see EOF immediately.
       child.stdin?.end();
     });
+
+    signal?.throwIfAborted();
+    const result = { output };
+    if (cache) {
+      await waitForPromiseWithAbort(cache.set(cacheKey, JSON.stringify(result)), signal);
+    }
+    return result;
   }
 }
