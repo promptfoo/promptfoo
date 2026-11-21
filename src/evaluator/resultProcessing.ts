@@ -1,6 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 
+import { z } from 'zod';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
+import { BaseTokenUsageSchema } from '../contracts/shared';
 import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
@@ -15,6 +17,7 @@ import {
   stripProviderPromptSelectors,
   stripTestProviderPromptSelectors,
 } from '../util/sanitizer';
+import { assertCheckpointBounds } from './checkpointMetadata';
 
 import type { ProviderConfig } from '../providers/shared';
 import type {
@@ -54,43 +57,225 @@ function stripMediaReferences(value: unknown): unknown {
   return value;
 }
 
+/** Detect output media before projection removes its identifying fields. */
+function containsCheckpointMedia(
+  value: unknown,
+  {
+    excludedRootKeys = [],
+    scanCheckpointChildren = false,
+  }: { excludedRootKeys?: string[]; scanCheckpointChildren?: boolean } = {},
+): boolean {
+  const pending = [value];
+  const visited = new WeakSet<object>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (
+      extractBlobHashesFromValue(current).length > 0 ||
+      (typeof current === 'string' && /^data:[^,]*,/i.test(current))
+    ) {
+      return true;
+    }
+    if (!current || typeof current !== 'object' || visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+    const record = current as Record<string, unknown>;
+    if (record.isBase64 === true) {
+      return true;
+    }
+    for (const key of ['audio', 'video', 'images']) {
+      const media = record[key];
+      const items = Array.isArray(media) ? media : [media];
+      if (
+        items.some((item) => {
+          const payload = asRecord(item);
+          return payload && ['data', 'blobRef', 'url'].some((field) => payload[field] != null);
+        })
+      ) {
+        return true;
+      }
+    }
+    for (const [key, child] of Object.entries(record)) {
+      if (
+        (current === value && excludedRootKeys.includes(key)) ||
+        (current === value &&
+          !scanCheckpointChildren &&
+          record.interruptedStrategy === true &&
+          key === 'completedTargetResponses')
+      ) {
+        continue;
+      }
+      pending.push(child);
+    }
+  }
+  return false;
+}
+
 export function projectOutputMetadata<T>(
   metadata: T,
-  stripOutput: boolean,
+  options: ResponseProjectionOptions,
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
 ): T {
-  if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
-    return metadata;
+  const metadataIsMedia =
+    options.checkpointOutput &&
+    options.stripOutput &&
+    (options.inheritedMediaOutput || containsCheckpointMedia(metadata));
+  let projected = metadata;
+  if (metadataIsMedia) {
+    // Media output can carry bytes under arbitrary child keys. Keep only
+    // an explicitly owned checkpoint wrapper for independent input projection.
+    const record = asRecord(metadata);
+    projected = (
+      record?.interruptedStrategy === true
+        ? {
+            interruptedStrategy: true,
+            completedTargetResponses: record.completedTargetResponses,
+          }
+        : '[output stripped]'
+    ) as T;
+  } else if (options.checkpointOutput && options.stripOutput && !asRecord(metadata)) {
+    return stripMediaReferences(sanitizeForDb(metadata)) as T;
+  } else if (options.stripOutput && metadata && responseMetadata && typeof metadata === 'object') {
+    projected = Object.fromEntries(
+      Object.entries(metadata).flatMap(([key, value]) => {
+        if (
+          !Object.prototype.hasOwnProperty.call(responseMetadata, key) ||
+          (testMetadata && isDeepStrictEqual(value, testMetadata[key])) ||
+          // Checkpoints contain target inputs as well as outputs; project their
+          // response fields below instead of stripping input media references.
+          (key === 'completedTargetResponses' && asRecord(metadata)?.interruptedStrategy === true)
+        ) {
+          return [[key, value]];
+        }
+        return key === 'audio' || key === 'blobUris'
+          ? []
+          : [[key, stripMediaReferences(sanitizeForDb(value))]];
+      }),
+    ) as T;
   }
-  return Object.fromEntries(
-    Object.entries(metadata).flatMap(([key, value]) => {
+  if (
+    options.stripPromptText &&
+    Object.prototype.hasOwnProperty.call(asRecord(projected) ?? {}, 'redteamFinalPrompt')
+  ) {
+    projected = { ...projected, redteamFinalPrompt: '[prompt stripped]' };
+  }
+  const childOptions = metadataIsMedia ? { ...options, inheritedMediaOutput: true } : options;
+  return mapCompletedTargetResponses(
+    sanitizeCompletedTargetResponses(projected),
+    (entry) => {
+      const { prompt, response, ...extra } = entry;
+      const entryIsMedia =
+        options.stripOutput &&
+        containsCheckpointMedia(entry, { excludedRootKeys: ['prompt', 'response'] });
+      // Only prompt/response are declared checkpoint fields. Additional imported
+      // fields retain the generic media scrub, including a media-shaped remainder.
+      const projectedExtra = options.stripOutput
+        ? childOptions.inheritedMediaOutput || entryIsMedia
+          ? {}
+          : stripMediaReferences(sanitizeForDb(extra))
+        : extra;
+      return {
+        ...(asRecord(projectedExtra) ?? {}),
+        ...('prompt' in entry
+          ? { prompt: options.stripPromptText ? '[prompt stripped]' : prompt }
+          : {}),
+        // Old stored rows and non-persisted JSON/JSONL exports also cross this boundary.
+        response: projectProviderResponse(response, {
+          ...childOptions,
+          checkpointOutput: true,
+          inheritedMediaOutput: childOptions.inheritedMediaOutput || entryIsMedia,
+        })!,
+      };
+    },
+    (value) => {
       if (
-        !Object.prototype.hasOwnProperty.call(responseMetadata, key) ||
-        (testMetadata && isDeepStrictEqual(value, testMetadata[key]))
+        options.stripPromptText &&
+        Object.prototype.hasOwnProperty.call(asRecord(value) ?? {}, 'prompt')
       ) {
-        return [[key, value]];
+        value = { ...asRecord(value), prompt: '[prompt stripped]' };
       }
-      return key === 'audio' || key === 'blobUris'
-        ? []
-        : [[key, stripMediaReferences(sanitizeForDb(value))]];
-    }),
-  ) as T;
+      if (!options.stripOutput) {
+        return value;
+      }
+      return childOptions.inheritedMediaOutput ||
+        containsCheckpointMedia(value, { scanCheckpointChildren: true })
+        ? '[output stripped]'
+        : stripMediaReferences(sanitizeForDb(value));
+    },
+  );
 }
+
+interface ResponseProjectionOptions {
+  stripMetadata: boolean;
+  stripOutput: boolean;
+  stripPromptText: boolean;
+  checkpointOutput?: boolean;
+  // An ancestor was media: child output payloads share its exclusion policy.
+  inheritedMediaOutput?: boolean;
+}
+
+const CHECKPOINT_INPUT_FIELDS = new Set([
+  'prompt',
+  'input',
+  'materializedVars',
+  'inputMaterialization',
+]);
+
+// Numeric/boolean ProviderResponse controls have an unambiguous non-output role
+// on a media record. Validate them independently so malformed payload aliases
+// cannot hide in them. Ordinary non-media responses keep their diagnostics.
+const CHECKPOINT_CONTROL_SCHEMAS = {
+  tokenUsage: BaseTokenUsageSchema.refine((usage) => Object.keys(usage).length > 0),
+  cached: z.boolean(),
+  cost: z.number(),
+  incurredCost: z.number(),
+  materializationHandled: z.boolean(),
+  isBase64: z.boolean(),
+  logProbs: z.array(z.number()),
+  latencyMs: z.number(),
+  isRefusal: z.boolean(),
+  conversationEnded: z.boolean(),
+  guardrails: z.object({
+    flaggedInput: z.boolean().optional(),
+    flaggedOutput: z.boolean().optional(),
+    flagged: z.boolean().optional(),
+  }),
+};
 
 export function projectProviderResponse(
   response: ProviderResponse | undefined,
-  options: { stripMetadata: boolean; stripOutput: boolean },
+  options: ResponseProjectionOptions,
 ): ProviderResponse | undefined {
-  if (!response) {
+  if (!response || (!asRecord(response) && !options.stripMetadata && !options.stripOutput)) {
     return response;
   }
 
-  if (!options.stripMetadata && !options.stripOutput) {
+  if (
+    !options.stripMetadata &&
+    !options.stripOutput &&
+    !options.stripPromptText &&
+    response.metadata?.interruptedStrategy !== true
+  ) {
     return response;
   }
 
-  const projectedResponse: ProviderResponse = options.stripMetadata
+  const mediaOutput =
+    options.checkpointOutput &&
+    options.stripOutput &&
+    (options.inheritedMediaOutput ||
+      containsCheckpointMedia(response, {
+        excludedRootKeys: [...CHECKPOINT_INPUT_FIELDS, 'metadata', 'turns'],
+      }));
+  // A direct media record owns its descendants. A normal response containing
+  // audio/images still projects its metadata and turns independently, retaining
+  // unrelated diagnostics and the inputs of sibling checkpoint entries.
+  const inheritedMediaOutput =
+    options.inheritedMediaOutput || extractBlobHashesFromValue(response).length > 0;
+  const childOptions =
+    mediaOutput && inheritedMediaOutput ? { ...options, inheritedMediaOutput: true } : options;
+
+  let projectedResponse: ProviderResponse & { turns?: unknown } = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(response)
     : { ...response };
 
@@ -102,13 +287,68 @@ export function projectProviderResponse(
     delete projectedResponse.audio;
     delete projectedResponse.video;
     delete projectedResponse.images;
-    if (projectedResponse.metadata) {
-      projectedResponse.metadata = projectOutputMetadata(
-        projectedResponse.metadata,
-        true,
-        projectedResponse.metadata,
-      );
+  }
+  if (options.stripPromptText && 'prompt' in projectedResponse) {
+    projectedResponse.prompt = '[prompt stripped]';
+  }
+  if (options.checkpointOutput && options.stripOutput) {
+    if (mediaOutput) {
+      // Direct media records may contain unknown inline payload aliases. Retain
+      // only declared inputs, controls, and independently projected children.
+      projectedResponse = {
+        ...Object.fromEntries(
+          Object.entries(projectedResponse).filter(
+            ([key]) => CHECKPOINT_INPUT_FIELDS.has(key) || key === 'metadata' || key === 'turns',
+          ),
+        ),
+        ...Object.fromEntries(
+          Object.entries(CHECKPOINT_CONTROL_SCHEMAS).flatMap(([key, schema]) => {
+            const parsed = schema.safeParse(projectedResponse[key as keyof ProviderResponse]);
+            return parsed.success ? [[key, parsed.data]] : [];
+          }),
+        ),
+        output: '[output stripped]',
+      };
     }
+    for (const [key, value] of Object.entries(projectedResponse)) {
+      // Inputs and recursively projected metadata/turns retain their own
+      // controls, even when the response also carries a direct BlobRef.
+      if (CHECKPOINT_INPUT_FIELDS.has(key) || key === 'metadata' || key === 'turns') {
+        continue;
+      }
+      Object.defineProperty(projectedResponse, key, {
+        value: stripMediaReferences(sanitizeForDb(value)),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+  }
+  if (projectedResponse.metadata) {
+    projectedResponse.metadata = projectOutputMetadata(
+      projectedResponse.metadata,
+      childOptions,
+      projectedResponse.metadata,
+    );
+  }
+
+  // Ordinary turns retain unrelated attributes. Turns within media output keep
+  // only their declared input/control fields and projected children.
+  const stripUnsupportedTurn = (turn: unknown) =>
+    mediaOutput || containsCheckpointMedia(turn, { scanCheckpointChildren: true })
+      ? '[output stripped]'
+      : stripMediaReferences(sanitizeForDb(turn));
+  if (Array.isArray(projectedResponse.turns)) {
+    projectedResponse.turns = projectedResponse.turns.map((turn) => {
+      const record = asRecord(turn);
+      return record
+        ? projectProviderResponse(record, childOptions)
+        : options.stripOutput
+          ? stripUnsupportedTurn(turn)
+          : turn;
+    });
+  } else if (options.stripOutput && projectedResponse.turns !== undefined) {
+    projectedResponse.turns = stripUnsupportedTurn(projectedResponse.turns);
   }
 
   return projectedResponse;
@@ -404,6 +644,73 @@ export function sanitizeForDb<T>(obj: T): T {
 }
 
 /**
+ * Detach JSON-compatible fields without joining their binary strings into one
+ * JSON string. Native traversal preserves toJSON and circular/undefined behavior;
+ * string values are restored by path so user data cannot collide with a sentinel.
+ */
+export function snapshotForMediaExtraction<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  const ancestors: object[] = [];
+  const paths: string[][] = [];
+  const strings: Array<{ path: string[]; value: string }> = [];
+  try {
+    const serialized = JSON.stringify(obj, function (key, value: unknown) {
+      while (ancestors.length && ancestors[ancestors.length - 1] !== this) {
+        ancestors.pop();
+        paths.pop();
+      }
+      const path = ancestors.length ? [...paths[paths.length - 1], key] : [];
+      if (typeof value === 'string') {
+        strings.push({ path, value });
+        return '';
+      }
+      if (value && typeof value === 'object') {
+        if (ancestors.includes(value)) {
+          return undefined;
+        }
+        ancestors.push(value);
+        paths.push(path);
+      }
+      return value;
+    });
+    if (serialized === undefined) {
+      return (Array.isArray(obj) ? [] : null) as T;
+    }
+    let snapshot: unknown = JSON.parse(serialized);
+    for (const entry of strings) {
+      if (entry.path.length === 0) {
+        snapshot = entry.value;
+        continue;
+      }
+      let holder = snapshot as Record<string, unknown>;
+      for (const key of entry.path.slice(0, -1)) {
+        holder = holder[key] as Record<string, unknown>;
+      }
+      Object.defineProperty(holder, entry.path[entry.path.length - 1], {
+        value: entry.value,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    return snapshot as T;
+  } catch (error) {
+    // Never silently truncate payloads if even their string-free structure is
+    // too large. Other non-serializable SDK values keep the existing fallback.
+    if (error instanceof RangeError && error.message.includes('Invalid string length')) {
+      throw error;
+    }
+    logger.debug('snapshotForMediaExtraction: Failed to serialize object, using fallback', {
+      valueType: typeof obj,
+      isArray: Array.isArray(obj),
+    });
+    return (Array.isArray(obj) ? [] : null) as T;
+  }
+}
+
+/**
  * Sanitize a per-test-case field for persistence: strips circular refs,
  * collapses class instances (e.g. live SDK clients that leaked in via
  * `defaultTest.options.provider`), and redacts credential fields (`apiKey`,
@@ -619,26 +926,93 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
 }
 
 function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(response: T): T {
-  if (!response) {
+  if (!response || !asRecord(response)) {
     return response;
   }
 
-  const redactedMetadata = redactHttpHeadersOnMetadata((response as ProviderResponse).metadata, {
-    redactLegacyHeaders: true,
-  });
-  if (redactedMetadata === (response as ProviderResponse).metadata) {
+  const redactedMetadata = sanitizeCompletedTargetResponses(
+    redactHttpHeadersOnMetadata((response as ProviderResponse).metadata, {
+      redactLegacyHeaders: true,
+    }),
+  );
+  const redactedPrompt = sanitizeForDbWithSecrets(response.prompt);
+  const redacted = {
+    ...response,
+    metadata: redactedMetadata,
+    ...('prompt' in response ? { prompt: redactedPrompt } : {}),
+  };
+  const turns = asRecord(response)?.turns;
+  if (Array.isArray(turns)) {
+    const redactedTurns = turns.map((turn) => {
+      const record = asRecord(turn);
+      return record ? sanitizeResponseForDb(record) : turn;
+    });
+    if (redactedTurns.some((turn, index) => turn !== turns[index])) {
+      return { ...redacted, turns: redactedTurns } as T;
+    }
+  }
+  if (redactedMetadata === response.metadata && redactedPrompt === response.prompt) {
     return response;
   }
-  return { ...response, metadata: redactedMetadata } as T;
+  return redacted as T;
 }
 
 // `responseMetadata` is the (pre-redaction) provider response metadata, used as the provenance
 // source so a legacy top-level `metadata.headers` is redacted only where it echoes the
 // transport — leaving user-authored test metadata headers intact.
 function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
-  return redactHttpHeadersOnMetadata(metadata, {
-    legacyHeadersSource: sanitizeForDb(responseMetadata),
-  });
+  return sanitizeCompletedTargetResponses(
+    redactHttpHeadersOnMetadata(metadata, {
+      legacyHeadersSource: sanitizeForDb(responseMetadata),
+    }),
+  );
+}
+
+/** Traverse only the evaluator-owned interrupted-strategy checkpoint schema. */
+function mapCompletedTargetResponses<T>(
+  metadata: T,
+  project: (entry: Record<string, unknown> & { response: ProviderResponse }) => unknown,
+  projectUnsupported?: (value: unknown) => unknown,
+): T {
+  const record = asRecord(metadata);
+  if (record?.interruptedStrategy !== true) {
+    return metadata;
+  }
+  assertCheckpointBounds(metadata);
+  if (!Array.isArray(record.completedTargetResponses)) {
+    return projectUnsupported && 'completedTargetResponses' in record
+      ? ({
+          ...record,
+          completedTargetResponses: projectUnsupported(record.completedTargetResponses),
+        } as T)
+      : metadata;
+  }
+  return {
+    ...record,
+    completedTargetResponses: record.completedTargetResponses.map((entry) => {
+      const target = asRecord(entry);
+      const response = asRecord(target?.response);
+      return target && response
+        ? project({ ...target, response })
+        : projectUnsupported
+          ? projectUnsupported(entry)
+          : entry;
+    }),
+  } as T;
+}
+
+function sanitizeCompletedTargetResponses<T>(metadata: T): T {
+  const sanitizePrompt = (value: unknown) => {
+    const entry = asRecord(value);
+    return entry && 'prompt' in entry
+      ? { ...entry, prompt: sanitizeForDbWithSecrets(entry.prompt) }
+      : value;
+  };
+  return mapCompletedTargetResponses(
+    metadata,
+    (entry) => sanitizePrompt({ ...entry, response: sanitizeResponseForDb(entry.response) }),
+    sanitizePrompt,
+  );
 }
 
 function sanitizeGradingResultAssertions<T>(gradingResult: T): T {
@@ -913,6 +1287,8 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   } = stripFlags;
 
   const artifactResult = serializeResultProviderRefs(result) as T & Record<string, unknown>;
+  assertCheckpointBounds(artifactResult.metadata);
+  assertCheckpointBounds(asRecord(artifactResult.response)?.metadata);
   const redacted = redactSensitiveResultFieldsForDb({
     response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
     gradingResult: sanitizeForDb(artifactResult.gradingResult),
@@ -921,6 +1297,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   const response = projectProviderResponse(redacted.response ?? undefined, {
     stripMetadata: shouldStripMetadata,
     stripOutput: shouldStripResponseOutput,
+    stripPromptText: shouldStripPromptText,
   });
 
   return {
@@ -967,7 +1344,11 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
       ? {}
       : projectOutputMetadata(
           redacted.metadata,
-          shouldStripResponseOutput,
+          {
+            stripMetadata: shouldStripMetadata,
+            stripOutput: shouldStripResponseOutput,
+            stripPromptText: shouldStripPromptText,
+          },
           redacted.response?.metadata,
           (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
         ),

@@ -1,7 +1,8 @@
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
-import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
+import { and, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
+import { extractAndStoreResultMedia, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
-import { evalResultsTable } from '../database/tables';
+import { evalResultsTable, evalsTable } from '../database/tables';
+import { parseEnvBool } from '../envars';
 import {
   getStripFlags,
   persistRepeatMetadata,
@@ -14,9 +15,9 @@ import {
   redactSensitiveResultFieldsForDb,
   sanitizeForDb,
   sanitizeForDbWithSecrets,
-  sanitizeGradingResultForDb,
   sanitizeProvider,
   serializeResultProviderRefs,
+  snapshotForMediaExtraction,
   surfaceRepeatMetadata,
   surfaceTraceMetadata,
 } from '../evaluator/resultProcessing';
@@ -74,11 +75,19 @@ export default class EvalResult {
       evaluationId,
     );
 
-    const processedResponse = await extractAndStoreBinaryData(result.response, {
-      evalId,
-      testIdx: result.testIdx,
-      promptIdx: result.promptIdx,
-    });
+    // In-memory evaluations and failed-write reconstruction have no persisted
+    // parent guaranteed to own blob references. Keep their media inline.
+    const fields = {
+      response: snapshotForMediaExtraction(result.response),
+      metadata: snapshotForMediaExtraction(persistedMetadata),
+    };
+    const processed = persist
+      ? await extractAndStoreResultMedia(fields, {
+          evalId,
+          testIdx: result.testIdx,
+          promptIdx: result.promptIdx,
+        })
+      : fields;
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under
@@ -98,13 +107,13 @@ export default class EvalResult {
       error: error?.toString(),
       success,
       score: score == null ? 0 : score,
-      response: sanitizeForDb(processedResponse || null),
+      response: sanitizeForDb(processed.response || null),
       gradingResult: sanitizeForDb(gradingResult || null),
       namedScores: sanitizeForDb(namedScores),
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(persistedMetadata),
+      metadata: sanitizeForDb(processed.metadata),
       failureReason,
     };
     if (persist) {
@@ -130,16 +139,19 @@ export default class EvalResult {
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
     for (const result of results) {
-      const processedResponse = isBlobStorageEnabled()
-        ? await extractAndStoreBinaryData(result.response, {
-            evalId,
-            testIdx: result.testIdx,
-            promptIdx: result.promptIdx,
-          })
-        : result.response;
+      const processed = isBlobStorageEnabled()
+        ? await extractAndStoreResultMedia(
+            {
+              response: snapshotForMediaExtraction(result.response),
+              metadata: snapshotForMediaExtraction(result.metadata),
+            },
+            { evalId, testIdx: result.testIdx, promptIdx: result.promptIdx },
+          )
+        : { response: result.response, metadata: result.metadata };
       processedResults.push({
         ...serializeResultProviderRefs(result),
-        response: processedResponse ?? undefined,
+        response: processed.response ?? undefined,
+        metadata: processed.metadata,
       });
     }
 
@@ -395,15 +407,45 @@ export default class EvalResult {
       pluginId: _pluginId,
       ...rest
     } = serializeResultProviderRefs(this);
+    const processed = await extractAndStoreResultMedia(
+      {
+        response: snapshotForMediaExtraction(rest.response),
+        metadata: snapshotForMediaExtraction(
+          persistTraceMetadata(
+            persistRepeatMetadata(this.metadata, this.repeatIndex, this.repeatGroupId),
+            this.traceId,
+            this.evaluationId,
+          ),
+        ),
+      },
+      { evalId: this.evalId, testIdx: this.testIdx, promptIdx: this.promptIdx },
+      async () => {
+        // Later updates run outside the evaluation's scoped env. Read its current
+        // policy only when the extractor finds media eligible for externalization.
+        const savedPolicy = await db
+          .select({
+            inlineMedia: sql<string | null>`CASE WHEN json_valid(${evalsTable.config})
+              THEN ${evalsTable.config} -> '$.env.PROMPTFOO_INLINE_MEDIA' END`,
+          })
+          .from(evalsTable)
+          .where(eq(evalsTable.id, this.evalId))
+          .get();
+        // SQL NULL means absent; JSON null and other explicit values keep their types.
+        const inlineMedia =
+          savedPolicy?.inlineMedia == null ? undefined : JSON.parse(savedPolicy.inlineMedia);
+        return inlineMedia === undefined
+          ? isBlobStorageEnabled()
+          : !parseEnvBool(String(inlineMedia), false);
+      },
+    );
     const persistedValues = {
       ...rest,
       error: this.error ?? null,
-      gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
-      metadata: persistTraceMetadata(
-        persistRepeatMetadata(this.metadata, this.repeatIndex, this.repeatGroupId),
-        this.traceId,
-        this.evaluationId,
-      ),
+      ...redactSensitiveResultFieldsForDb({
+        response: sanitizeForDb(processed.response),
+        gradingResult: sanitizeForDb(rest.gradingResult),
+        metadata: sanitizeForDb(processed.metadata),
+      }),
     };
     //check if this exists in the db
     if (this.persisted) {
@@ -432,6 +474,7 @@ export default class EvalResult {
     const response = projectProviderResponse(this.response, {
       stripMetadata: shouldStripMetadata,
       stripOutput: shouldStripResponseOutput,
+      stripPromptText: shouldStripPromptText,
     });
 
     const prompt = projectPrompt(this.prompt, shouldStripPromptText);
@@ -489,7 +532,11 @@ export default class EvalResult {
         ? {}
         : projectOutputMetadata(
             this.metadata,
-            shouldStripResponseOutput,
+            {
+              stripMetadata: shouldStripMetadata,
+              stripOutput: shouldStripResponseOutput,
+              stripPromptText: shouldStripPromptText,
+            },
             this.response?.metadata,
             this.testCase.metadata,
           ),
