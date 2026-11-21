@@ -96,6 +96,10 @@ interface MetadataKeyResult {
   key: string;
 }
 
+export function generateDatasetId(tests?: UnifiedConfig['tests']) {
+  return sha256(JSON.stringify(tests || []));
+}
+
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
@@ -538,7 +542,7 @@ export default class Eval {
     const author = opts && 'author' in opts ? (opts.author ?? null) : getAuthor();
     const db = await getDb();
 
-    const datasetId = sha256(JSON.stringify(config.tests || []));
+    const datasetId = generateDatasetId(config.tests);
 
     const durationResults = {
       ...(opts?.durationMs !== undefined && { durationMs: opts.durationMs }),

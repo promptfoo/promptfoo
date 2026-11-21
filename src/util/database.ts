@@ -14,7 +14,12 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import Eval, { createEvalId, insertEvalDatasetAndTags, insertEvalPrompts } from '../models/eval';
+import Eval, {
+  createEvalId,
+  generateDatasetId,
+  insertEvalDatasetAndTags,
+  insertEvalPrompts,
+} from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import { getStripFlags } from '../models/evalResult';
 import {
@@ -77,7 +82,7 @@ export async function writeResultsToDatabase(
     await insertEvalPrompts(tx, evalId, results.table.head.prompts);
 
     // Record dataset relation
-    const datasetId = sha256(JSON.stringify(config.tests || []));
+    const datasetId = generateDatasetId(config.tests);
     const testsForStorage = Array.isArray(config.tests) ? config.tests : [];
 
     // Log when non-array tests are converted to empty array for database storage
@@ -156,7 +161,7 @@ async function getPromptsWithPredicate(
   for (const eval_ of evals_) {
     const timestamp = eval_.createdAt;
     const createdAt = new Date(timestamp).toISOString();
-    const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
+    const datasetId = generateDatasetId(eval_.config.tests);
     if (predicate(datasetId)) {
       for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
@@ -209,7 +214,7 @@ export async function getTestCases(limit = DEFAULT_QUERY_LIMIT): Promise<TestCas
     }
 
     // Hash the stored tests so output stripping does not change dataset identity.
-    const id = sha256(JSON.stringify(config.tests || []));
+    const id = generateDatasetId(config.tests);
     const dataset = (groupedTestCases[id] ??= {
       id,
       count: 0,

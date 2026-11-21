@@ -3,11 +3,10 @@ import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import Eval, { EvalQueries } from '../../models/eval';
+import Eval, { EvalQueries, generateDatasetId } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
-import { sha256 } from '../../util/createHash';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   evalTableToJson,
@@ -302,7 +301,7 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
 // Legacy imports lack a dataset relationship. Recreate the ID used by Eval.create
 // when the imported configuration still contains the tests.
 function comparisonDatasetId(eval_: Eval) {
-  return eval_.datasetId ?? (eval_.config.tests && sha256(JSON.stringify(eval_.config.tests)));
+  return eval_.datasetId ?? (eval_.config.tests && generateDatasetId(eval_.config.tests));
 }
 
 const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
