@@ -81,9 +81,9 @@ describe('ProductCard', () => {
     const button = screen.getByRole('button', { name: `View ${mockProduct.name} (Sold Out)` });
     expect(button).toBeInTheDocument();
     expect(screen.getByText('Sold Out')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: mockProduct.name })).toHaveStyle({
-      filter: 'grayscale(100%)',
-    });
+    for (const image of screen.getAllByRole('img')) {
+      expect(image).toHaveStyle({ filter: 'grayscale(1)' });
+    }
   });
 
   it('calls onClick when clicked', async () => {

@@ -22,6 +22,15 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
   const hoverImage = product.images[1];
   const hasHoverImage = Boolean(hoverImage);
   const soldOut = isProductSoldOut(product);
+  const imageStyle = {
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    transition: 'opacity 0.3s ease-out, filter 0.3s ease-out',
+    filter: soldOut ? 'grayscale(1)' : 'none',
+  } as const;
 
   const lowestPrice = useMemo(() => {
     if (product.type === 'BUNDLE') {
@@ -98,14 +107,8 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
           alt={product.name}
           onLoad={() => setPrimaryLoaded(true)}
           sx={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
+            ...imageStyle,
             opacity: primaryLoaded && !(isHovered && hasHoverImage && hoverLoaded) ? 1 : 0,
-            transition: 'opacity 0.3s ease-out, filter 0.3s ease-out',
-            filter: soldOut ? 'grayscale(100%)' : 'none',
           }}
         />
         {/* Hover image — rendered once to preload, shown on hover */}
@@ -116,14 +119,8 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
             alt={`${product.name} alternate view`}
             onLoad={() => setHoverLoaded(true)}
             sx={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
+              ...imageStyle,
               opacity: isHovered && hoverLoaded ? 1 : 0,
-              transition: 'opacity 0.3s ease-out, filter 0.3s ease-out',
-              filter: soldOut ? 'grayscale(100%)' : 'none',
             }}
           />
         )}
