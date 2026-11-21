@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate Muse Code workspace understanding
+
+prompts:
+  - |-
+    Read math.js in the workspace. {{question}}
+    Answer with only the function name, without Markdown or explanations.
+
+providers:
+  - id: muse-code
+    config:
+      working_dir: ./workspace
+      disable_shell: true
+      disable_write: true
+      disable_web_tools: true
+      no_foreign_personal_context: true
+      max_model_steps: 6
+
+tests:
+  - vars:
+      question: Which function multiplies two numbers?
+    assert:
+      - type: equals
+        value: multiply
+  - vars:
+      question: Which function adds two numbers?
+    assert:
+      - type: equals
+        value: add

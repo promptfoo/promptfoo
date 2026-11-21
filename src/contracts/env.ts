@@ -91,6 +91,8 @@ export const ProviderEnvOverridesSchema = z.object({
   LLAMA_API_KEY: z.string().optional(),
   LOCALAI_BASE_URL: z.string().optional(),
   LOCALAI_TEMPERATURE: z.string().optional(),
+  META_API_KEY: z.string().optional(),
+  MUSE_CLI_PATH: z.string().optional(),
   MISTRAL_API_BASE_URL: z.string().optional(),
   MISTRAL_API_HOST: z.string().optional(),
   MISTRAL_API_KEY: z.string().optional(),
