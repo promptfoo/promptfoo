@@ -364,7 +364,7 @@ export class FunctionCallbackHandler {
         id: callId,
         name: toolName,
         input: sanitizeMcpToolData(input),
-        output: sanitizeMcpToolData(output),
+        output: normalizeMcpToolContent(sanitizeMcpToolData(output)),
         is_error,
       });
     };
@@ -387,7 +387,7 @@ export class FunctionCallbackHandler {
       }
 
       const content = normalizeMcpToolContent(result?.content);
-      record(content, false);
+      record(result?.content, false);
       return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
       // A JSON parser error may quote the original arguments, including credentials.

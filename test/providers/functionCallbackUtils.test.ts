@@ -915,6 +915,22 @@ describe('FunctionCallbackHandler', () => {
       },
     );
 
+    it('sanitizes individual result blocks before joining them for metadata', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([{ name: 'local_tool' }]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: [{ json: { apiKey: 'fixture-key' } }, { text: 'public' }],
+      });
+      const toolCalls: McpToolCallEntry[] = [];
+      const result = await handler.processCall(
+        { name: 'local_tool', arguments: '{}' },
+        undefined,
+        undefined,
+        { toolCalls },
+      );
+      expect(result.output).toContain('fixture-key');
+      expect(toolCalls[0].output).toBe('{"apiKey":"[REDACTED]"}\npublic');
+    });
+
     it('does not record malformed arguments or expose them in the error', async () => {
       mockMCPClient.getAllTools.mockReturnValue([{ name: 'local_tool' }]);
       const toolCalls: McpToolCallEntry[] = [];
