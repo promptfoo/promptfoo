@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { testCaseFromCsvRow } from '../../src/csv';
-import { matchesVideoRubric } from '../../src/matchers/rubric';
+import { matchesVideoRubric } from '../../src/matchers/llmGrading';
 
 import type { ApiProvider, Assertion, ProviderResponse } from '../../src/types/index';
 

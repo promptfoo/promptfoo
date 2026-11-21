@@ -1133,35 +1133,3 @@ export async function runJsonGradingPrompt({
     },
   };
 }
-
-export async function matchesVideoRubric(
-  rubric: string | object,
-  resolveVideo: AssertionParams['resolveVideo'],
-  grading?: GradingConfig,
-  vars?: Record<string, VarValue>,
-  assertion?: Assertion,
-  providerCallContext?: CallApiContextParams,
-): Promise<GradingResult> {
-  if (!grading) {
-    throw new Error(
-      'Cannot grade video without grading config. Specify --grader option or grading config.',
-    );
-  }
-  if (!resolveVideo) {
-    return {
-      ...graderFail('Video grading requires a trusted blob from this evaluation result'),
-      assertion,
-    };
-  }
-  const result = await runJsonGradingPrompt({
-    assertion,
-    grading,
-    providerCallContext,
-    resolveVideo,
-    defaultPrompt: DEFAULT_VIDEO_GRADING_PROMPT,
-    label: 'video-rubric',
-    checkName: 'video-rubric check',
-    vars: { ...vars, rubric: typeof rubric === 'object' ? JSON.stringify(rubric) : rubric },
-  });
-  return { ...result, assertion };
-}

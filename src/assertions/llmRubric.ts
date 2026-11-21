@@ -1,5 +1,4 @@
-import { matchesLlmRubric } from '../matchers/llmGrading';
-import { matchesVideoRubric } from '../matchers/rubric';
+import { matchesLlmRubric, matchesVideoRubric } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
 import { finalizeGradedAssertion } from './ragDefaults';
 

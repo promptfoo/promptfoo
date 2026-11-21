@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleVideoRubric } from '../../src/assertions/llmRubric';
+import { matchesVideoRubric } from '../../src/matchers/llmGrading';
 
 import type { AssertionParams, GradingResult } from '../../src/types/index';
 
-vi.mock('../../src/matchers/rubric', () => ({
+vi.mock('../../src/matchers/llmGrading', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/matchers/llmGrading')>()),
   matchesVideoRubric: vi.fn(),
 }));
-
-import { matchesVideoRubric } from '../../src/matchers/rubric';
 
 function createParams(overrides: Partial<AssertionParams> = {}): AssertionParams {
   const test = overrides.test ?? { vars: {}, options: {} };
