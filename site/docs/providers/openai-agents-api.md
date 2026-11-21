@@ -135,7 +135,7 @@ Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON e
 | `status: unavailable`                                      | Read `reason`. Enable eval tracing if no local span was available, check organization and key permissions for HTTP 403, or increase `hostedTrace.timeoutMs` if publication timed out. Output assertions still grade the answer. |
 | Tool name is visible but arguments are missing             | Set `hostedTrace.includeToolArguments: true` before running a synthetic fixture. Missing or redacted arguments cannot establish the absence of a value.                                                                         |
 
-Promptfoo waits for a connected span tree, retrying unpublished parents for up to 15 seconds by default within the provider timeout. A complete trace uses the remaining time for local storage. A validated partial tree gets one final write of up to 250 ms, capped by the configured timeouts. If SQLite reaches the deadline before committing, Promptfoo rolls back the write. If the commit succeeds and returns late, the spans remain available and `hostedTrace.storageDeadlineExceeded` is `true`. The completed answer still grades.
+Promptfoo waits for a connected span tree, retrying unpublished parents for up to 15 seconds by default within the provider timeout. A complete trace uses the remaining time for local storage. A validated partial tree gets one final write of up to 250 ms, capped by the configured timeouts. If SQLite reaches the deadline before committing, Promptfoo rolls back the write. If the commit succeeds and returns late, the spans remain available and `hostedTrace.storageDeadlineExceeded` is `true`. The completed answer still grades. Provider latency includes the session and requested artifacts. It excludes hosted trace collection and session cleanup.
 
 Use `hostedTrace: true` when tool names, timing and status are sufficient. The importer omits prompts, instructions and tool results. A trace filter on a discarded attribute such as `gen_ai.tool.call.result` cannot establish that a result was absent. OpenAI's own trace recording is separate.
 
@@ -239,7 +239,7 @@ The provider polls for session usage after the root turn completes. `usageTimeou
 | `usageMayExcludeSubagents` | The session or root totals may omit delegated work. When all subagent turn counts are available, `subagentUsage` reports their sum separately. Adding it to the total can double-count tokens. |
 | `usageUnavailable`         | The answer is available, but token counts and cost are missing.                                                                                                                                |
 
-For a single agent, the cost estimate covers model tokens. Tools and sandbox time can incur additional charges. The provider omits cost when subagents are enabled or observed because their models and service tiers can differ.
+For a single agent, Promptfoo estimates model token costs using the root turn's start time. Tools and sandbox time can incur additional charges. The provider omits cost when subagents are enabled or observed because their models and service tiers can differ.
 
 ### Session cleanup
 

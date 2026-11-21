@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import logger from '../../logger';
 import { getOtelConfigFromEnv } from '../../tracing/otelConfig';
+import { markHostedRequest } from '../../tracing/otlpOwnership';
 import { HOSTED_ERROR_STATUS_COMPLETE, HOSTED_ERROR_STATUS_VERSION } from '../../tracing/spanError';
 import { getTraceStore } from '../../tracing/store';
 import { CloudAuthRedirectError } from '../../util/fetch/cloudAuthRedirects';
@@ -10,19 +11,20 @@ import { renderVarsInObject } from '../../util/render';
 import {
   isCredentialHeader as isKnownCredentialHeader,
   isNonCredentialHeader,
-  isSecretField,
-  looksLikeSecret,
   REDACTED,
   sanitizeObject,
-  sanitizeUrlForLogging,
 } from '../../util/sanitizer';
 import { analyzeTemplateReference } from '../../util/templates';
 import { runWithAbort, sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
-import { decodeUrlComponent } from '../urlEncoding';
 import {
+  basicCredential,
+  decodeBasicCredentials,
   getHostedCredentialArgument,
   getHostedHeaderCredentialParts,
+  getUrlCredentials,
+  isCredentialName,
+  splitUserinfo,
 } from './agents-api-credential-args';
 import { normalizeHostedTrace, UnpublishedTraceParentError } from './agents-api-trace-spans';
 import { calculateOpenAIUsageCost } from './billing';
@@ -80,6 +82,8 @@ interface Session {
 
 interface Turn {
   id: string;
+  created_at?: number;
+  started_at?: number | null;
   subagent_id: string | null;
   status: 'queued' | 'in_progress' | 'waiting' | 'completed' | 'failed' | 'cancelled';
   error?: { code?: string; message: string } | null;
@@ -132,12 +136,11 @@ const TURN_USAGE_GRACE_MS = 5_000;
 const MIN_CREDENTIAL_LENGTH = 8;
 // A single character is no secret, and redacting it would erase that character from diagnostics.
 const MIN_TOKEN_CREDENTIAL_LENGTH = 2;
-const CREDENTIAL_NAME =
-  /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password|(?:^|[-_])key$)/i;
 
 async function digestArtifact(response: Response | undefined, expectedSize: number) {
-  if (!response?.body) {
-    throw new Error('Missing artifact content');
+  if (!response?.body || response.redirected) {
+    void response?.body?.cancel().catch(() => {});
+    throw new Error('Missing or redirected artifact content');
   }
   const reader = response.body.getReader();
   const hash = createHash('sha256');
@@ -171,10 +174,6 @@ class AgentsApiHttpError extends Error {
     super(message);
     this.name = 'AgentsApiHttpError';
   }
-}
-
-function isCredentialName(name: string): boolean {
-  return isSecretField(name) || CREDENTIAL_NAME.test(name);
 }
 
 function isCredentialHeader(name: string, value: string): boolean {
@@ -211,16 +210,13 @@ function addCredential(credentials: Set<string>, value: unknown, field?: string)
       candidates.push(part);
     }
   }
-  const basic = /^Basic\s+([a-z\d+/]+={0,2})$/i.exec(trimmed);
+  const basic = /^Basic\s+([a-z\d._~+/-]+=*)$/i.exec(trimmed);
   if (basic) {
-    const bytes = Buffer.from(basic[1], 'base64');
-    const decoded = bytes.toString('utf8');
-    const separator = decoded.indexOf(':');
-    if (
-      separator !== -1 &&
-      bytes.toString('base64').replace(/=+$/, '') === basic[1].replace(/=+$/, '')
-    ) {
-      candidates.push(decoded, decoded.slice(0, separator), decoded.slice(separator + 1));
+    const parts = decodeBasicCredentials(basic[1]);
+    if (parts) {
+      candidates.push(...parts);
+    } else {
+      credentials.add(UNINSPECTABLE_AUTHORIZATION);
     }
   }
   for (const candidate of candidates) {
@@ -229,83 +225,6 @@ function addCredential(credentials: Set<string>, value: unknown, field?: string)
       credentials.add(encodeURIComponent(candidate));
     }
   }
-}
-
-/** Decode URL userinfo as Node's HTTP client does, keeping a malformed escape as written. */
-function decodeUserinfo(url: URL): string | undefined {
-  return url.username || url.password
-    ? `${decodeUrlComponent(url.username)}:${decodeUrlComponent(url.password)}`
-    : undefined;
-}
-
-function basicCredential(userinfo: string): string {
-  return `Basic ${Buffer.from(userinfo).toString('base64')}`;
-}
-
-/**
- * Promptfoo's fetch helper would Base64-encode URL userinfo while it is still percent-encoded, so
- * request URLs omit it and the provider sends a decoded Basic credential instead.
- */
-function splitUserinfo(apiUrl: string): { url: string; userinfo?: string } {
-  let url: URL;
-  try {
-    url = new URL(apiUrl);
-  } catch {
-    return { url: apiUrl };
-  }
-  const userinfo = decodeUserinfo(url);
-  if (!userinfo) {
-    return { url: apiUrl };
-  }
-  url.username = '';
-  url.password = '';
-  return { url: url.toString(), userinfo };
-}
-
-/**
- * Credential values carried by a URL: userinfo, including the decoded pair and the Basic
- * credential derived from it, and credential-named query parameters. Raw and decoded spellings
- * are both returned for redaction.
- */
-function getUrlCredentials(value: string, includeFragment = true): string[] {
-  const trimmed = value.trim();
-  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)) {
-    return [];
-  }
-  let url: URL;
-  try {
-    url = new URL(trimmed);
-  } catch {
-    // A malformed credential-bearing URL can be echoed only as one opaque error value.
-    return sanitizeUrlForLogging(value) === value ? [] : [value];
-  }
-  const found = [url.username, url.password].flatMap((part) => [part, decodeUrlComponent(part)]);
-  const userinfo = decodeUserinfo(url);
-  if (userinfo) {
-    found.push(userinfo, basicCredential(userinfo));
-  }
-  const sanitizedSegments = sanitizeUrlForLogging(url.pathname).split('/');
-  for (const [index, segment] of url.pathname.split('/').entries()) {
-    if (sanitizedSegments[index] === '%5BREDACTED%5D') {
-      found.push(segment, decodeUrlComponent(segment));
-    }
-  }
-  const parameterParts = includeFragment ? [url.search, url.hash] : [url.search];
-  for (const segment of parameterParts.flatMap((part) => part.slice(1).split(/[&;]/))) {
-    const separator = segment.indexOf('=');
-    const [param] = new URLSearchParams(segment);
-    if (
-      separator !== -1 &&
-      param &&
-      (isCredentialName(param[0]) ||
-        looksLikeSecret(param[1]) ||
-        looksLikeSecret(segment.slice(separator + 1)))
-    ) {
-      // A raw `+` decodes to a space; keep both spellings a server might echo.
-      found.push(segment.slice(separator + 1), param[1]);
-    }
-  }
-  return found.filter((credential) => credential.trim().length > 0);
 }
 
 /**
@@ -654,6 +573,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           signal,
           // A redirect must not forward gateway headers or credentials in the session body.
           restrictCloudAuthRedirects: true,
+          // Artifact evidence belongs to this exact resource, even within one origin.
+          ...(endpoint.endsWith('/content') && { redirect: 'manual' as const }),
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         },
         30_000,
@@ -793,7 +714,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   ): Promise<string[]> {
     const subagents = await this.list<{ id?: unknown }>(`${endpoint}/subagents`, headers, signal);
     return subagents.map(({ id }) => {
-      if (typeof id !== 'string' || !id) {
+      if (!isResourceId(id)) {
         throw new Error('Agents API returned an invalid subagent');
       }
       return id;
@@ -1016,7 +937,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         (span) => {
           let parent: SpanContext | undefined;
           if (config.hostedTrace && context?.traceparent && span.isRecording()) {
-            span.setAttribute('promptfoo.openai.hosted_trace_requested', true);
+            markHostedRequest(span, context.traceparent);
             parent = span.spanContext();
           }
           return callProvider.runSession(prompt, options, parent);
@@ -1110,7 +1031,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     headers.set('x-promptfoo-silent', 'true');
 
     const timeoutMs = this.config.timeoutMs ?? 300_000;
-    const deadline = Date.now() + timeoutMs;
+    const startedAt = Date.now();
+    const deadline = startedAt + timeoutMs;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const signal = options?.abortSignal
@@ -1165,20 +1087,20 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         signal,
         options?.abortSignal,
       );
-      const {
-        session: finished,
-        usage,
-        usageMetadata,
-      } = await this.waitForFinalUsage(
-        completedSession,
-        turn,
-        endpoint,
-        headers,
-        signal,
-        deadline,
-        hasSubagents,
-        options?.abortSignal,
-      );
+      // Accounting may use the rest of the deadline. Start downloads first.
+      const [artifacts, { session: finished, usage, usageMetadata }] = await Promise.all([
+        this.getArtifactMetadata(session.id, turn.id, endpoint, headers, signal),
+        this.waitForFinalUsage(
+          completedSession,
+          turn,
+          endpoint,
+          headers,
+          signal,
+          deadline,
+          hasSubagents,
+          options?.abortSignal,
+        ),
+      ]);
       const subagentUsageMetadata = hasSubagents
         ? await this.getSubagentUsageMetadata(endpoint, headers, signal, options?.abortSignal)
         : {};
@@ -1189,6 +1111,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!hasSubagents) {
         result.cost = calculateOpenAIUsageCost(model, this.config, usage, {
           apiUrl: this.getApiUrl(),
+          createdAt: turn.started_at ?? turn.created_at,
           serviceTier: finished.agent.service_tier ?? this.config.agent?.service_tier,
         });
       }
@@ -1201,8 +1124,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         ...toolActivity,
         ...usageMetadata,
         ...subagentUsageMetadata,
-        ...(await this.getArtifactMetadata(session.id, turn.id, endpoint, headers, signal)),
+        ...artifacts,
       });
+      // Optional trace publication and session cleanup can take several more seconds.
+      result.latencyMs = Date.now() - startedAt;
       if (this.config.hostedTrace) {
         metadata.hostedTrace = await this.importHostedTrace(
           session.id,
@@ -1274,15 +1199,14 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
             artifact?.session_id !== sessionId ||
             artifact.turn_id !== turnId ||
             artifact.path !== path ||
-            typeof artifact.id !== 'string' ||
-            !/^[A-Za-z0-9_-]+$/.test(artifact.id) ||
+            !isResourceId(artifact.id) ||
             !isNonNegativeSafeInteger(artifact.size_bytes) ||
             artifact.size_bytes > MAX_ARTIFACT_BYTES
           ) {
             return { ...evidence, status: 'unavailable' };
           }
           const response = await this.requestRaw(
-            `${collection}/${artifact.id}/content`,
+            `${collection}/${encodeURIComponent(artifact.id)}/content`,
             'GET',
             headers,
             artifactSignal,

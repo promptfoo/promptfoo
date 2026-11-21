@@ -6,6 +6,7 @@ import { TargetAttributes, withTargetSpan } from '../../src/tracing/targetTracer
 const mocks = vi.hoisted(() => {
   const span = {
     end: vi.fn(),
+    spanContext: vi.fn(() => ({ traceId: 'test', spanId: 'target', traceFlags: 1 })),
     recordException: vi.fn(),
     setAttribute: vi.fn(),
     setStatus: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock('@opentelemetry/api', async () => {
     ROOT_CONTEXT: { traceId: 'root' },
     trace: {
       ...actual.trace,
+      getSpanContext: vi.fn(() => ({ spanId: 'parent' })),
       getTracer: vi.fn(() => mocks.tracer),
     },
   };

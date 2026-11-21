@@ -1,3 +1,5 @@
+/// <reference lib="es2022.error" />
+
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { pathToFileURL } from 'node:url';
 import * as fs from 'fs';
@@ -132,9 +134,12 @@ function databasePathsReferToSameFile(firstPath: string, secondPath: string): bo
   }
 }
 
+function configuredDbPath(): string {
+  return path.resolve(getConfigDirectoryPath(), 'promptfoo.db');
+}
+
 export function getDbPath() {
-  const configDirectoryPath = getConfigDirectoryPath();
-  const dbPath = path.resolve(configDirectoryPath, 'promptfoo.db');
+  const dbPath = configuredDbPath();
   // Runner-owned globals survive helpers that clear process.env; JEST_WORKER_ID alone does not
   // identify Jest because the generic jest-worker package sets it for ordinary tasks.
   const isTestProcess =
@@ -273,7 +278,7 @@ function serializeTopLevelOperations(
       try {
         return await operation();
       } catch (error) {
-        if (!isTransientDatabaseLockError(error)) {
+        if (client.closed || !isTransientDatabaseLockError(error)) {
           throw error;
         }
         // libsql 0.5.29 can leave a failed statement active: later writes appear to
@@ -423,10 +428,21 @@ function serializeTopLevelOperations(
         // Keep the transaction open so close() can roll it back before recovery.
         await tx.executeMultiple(restoreTimeout ? `COMMIT; ${restoreTimeout}` : 'COMMIT');
       } catch (error) {
+        let failure = error;
         try {
           tx.close();
         } catch (rollbackError) {
-          logger.warn('Could not roll back guarded database write', { error: rollbackError });
+          failure = new AggregateError(
+            [error, rollbackError],
+            'Could not roll back guarded database write',
+            { cause: error },
+          );
+          // A released connection can be replaced by lock recovery below. Otherwise
+          // discard it before any queued write or timeout restoration can reuse it.
+          if (!tx.closed || !reconnectOnLockFailure || !isTransientDatabaseLockError(error)) {
+            client.close();
+            throw failure;
+          }
         }
         // COMMIT may have skipped the trailing PRAGMA. Restore the single serialized
         // connection before lock recovery reads its settings or another writer can use it.
@@ -438,7 +454,7 @@ function serializeTopLevelOperations(
             throw restoreError;
           }
         }
-        throw error;
+        throw failure;
       }
       tx.close();
     },
@@ -521,6 +537,20 @@ export async function getDb() {
     // drop the promise reference so it can be garbage collected.
     dbPromise = null;
   }
+}
+
+/** Open an existing database for a read without creating a file on first use. */
+export async function getDbIfExists() {
+  // Test clients can share an in-memory database without a file on disk.
+  if (
+    dbInstance ||
+    dbPromise ||
+    getEnvBool('IS_TESTING') ||
+    fs.statSync(configuredDbPath(), { throwIfNoEntry: false })
+  ) {
+    return getDb();
+  }
+  return null;
 }
 
 export async function closeDb() {

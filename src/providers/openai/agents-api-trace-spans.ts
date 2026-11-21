@@ -3,7 +3,10 @@ import { createHash } from 'node:crypto';
 import { tokenizer, tokTypes } from 'acorn';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { isSensitiveTraceAttribute } from '../../tracing/sanitizeAttributes';
+import {
+  isSensitiveTraceAttribute,
+  MAX_HOSTED_ARGUMENT_BYTES as MAX_ARGUMENT_BYTES,
+} from '../../tracing/sanitizeAttributes';
 import {
   HOSTED_ERROR_STATUS_COMPLETE,
   HOSTED_ERROR_STATUS_VERSION,
@@ -18,10 +21,13 @@ import {
 } from '../../tracing/spanFilter';
 import { HOSTED_DURATION_NS, HOSTED_START_TIME_OFFSET_NS } from '../../tracing/spanTiming';
 import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
-import { isCredentialHeader, isSecretEnvVarName, looksLikeSecret } from '../../util/sanitizer';
 import {
+  decodeBasicCredentials,
   getHostedCredentialArgument,
   getHostedHeaderCredentialParts,
+  getUrlCredentials,
+  hasOpaqueIdentifierComponent,
+  isHostedCredentialLabel,
 } from './agents-api-credential-args';
 import {
   hasRecognizableOpenAiCredential,
@@ -32,7 +38,6 @@ import {
 import type { SpanData } from '../../tracing/store';
 
 const MAX_SPANS = 1_000;
-const MAX_ARGUMENT_BYTES = 64 * 1024;
 // Snapshot-wide limits keep synchronous inspection bounded across tools.
 const MAX_TRACE_ARGUMENT_BYTES = 256 * 1024;
 const MAX_TRACE_ARGUMENT_VALUES = 4_096;
@@ -245,13 +250,7 @@ function mayNameCredential(text: string): boolean {
 }
 
 function isHostedCredentialField(key: string): boolean {
-  return (
-    mayNameCredential(key) &&
-    isSensitiveTraceAttribute(key, (name) => {
-      const leaf = name.slice(name.lastIndexOf('.') + 1);
-      return isCredentialHeader(leaf, '') || isSecretEnvVarName(leaf);
-    })
-  );
+  return mayNameCredential(key) && isSensitiveTraceAttribute(key, isHostedCredentialLabel);
 }
 
 // Header collections may use Fetch tuples, Node's alternating rawHeaders, or named records.
@@ -262,6 +261,9 @@ const headerValueField = /^(?:value|header[-_]?value)s?$/i;
 // Decode JSON escapes for the same name guard. Built-in rules need not parse a large
 // or malformed argument when the source cannot spell a credential field in the first place.
 function mayContainCredentialField(raw: string, consumeToken: () => void, strict = true): boolean {
+  if (raw.includes('://')) {
+    return true;
+  }
   if (!raw.includes('\\') && !mayNameCredential(raw)) {
     return false;
   }
@@ -293,7 +295,8 @@ function mayContainCredentialField(raw: string, consumeToken: () => void, strict
         : undefined;
     if (
       key !== undefined &&
-      ((startsArray && key.toLowerCase() !== 'pwd' && isHostedCredentialField(key)) ||
+      (key.includes('://') ||
+        (startsArray && key.toLowerCase() !== 'pwd' && isHostedCredentialField(key)) ||
         ((key.startsWith('--') || key.includes('=') || key.includes(':')) &&
           mayNameCredential(key)) ||
         (/^\s*["[{]/.test(key) && (key.includes('\\') || mayNameCredential(key))))
@@ -439,19 +442,38 @@ function protectedEchoMatcher(policy: ImportPolicy) {
         invalid();
       }
       needles.add(text);
+      inspectUrl(text, depth);
       // A protected OTLP or JSON string may itself encode structured data. Inspect
       // it once, preserving the original text and charging the shared JSON budgets.
       if (typeof value === 'string' && isStructuredJson(text)) {
         inspectJson(text, source || true, depth + 1);
       }
       // The credential alone can appear in a tool or model name.
-      const auth = /^(?:Bearer|Basic|Token|Api[-_]?Key)[ \t]+(\S+)$/i.exec(text.trim());
+      const auth = /^(Bearer|Basic|Token|Api[-_]?Key)[ \t]+(\S+)$/i.exec(text.trim());
       if (auth) {
-        remember(auth[1], depth);
+        remember(auth[2], depth);
+        if (auth[1].toLowerCase() === 'basic') {
+          for (const part of decodeBasicCredentials(auth[2]) ?? invalid()) {
+            remember(part, depth);
+          }
+        }
       }
     }
   }
+  function inspectUrl(text: string, depth: number) {
+    if (!text.includes('://')) {
+      return;
+    }
+    chargeSearch(text, 1);
+    if (text.length > MAX_ARGUMENT_BYTES) {
+      invalid();
+    }
+    for (const part of getUrlCredentials(text, true, invalid)) {
+      remember(part, depth);
+    }
+  }
   function inspectText(text: string, headers: boolean, depth: number) {
+    inspectUrl(text, depth);
     if (isStructuredJson(text)) {
       chargeSearch(text, 1);
       if (headers || mayContainCredentialField(text, () => visit(depth), false)) {
@@ -714,7 +736,15 @@ function isLiteralPath(value: unknown, policy: ImportPolicy): value is string {
     !value.startsWith('-') &&
     !/[^\p{L}\p{N}_./-]/u.test(value) &&
     !hasSensitiveOpenAiCachePath(value) &&
-    !hasProtectedComponent(value, policy)
+    !hasProtectedComponent(value, policy) &&
+    // Short configured credentials may only match as whole values. A suffix
+    // must not disguise a credential-shaped basename in a command operand.
+    value.split('/').every((segment) => {
+      const parts = segment.includes('.') ? [segment, ...segment.split('.')] : [segment];
+      return parts.every(
+        (part) => !part || (!hasSensitiveOpenAiCachePath(part) && policy.redact(part) === part),
+      );
+    })
   );
 }
 
@@ -862,17 +892,6 @@ function toolAttributes(
   } catch {
     return unavailable;
   }
-}
-
-// A namespace or file extension can surround a base64url token. Keep hyphens and
-// underscores inside each component so a token cannot hide behind its own separators.
-function hasOpaqueIdentifierComponent(value: string): boolean {
-  return value.split(/[.:/]/).some(
-    (part) =>
-      looksLikeSecret(part) &&
-      // Some dated model slugs exceed the opaque-token threshold using descriptive words.
-      !/^(?:[a-z]{1,16}-){2,}\d{4}-\d{2}-\d{2}(?:-\d{1,8})?$/.test(part),
-  );
 }
 
 function safeIdentifier(value: unknown, policy: ImportPolicy): value is string {

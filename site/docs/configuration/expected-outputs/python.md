@@ -1,7 +1,7 @@
 ---
 sidebar_position: 51
 sidebar_label: Python
-description: Create advanced Python validation scripts with complex logic, external APIs, and ML libraries for sophisticated output grading
+description: Write Python assertions to grade LLM outputs using custom logic, external APIs, or Python libraries. Return pass/fail results and scores from eval scripts.
 ---
 
 # Python assertions

@@ -13,7 +13,8 @@ const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-hosted-export-'
 const evalId = 'eval-hosted-trace-export';
 const traceId = 'abcdef0123456789abcdef0123456789';
 const parentSpanId = '0123456789abcdef';
-const args = { query: 'x'.repeat(480) };
+const directory = '/folder.v1'.repeat(25);
+const args = { cwd: directory, path: directory + '/ledger.csv' };
 const noDelete: Assertion = { type: 'not-trajectory:tool-used', value: 'delete' };
 
 function runNode(state: string, args: string[], env: NodeJS.ProcessEnv = {}) {
@@ -139,7 +140,8 @@ it('regrades hosted arguments against the bytes that survived export and import'
     (span: TraceSpan) => span.parentSpanId === parentSpanId,
   ).attributes;
   expect(attrs['tool.arguments']).toBe(attrs['gen_ai.tool.call.arguments']);
-  expect(() => JSON.parse(attrs['tool.arguments'])).toThrow(SyntaxError);
+  expect(attrs['tool.arguments'].length).toBeGreaterThan(400);
+  expect(JSON.parse(attrs['tool.arguments'])).toEqual(args);
 
   const value = { name: 'lookup', args };
   const checks: Assertion[] = [
@@ -150,7 +152,7 @@ it('regrades hosted arguments against the bytes that survived export and import'
   expect(regrade('source', file, checks).map((grade) => grade.pass)).toEqual([true, false, true]);
   runNode('restored', [cli, 'import', file]);
   expect(regrade('restored', exportEval('restored'), checks).map((grade) => grade.pass)).toEqual([
-    false,
+    true,
     false,
     true,
   ]);

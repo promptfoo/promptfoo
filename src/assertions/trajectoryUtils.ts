@@ -246,11 +246,11 @@ function hasRedactedHostedArguments(span: TraceSpan): boolean {
   );
 }
 
-function commandFromToolArguments(
+function commandsFromToolArguments(
   toolArgs: unknown,
   hosted: boolean,
   redacted: boolean,
-): string | undefined {
+): string[] | undefined {
   const args =
     toolArgs && typeof toolArgs === 'object' && !Array.isArray(toolArgs)
       ? (toolArgs as Record<string, unknown>)
@@ -260,43 +260,40 @@ function commandFromToolArguments(
     return undefined;
   }
   let command = hosted ? toolArgs : undefined;
-  let separator = ' ';
+  let list = false;
   if (args) {
     if (args.cmd !== undefined) {
       command = args.cmd;
     } else if (args.command === undefined) {
       command = args.commands;
-      separator = '; ';
+      list = true;
     } else {
       command = args.command;
     }
   }
   if (typeof command === 'string' && command.trim()) {
-    return command.trim();
+    return [command.trim()];
   }
   if (Array.isArray(command) && (!hosted || command.every((part) => typeof part === 'string'))) {
-    const joined = command
-      .map((part) => String(part).trim())
-      .filter(Boolean)
-      .join(separator);
-    if (joined) {
-      return joined;
+    const parts = command.map((part) => String(part).trim()).filter(Boolean);
+    if (parts.length) {
+      return list ? parts : [parts.join(' ')];
     }
   }
   return undefined;
 }
 
-function extractCommand(
+function extractCommands(
   span: TraceSpan,
   toolName = extractToolName(span),
   getToolArgs = () => extractToolArgs(span),
   commandToolNames = resolveCommandToolNames(undefined),
-): string | undefined {
+): string[] | undefined {
   const attributes = span.attributes || {};
 
   const directMatch = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
   if (directMatch) {
-    return directMatch;
+    return [directMatch];
   }
 
   for (const [key, value] of Object.entries(attributes)) {
@@ -305,13 +302,13 @@ function extractCommand(
     }
 
     if (/command/i.test(key) && !/output|result/i.test(key)) {
-      return value.trim();
+      return [value.trim()];
     }
   }
 
   if (isCommandToolName(toolName, commandToolNames)) {
     const hosted = typeof attributes['promptfoo.openai.hosted_trace'] === 'string';
-    const command = commandFromToolArguments(
+    const command = commandsFromToolArguments(
       getToolArgs(),
       hosted,
       hasRedactedHostedArguments(span),
@@ -322,7 +319,7 @@ function extractCommand(
   }
 
   if (span.name.startsWith('exec ')) {
-    return span.name.slice('exec '.length).trim();
+    return [span.name.slice('exec '.length).trim()];
   }
 
   return undefined;
@@ -333,7 +330,7 @@ export function hasUnresolvedHostedCommand(trace: TraceData): boolean {
   const names = getTraceCommandToolNames(trace);
   return trace.spans.some((span) => {
     const tool = extractToolName(span);
-    return isCommandToolName(tool, names) && !extractCommand(span, tool, undefined, names);
+    return isCommandToolName(tool, names) && !extractCommands(span, tool, undefined, names);
   });
 }
 
@@ -420,7 +417,8 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
         }
         return toolArgs;
       };
-      const command = extractCommand(span, toolName, getToolArgs, commandToolNames);
+      const commands = extractCommands(span, toolName, getToolArgs, commandToolNames) ?? [];
+      const command = commands.join('; ');
       const searchQuery = extractSearchQuery(span);
 
       let type: TrajectoryStepType = 'span';
@@ -428,31 +426,28 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
       const aliases = new Set<string>([span.name]);
       let args: unknown;
 
-      if (command && isCommandToolName(toolName, commandToolNames)) {
+      if (command && (!toolName || isCommandToolName(toolName, commandToolNames))) {
         type = 'command';
         name = command;
         aliases.add(command);
-        args = getToolArgs();
         if (toolName) {
+          args = getToolArgs();
           aliases.add(toolName);
         }
-        const executable = getCommandExecutable(command);
-        if (executable) {
-          aliases.add(executable);
+        // A commands list describes one tool invocation. Keep each executable
+        // independently matchable without turning argv operands into commands.
+        for (const part of commands) {
+          aliases.add(part);
+          const executable = getCommandExecutable(part);
+          if (executable) {
+            aliases.add(executable);
+          }
         }
       } else if (toolName) {
         type = 'tool';
         name = toolName;
         aliases.add(toolName);
         args = getToolArgs();
-      } else if (command) {
-        type = 'command';
-        name = command;
-        aliases.add(command);
-        const executable = getCommandExecutable(command);
-        if (executable) {
-          aliases.add(executable);
-        }
       } else if (searchQuery) {
         type = 'search';
         name = searchQuery;

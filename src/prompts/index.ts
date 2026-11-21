@@ -160,23 +160,20 @@ async function processPrompt(
         labelBasePath,
       );
       const expandedId = prompt.id && `${prompt.id}:${relativePath}`;
-      prompts.push(
-        ...processedPrompts.map((processedPrompt, index) => ({
+      processedPrompts.forEach((processedPrompt, index) => {
+        prompts.push({
           ...processedPrompt,
           ...(expandedId && !processedPrompt.id
             ? { id: processedPrompts.length > 1 ? `${expandedId}:${index + 1}` : expandedId }
             : {}),
-        })),
-      );
+        });
+      });
     }
-    if (prompts.length === 0) {
-      // There was nothing at this filepath, so treat it as a prompt string.
-      logger.debug(
-        `Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`,
-      );
-      prompts.push(...processString(prompt));
+    if (prompts.length > 0) {
+      return prompts;
     }
-    return prompts;
+    logger.debug(`Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`);
+    return processString(prompt);
   }
 
   return processPromptFile(filePath, prompt, extension, functionName, getLabelPath(filePath));
@@ -199,9 +196,8 @@ export async function readPrompts(
   sourceBasePaths?: readonly string[],
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
-  const promptPartials: Partial<Prompt>[] = normalizeInput(promptPathOrGlobs);
   const prompts: Prompt[] = [];
-  for (const [index, prompt] of promptPartials.entries()) {
+  for (const [index, prompt] of normalizeInput(promptPathOrGlobs).entries()) {
     const sourceBasePath = sourceBasePaths?.[index];
     const promptBatch = await processPrompt(
       prompt,
@@ -212,7 +208,9 @@ export async function readPrompts(
     if (promptBatch.length === 0) {
       throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
     }
-    prompts.push(...promptBatch);
+    for (const result of promptBatch) {
+      prompts.push(result);
+    }
   }
   return prompts;
 }
