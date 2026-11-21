@@ -7,7 +7,7 @@ description: Red team LLM systems against special token injection attacks using 
 
 ## Overview
 
-Special Token Injection (STI) is a technique that exploits conversation format delimiters to manipulate LLM behavior. These attacks leverage the special tokens used by different AI systems to structure conversations, such as ChatML format tags (`<|im_start|>`, `<|im_end|>`), Llama format markers (`[INST]`, `[/INST]`), and other conversation delimiters.
+Special Token Injection (STI) is a technique that exploits conversation format delimiters to manipulate LLM behavior. These attacks use tokens that structure conversations, such as ChatML format tags (`<|im_start|>`, `<|im_end|>`), Llama format markers (`[INST]`, `[/INST]`), and other conversation delimiters.
 
 By injecting these format-specific tokens into user input, attackers can potentially:
 

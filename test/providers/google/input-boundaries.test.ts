@@ -100,8 +100,7 @@ describe('Google media and tool-policy input boundaries', () => {
   }
 
   function requestBody(route: Route, streaming = false) {
-    const action =
-      streaming && route === 'Vertex Express' ? 'streamGenerateContent' : 'generateContent';
+    const action = streaming ? 'streamGenerateContent' : 'generateContent';
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = fetchMock.mock.calls[0];
     expect(String(url)).toBe(

@@ -47,12 +47,15 @@ function resolveFilesystemMcpServerEntry(): string {
     return require.resolve('@modelcontextprotocol/server-filesystem/dist/index.js');
   } catch {
     throw new Error(
-      'The @modelcontextprotocol/server-filesystem package is required to scan beyond the diff. Reinstall promptfoo with optional dependencies or use --diffs-only.',
+      'The @modelcontextprotocol/server-filesystem package is required to scan beyond the diff. It ships as an optional dependency and needs Node.js 24 or newer, so reinstall promptfoo with optional dependencies on Node 24+ (or use --diffs-only).',
     );
   }
 }
 
-function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string } {
+function getFilesystemMcpLaunch(
+  rootDir: string,
+  checkout: string,
+): { args: string[]; cwd: string } {
   // Preserve a caller's numeric heap limit without forwarding ambient loaders or preloads.
   const heapLimit = [
     ...(process.env.NODE_OPTIONS ?? '').matchAll(
@@ -61,9 +64,10 @@ function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string 
   ].at(-1)?.[1];
   const nodeArgs = heapLimit ? [`--max-old-space-size=${heapLimit}`] : [];
   const canonicalRoot = realpathSync(rootDir);
+  const canonicalCheckout = realpathSync(checkout);
   const outsideRoot = (file: string): string => {
     const canonicalFile = realpathSync(file);
-    const relativePath = relative(canonicalRoot, canonicalFile);
+    const relativePath = relative(canonicalCheckout, canonicalFile);
     if (
       relativePath !== '..' &&
       !relativePath.startsWith(`..${sep}`) &&
@@ -77,8 +81,9 @@ function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string 
   };
 
   const entry = outsideRoot(resolveFilesystemMcpServerEntry());
+  const serverArgs = [entry, '--read-only', '--confine-roots', '--', canonicalRoot];
   if (!process.versions.pnp) {
-    return { args: [...nodeArgs, entry, canonicalRoot], cwd: dirname(entry) };
+    return { args: [...nodeArgs, ...serverArgs], cwd: dirname(entry) };
   }
 
   // Resolve only the installed package's loaders; never inherit ambient NODE_OPTIONS.
@@ -96,8 +101,7 @@ function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string 
       pnpLoader,
       '--experimental-loader',
       pathToFileURL(outsideRoot(esmLoader)).href,
-      entry,
-      canonicalRoot,
+      ...serverArgs,
     ],
     cwd: dirname(pnpLoader),
   };
@@ -108,7 +112,7 @@ function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string 
  * @param rootDir Absolute path to root directory for filesystem access
  * @returns Child process handle
  */
-export function startFilesystemMcpServer(rootDir: string): ChildProcess {
+export function startFilesystemMcpServer(rootDir: string, checkout = rootDir): ChildProcess {
   // Validate rootDir is absolute
   if (!isAbsolute(rootDir)) {
     throw new FilesystemMcpError(`Root directory must be an absolute path, got: ${rootDir}`);
@@ -121,7 +125,7 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
   logger.debug(`Root directory: ${absoluteRootDir}`);
 
   try {
-    const { args, cwd } = getFilesystemMcpLaunch(absoluteRootDir);
+    const { args, cwd } = getFilesystemMcpLaunch(absoluteRootDir, checkout);
     const mcpProcess = spawn(process.execPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd,
@@ -204,12 +208,11 @@ export function waitForFilesystemMcpServerReady(
     };
 
     const settle = (callback: () => void) => {
-      if (settled) {
-        return;
+      if (!settled) {
+        settled = true;
+        cleanup();
+        callback();
       }
-      settled = true;
-      cleanup();
-      callback();
     };
 
     const onStderr = (chunk: Buffer) => {
@@ -300,22 +303,20 @@ export async function stopFilesystemMcpServer(mcpProcess: ChildProcess): Promise
     };
 
     const onExit = () => {
-      if (settled) {
-        return;
+      if (!settled) {
+        settled = true;
+        cleanup();
+        logger.debug('MCP server stopped');
+        resolve();
       }
-      settled = true;
-      cleanup();
-      logger.debug('MCP server stopped');
-      resolve();
     };
 
     const onError = (error: Error) => {
-      if (settled) {
-        return;
+      if (!settled) {
+        settled = true;
+        cleanup();
+        reject(new FilesystemMcpError(`Failed to stop filesystem MCP server: ${error.message}`));
       }
-      settled = true;
-      cleanup();
-      reject(new FilesystemMcpError(`Failed to stop filesystem MCP server: ${error.message}`));
     };
 
     const sendSignal = (signal: NodeJS.Signals) => {

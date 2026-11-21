@@ -5,7 +5,7 @@ description: Learn how to test LangChain PromptTemplate outputs systematically w
 
 # Using LangChain PromptTemplate with Promptfoo
 
-LangChain PromptTemplate is commonly used to format prompts with injecting variables. Promptfoo allows you to evaluate and test your prompts systematically. Combining the two can streamline your workflow, enabling you to test the prompts that use LangChain PromptTemplate in application code directly within Promptfoo.
+Use Promptfoo to test the same LangChain PromptTemplate that your application uses, with test variables supplied by the eval config.
 
 ## Example of LangChain PromptTemplate
 
@@ -63,7 +63,7 @@ export async function evaluatePrompt(prompt: string): Promise<EvaluationResult> 
 
 ## Testing with Promptfoo
 
-To make the evaluation of prompts more seamless, the prompts can be loaded directly into Promptfoo tests. This way, whenever the prompts are updated in the application, the tests can evaluate the most up-to-date prompt.
+Load the prompt from application code so the eval uses the current version.
 
 Change the prompt to a function that can be loaded in the Promptfoo configuration file, as described in the [prompt functions documentation](/docs/configuration/prompts/). Change how the substitution of variables is done to regular JS substitution.
 

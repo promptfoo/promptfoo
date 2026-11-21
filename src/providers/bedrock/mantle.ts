@@ -1,11 +1,10 @@
-import { getEnvString } from '../../envars';
+import { getEnvString, getProviderEnvString } from '../../envars';
 import { resolveProviderEnv } from '../env';
 
 import type { EnvOverrides } from '../../types/env';
 
-// Mantle supports AWS_REGION/AWS_DEFAULT_REGION in addition to Bedrock's region
-// override. Provider values precede ambient aliases. The default differs per route
-// (frontier GA region vs Anthropic Messages region), so callers pass it in.
+// Native and Mantle clients share region precedence. Provider values precede ambient
+// aliases, and each client supplies its own default region.
 export function resolveBedrockMantleRegion(
   config: Record<string, any>,
   env: EnvOverrides | undefined,
@@ -45,7 +44,11 @@ export function resolveBedrockMantleApiKey(
   if (config.apiKeyRequired === false || hasExplicitAwsCredentials) {
     return explicitKey || undefined;
   }
-  return explicitKey || env?.AWS_BEARER_TOKEN_BEDROCK || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
+  return (
+    explicitKey ||
+    getProviderEnvString(env, 'AWS_BEARER_TOKEN_BEDROCK') ||
+    getEnvString('AWS_BEARER_TOKEN_BEDROCK')
+  );
 }
 
 export function getBedrockMantleOrigin(region: string): string {
