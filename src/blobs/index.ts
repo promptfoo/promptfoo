@@ -132,7 +132,11 @@ export async function getBlobByHash(hash: string): Promise<StoredBlob> {
   return asset ? { ...blob, metadata: { ...blob.metadata, mimeType: asset.mimeType } } : blob;
 }
 
-export async function isBlobAllowedForShare(hash: string, evalId: string): Promise<boolean> {
+export async function isBlobAllowedForShare(
+  hash: string,
+  evalId: string,
+  result?: { testIdx: number; promptIdx: number },
+): Promise<boolean> {
   const db = await getDb();
   // Result text may contain copied blob URIs, so only independently classified or imported refs
   // authorize reading local bytes during a share.
@@ -143,6 +147,8 @@ export async function isBlobAllowedForShare(hash: string, evalId: string): Promi
       and(
         eq(blobReferencesTable.blobHash, hash),
         eq(blobReferencesTable.evalId, evalId),
+        result && eq(blobReferencesTable.testIdx, result.testIdx),
+        result && eq(blobReferencesTable.promptIdx, result.promptIdx),
         or(isNotNull(blobReferencesTable.kind), eq(blobReferencesTable.location, 'import')),
       ),
     )

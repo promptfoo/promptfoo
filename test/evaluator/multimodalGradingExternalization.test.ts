@@ -30,7 +30,7 @@ describeEvaluator('multimodal grading externalization', () => {
   });
 
   it.each([false, true])(
-    'checks current-eval image authorization before reading (allowed=%s)',
+    'checks current-result image authorization before reading (allowed=%s)',
     async (allowed) => {
       const hash = 'c'.repeat(64);
       const authorize = vi.spyOn(blobs, 'isBlobAllowedForShare').mockResolvedValue(allowed);
@@ -72,7 +72,10 @@ describeEvaluator('multimodal grading externalization', () => {
       const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
       await evaluate(suite, record, {});
       const summary = await record.toEvaluateSummary();
-      expect(authorize).toHaveBeenCalledExactlyOnceWith(hash, record.id);
+      expect(authorize).toHaveBeenCalledExactlyOnceWith(hash, record.id, {
+        testIdx: 0,
+        promptIdx: 0,
+      });
       expect(read).toHaveBeenCalledTimes(allowed ? 1 : 0);
       expect(grader.callApi).toHaveBeenCalledTimes(allowed ? 1 : 0);
       expect(summary.stats.successes).toBe(allowed ? 1 : 0);
@@ -136,6 +139,15 @@ describeEvaluator('multimodal grading externalization', () => {
       const image = result.response?.images?.[0];
       expect(image?.blobRef?.hash).toMatch(/^[a-f0-9]{64}$/);
       expect(image?.data).toBeUndefined();
+      const hash = image!.blobRef!.hash;
+      for (const sibling of [
+        { testIdx: 1, promptIdx: 0 },
+        { testIdx: 0, promptIdx: 1 },
+      ]) {
+        await expect(blobs.isBlobAllowedForShare(hash, evalRecord.id, sibling)).resolves.toBe(
+          false,
+        );
+      }
       const storedUris =
         count === 1 ? [result.response?.output] : JSON.parse(String(result.response?.output));
       expect(storedUris).toHaveLength(count);

@@ -25,7 +25,7 @@ The easiest way to get started is by installing the Promptfoo Scanner GitHub App
 4. **Review the setup PR**: A pull request will be automatically opened in each repository you selected in step 2—it adds the Code Scan Action workflow to `.github/workflows/promptfoo-code-scan.yml`
 5. **Merge the PR**: you can tweak the workflow configuration if desired, and merge when ready.
 
-Once merged, the scanner will automatically run on future pull requests, posting review comments for any security issues found. The action runs the scanner with its bundled Node.js 24 runtime, but older action releases and direct CLI steps require Node.js `>=22.22.0` on the runner. The [manual workflow](#workflow-configuration) configures Node.js 24 LTS for compatibility.
+Once merged, the scanner will automatically run on future pull requests, posting review comments for any security issues found. The action runs the scanner with its bundled Node.js 24 runtime. Direct CLI steps need Node.js 24 or later for full-repository scans. Diff-only scans also support Node.js 22.22 or later. The [manual workflow](#workflow-configuration) sets up Node.js 24 before installing Promptfoo.
 
 :::info
 When using the GitHub App:
@@ -33,6 +33,8 @@ When using the GitHub App:
 - Authentication is handled automatically with GitHub OIDC. No API key, token, or other configuration is needed.
 - No Promptfoo Cloud account is needed—just a valid email address.
   :::
+
+The action installs the scanner before requesting its short-lived OIDC token, so slow installs do not expire the token before scanning.
 
 ## Configuration
 
@@ -45,7 +47,7 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 | `api-host`          | Promptfoo API host URL                                                                                                                   | `https://api.promptfoo.app` |
 | `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`)                                                                         | `medium`                    |
 | `minimum-severity`  | Alias for `min-severity`. Takes effect only when `min-severity` is unset; if both are set, `min-severity` wins and a warning is emitted. | None                        |
-| `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                                                                                          | Auto-detected               |
+| `config-path`       | Path to the scan configuration file                                                                                                      | None                        |
 | `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])                                                                                   | None                        |
 | `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])                                                                              | None                        |
 | `enable-fork-prs`   | Enable scanning PRs from forked repositories                                                                                             | `false`                     |
@@ -134,14 +136,14 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
 
 ### Configuration File
 
-Create a `.promptfoo-code-scan.yaml` in your repository root. See the [CLI documentation](/docs/code-scanning/cli#configuration-file) for all available options.
+To use `.promptfoo-code-scan.yaml`, set the action's `config-path` input to that file. By default, full scans also share eligible committed text files from the compared revision. Set `diffsOnly: true` in the file to limit hosted access to the diff. See the [CLI documentation](/docs/code-scanning/cli#configuration-file) for all available options.
 
 ```yaml
 # Minimum severity level to report
 minSeverity: medium
 
 # Scan only PR diffs without filesystem exploration (default: false)
-diffsOnly: false
+diffsOnly: true
 
 # Custom guidance to tailor the scan
 guidance: |
@@ -214,7 +216,7 @@ The example pins the third-party actions to full commit SHAs with version commen
 The hardening below applies to code-scan-action releases after v0.1.8; earlier releases resolve `promptfoo@latest` at runtime and predate the provenance attestation.
 
 - The action installs an exact, release-pinned version of the `promptfoo` CLI with npm lifecycle scripts disabled (`--ignore-scripts`); it does not resolve `promptfoo@latest` at runtime. Use the `promptfoo-version` input to override the pin with another exact version.
-- The `dist/` bundle and `action.yml` committed to [promptfoo/code-scan-action](https://github.com/promptfoo/code-scan-action) are built and exported by the promptfoo monorepo release workflow, which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout with `gh attestation verify dist/index.js --repo promptfoo/promptfoo` (and likewise for `action.yml`).
+- The `dist/` bundle and `action.yml` committed to [promptfoo/code-scan-action](https://github.com/promptfoo/code-scan-action) are built and exported by the promptfoo monorepo release workflow, which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout with `gh attestation verify dist/index.js --repo promptfoo/promptfoo --signer-workflow promptfoo/promptfoo/.github/workflows/release-please.yml --source-ref refs/heads/main` (and likewise for `action.yml`).
 - The scanner install strips npm config and `NODE_OPTIONS` from its environment and isolates its npm config files, but a step that runs pull-request-controlled code earlier in the same job (such as `npm ci` or a build) can persist state — `$GITHUB_PATH`, `$GITHUB_ENV`, or `$HOME` writes — that later steps inherit, and it already runs with the job's token. Keep the scan in a job that only checks out and scans the PR; run untrusted build steps in a separate job.
 
 ## See Also

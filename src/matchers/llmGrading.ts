@@ -188,6 +188,19 @@ function getGradingOutputForImages(
     return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
   }
 
+  if (parsed && typeof parsed === 'object') {
+    let redacted = false;
+    const output = JSON.stringify(parsed, (key, value) => {
+      if (key === 'b64_json' && typeof value === 'string' && isImageValue(value)) {
+        redacted = true;
+        return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+      }
+      return value;
+    });
+    if (redacted) {
+      return output;
+    }
+  }
   return llmOutput;
 }
 
