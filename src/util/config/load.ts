@@ -1176,10 +1176,20 @@ async function resolveLoadedConfig(
   // test prompt references, --filter-prompts). Read the files from the absolute base, but
   // label them relative to the working directory so labels do not embed the checkout path.
   let parsedPrompts: Prompt[];
+  // A persisted cloud prompt stays literal even if it happens to match a local path on replay.
+  const savedInline = config.metadata?.__promptfoo?.inlinePrompts === true;
+  const inline =
+    !cmdObj.prompts && !cmdObj.assertions && (cloudConfig !== undefined || savedInline);
+  if (inline !== savedInline) {
+    config.metadata = {
+      ...config.metadata,
+      __promptfoo: { ...config.metadata?.__promptfoo, inlinePrompts: inline },
+    };
+  }
   if (cmdObj.prompts) {
     parsedPrompts = await readPrompts(cmdObj.prompts);
-  } else if (cloudConfig && !fileConfig.prompts) {
-    parsedPrompts = readCloudPrompts(cloudConfig.prompts);
+  } else if (inline) {
+    parsedPrompts = readCloudPrompts(config.prompts);
   } else {
     parsedPrompts = await readPrompts(
       fileConfig.prompts || localDefaults.prompts || [],

@@ -99,6 +99,20 @@ describe('doEval environment files', () => {
     expect(override.testSuite.prompts[0].raw).toBe('Local prompt');
   });
 
+  it('keeps path-like text literal even on replay', async () => {
+    const raw = 'What is 2 * 2? Return pass/fail. See https://example.invalid/';
+    const prompts = [{ id: 'question', label: 'Math', raw }, 'package.json'];
+    const { config, testSuite } = await resolveConfigs({}, {}, undefined, {
+      providers: ['echo'],
+      metadata: { __promptfoo: { inlinePrompts: false } },
+      prompts,
+    });
+    const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(config)));
+    for (const suite of [testSuite, replay.testSuite]) {
+      expect(suite.prompts).toMatchObject([prompts[0], { raw: 'package.json' }]);
+    }
+  });
+
   it.each([
     { prompts: ['exec:fixture'], providers: ['echo'] },
     { prompts: ['file://fixture.txt'], providers: ['echo'] },

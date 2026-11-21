@@ -217,8 +217,7 @@ export function readCloudPrompts(input: Parameters<typeof normalizeInput>[0]): P
     if (
       typeof raw !== 'string' ||
       prompt.function ||
-      raw.startsWith('exec:') ||
-      maybeFilePath(raw)
+      /^(?:exec:|file:\/\/|(?:\.{1,2}|~|[a-z]:)?[/\\])/i.test(raw)
     ) {
       throw new Error(
         'Local prompt files and commands are disabled for cloud configurations. Use an inline prompt or a trusted local configuration file.',
