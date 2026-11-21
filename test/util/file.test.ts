@@ -1459,6 +1459,49 @@ describe('file utilities', () => {
       });
     });
 
+    it('renders strict flags in a loaded response format using test variables', () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          type: 'json_schema',
+          strict: '{{ flat_strict }}',
+          json_schema: {
+            name: '{{ schema_name }}',
+            strict: '{{ nested_strict }}',
+            schema: { type: 'object' },
+          },
+        }),
+      );
+
+      expect(
+        maybeLoadResponseFormatFromExternalFile('file://format.json', {
+          flat_strict: true,
+          nested_strict: false,
+          schema_name: 'fixture',
+        }),
+      ).toEqual({
+        type: 'json_schema',
+        strict: 'true',
+        json_schema: { name: 'fixture', strict: 'false', schema: { type: 'object' } },
+      });
+    });
+
+    it('renders schema text once without treating runtime data as a template', () => {
+      const format = {
+        type: 'json_schema',
+        schema: { type: 'object', description: '{{ description }}' },
+      };
+
+      expect(
+        maybeLoadResponseFormatFromExternalFile(format, {
+          description: '{{ placeholder }}',
+          placeholder: 'must stay literal',
+        }),
+      ).toEqual({
+        type: 'json_schema',
+        schema: { type: 'object', description: '{{ placeholder }}' },
+      });
+    });
+
     it('should render variables in response_format', () => {
       const format = {
         type: 'json_schema',
