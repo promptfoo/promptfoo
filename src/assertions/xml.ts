@@ -9,7 +9,12 @@ type XmlTag =
   | { kind: 'declaration'; start: number; end: number };
 
 type OpenXmlTag = { name: string; start: number };
-type XmlCandidate = { start: number; end: number; parentStart?: number };
+type XmlCandidate = {
+  start: number;
+  end: number;
+  parentStart?: number;
+  fragments?: XmlCandidate[];
+};
 type XmlValidationResult = { isValid: boolean; reason: string; isWellFormed: boolean };
 
 function getLastOpenTag(stack: OpenXmlTag[]): OpenXmlTag | undefined {
@@ -371,6 +376,7 @@ function orderXmlCandidates(candidates: XmlCandidate[]): XmlCandidate[] {
       start: siblings[0].start,
       end: siblings[siblings.length - 1].end,
       parentStart,
+      fragments: siblings,
     });
   }
 
@@ -391,9 +397,13 @@ function orderXmlCandidates(candidates: XmlCandidate[]): XmlCandidate[] {
 function extractXmlCandidates(outputString: string): XmlCandidate[] {
   const stack: OpenXmlTag[] = [];
   const candidates: XmlCandidate[] = [];
+  let prologStart: number | undefined;
 
   for (let i = 0; i < outputString.length; i++) {
     if (outputString[i] !== '<') {
+      if (!isXmlWhitespace(outputString[i])) {
+        prologStart = undefined;
+      }
       continue;
     }
 
@@ -402,17 +412,27 @@ function extractXmlCandidates(outputString: string): XmlCandidate[] {
       continue;
     }
 
-    if (tag.kind === 'opening') {
+    if (tag.kind === 'declaration') {
+      if (
+        !stack.length &&
+        (outputString.startsWith('<?xml', i) || outputString.startsWith('<!DOCTYPE', i))
+      ) {
+        prologStart ??= i;
+      }
+    } else if (tag.kind === 'opening') {
+      const start = prologStart ?? tag.start;
+      prologStart = undefined;
       if (tag.selfClosing) {
         candidates.push({
-          start: tag.start,
+          start,
           end: tag.end + 1,
           parentStart: getLastOpenTag(stack)?.start,
         });
       } else {
-        stack.push({ name: tag.name, start: tag.start });
+        stack.push({ name: tag.name, start });
       }
     } else if (tag.kind === 'closing') {
+      prologStart = undefined;
       const openTag = getLastOpenTag(stack);
       if (openTag?.name === tag.name) {
         stack.pop();
@@ -512,14 +532,9 @@ function validateXmlCandidate(xmlString: string, requiredElements?: string[]): X
   }
 }
 
-export function validateXml(
-  xmlString: string,
-  requiredElements?: string[],
-): { isValid: boolean; reason: string } {
+function xmlSyntaxError(xmlString: string): string | undefined {
   // XMLParser.parse() is a lenient data extractor, so validate the entire
   // document with a well-formedness parser before extracting its values.
-  // contains-xml intentionally remains lenient because it accepts fragments
-  // embedded in otherwise non-XML output.
   let unsupportedReason: string | undefined;
   let doctypeParseError: string | undefined;
   let standalone = false;
@@ -546,10 +561,21 @@ export function validateXml(
     // A populated `unsupportedReason` is a deliberate policy rejection, not a
     // parse failure, so report it without the "XML parsing failed" prefix.
     if (unsupportedReason) {
-      return { isValid: false, reason: unsupportedReason };
+      return unsupportedReason;
     }
     const message = doctypeParseError ?? (err instanceof Error ? err.message : String(err));
-    return { isValid: false, reason: `XML parsing failed: ${message}` };
+    return `XML parsing failed: ${message}`;
+  }
+  return undefined;
+}
+
+export function validateXml(
+  xmlString: string,
+  requiredElements?: string[],
+): { isValid: boolean; reason: string } {
+  const reason = xmlSyntaxError(xmlString);
+  if (reason) {
+    return { isValid: false, reason };
   }
   const result = validateXmlCandidate(xmlString, requiredElements);
   return { isValid: result.isValid, reason: result.reason };
@@ -575,8 +601,18 @@ export function containsXml(
       continue;
     }
 
+    const fragments = (xmlCandidate.fragments ?? [xmlCandidate])
+      .map((fragment) => outputString.slice(fragment.start, fragment.end))
+      // Keep declarations, entity rules and namespace bindings local to each document.
+      .filter((fragment) => !xmlSyntaxError(fragment));
+    if (fragments.length === 0) {
+      continue;
+    }
+
+    // The data extractor supports multiple roots, preserving required paths
+    // that span well-formed sibling fragments.
     const { isValid, isWellFormed, reason } = validateXmlCandidate(
-      outputString.slice(xmlCandidate.start, xmlCandidate.end),
+      fragments.join(''),
       requiredElements,
     );
     if (isValid) {
