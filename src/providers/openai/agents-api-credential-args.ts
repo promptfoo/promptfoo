@@ -29,6 +29,23 @@ export function getHostedCredentialArgument(
   return flag && isProtectedKey(flag[1]) ? { name: flag[1], value: current } : undefined;
 }
 
+// Buffer's base64 and UTF-8 decoders tolerate malformed input. Verify both
+// round trips before assuming the credential components are known.
+export function decodeBasicCredentials(token: string): string[] | undefined {
+  const bytes = Buffer.from(token, 'base64');
+  const canonical = bytes.toString('base64');
+  const decoded = bytes.toString('utf8');
+  const separator = decoded.indexOf(':');
+  if (
+    (token !== canonical && token !== canonical.replace(/=+$/, '')) ||
+    separator < 0 ||
+    !bytes.equals(Buffer.from(decoded))
+  ) {
+    return undefined;
+  }
+  return [decoded, decoded.slice(0, separator), decoded.slice(separator + 1)];
+}
+
 // Raw authorization and cookie fields can embed the credential inside a public envelope.
 export function* getHostedHeaderCredentialParts(
   label: string,

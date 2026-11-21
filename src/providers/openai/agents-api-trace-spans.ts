@@ -18,6 +18,7 @@ import { HOSTED_DURATION_NS, HOSTED_START_TIME_OFFSET_NS } from '../../tracing/s
 import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
 import { isCredentialHeader, isSecretEnvVarName, looksLikeSecret } from '../../util/sanitizer';
 import {
+  decodeBasicCredentials,
   getHostedCredentialArgument,
   getHostedHeaderCredentialParts,
 } from './agents-api-credential-args';
@@ -437,9 +438,14 @@ function protectedEchoMatcher(policy: ImportPolicy) {
         inspectJson(text, source || true, depth + 1);
       }
       // The credential alone can appear in a tool or model name.
-      const auth = /^(?:Bearer|Basic|Token|Api[-_]?Key)[ \t]+(\S+)$/i.exec(text.trim());
+      const auth = /^(Bearer|Basic|Token|Api[-_]?Key)[ \t]+(\S+)$/i.exec(text.trim());
       if (auth) {
-        remember(auth[1], depth);
+        remember(auth[2], depth);
+        if (auth[1].toLowerCase() === 'basic') {
+          for (const part of decodeBasicCredentials(auth[2]) ?? invalid()) {
+            remember(part, depth);
+          }
+        }
       }
     }
   }
