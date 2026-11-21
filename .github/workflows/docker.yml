@@ -119,6 +119,8 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Test Docker build context exclusions
+        # Historical release tags can predate the context test. Require it on main and PRs.
+        if: env.IS_RELEASE_FALLBACK != 'true' || hashFiles('scripts/testDockerBuildContext.js') != ''
         run: node scripts/testDockerBuildContext.js
 
       - name: Build official Docker image for testing

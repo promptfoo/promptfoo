@@ -6,7 +6,7 @@ Dockerfile
 
 # Installed and built inside the image. Test fixtures keep their vendored packages.
 **/node_modules
-!test/**/node_modules
+!test/__fixtures__/mock-packages/node_modules
 dist
 
 # Local files that must not reach a build layer

@@ -269,3 +269,13 @@ describe('release-please automation', () => {
     }
   });
 });
+
+it('skips the Docker context probe only for older fallback tags that lack it', () => {
+  const { jobs } = yaml.load(readRepoFile('.github/workflows/docker.yml')) as ReleasePleaseWorkflow;
+  const probe = jobs?.test?.steps?.find(
+    (step) => step.run === 'node scripts/testDockerBuildContext.js',
+  );
+  expect(probe).toMatchObject({
+    if: "env.IS_RELEASE_FALLBACK != 'true' || hashFiles('scripts/testDockerBuildContext.js') != ''",
+  });
+});

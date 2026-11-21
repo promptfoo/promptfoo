@@ -12,6 +12,7 @@ const context = path.join(temporaryDir, 'context');
 const output = path.join(temporaryDir, 'output');
 const excluded = [
   'node_modules/host-package/index.js',
+  'test/node_modules/host-package/index.js',
   'src/app/node_modules/host-package/index.js',
   'src/app/deep/node_modules/host-package/index.js',
   '.env',
