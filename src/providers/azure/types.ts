@@ -270,8 +270,8 @@ export interface AzureAssistantProviderOptions {
 // =============================================================================
 
 /**
- * Configuration options for Microsoft MAI image generation models served from
- * the Foundry `/mai/v1/images/generations` route (e.g. `MAI-Image-2.7`).
+ * Configuration options for Microsoft MAI image models served from the Foundry
+ * `/mai/v1/images/generations` and `/mai/v1/images/edits` routes (e.g. `MAI-Image-2.7`).
  *
  * @see https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-mai
  */
@@ -279,15 +279,34 @@ export interface AzureImageOptions extends AzureCompletionOptions {
   /**
    * Output image width in pixels. Minimum 768. The maximum `width * height`
    * depends on the model (2048x2048 for MAI-Image-2.7, 1536x1536 for 2.6,
-   * 1024x1024 for 2.5) and is enforced by the API. Defaults to 1024.
+   * 1024x1024 for 2.5) and is enforced by the API. Generations default to 1024.
+   * Edits send a size only when `width` or `height` is set; otherwise the API
+   * chooses one.
    */
   width?: number;
   /**
    * Output image height in pixels. Minimum 768. The maximum `width * height`
    * depends on the model (2048x2048 for MAI-Image-2.7, 1536x1536 for 2.6,
-   * 1024x1024 for 2.5) and is enforced by the API. Defaults to 1024.
+   * 1024x1024 for 2.5) and is enforced by the API. Generations default to 1024.
+   * Edits send a size only when `width` or `height` is set; otherwise the API
+   * chooses one.
    */
   height?: number;
+  /**
+   * Reference images for an image-to-image edit: 1 to 5 JPEG or PNG images.
+   * Setting this sends the prompt to the multipart `/mai/v1/images/edits` route
+   * instead of generations. Each entry is a `file://` path (relative paths
+   * resolve against the config file's directory) or a base64 `data:` URL.
+   * Entries are rendered with the test's vars, so `'{{image}}'` works with a var
+   * loaded from `file://image.png`. In a providers file loaded with `file://`,
+   * promptfoo reads `file://` values as text, so use test vars there.
+   */
+  images?: string | string[];
+  /**
+   * Directory that relative `file://` image paths resolve against. promptfoo sets
+   * it to the config file's directory.
+   */
+  basePath?: string;
   /**
    * MAI model id used only for cost reporting (e.g. `MAI-Image-2.7`). Azure
    * deployment names can't contain the dots in model ids, so set this when your
@@ -295,7 +314,8 @@ export interface AzureImageOptions extends AzureCompletionOptions {
    */
   model?: string;
   /**
-   * Override the request path. Defaults to `/mai/v1/images/generations`.
+   * Override the request path. Defaults to `/mai/v1/images/generations`, or
+   * `/mai/v1/images/edits` when `images` is set.
    */
   apiPath?: string;
 }

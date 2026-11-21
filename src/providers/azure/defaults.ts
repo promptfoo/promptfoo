@@ -13,6 +13,15 @@ export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
  */
 export const DEFAULT_AZURE_MAI_IMAGE_API_PATH = '/mai/v1/images/generations';
 
+/**
+ * Default route for MAI image-to-image edits. It takes multipart form data with
+ * 1 to 5 JPEG or PNG reference images and returns the same JSON as generations.
+ */
+export const DEFAULT_AZURE_MAI_IMAGE_EDIT_API_PATH = '/mai/v1/images/edits';
+
+/** Client-side limit on each decoded MAI reference image. */
+export const MAX_MAI_IMAGE_BYTES = 50 * 1024 * 1024;
+
 // =============================================================================
 // Video Generation Constants (Sora)
 // =============================================================================

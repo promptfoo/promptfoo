@@ -7,7 +7,7 @@ npx promptfoo@latest init --example azure-mai
 cd azure-mai
 ```
 
-Evaluate Microsoft's first-party **MAI** models with promptfoo. This example compares the image models `MAI-Image-2.7` and `MAI-Image-2.7-Flash` (Preview [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure)) through the dedicated `azure:image` provider, runs the `MAI-Thinking-1` reasoning model through `azure:chat`, and shows `MAI-Code-2-Flash` through `azure:responses`.
+Evaluate Microsoft's first-party **MAI** models with promptfoo. This example compares the image models `MAI-Image-2.7` and `MAI-Image-2.7-Flash` (Preview [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure)) through the dedicated `azure:image` provider, edits a photo with reference images, runs the `MAI-Thinking-1` reasoning model through `azure:chat`, and shows `MAI-Code-2-Flash` through `azure:responses`.
 
 ## Environment Variables
 
@@ -45,6 +45,7 @@ promptfoo view
 ## What's in this Example
 
 - `promptfooconfig.yaml` — generates images with `MAI-Image-2.7` and `MAI-Image-2.7-Flash` (transparent background) through the `azure:image` provider, reporting per-image token usage and cost from the API's token counts
+- `promptfooconfig.edit.yaml` — edits a photo with `MAI-Image-2.7-Flash`, combining it with a second reference image (see below)
 - `promptfooconfig.vision-judge.yaml` — uses a vision LLM as a judge on the generated images (see below)
 - `promptfooconfig.thinking.yaml` — runs `MAI-Thinking-1` on short reasoning questions through `azure:chat`
 - `promptfooconfig.code.yaml` — compares `MAI-Code-2-Flash` at low and max reasoning effort on coding tasks through `azure:responses` (limited-access preview; see below)
@@ -65,6 +66,26 @@ providers:
 ```
 
 The image is returned as a base64 PNG. promptfoo stores large base64 media as a blob reference (`promptfoo://blob/...`), so assertions should accept either the blob ref or an inline `data:image/...` URL.
+
+### Image editing (`azure:image`)
+
+Set `images` to edit existing images. The provider sends the prompt and 1 to 5 JPEG or PNG reference images to the multipart `/mai/v1/images/edits` route:
+
+```yaml
+providers:
+  - id: azure:image:mai-image-2-7-flash
+    config:
+      model: MAI-Image-2.7-Flash
+      images:
+        - '{{photo}}' # a test var loaded with file://
+        - file://assets/red-panda.jpg # relative to the config file
+```
+
+```bash
+promptfoo eval -c promptfooconfig.edit.yaml --no-cache
+```
+
+Reference images are billed as image input tokens (one per 1,024 pixels) at the model's image-input rate. Without `width` and `height`, the API chooses the output size and keeps the reference image's aspect ratio.
 
 ### Reasoning chat (`azure:chat`)
 

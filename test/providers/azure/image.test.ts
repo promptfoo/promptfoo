@@ -1,7 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import cliState from '../../../src/cliState';
 import {
   AzureImageProvider,
+  loadMaiEditImage,
   summarizeImageResponse,
   validateMaiImageDimensions,
 } from '../../../src/providers/azure/image';
@@ -12,6 +18,11 @@ vi.mock('../../../src/cache', async (importOriginal) => {
     fetchWithCache: vi.fn(),
   };
 });
+
+vi.mock(import('../../../src/providers/azure/defaults'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  MAX_MAI_IMAGE_BYTES: 1024,
+}));
 
 const FAKE_B64 = Buffer.from('fake-png-bytes').toString('base64');
 
@@ -356,5 +367,341 @@ describe('AzureImageProvider', () => {
     expect(result.cached).toBe(true);
     expect(result.cost).toBe(0);
     expect(result.tokenUsage).toEqual({ cached: 1024, total: 1024 });
+  });
+});
+
+// Minimal byte sequences the edits path recognizes by their signatures.
+const PNG_BYTES = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.from('fake-png-body'),
+]);
+const JPEG_BYTES = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('fake-jpeg')]);
+const WEBP_BYTES = Buffer.from('RIFF\u0000\u0000\u0000\u0000WEBPVP8 fake');
+
+function lastFetchCall() {
+  const calls = vi.mocked(fetchWithCache).mock.calls;
+  const [url, options, , , cacheOptions] = calls[calls.length - 1];
+  return { url, options: options as RequestInit, cacheOptions: cacheOptions as any };
+}
+
+async function formImages(form: FormData) {
+  return Promise.all(
+    form.getAll('image').map(async (entry) => {
+      const file = entry as File;
+      return {
+        name: file.name,
+        type: file.type,
+        bytes: Buffer.from(await file.arrayBuffer()),
+      };
+    }),
+  );
+}
+
+describe('AzureImageProvider edits', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mai-edit-'));
+    fs.writeFileSync(path.join(tempDir, 'source.png'), PNG_BYTES);
+    fs.writeFileSync(path.join(tempDir, 'style.jpg'), JPEG_BYTES);
+    fs.writeFileSync(path.join(tempDir, 'source.webp'), WEBP_BYTES);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    vi.resetAllMocks();
+  });
+
+  it('sends a multipart edit to /mai/v1/images/edits and prices reference-image tokens', async () => {
+    // Usage shape and counts from a live MAI-Image-2.7-Flash edit of a 1024x1024 PNG.
+    mockSuccess({
+      model: 'mai-image-2-7-flash',
+      usage: {
+        num_output_tokens: 1024,
+        num_input_text_tokens: 19,
+        num_input_image_tokens: 1024,
+        num_web_calls: 0,
+      },
+    });
+    const provider = new AzureImageProvider('mai-image-2-7-flash', {
+      config: {
+        apiHost: 'res.services.ai.azure.com',
+        apiKey: 'test-key',
+        model: 'MAI-Image-2.7-Flash',
+        basePath: tempDir,
+        images: ['file://source.png'],
+      },
+    });
+
+    const result = await provider.callApi('Make the circle red');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe(`data:image/png;base64,${FAKE_B64}`);
+    // 19 text * $1.75/1M + 1,024 image input * $2.50/1M + 1,024 output * $10/1M
+    expect(result.cost).toBeCloseTo(19 * 1.75e-6 + 1024 * 2.5e-6 + 1024 * 10e-6, 12);
+    expect(result.tokenUsage).toEqual({
+      prompt: 1043,
+      completion: 1024,
+      total: 2067,
+      numRequests: 1,
+    });
+
+    const { url, options, cacheOptions } = lastFetchCall();
+    expect(url).toBe('https://res.services.ai.azure.com/mai/v1/images/edits');
+    expect(options.method).toBe('POST');
+    expect(options.headers).toEqual({ 'api-key': 'test-key' });
+    const form = options.body as FormData;
+    expect(form).toBeInstanceOf(FormData);
+    expect(form.get('model')).toBe('mai-image-2-7-flash');
+    expect(form.get('prompt')).toBe('Make the circle red');
+    // Without a configured size, the API picks one from the reference image.
+    expect(form.has('width')).toBe(false);
+    expect(form.has('height')).toBe(false);
+    expect(await formImages(form)).toEqual([
+      { name: 'image-1.png', type: 'image/png', bytes: PNG_BYTES },
+    ]);
+    expect(cacheOptions).toEqual({
+      bust: false,
+      cacheKey: expect.stringMatching(/^azure-mai-image-edit:[0-9a-f]{64}$/),
+    });
+  });
+
+  it('renders test vars into images and sends each reference image in order', async () => {
+    mockSuccess();
+    const provider = makeProvider({
+      basePath: tempDir,
+      images: ['{{source}}', 'file://style.jpg'],
+    });
+    // A var loaded from file://source.png reaches the provider as a data URL.
+    const sourceDataUrl = `data:image/png;base64,${PNG_BYTES.toString('base64')}`;
+
+    const result = await provider.callApi('Restyle the first image like the second', {
+      prompt: { raw: 'x', label: 'x' },
+      vars: { source: sourceDataUrl },
+    } as any);
+
+    expect(result.error).toBeUndefined();
+    const form = lastFetchCall().options.body as FormData;
+    expect(await formImages(form)).toEqual([
+      { name: 'image-1.png', type: 'image/png', bytes: PNG_BYTES },
+      { name: 'image-2.jpg', type: 'image/jpeg', bytes: JPEG_BYTES },
+    ]);
+  });
+
+  it('accepts a single image string and an absolute file path', async () => {
+    mockSuccess();
+    const provider = makeProvider({ images: `file://${path.join(tempDir, 'style.jpg')}` });
+    const result = await provider.callApi('Add a hat');
+    expect(result.error).toBeUndefined();
+    const form = lastFetchCall().options.body as FormData;
+    expect(await formImages(form)).toEqual([
+      { name: 'image-1.jpg', type: 'image/jpeg', bytes: JPEG_BYTES },
+    ]);
+  });
+
+  it('sends a configured size and passthrough options as form fields', async () => {
+    mockSuccess({ size: '1536x1024' });
+    const provider = makeProvider({
+      basePath: tempDir,
+      images: ['file://source.png'],
+      width: 1536,
+      height: 1024,
+      passthrough: { background: 'transparent', auto_aspect_ratio: true },
+      headers: { 'Content-Type': 'application/json', 'x-trace': 'abc' },
+    });
+
+    const result = await provider.callApi('Remove the background');
+
+    expect(result.error).toBeUndefined();
+    const { options } = lastFetchCall();
+    const form = options.body as FormData;
+    expect(form.get('width')).toBe('1536');
+    expect(form.get('height')).toBe('1024');
+    expect(form.get('background')).toBe('transparent');
+    expect(form.get('auto_aspect_ratio')).toBe('true');
+    // A JSON Content-Type would break the multipart boundary, so it is dropped.
+    expect(options.headers).toEqual({ 'api-key': 'test-key', 'x-trace': 'abc' });
+  });
+
+  it('validates a configured edit size before calling the API', async () => {
+    const provider = makeProvider({ basePath: tempDir, images: ['file://source.png'], width: 512 });
+    const result = await provider.callApi('Shrink it');
+    expect(result.error).toMatch(/at least 768/);
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('rejects more than five reference images without calling the API', async () => {
+    const provider = makeProvider({
+      basePath: tempDir,
+      images: Array.from({ length: 6 }, () => 'file://source.png'),
+    });
+    const result = await provider.callApi('Combine them');
+    expect(result.error).toBe('MAI image edits accept 1 to 5 reference images; got 6.');
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('limits regular files and decoded data URLs before sending an edit', async () => {
+    const file = path.join(tempDir, 'source.png');
+    fs.truncateSync(file, 1025);
+    const encoded = fs.readFileSync(file).toString('base64');
+    for (const image of [`file://${file}`, `data:image/png;base64,${encoded}`]) {
+      const result = await makeProvider({ images: [image] }).callApi('Edit it');
+      expect(result.error).toContain('1024 bytes');
+    }
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a WebP file', 'file://source.webp', 'MAI image edits accept only JPEG or PNG images'],
+    ['a directory', 'file://.', 'could not read'],
+    ['a missing file', 'file://missing.png', 'file not found:'],
+    ['a non-base64 data URL', 'data:image/png,rawbytes', 'data URLs must be base64-encoded'],
+    ['an HTTPS URL', 'https://example.com/a.png', 'expected a file:// path or a base64 data URL'],
+    ['an empty rendered var', '{{missing}}', 'expected a file:// path or a base64 data URL'],
+    [
+      'image bytes read as text',
+      PNG_BYTES.toString('utf8'),
+      'received image bytes as text; when providers are loaded from a file, pass images through test vars instead',
+    ],
+  ])('reports %s without calling the API', async (_label, reference, message) => {
+    const provider = makeProvider({ basePath: tempDir, images: [reference] });
+    const result = await provider.callApi('Edit it', {
+      prompt: { raw: 'x', label: 'x' },
+      vars: {},
+    } as any);
+    expect(result.error).toContain('Invalid images[0]: ');
+    expect(result.error).toContain(message);
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('surfaces an edits API error and evicts it from the cache', async () => {
+    const deleteFromCache = vi.fn();
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        error: {
+          code: 'invalid_image',
+          message:
+            'The provided image is invalid: Unsupported format: only RGB, RGBA, and palette-based GIF images are supported',
+        },
+      },
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+      deleteFromCache,
+    } as any);
+    const provider = makeProvider({ basePath: tempDir, images: ['file://source.png'] });
+    const result = await provider.callApi('Edit it');
+    expect(result.error).toBe(
+      'API response error: invalid_image The provided image is invalid: Unsupported format: only RGB, RGBA, and palette-based GIF images are supported',
+    );
+    expect(deleteFromCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a template that fails to render without calling the API', async () => {
+    const provider = makeProvider({ images: ['{{ unclosed'] });
+    const result = await provider.callApi('Edit it', {
+      prompt: { raw: 'x', label: 'x' },
+      vars: {},
+    } as any);
+    expect(result.error).toMatch(/^Could not render images: /);
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('takes images from the prompt config and resolves them against cliState.basePath', async () => {
+    mockSuccess();
+    const originalBasePath = cliState.basePath;
+    cliState.basePath = tempDir;
+    try {
+      const provider = makeProvider();
+      const result = await provider.callApi('Edit it', {
+        prompt: { raw: 'x', label: 'x', config: { images: ['file://style.jpg'] } },
+        vars: {},
+      } as any);
+      expect(result.error).toBeUndefined();
+    } finally {
+      cliState.basePath = originalBasePath;
+    }
+    const { url, options } = lastFetchCall();
+    expect(url).toBe('https://res.services.ai.azure.com/mai/v1/images/edits');
+    expect(await formImages(options.body as FormData)).toEqual([
+      { name: 'image-1.jpg', type: 'image/jpeg', bytes: JPEG_BYTES },
+    ]);
+  });
+
+  it.each([
+    { headers: { 'Ocp-Apim-Subscription-Key': 'gateway-key' } },
+    { apiPath: '/mai/v1/images/edits?subscription-key=gateway-key' },
+    { passthrough: { session: 'private' } },
+  ])('bypasses the cache for custom edit settings %o', async (config) => {
+    mockSuccess();
+    await makeProvider({ basePath: tempDir, images: ['file://source.png'], ...config }).callApi(
+      'Edit',
+    );
+    expect(lastFetchCall().cacheOptions).toEqual({ bust: true });
+  });
+
+  it('keys edits by URL, form fields and ordered image bytes, excluding credentials', async () => {
+    const images = ['file://source.png', 'file://style.jpg'];
+    const cacheKey = async (config = {}, prompt = 'Edit', bustCache = false) => {
+      mockSuccess();
+      const provider = makeProvider({ basePath: tempDir, images, ...config });
+      await provider.callApi(prompt, { prompt: { raw: 'x', label: 'x' }, vars: {}, bustCache });
+      return lastFetchCall().cacheOptions.cacheKey;
+    };
+    const key = await cacheKey();
+    expect(key).toMatch(/^azure-mai-image-edit:[0-9a-f]{64}$/);
+    expect(
+      await cacheKey({ apiKey: 'different', headers: { 'Content-Type': 'application/json' } }),
+    ).toBe(key);
+    expect(await cacheKey({}, 'Edit', true)).toBeUndefined();
+    expect(await cacheKey({ images: [...images].reverse() })).not.toBe(key);
+    expect(await cacheKey({ width: 1536 })).not.toBe(key);
+    expect(await cacheKey({}, 'Another edit')).not.toBe(key);
+    expect(await cacheKey({ apiHost: 'other.services.ai.azure.com' })).not.toBe(key);
+    fs.appendFileSync(path.join(tempDir, 'source.png'), 'changed');
+    expect(await cacheKey()).not.toBe(key);
+  });
+
+  it('reports a cached edit with zero cost', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        data: [{ b64_json: FAKE_B64 }],
+        usage: { num_output_tokens: 1024, num_input_text_tokens: 19, num_input_image_tokens: 1024 },
+      },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+    const provider = makeProvider({
+      basePath: tempDir,
+      images: ['file://source.png'],
+      model: 'MAI-Image-2.7-Flash',
+    });
+    const result = await provider.callApi('Edit it');
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBe(0);
+    expect(result.tokenUsage).toEqual({ cached: 2067, total: 2067 });
+  });
+
+  it('keeps generations on the JSON route when images is empty', async () => {
+    mockSuccess();
+    const provider = makeProvider({ images: [] });
+    await provider.callApi('a red cube');
+    const { url, options, cacheOptions } = lastFetchCall();
+    expect(url).toBe('https://res.services.ai.azure.com/mai/v1/images/generations');
+    expect(JSON.parse(options.body as string)).toMatchObject({ width: 1024, height: 1024 });
+    expect(cacheOptions).toBeUndefined();
+  });
+});
+
+describe('loadMaiEditImage', () => {
+  it('detects PNG and JPEG from a data URL regardless of its declared type', async () => {
+    const png = await loadMaiEditImage(`data:image/jpeg;base64,${PNG_BYTES.toString('base64')}`);
+    expect(png).toEqual({ bytes: PNG_BYTES, mimeType: 'image/png' });
+    const jpeg = await loadMaiEditImage(
+      `data:application/octet-stream;base64,${JPEG_BYTES.toString('base64')}`,
+    );
+    expect(jpeg).toEqual({ bytes: JPEG_BYTES, mimeType: 'image/jpeg' });
   });
 });
