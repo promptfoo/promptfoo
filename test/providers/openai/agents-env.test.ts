@@ -680,6 +680,16 @@ describe('Agents SDK scoped client', () => {
     expect(request().headers.has('authorization')).toBe(false);
   });
 
+  it.each([{ apiKey: '' }, { apiKeyEnvar: '' }, { apiKey: '  ' }, { apiKeyEnvar: '  ' }])(
+    'does not replace an explicitly cleared gateway key or selector: %j',
+    async (config) => {
+      await expect(
+        provider({ apiBaseUrl: 'https://gateway.example.invalid/v1', ...config }).callApi('hello'),
+      ).rejects.toThrow(/Missing credentials/);
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([{ apiKey: 'explicit-key' }, { apiKeyEnvar: 'OPENAI_API_KEY' }])(
     'keeps explicitly selected gateway API keys: %j',
     async (config) => {
