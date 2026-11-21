@@ -4,6 +4,7 @@ export { evaluate } from '../node/evaluateTestSuite';
 export { formatVarsForDisplay, ProgressBarManager } from '../progress/evaluationProgress';
 export {
   __resetPromptConversationCacheForTests,
+  buildConversationKey,
   generateVarCombinations,
   getTraceId,
   getTraceLinkage,
