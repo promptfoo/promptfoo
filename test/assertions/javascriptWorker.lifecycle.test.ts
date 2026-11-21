@@ -2,7 +2,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { EventEmitter } from 'node:events';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runJavascriptInWorker } from '../../src/assertions/javascriptWorker';
 import * as esm from '../../src/esm';
 
@@ -47,7 +47,9 @@ function execute(provider?: Parameters<typeof runJavascriptInWorker>[0]['context
 }
 
 describe('JavaScript worker transport cleanup', () => {
-  beforeEach(() => {
+  afterEach(() => {
+    vi.resetAllMocks();
+    transport.entry = undefined;
     transport.worker = undefined;
   });
 
