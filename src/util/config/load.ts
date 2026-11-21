@@ -879,14 +879,16 @@ async function prepareCombinedConfig(configPaths: string[]): Promise<{
       const prevObj = typeof prev === 'object' ? prev : {};
       const previousVars = prevObj.vars;
       const currentVars = currDefaultTest.vars;
+      const fileVars = typeof currentVars === 'string' || Array.isArray(currentVars);
+      if (currentVars != null) {
+        // Dependencies inside a vars file belong to the config that supplied it.
+        defaultTestBasePath = fileVars ? basePath : undefined;
+      }
       return {
         ...prevObj,
         ...currDefaultTest,
         vars:
-          typeof previousVars === 'string' ||
-          Array.isArray(previousVars) ||
-          typeof currentVars === 'string' ||
-          Array.isArray(currentVars)
+          typeof previousVars === 'string' || Array.isArray(previousVars) || fileVars
             ? (currentVars ?? previousVars)
             : { ...previousVars, ...currentVars },
         assert: [...(prevObj?.assert || []), ...(currDefaultTest?.assert || [])],

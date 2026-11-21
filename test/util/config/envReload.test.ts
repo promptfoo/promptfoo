@@ -1465,34 +1465,38 @@ describe('suite environment loading', () => {
     },
   );
 
-  it('loads external defaults from the later config directory', async () => {
-    const first = writeConfig('first-default-root', {});
-    const second = writeConfig('second-default-root', {
-      defaultTest: 'file://defaults/default.yaml',
-    });
-    const firstDir = path.dirname(first);
-    const secondDir = path.dirname(second);
-    fs.mkdirSync(path.join(secondDir, 'defaults'));
-    fs.writeFileSync(path.join(firstDir, 'vars.yaml'), 'source: wrong-first');
-    fs.writeFileSync(
-      path.join(secondDir, 'vars.yaml'),
-      'source: second\ncontext: file://context.txt',
-    );
-    fs.writeFileSync(path.join(firstDir, 'context.txt'), 'wrong-first-context');
-    fs.writeFileSync(path.join(secondDir, 'context.txt'), 'second-context');
-    fs.writeFileSync(path.join(secondDir, 'defaults/default.yaml'), 'vars: vars.yaml');
+  it.each(['file://defaults/default.yaml', { vars: 'file://vars.yaml' }, { vars: ['vars.yaml'] }])(
+    'resolves nested default vars under the config supplying %j',
+    async (defaultTest) => {
+      const first = writeConfig('first-default-root', {});
+      const second = writeConfig('second-default-root', { defaultTest });
+      const third = writeConfig('third-default-root', {
+        defaultTest: { metadata: { suffix: true } },
+      });
+      const firstDir = path.dirname(first);
+      const secondDir = path.dirname(second);
+      fs.mkdirSync(path.join(secondDir, 'defaults'));
+      fs.writeFileSync(path.join(firstDir, 'vars.yaml'), 'source: wrong-first');
+      fs.writeFileSync(
+        path.join(secondDir, 'vars.yaml'),
+        'source: second\ncontext: file://context.txt',
+      );
+      fs.writeFileSync(path.join(firstDir, 'context.txt'), 'wrong-first-context');
+      fs.writeFileSync(path.join(secondDir, 'context.txt'), 'second-context');
+      fs.writeFileSync(path.join(secondDir, 'defaults/default.yaml'), 'vars: vars.yaml');
 
-    const resolved = await resolveConfigs({ config: [first, second] }, {});
+      const resolved = await resolveConfigs({ config: [first, second, third] }, {});
 
-    expect(resolved.testSuite.defaultTest).toMatchObject({
-      vars: { source: 'second', context: 'second-context' },
-    });
-    const watched = (resolved.watchSources ?? []).flatMap((source) =>
-      resolveTestsWatchPaths(source.tests, source.basePath),
-    );
-    expect(watched).toContain(path.join(secondDir, 'context.txt'));
-    expect(watched).not.toContain(path.join(firstDir, 'context.txt'));
-  });
+      expect(resolved.testSuite.defaultTest).toMatchObject({
+        vars: { source: 'second', context: 'second-context' },
+      });
+      const watched = (resolved.watchSources ?? []).flatMap((source) =>
+        resolveTestsWatchPaths(source.tests, source.basePath),
+      );
+      expect(watched).toContain(path.join(secondDir, 'context.txt'));
+      expect(watched).not.toContain(path.join(firstDir, 'context.txt'));
+    },
+  );
 
   it('retains scenario vars references before loading them', async () => {
     const configPath = writeConfig('scenario-watch', {
