@@ -5,11 +5,12 @@ import { formatVarsForDisplay } from '../evaluator/progress';
 import { globalLogCallback, setLogCallback } from '../logger';
 import type { SingleBar } from 'cli-progress';
 
-import type { PromptMetrics, RunEvalOptions } from '../types/index';
+type ProgressStep = {
+  provider: { id(): string; label?: string };
+  prompt: { raw: string };
+  test: { vars?: Record<string, unknown> };
+};
 
-/**
- * Manages a single progress bar for the evaluation
- */
 export class ProgressBarManager {
   private progressBar: SingleBar | undefined;
   private isWebUI: boolean;
@@ -17,7 +18,6 @@ export class ProgressBarManager {
   private installedLogCallback: ((message: string) => void) | null = null;
   private pendingRender: ReturnType<typeof setImmediate> | null = null;
 
-  // Track overall progress
   private totalCount: number = 0;
 
   constructor(isWebUI: boolean) {
@@ -85,11 +85,8 @@ export class ProgressBarManager {
     this.originalLogCallback = null;
   }
 
-  /**
-   * Initialize progress bar
-   */
   async initialize(
-    runEvalOptions: RunEvalOptions[],
+    runEvalOptions: readonly unknown[],
     _concurrency: number,
     compareRowsCount: number,
   ): Promise<void> {
@@ -99,7 +96,6 @@ export class ProgressBarManager {
 
     this.totalCount = runEvalOptions.length + compareRowsCount;
 
-    // Create single progress bar
     this.progressBar = new cliProgress.SingleBar(
       {
         format: (options, params, payload) => {
@@ -123,7 +119,6 @@ export class ProgressBarManager {
       cliProgress.Presets.shades_classic,
     );
 
-    // Start the progress bar
     this.progressBar.start(this.totalCount, 0, {
       provider: '',
       prompt: '',
@@ -132,14 +127,11 @@ export class ProgressBarManager {
     });
   }
 
-  /**
-   * Update progress for a specific evaluation
-   */
   updateProgress(
     _index: number,
-    evalStep: RunEvalOptions | undefined,
+    evalStep: ProgressStep | undefined,
     _phase: 'serial' | 'concurrent' = 'concurrent',
-    metrics?: PromptMetrics,
+    metrics?: { testErrorCount: number },
   ): void {
     if (this.isWebUI || !evalStep || !this.progressBar) {
       return;
@@ -157,9 +149,6 @@ export class ProgressBarManager {
     });
   }
 
-  /**
-   * Update comparison progress
-   */
   updateComparisonProgress(prompt: string): void {
     if (this.isWebUI || !this.progressBar) {
       return;
@@ -173,9 +162,6 @@ export class ProgressBarManager {
     });
   }
 
-  /**
-   * Update total count when comparison count is determined
-   */
   updateTotalCount(additionalCount: number): void {
     if (this.isWebUI || !this.progressBar || additionalCount <= 0) {
       return;
@@ -185,9 +171,6 @@ export class ProgressBarManager {
     this.progressBar.setTotal(this.totalCount);
   }
 
-  /**
-   * Mark evaluation as complete
-   */
   complete(): void {
     if (this.isWebUI || !this.progressBar) {
       return;
@@ -197,9 +180,6 @@ export class ProgressBarManager {
     this.progressBar.update(this.totalCount);
   }
 
-  /**
-   * Stop the progress bar
-   */
   stop(): void {
     if (this.progressBar) {
       this.progressBar.stop();
