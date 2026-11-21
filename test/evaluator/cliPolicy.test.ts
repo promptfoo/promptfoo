@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import * as envars from '../../src/envars';
 import { evaluate } from '../../src/evaluator';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import { ProgressBarManager } from '../../src/node/evaluatorProgress';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
+import { ProgressBarManager } from '../../src/progress/evaluationProgress';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
 
@@ -100,6 +102,37 @@ describe('CLI progress policy', () => {
     );
     expect(start).not.toHaveBeenCalled();
     expect(initialize).not.toHaveBeenCalled();
+  });
+
+  it('keeps row variables and provider output out of web progress and debug logs', async () => {
+    const info = vi.spyOn(logger, 'info');
+    const debug = vi.spyOn(logger, 'debug');
+    const originalWebUi = cliState.webUI;
+    cliState.webUI = true;
+    try {
+      await evaluate(
+        {
+          ...suite(),
+          tests: [{ vars: { input: 'private-input' }, options: { runSerially: true } }],
+          providers: [createMockProvider({ response: { output: 'private-output' } })],
+        },
+        new Eval({}),
+        { eventSource: 'web' },
+      );
+      expect(info).toHaveBeenCalledWith('[1/1] Completed');
+      expect(JSON.stringify([info.mock.calls, debug.mock.calls])).not.toMatch(
+        /private-input|private-output/,
+      );
+    } finally {
+      cliState.webUI = originalWebUi;
+    }
+  });
+
+  it('leaves a caller-owned progress callback in place across evaluations', async () => {
+    const progressCallback = vi.fn();
+    const options = { progressCallback };
+    await evaluate(suite(), new Eval({}), options);
+    expect(options.progressCallback).toBe(progressCallback);
   });
 
   it('starts, updates and finishes the CLI reporter', async () => {

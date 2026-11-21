@@ -100,7 +100,6 @@ import { PromptSuggestionsRejectedError } from './errors';
 import {
   cleanupProgressAfterError,
   cleanupProgressReporters,
-  formatVarsForDisplay,
   logWebUiEvalStepStart,
   updateComparisonReporterProgress,
   updateComparisonReporterTotals,
@@ -603,14 +602,9 @@ async function maybeAddGeneratedPrompts(
     );
   }
 
-  logger.info(chalk.blue('Generated prompts:'));
   let numAdded = 0;
   for (const prompt of newPrompts) {
     abortSignal?.throwIfAborted();
-    logger.info('--------------------------------------------------------');
-    logger.info(`${prompt}`);
-    logger.info('--------------------------------------------------------');
-
     const selected = await selectPrompt(prompt);
     abortSignal?.throwIfAborted();
     if (selected) {
@@ -2156,7 +2150,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   ) {
     this.testSuite = testSuite;
     this.store = store;
-    this.options = options;
+    this.options = { ...options };
     this.stats = {
       successes: 0,
       failures: 0,
@@ -2755,7 +2749,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       checkAbort();
     } catch (err) {
       if (!combinedAbortSignal.aborted) {
-        cleanupProgressAfterError(progressBarManager, ciProgressReporter, err);
         throw err;
       }
 
@@ -3032,6 +3025,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (globalTimeout) {
       clearTimeout(globalTimeout);
     }
+    progressBarManager?.removeLogInterceptor();
     progressBarManager?.stop();
     ciProgressReporter?.error(`Target unavailable (HTTP ${processingContext.targetErrorStatus})`);
     this.store.setVars(Array.from(processingContext.vars));
@@ -3661,7 +3655,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     vars: Set<string>;
   }) {
     await this.store.appendPrompts(prompts);
-    cleanupProgressReporters(progressBarManager, ciProgressReporter);
 
     if (globalTimeout) {
       clearTimeout(globalTimeout);
@@ -3694,6 +3687,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (this.store.persisted) {
       await this.store.save();
     }
+    cleanupProgressReporters(progressBarManager, ciProgressReporter);
   }
 
   private async addMaxDurationTimeoutResults({
@@ -3816,6 +3810,31 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
   }
 
+  private setupProgressReporters(rowCount: number, isWebUI: boolean) {
+    const originalProgressCallback = this.options.progressCallback;
+    const { progressBarManager = null, ciProgressReporter = null } =
+      this.runtime.createProgressReporters?.(rowCount) ?? {};
+    invariant(
+      !(progressBarManager && ciProgressReporter),
+      'Evaluator runtime must supply at most one progress reporter',
+    );
+    this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
+      originalProgressCallback?.(completed, total, index, evalStep, metrics);
+
+      if (isWebUI) {
+        logger.info(`[${completed}/${total}] Completed`);
+      } else if (progressBarManager) {
+        const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
+        progressBarManager.updateProgress(index, evalStep, phase, metrics);
+      } else if (ciProgressReporter) {
+        ciProgressReporter.update(completed);
+      } else {
+        logger.debug(`Eval #${index + 1} complete (${completed} of ${total})`);
+      }
+    };
+    return { progressBarManager, ciProgressReporter };
+  }
+
   private async _runEvaluation({
     startTime,
     maxEvalTimeMs,
@@ -3830,10 +3849,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const processedIndices = new Set<number>();
 
     const targetErrorAbortController = new AbortController();
-
-    // Progress reporters declared here for cleanup in finally block
-    let ciProgressReporter: CIProgressReporter | null = null;
-    let progressBarManager: ProgressBarManager | null = null;
 
     // Target errors stop the evaluator loop; only caller cancellation and the timeout reach providers.
     const combinedAbortSignal = providerAbortSignal
@@ -3952,52 +3967,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       vars,
     };
 
-    // Set up progress tracking
-    const originalProgressCallback = this.options.progressCallback;
-    const isWebUI = Boolean(cliState.webUI);
-
-    // Choose appropriate progress reporter
-    logger.debug(
-      `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}`,
-    );
-
-    ({ progressBarManager = null, ciProgressReporter = null } =
-      this.runtime.createProgressReporters?.(runEvalOptions.length) ?? {});
-    invariant(
-      !(progressBarManager && ciProgressReporter),
-      'Evaluator runtime must supply at most one progress reporter',
-    );
-    const cleanupAndRethrow = (error: unknown): never => {
-      cleanupProgressAfterError(progressBarManager, ciProgressReporter, error);
-      throw error;
-    };
-    ciProgressReporter?.start();
-
-    this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
-      if (originalProgressCallback) {
-        originalProgressCallback(completed, total, index, evalStep, metrics);
-      }
-
-      if (isWebUI) {
-        const provider = evalStep.provider.label || evalStep.provider.id();
-        const vars = formatVarsForDisplay(evalStep.test.vars, 50);
-        logger.info(
-          `[${processingContext.numComplete}/${total}] Running ${provider} with vars: ${vars}`,
-        );
-      } else if (progressBarManager) {
-        // Progress bar update is handled by the manager
-        const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
-        progressBarManager.updateProgress(index, evalStep, phase, metrics);
-      } else if (ciProgressReporter) {
-        // CI progress reporter update
-        ciProgressReporter.update(processingContext.numComplete);
-      } else {
-        logger.debug(
-          `Eval #${index + 1} complete (${processingContext.numComplete} of ${runEvalOptions.length})`,
-        );
-      }
-    };
-
     // Separate serial and concurrent eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
     const concurrentRunEvalOptions: RunEvalOptions[] = [];
@@ -4037,77 +4006,85 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       });
     }
 
-    // Now start the progress bar after info messages
-    if (progressBarManager) {
-      await progressBarManager.initialize(runEvalOptions, concurrency, 0).catch(cleanupAndRethrow);
-      progressBarManager.installLogInterceptor();
-    }
-
-    const interruptedEval = await this.executeEvalSteps({
-      checkAbort,
-      ciProgressReporter,
-      combinedAbortSignal,
-      concurrentRunEvalOptions,
-      evalStepIndexMap,
-      globalTimeout,
-      groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
-      isEvalTimedOut: isTimedOut,
+    const isWebUI = Boolean(cliState.webUI);
+    const { progressBarManager, ciProgressReporter } = this.setupProgressReporters(
+      runEvalOptions.length,
       isWebUI,
-      maxEvalTimeMs,
-      processingContext,
-      processedIndices,
-      progressBarManager,
-      prompts,
-      serialRunEvalOptions,
-      shouldGroupGradingByProvider,
-    });
-    if (interruptedEval) {
-      return interruptedEval;
-    }
+    );
+    try {
+      ciProgressReporter?.start();
+      await progressBarManager?.initialize(runEvalOptions, concurrency, 0);
+      progressBarManager?.installLogInterceptor();
 
-    if (
-      !(await this.processComparisonAssertions({
+      const interruptedEval = await this.executeEvalSteps({
+        checkAbort,
         ciProgressReporter,
+        combinedAbortSignal,
+        concurrentRunEvalOptions,
+        evalStepIndexMap,
+        globalTimeout,
+        groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
         isEvalTimedOut: isTimedOut,
         isWebUI,
-        progressBarManager,
-        prompts,
-        providerAbortSignal,
-        repeatCacheContextByTestIdx,
-        rowsWithMaxScoreAssertion,
-        rowsWithSelectBestAssertion,
-        runEvalOptions,
-      }).catch(cleanupAndRethrow))
-    ) {
-      return this.saveInterruptedEval({
-        ciProgressReporter,
-        globalTimeout,
+        maxEvalTimeMs,
         processingContext,
+        processedIndices,
         progressBarManager,
         prompts,
+        serialRunEvalOptions,
+        shouldGroupGradingByProvider,
       });
-    }
+      if (interruptedEval) {
+        return interruptedEval;
+      }
 
-    await this.finalizeEvaluation({
-      assertionTypes,
-      ciProgressReporter,
-      concurrency,
-      evalTimedOut: isTimedOut(),
-      globalTimeout,
-      maxEvalTimeMs,
-      options,
-      processedIndices,
-      progressBarManager,
-      prompts,
-      runEvalOptions,
-      startTime,
-      testSuite,
-      tests,
-      usesConversationVar,
-      varNames,
-      vars,
-    }).catch(cleanupAndRethrow);
-    return this.store.evaluation;
+      if (
+        !(await this.processComparisonAssertions({
+          ciProgressReporter,
+          isEvalTimedOut: isTimedOut,
+          isWebUI,
+          progressBarManager,
+          prompts,
+          providerAbortSignal,
+          repeatCacheContextByTestIdx,
+          rowsWithMaxScoreAssertion,
+          rowsWithSelectBestAssertion,
+          runEvalOptions,
+        }))
+      ) {
+        return this.saveInterruptedEval({
+          ciProgressReporter,
+          globalTimeout,
+          processingContext,
+          progressBarManager,
+          prompts,
+        });
+      }
+
+      await this.finalizeEvaluation({
+        assertionTypes,
+        ciProgressReporter,
+        concurrency,
+        evalTimedOut: isTimedOut(),
+        globalTimeout,
+        maxEvalTimeMs,
+        options,
+        processedIndices,
+        progressBarManager,
+        prompts,
+        runEvalOptions,
+        startTime,
+        testSuite,
+        tests,
+        usesConversationVar,
+        varNames,
+        vars,
+      });
+      return this.store.evaluation;
+    } catch (error) {
+      cleanupProgressAfterError(progressBarManager, ciProgressReporter, error);
+      throw error;
+    }
   }
 
   async evaluate(): Promise<TEvaluation> {

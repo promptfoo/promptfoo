@@ -130,7 +130,6 @@ describe('coverage ratchets', () => {
     'src/evaluator/runEval.ts',
     'src/evaluator/progress.ts',
     'src/node/evaluateForCli.ts',
-    'src/node/evaluatorProgress.ts',
     'src/progress/evaluationProgress.ts',
   ])('enforces coverage floors for modified critical backend path %s', (file) => {
     const result = evaluateCoverageRatchets({

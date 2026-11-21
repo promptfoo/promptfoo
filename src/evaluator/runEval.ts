@@ -771,8 +771,6 @@ async function callActiveProvider({
     }
   }
 
-  logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
-  logger.debug(`Provider response cached property explicitly: ${response.cached}`);
   return response;
 }
 
@@ -1436,13 +1434,6 @@ export async function runEvalInternal(
             renderedPrompt: rendered.renderedPrompt,
             response,
           });
-
-          logger.debug('Evaluator response', {
-            responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
-          });
-          logger.debug(
-            `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
-          );
 
           await applyProviderDelayIfNeeded(provider, response, abortSignal);
 

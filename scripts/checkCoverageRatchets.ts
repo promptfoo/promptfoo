@@ -108,7 +108,6 @@ export const COVERAGE_RATCHET_REPORTS: CoverageReportConfig[] = [
       'src/evaluator/runEval.ts',
       'src/evaluator/progress.ts',
       'src/node/evaluateForCli.ts',
-      'src/node/evaluatorProgress.ts',
       'src/progress/evaluationProgress.ts',
       'src/evaluatorHelpers.ts',
       'src/prompts.ts',
