@@ -35,7 +35,6 @@ const testRuntimeEnv = Object.fromEntries(
     'PROMPTFOO_NODE20_BIN',
     'PROMPTFOO_MIN_NODE_BIN',
     'PROMPTFOO_TEST_SHOW_OUTPUT',
-    'PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS',
   ].map((key) => [key, process.env[key]]),
 );
 

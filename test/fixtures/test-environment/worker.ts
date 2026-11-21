@@ -41,7 +41,6 @@ it('starts clean while retaining executable selections and unrelated environment
     PROMPTFOO_NODE20_BIN: '/fixture/node20',
     PROMPTFOO_MIN_NODE_BIN: '/fixture/node-min',
     PROMPTFOO_TEST_SHOW_OUTPUT: 'true',
-    PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'false',
     HTTPS_PROXY: 'http://host-proxy.invalid:8080',
     CI: '1',
     PATH: process.env.TEST_ENVIRONMENT_PATH,
@@ -86,4 +85,9 @@ it.each([false, true])('isolates child processes unless a fixture is selected (%
   } finally {
     removeTempDir(tempDir);
   }
+});
+
+it.runIf(process.env.TEST_CI_REJECTION === '1')('unhandled CI fixture', async () => {
+  void Promise.reject(new Error('fixture rejected without a handler'));
+  await new Promise<void>((resolve) => setImmediate(resolve));
 });
