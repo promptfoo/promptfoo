@@ -17,7 +17,7 @@ import {
   withGenAIToolSpan,
 } from '../tracing';
 import { hasHeaderOverride, OPENAI_ORGANIZATION_HEADER, OpenAiGenericProvider } from '.';
-import { assertOpenAiApiModel, failApiCall, getTokenUsage } from './util';
+import { failApiCall, getTokenUsage, isOpenAiFirstPartyApiUrl } from './util';
 import type { Metadata } from 'openai/resources/shared';
 
 import type { EnvOverrides } from '../../types/env';
@@ -64,7 +64,12 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     super(assistantId, options);
     this.assistantConfig = options.config || {};
     this.assistantId = assistantId;
-    assertOpenAiApiModel(this.assistantConfig.modelName, this.getApiUrl());
+    if (isOpenAiFirstPartyApiUrl(this.getApiUrl())) {
+      throw new Error(
+        'OpenAI retired the Assistants API on August 26, 2026. Migrate to openai:responses:<model>. ' +
+          'See https://developers.openai.com/api/docs/assistants/migration.',
+      );
+    }
 
     // Preload function callbacks if available
     if (this.assistantConfig.functionToolCallbacks) {
@@ -293,114 +298,122 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       return failApiCall(err);
     }
 
-    while (true) {
-      throwIfAborted(signal);
-      let currentRun: OpenAI.Beta.Threads.Run;
-      try {
-        currentRun = await openai.beta.threads.runs.retrieve(
+    try {
+      while (true) {
+        throwIfAborted(signal);
+        const currentRun = await openai.beta.threads.runs.retrieve(
           run.id,
           { thread_id: run.thread_id },
           requestOptions,
         );
-      } catch (err) {
         throwIfAborted(signal);
-        throw err;
+
+        if (currentRun.status === 'completed') {
+          run = currentRun;
+          break;
+        }
+
+        if (currentRun.status === 'requires_action') {
+          const requiredAction = currentRun.required_action;
+          if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
+            run = currentRun;
+            break;
+          }
+          const functionCallsWithCallbacks: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[] =
+            requiredAction.submit_tool_outputs.tool_calls.filter((toolCall) => {
+              return (
+                toolCall.type === 'function' &&
+                Object.prototype.hasOwnProperty.call(
+                  this.assistantConfig.functionToolCallbacks ?? {},
+                  toolCall.function.name,
+                )
+              );
+            });
+          if (functionCallsWithCallbacks.length === 0) {
+            run = currentRun;
+            break;
+          }
+
+          // Build context for function callbacks
+          const callbackContext: CallbackContext = {
+            threadId: currentRun.thread_id,
+            runId: currentRun.id,
+            assistantId: this.assistantId,
+            provider: 'openai',
+            ...(signal ? { abortSignal: signal } : {}),
+          };
+
+          logger.debug(
+            `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
+              ({ function: { name } }) => name,
+            )}`,
+          );
+          const toolOutputs = await Promise.all(
+            functionCallsWithCallbacks.map(async (toolCall) => {
+              const functionResult = await this.executeFunctionCallback(
+                toolCall.function.name,
+                toolCall.function.arguments,
+                callbackContext,
+                toolCall.id,
+              );
+              return {
+                tool_call_id: toolCall.id,
+                output: functionResult,
+              };
+            }),
+          );
+          throwIfAborted(signal);
+          try {
+            run = await openai.beta.threads.runs.submitToolOutputs(
+              currentRun.id,
+              { thread_id: currentRun.thread_id, tool_outputs: toolOutputs },
+              requestOptions,
+            );
+          } catch (err) {
+            throwIfAborted(signal);
+            return failApiCall(err);
+          }
+          continue;
+        }
+
+        if (
+          currentRun.status === 'failed' ||
+          currentRun.status === 'cancelled' ||
+          currentRun.status === 'incomplete' ||
+          currentRun.status === 'expired'
+        ) {
+          run = currentRun;
+          break;
+        }
+
+        await (signal ? sleepWithAbort(1000, signal) : sleep(1000));
+      }
+
+      return await this.getRunResponse(openai, run, signal);
+    } catch (error) {
+      if (signal?.aborted && run.status !== 'completed') {
+        // The caller signal is already aborted. Bound cleanup independently.
+        try {
+          await openai.beta.threads.runs.cancel(
+            run.id,
+            { thread_id: run.thread_id },
+            { timeout: 5000, maxRetries: 0 },
+          );
+        } catch {
+          logger.warn('OpenAI Assistant run cancellation could not be confirmed.');
+        }
       }
       throwIfAborted(signal);
-
-      if (currentRun.status === 'completed') {
-        run = currentRun;
-        break;
-      }
-
-      if (currentRun.status === 'requires_action') {
-        const requiredAction = currentRun.required_action;
-        if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
-          run = currentRun;
-          break;
-        }
-        const functionCallsWithCallbacks: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[] =
-          requiredAction.submit_tool_outputs.tool_calls.filter((toolCall) => {
-            return (
-              toolCall.type === 'function' &&
-              Object.prototype.hasOwnProperty.call(
-                this.assistantConfig.functionToolCallbacks ?? {},
-                toolCall.function.name,
-              )
-            );
-          });
-        if (functionCallsWithCallbacks.length === 0) {
-          run = currentRun;
-          break;
-        }
-
-        // Build context for function callbacks
-        const callbackContext: CallbackContext = {
-          threadId: currentRun.thread_id,
-          runId: currentRun.id,
-          assistantId: this.assistantId,
-          provider: 'openai',
-          ...(signal ? { abortSignal: signal } : {}),
-        };
-
-        logger.debug(
-          `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
-            ({ function: { name } }) => name,
-          )}`,
-        );
-        const toolOutputs = await Promise.all(
-          functionCallsWithCallbacks.map(async (toolCall) => {
-            logger.debug(
-              `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
-            );
-            const functionResult = await this.executeFunctionCallback(
-              toolCall.function.name,
-              toolCall.function.arguments,
-              callbackContext,
-              toolCall.id,
-            );
-            return {
-              tool_call_id: toolCall.id,
-              output: functionResult,
-            };
-          }),
-        );
-        logger.debug(
-          `Calling OpenAI API, submitting tool outputs for ${currentRun.thread_id}: ${JSON.stringify(
-            toolOutputs,
-          )}`,
-        );
-        throwIfAborted(signal);
-        try {
-          run = await openai.beta.threads.runs.submitToolOutputs(
-            currentRun.id,
-            { thread_id: currentRun.thread_id, tool_outputs: toolOutputs },
-            requestOptions,
-          );
-        } catch (err) {
-          throwIfAborted(signal);
-          return failApiCall(err);
-        }
-        continue;
-      }
-
-      if (
-        currentRun.status === 'failed' ||
-        currentRun.status === 'cancelled' ||
-        currentRun.status === 'expired'
-      ) {
-        run = currentRun;
-        break;
-      }
-
-      try {
-        await (signal ? sleepWithAbort(1000, signal) : sleep(1000));
-      } catch (err) {
-        throwIfAborted(signal);
-        throw err;
-      }
+      throw error;
     }
+  }
 
+  private async getRunResponse(
+    openai: OpenAI,
+    run: OpenAI.Beta.Threads.Run,
+    signal?: AbortSignal,
+  ): Promise<ProviderResponse> {
+    const requestOptions = { signal };
     if (run.status !== 'completed' && run.status !== 'requires_action') {
       if (run.last_error) {
         return {

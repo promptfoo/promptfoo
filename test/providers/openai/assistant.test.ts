@@ -52,11 +52,13 @@ vi.mock('openai');
 describe('OpenAI Provider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.stubEnv('OPENAI_API_BASE_URL', 'https://gateway.example/v1');
     disableCache();
   });
 
   afterEach(() => {
     enableCache();
+    vi.unstubAllEnvs();
   });
 
   describe('OpenAiAssistantProvider', () => {
@@ -69,6 +71,7 @@ describe('OpenAI Provider', () => {
           threads: {
             createAndRun: vi.fn(),
             runs: {
+              cancel: vi.fn(),
               retrieve: vi.fn(),
               submitToolOutputs: vi.fn(),
               steps: {
@@ -89,6 +92,7 @@ describe('OpenAI Provider', () => {
 
     const provider = new OpenAiAssistantProvider('test-assistant-id', {
       config: {
+        apiBaseUrl: 'https://gateway.example/v1',
         apiKey: 'test-key',
         organization: 'test-org',
         functionToolCallbacks: {
@@ -97,15 +101,13 @@ describe('OpenAI Provider', () => {
       },
     });
 
-    it.each(['gpt-transcribe', 'gpt-live-transcribe', 'gpt-5.3-codex-spark'])(
-      'should reject unsupported first-party model override %s in the direct constructor',
-      (modelName) => {
-        expect(
-          () =>
-            new OpenAiAssistantProvider('test-assistant-id', {
-              config: { apiKey: 'test-key', modelName },
-            }),
-        ).toThrow();
+    it.each(['https://api.openai.com/v1', 'https://eu.api.openai.com/v1'])(
+      'rejects the retired Assistants API at %s before initializing the SDK',
+      (apiBaseUrl) => {
+        expect(() => new OpenAiAssistantProvider('asst_test', { config: { apiBaseUrl } })).toThrow(
+          /retired the Assistants API.*openai:responses/,
+        );
+        expect(OpenAI).not.toHaveBeenCalled();
       },
     );
 
@@ -125,9 +127,7 @@ describe('OpenAI Provider', () => {
 
       expect(OpenAI).toHaveBeenCalledWith(
         expect.objectContaining({
-          defaultHeaders: expect.objectContaining({
-            'X-OpenAI-Originator': 'promptfoo',
-          }),
+          baseURL: 'https://gateway.example/v1',
         }),
       );
       expect(result.output).toBe('[Assistant] Test response');
@@ -141,7 +141,7 @@ describe('OpenAI Provider', () => {
       const run = { id: 'run_cancel', thread_id: 'thread_cancel', status: 'completed' };
 
       beforeEach(() => {
-        mockClient.beta.threads.createAndRun.mockResolvedValue(run);
+        mockClient.beta.threads.createAndRun.mockResolvedValue({ ...run, status: 'queued' });
         mockClient.beta.threads.runs.retrieve.mockResolvedValue(run);
         mockClient.beta.threads.runs.steps.list.mockResolvedValue({
           data: [
@@ -203,9 +203,15 @@ describe('OpenAI Provider', () => {
         );
         await vi.advanceTimersByTimeAsync(0);
         expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
+        mockClient.beta.threads.runs.cancel.mockRejectedValueOnce(new Error('already finished'));
         controller.abort(new Error('stop polling'));
         await vi.runAllTimersAsync();
         expect(await settled).toMatchObject({ name: 'AbortError', message: 'stop polling' });
+        expect(mockClient.beta.threads.runs.cancel).toHaveBeenCalledWith(
+          run.id,
+          { thread_id: run.thread_id },
+          { timeout: 5000, maxRetries: 0 },
+        );
         expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
         expect(mockClient.beta.threads.runs.steps.list).not.toHaveBeenCalled();
       });
@@ -515,6 +521,7 @@ describe('OpenAI Provider', () => {
           threads: {
             createAndRun: vi.fn(),
             runs: {
+              cancel: vi.fn(),
               retrieve: vi.fn(),
               submitToolOutputs: vi.fn(),
               steps: {
@@ -629,6 +636,11 @@ describe('OpenAI Provider', () => {
         finishCallback('late output');
         await settled;
       }
+      expect(mockClient.beta.threads.runs.cancel).toHaveBeenCalledWith(
+        'run_test',
+        { thread_id: 'thread_test' },
+        { timeout: 5000, maxRetries: 0 },
+      );
       expect(mockClient.beta.threads.runs.submitToolOutputs).not.toHaveBeenCalled();
       expect(mockClient.beta.threads.runs.steps.list).not.toHaveBeenCalled();
     });

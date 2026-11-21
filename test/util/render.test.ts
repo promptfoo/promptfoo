@@ -90,6 +90,29 @@ describe('renderVarsInObject', () => {
     });
   });
 
+  it('preserves own __proto__ keys through provider config and runtime rendering', () => {
+    const input = { ['__proto__']: { text: '{{ env.TEST_ENV_VAR }} {{ variable }}' } };
+    const config = renderEnvOnlyInObject(input, { TEST_ENV_VAR: 'Hello' });
+    const rendered = renderVarsInObject(config, { variable: 'world' });
+
+    expect(Object.getPrototypeOf(rendered)).toBe(Object.prototype);
+    expect(Object.hasOwn(rendered, '__proto__')).toBe(true);
+    expect(rendered.__proto__.text).toBe('Hello world');
+  });
+
+  it('keeps inherited enumerable config values through provider config and runtime rendering', () => {
+    const input = Object.assign(Object.create({ temperature: 0, label: '{{ variable }}' }), {
+      seed: 1,
+    });
+    const config = renderEnvOnlyInObject(input, {});
+    expect(config).toEqual({ seed: 1, temperature: 0, label: '{{ variable }}' });
+    expect(renderVarsInObject(input, { variable: 'world' })).toEqual({
+      seed: 1,
+      temperature: 0,
+      label: 'world',
+    });
+  });
+
   it('should handle function objects by calling them with vars', async () => {
     const mockFunction = vi.fn().mockReturnValue({ result: '{{ value }}' });
     const vars = { value: 'function_result' };
@@ -206,29 +229,22 @@ describe('renderEnvOnlyInObject', () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
   });
 
-  it('renders only own properties without reading inherited getters', () => {
-    const inherited = vi.fn(() => 'inherited value');
-    const prototype = Object.defineProperty({}, 'inherited', {
-      enumerable: true,
-      get: inherited,
+  it('renders callback paths without evaluating functions or inherited getters', () => {
+    const callback = vi.fn();
+    const inherited = vi.fn();
+    const prototype = Object.defineProperty({}, 'inherited', { enumerable: true, get: inherited });
+    const input = {
+      functionToolCallbacks: Object.assign(Object.create(prototype), {
+        path: 'file://{{ env.TEST_ENV_VAR }}/{{ name }}.js',
+        callback,
+      }),
+    };
+    const rendered = renderEnvOnlyInObject(input, { TEST_ENV_VAR: 'tools' });
+    expect(renderVarsInObject(rendered, { name: 'lookup' })).toEqual({
+      functionToolCallbacks: { path: 'file://tools/lookup.js', callback },
     });
-    const object = Object.assign(Object.create(prototype), { own: '{{ env.TEST_ENV_VAR }}' });
-
-    const rendered = renderEnvOnlyInObject(object, { TEST_ENV_VAR: 'own value' });
-
-    expect(rendered).toEqual({ own: 'own value' });
+    expect(callback).not.toHaveBeenCalled();
     expect(inherited).not.toHaveBeenCalled();
-  });
-
-  it('preserves an own __proto__ key as data while rendering nested values', () => {
-    const object = JSON.parse('{"__proto__":{"value":"{{ env.TEST_ENV_VAR }}"}}');
-
-    const rendered = renderEnvOnlyInObject(object, { TEST_ENV_VAR: 'rendered value' });
-
-    expect(Object.hasOwn(rendered, '__proto__')).toBe(true);
-    expect(rendered.__proto__).toEqual({ value: 'rendered value' });
-    expect(Object.getPrototypeOf(rendered)).toBe(Object.prototype);
-    expect(object.__proto__.value).toBe('{{ env.TEST_ENV_VAR }}');
   });
 
   describe('Basic rendering', () => {

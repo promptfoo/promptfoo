@@ -128,13 +128,9 @@ export function renderEnvOnlyInObject<T>(
     }
 
     if (typeof value === 'object' && value !== null) {
-      return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [
-          key,
-          // Conversation history is runtime data and may contain untrusted model output.
-          // Preserve it as literal data instead of rendering env templates.
-          key === '_conversation' ? item : render(item),
-        ]),
+      return mapObjectValues(value, (key, child) =>
+        // Conversation history is runtime data and may contain untrusted model output.
+        key === '_conversation' ? child : render(child),
       );
     }
 
@@ -142,6 +138,39 @@ export function renderEnvOnlyInObject<T>(
   };
 
   return render(obj) as T;
+}
+
+/**
+ * Copy an object's enumerable keys, including inherited ones, into a plain object.
+ * Object.fromEntries keeps a literal "__proto__" key as data instead of changing the prototype.
+ */
+function mapObjectValues(
+  value: object,
+  map: (key: string, child: unknown) => unknown,
+): Record<string, unknown> {
+  const entries: [string, unknown][] = [];
+  for (const key in value) {
+    // Callback registries authorize execution. Never promote inherited entries or
+    // invoke callback functions as runtime template factories.
+    if (key === 'functionToolCallbacks' && !Object.hasOwn(value, key)) {
+      continue;
+    }
+    const child = (value as Record<string, unknown>)[key];
+    if (key === 'functionToolCallbacks' && child && typeof child === 'object') {
+      entries.push([
+        key,
+        Object.fromEntries(
+          Object.entries(child).map(([name, fn]) => [
+            name,
+            typeof fn === 'string' ? map(name, fn) : fn,
+          ]),
+        ),
+      ]);
+    } else {
+      entries.push([key, map(key, child)]);
+    }
+  }
+  return Object.fromEntries(entries);
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T {
@@ -157,11 +186,7 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): 
     return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;
   }
   if (typeof obj === 'object' && obj !== null) {
-    const result: Record<string, unknown> = {};
-    for (const key in obj) {
-      result[key] = renderVarsInObject((obj as Record<string, unknown>)[key], vars);
-    }
-    return result as T;
+    return mapObjectValues(obj, (_key, value) => renderVarsInObject(value, vars)) as T;
   } else if (typeof obj === 'function') {
     const fn = obj as Function;
     return renderVarsInObject(fn({ vars }) as T);

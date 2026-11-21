@@ -2,7 +2,7 @@ import { getEventListeners } from 'node:events';
 import fs from 'node:fs';
 
 import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
 import { load } from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, withCacheEnabled, withCacheNamespace } from '../../src/cache';
@@ -15,9 +15,10 @@ import {
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 import { ProviderOptionsSchema } from '../../src/validators/providers';
 import { createDeferred, mockProcessEnv } from '../util/utils';
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-node';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
 
@@ -698,8 +699,8 @@ describe('completed model callback billing', () => {
       async forceFlush() {},
       async shutdown() {},
     };
-    const tracer = new NodeTracerProvider({ spanProcessors: [processor] });
-    tracer.register();
+    const tracer = new TracerProvider({ spanProcessors: [processor] });
+    registerTracerProvider(tracer);
     const registry = new RateLimitRegistry({ maxConcurrency: 1, minConcurrency: 1 });
     let target: ApiProvider | undefined;
     const pending: Promise<unknown>[] = [];

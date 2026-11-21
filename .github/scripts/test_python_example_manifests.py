@@ -7,10 +7,20 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from python_example_manifests import SCRIPTS, WORKFLOW
+from python_example_manifests import SCRIPTS, WORKFLOW, is_dependency_manifest
 
 SELECTOR = Path(__file__).with_name("python_example_manifests.py")
+
+
+class ManifestNameTests(unittest.TestCase):
+    def test_only_probes_candidate_names(self) -> None:
+        with patch.object(Path, "is_file", side_effect=PermissionError) as probe:
+            self.assertFalse(is_dependency_manifest("examples/demo/README.md"))
+            probe.assert_not_called()
+            for path in ("requirements.txt", "pyproject.toml"):
+                self.assertRaises(PermissionError, is_dependency_manifest, path)
 
 
 class ManifestSelectionTests(unittest.TestCase):

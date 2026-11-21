@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerGetEvaluationDetailsTool } from '../../../../src/commands/mcp/tools/getEvaluationDetails';
 import { readResult } from '../../../../src/util/database';
+import { createEvaluateResult, createEvaluateSummaryV2 } from '../../../factories/eval';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 vi.mock('../../../../src/util/database', () => ({
   readResult: vi.fn(),
@@ -11,107 +13,94 @@ vi.mock('../../../../src/commands/mcp/lib/utils', () => ({
 }));
 
 describe('get_evaluation_details filtering', () => {
-  const getMockEvalData = () => ({
-    result: {
+  function getMockEvalData(version = 4): NonNullable<Awaited<ReturnType<typeof readResult>>> {
+    const summary = createEvaluateSummaryV2({
       results: [
-        { success: true, error: null, metadata: {} },
-        { success: false, error: 'Failed assertion', metadata: {} },
-        { success: false, error: 'Runtime error', metadata: {} },
-        { success: true, error: null, metadata: { highlighted: true } },
+        createEvaluateResult(),
+        createEvaluateResult({ success: false, error: 'Failed assertion' }),
+        createEvaluateResult({
+          success: false,
+          error: 'Runtime error',
+          metadata: { starred: true },
+        }),
+        createEvaluateResult({ error: 'Nonfatal error', metadata: { highlighted: true } }),
       ],
-      table: {
-        head: {
-          providers: [],
-          prompts: [{}, {}],
-        },
+    });
+    const { timestamp, results, stats, table } = summary;
+    return {
+      id: 'test-eval',
+      createdAt: new Date(timestamp),
+      result: {
+        author: null,
+        config: {},
+        createdAt: timestamp,
+        version,
+        prompts: table.head.prompts,
+        results:
+          version === 3
+            ? summary
+            : { version: 3, timestamp, results, stats, prompts: table.head.prompts },
       },
-    },
-  });
+    };
+  }
 
-  const mockMcpServer = {
-    tool: vi.fn(),
-  } as any;
+  let toolHandler: (args: { id: string; filter: string }) => Promise<any>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    const tool = vi.fn();
+    registerGetEvaluationDetailsTool({ tool } as unknown as McpServer);
+    expect(tool).toHaveBeenCalledTimes(1);
+    toolHandler = tool.mock.calls[0][2];
   });
 
   afterEach(() => {
     vi.resetAllMocks();
   });
 
-  it('should filter failures correctly', async () => {
-    registerGetEvaluationDetailsTool(mockMcpServer);
-    const toolHandler = mockMcpServer.tool.mock.calls[0][2];
-    vi.mocked(readResult).mockResolvedValue(getMockEvalData() as any);
+  describe.each([3, 4])('persisted evaluation v%i', (version) => {
+    it.each([
+      ['all', [0, 1, 2, 3]],
+      ['passes', [0]],
+      ['failures', [1, 2]],
+      ['errors', [1, 2, 3]],
+      ['highlights', [2, 3]],
+    ] as const)('filters %s and keeps the original summary', async (filter, expectedIndices) => {
+      const stored = getMockEvalData(version);
+      const rows = stored.result.results.results;
+      vi.mocked(readResult).mockResolvedValue(stored);
 
-    const response = await toolHandler({ id: 'test-eval', filter: 'failures' });
+      const response = await toolHandler({ id: stored.id, filter });
 
-    expect(response.success).toBe(true);
-    const filteredResults = response.data.evaluation.results;
-    expect(filteredResults).toHaveLength(2);
-    expect(filteredResults[0].success).toBe(false);
-  });
-
-  it('should filter passes correctly', async () => {
-    registerGetEvaluationDetailsTool(mockMcpServer);
-    const toolHandler = mockMcpServer.tool.mock.calls[0][2];
-    vi.mocked(readResult).mockResolvedValue(getMockEvalData() as any);
-
-    const response = await toolHandler({ id: 'test-eval', filter: 'passes' });
-
-    expect(response.success).toBe(true);
-    const filteredResults = response.data.evaluation.results;
-    expect(filteredResults).toHaveLength(2);
-    filteredResults.forEach((r: any) => {
-      expect(r.success).toBe(true);
-      expect(r.error).toBeNull();
+      expect(response.success).toBe(true);
+      expect(response.data.evaluation.results.results).toEqual(expectedIndices.map((i) => rows[i]));
+      expect(response.data.summary).toEqual({
+        id: stored.id,
+        totalTests: 4,
+        passedTests: 2,
+        failedTests: 2,
+        providers: [],
+        prompts: 0,
+      });
     });
   });
 
-  it('should filter errors correctly', async () => {
-    registerGetEvaluationDetailsTool(mockMcpServer);
-    const toolHandler = mockMcpServer.tool.mock.calls[0][2];
-    vi.mocked(readResult).mockResolvedValue(getMockEvalData() as any);
+  it.each([undefined, { invalid: true }])('preserves malformed legacy rows', async (rows) => {
+    const stored = getMockEvalData(3);
+    Object.assign(stored.result.results, { results: rows });
+    vi.mocked(readResult).mockResolvedValue(stored);
 
-    const response = await toolHandler({ id: 'test-eval', filter: 'errors' });
-
-    expect(response.success).toBe(true);
-    const filteredResults = response.data.evaluation.results;
-    expect(filteredResults).toHaveLength(2);
-    expect(filteredResults[1].error).toBe('Runtime error');
-  });
-
-  it('should filter highlights correctly', async () => {
-    registerGetEvaluationDetailsTool(mockMcpServer);
-    const toolHandler = mockMcpServer.tool.mock.calls[0][2];
-    vi.mocked(readResult).mockResolvedValue(getMockEvalData() as any);
-
-    const response = await toolHandler({ id: 'test-eval', filter: 'highlights' });
+    const response = await toolHandler({ id: stored.id, filter: 'failures' });
 
     expect(response.success).toBe(true);
-    const filteredResults = response.data.evaluation.results;
-    expect(filteredResults).toHaveLength(1);
-    expect(filteredResults[0].metadata.highlighted).toBe(true);
-  });
-
-  it('should return all results when filter is "all"', async () => {
-    registerGetEvaluationDetailsTool(mockMcpServer);
-    const toolHandler = mockMcpServer.tool.mock.calls[0][2];
-    vi.mocked(readResult).mockResolvedValue(getMockEvalData() as any);
-
-    const response = await toolHandler({ id: 'test-eval', filter: 'all' });
-
-    expect(response.success).toBe(true);
-    expect(response.data.evaluation.results).toHaveLength(4);
+    expect(response.data.evaluation.results.results).toEqual(rows);
+    expect(response.data.summary).toMatchObject({ totalTests: 0, passedTests: 0, failedTests: 0 });
   });
 
   it('redacts Azure Blob SAS tokens from returned evaluation config', async () => {
     const sasUri = 'az://account/container/tests.yaml?sp=r&sig=azure-secret';
-    const storedEvaluation = getMockEvalData() as any;
+    const storedEvaluation = getMockEvalData();
     storedEvaluation.result.config = { tests: sasUri };
-    registerGetEvaluationDetailsTool(mockMcpServer);
-    const toolHandler = mockMcpServer.tool.mock.calls[0][2];
     vi.mocked(readResult).mockResolvedValue(storedEvaluation);
 
     const response = await toolHandler({ id: 'test-eval', filter: 'all' });
