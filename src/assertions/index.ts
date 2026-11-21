@@ -38,7 +38,6 @@ import {
   type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
-import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
@@ -69,7 +68,7 @@ import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
 import { handleContainsHtml, handleIsHtml } from './html';
-import { handleJavascript } from './javascript';
+import { handleJavascript, isJavascriptWorkerReference } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
@@ -501,11 +500,12 @@ async function runAssertionInternal({
   let valueFromScript: ValueFromScriptType;
   const scriptFailure = (reason: string): GradingResult =>
     applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
-  if (typeof renderedValue === 'string' && !(isolatedJavascript && isPackagePath(renderedValue))) {
+  if (
+    typeof renderedValue === 'string' &&
+    !(isolatedJavascript && isJavascriptWorkerReference(renderedValue))
+  ) {
     if (isolatedJavascript && renderedValue.startsWith('file://')) {
-      if (!isJavascriptFile(parseFileUrl(renderedValue).filePath)) {
-        renderedValue = processFileReference(renderedValue);
-      }
+      renderedValue = processFileReference(renderedValue);
     } else if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const fileRef = renderedValue.slice('file://'.length);

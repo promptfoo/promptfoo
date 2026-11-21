@@ -93,6 +93,7 @@ describe('JavaScript worker entry transport', () => {
         ? { type: 'result', result: true }
         : {
             type: 'error',
+            stack: expect.any(String),
             message: 'Package JavaScript assertion must export a function',
           },
     );
@@ -102,6 +103,7 @@ describe('JavaScript worker entry transport', () => {
     await start('({ callback: () => true })');
     await expectMessage({
       type: 'error',
+      stack: expect.any(String),
       message: expect.stringContaining('functions and symbols'),
     });
   });
@@ -125,7 +127,7 @@ describe('JavaScript worker entry transport', () => {
       await expectMessage(
         ok
           ? { type: 'result', result: { output: 'reply' } }
-          : { type: 'error', message: 'Provider unavailable' },
+          : { type: 'error', stack: expect.any(String), message: 'Provider unavailable' },
       );
       const sent = transport.postMessage.mock.calls.length;
       reply(message);
@@ -138,7 +140,7 @@ describe('JavaScript worker entry transport', () => {
       throw new Error('Port closed');
     });
     await start("context.provider.callApi('fixture')", true);
-    await expectMessage({ type: 'error', message: 'Port closed' });
+    await expectMessage({ type: 'error', stack: expect.any(String), message: 'Port closed' });
   });
 
   it('bounds pending provider callbacks before sending another request', async () => {
@@ -148,6 +150,7 @@ describe('JavaScript worker entry transport', () => {
     );
     await expectMessage({
       type: 'error',
+      stack: expect.any(String),
       message: 'Worker assertions support at most eight pending provider calls',
     });
     expect(

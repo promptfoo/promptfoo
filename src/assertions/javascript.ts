@@ -1,5 +1,6 @@
 import { Parser, type TokenType, tokTypes, type YieldExpression } from 'acorn';
 import { type GradingResult } from '../types/index';
+import { isJavascriptFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
 import { isSafeMode, SafeModeError } from '../util/safeMode';
@@ -236,6 +237,10 @@ function normalizeJavascriptAssertionResult(
     : normalizedResult;
 }
 
+export function isJavascriptWorkerReference(value: string): boolean {
+  return value.startsWith('package:') || isJavascriptFileUrl(value);
+}
+
 export const handleJavascript = async ({
   assertion,
   renderedValue,
@@ -273,9 +278,7 @@ export const handleJavascript = async ({
       // Only literal script references bypass the inline-code guard. A rendered
       // expression or a text file cannot turn into a module reference.
       const workerReference =
-        inWorker &&
-        renderedValue === assertion.value &&
-        (renderedValue.startsWith('file://') || renderedValue.startsWith('package:'));
+        inWorker && renderedValue === assertion.value && isJavascriptWorkerReference(renderedValue);
       if (isSafeMode() && !workerReference) {
         throw new SafeModeError(
           'Inline JavaScript execution is disabled in safe mode. Please use a file reference instead (e.g. "file://path/to/assertion.js").',

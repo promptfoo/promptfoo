@@ -62,14 +62,16 @@ export async function runJavascriptInWorker({
     envFileOverrides: cliState.envFileOverrides,
   });
   const built = typeof BUILD_FORMAT !== 'undefined';
+  // The server entry can run one directory below the CLI and library bundles.
+  const directory = getDirectory();
   const entry = path.join(
-    getDirectory(),
+    built && path.basename(directory) === 'server' ? path.dirname(directory) : directory,
     'assertions',
     `javascriptWorkerEntry.${built ? 'js' : 'ts'}`,
   );
   let workerEntry = pathToFileURL(entry);
   if (!built) {
-    const loader = resolvePackageEntryPoint('tsx/esm/api', getDirectory());
+    const loader = resolvePackageEntryPoint('tsx/esm/api', directory);
     if (!loader) {
       throw new Error('The JavaScript assertion worker requires tsx when running from source');
     }
@@ -178,7 +180,11 @@ await import(${JSON.stringify(workerEntry.href)});`;
       if (message.type === 'result') {
         void finish(undefined, message.result);
       } else if (message.type === 'error') {
-        void finish(new Error(message.message));
+        const error = new Error(message.message);
+        if (message.stack) {
+          error.stack = message.stack;
+        }
+        void finish(error);
       } else {
         void callProvider(message).catch((error) => finish(error));
       }

@@ -66,6 +66,44 @@ describe('isolated JavaScript assertions', () => {
     ).rejects.toThrow('supported only by JavaScript');
   });
 
+  it('preserves the assertion file and line in worker error stacks', async () => {
+    await fs.writeFile(
+      path.join(basePath, 'check.mjs'),
+      'export default () => {\nthrow new Error("fixture failure");\n};',
+    );
+    const result = await cliState.withBasePath(basePath, () =>
+      runAssertion({
+        assertion: { type: 'javascript', executionMode: 'worker', value: 'file://check.mjs' },
+        test: {},
+        providerResponse: { output: 'fixture' },
+      }),
+    );
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('check.mjs:2:');
+  });
+
+  it('enforces safe mode for inline code while permitting trusted modules', async () => {
+    await fs.writeFile(path.join(basePath, 'check.mjs'), 'export default () => true;');
+    await cliState.withBasePath(basePath, () =>
+      cliState.withSafeMode(true, async () => {
+        const run = (value: string) =>
+          runAssertion({
+            assertion: { type: 'javascript', executionMode: 'worker', value },
+            test: {},
+            providerResponse: { output: 'fixture' },
+          });
+        await fs.writeFile(path.join(basePath, 'value.txt'), 'file://check.mjs');
+        for (const value of ['true', 'file://value.txt', '{{ "file://check.mjs" }}']) {
+          await expect(run(value)).resolves.toMatchObject({
+            pass: false,
+            reason: expect.stringContaining('safe mode'),
+          });
+        }
+        await expect(run('file://check.mjs')).resolves.toMatchObject({ pass: true });
+      }),
+    );
+  });
+
   it('preserves the Node process shim in source workers', async () => {
     await expect(
       execute(

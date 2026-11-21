@@ -99,6 +99,10 @@ function normalizeFilePath(filePath: string): string {
   return filePath;
 }
 
+export function isJavascriptFileUrl(value: string): boolean {
+  return value.startsWith('file://') && isJavascriptFile(parseFileUrl(value).filePath);
+}
+
 /**
  * Extracts the file path and optional function name from a `file://` URL.
  *

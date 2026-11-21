@@ -1,9 +1,13 @@
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { EventEmitter } from 'node:events';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runJavascriptInWorker } from '../../src/assertions/javascriptWorker';
+import * as esm from '../../src/esm';
 
 const transport = vi.hoisted(() => ({
+  entry: undefined as URL | undefined,
   worker: undefined as
     | (EventEmitter & {
         terminate: ReturnType<typeof vi.fn>;
@@ -17,8 +21,9 @@ vi.mock('node:worker_threads', async () => {
     Worker: class extends EventEmitter {
       terminate = vi.fn().mockResolvedValue(0);
       postMessage = vi.fn();
-      constructor() {
+      constructor(entry: URL) {
         super();
+        transport.entry = entry;
         transport.worker = this;
       }
     },
@@ -44,6 +49,23 @@ function execute(provider?: Parameters<typeof runJavascriptInWorker>[0]['context
 describe('JavaScript worker transport cleanup', () => {
   beforeEach(() => {
     transport.worker = undefined;
+  });
+
+  it('uses the shared built worker when invoked by the server bundle', async () => {
+    const root = path.resolve('dist/src');
+    vi.stubGlobal('BUILD_FORMAT', 'esm');
+    const getDirectory = vi.spyOn(esm, 'getDirectory').mockReturnValue(path.join(root, 'server'));
+    try {
+      const pending = execute();
+      transport.worker!.emit('message', { type: 'result', result: true });
+      await pending;
+      expect(transport.entry?.href).toBe(
+        pathToFileURL(path.join(root, 'assertions/javascriptWorkerEntry.js')).href,
+      );
+    } finally {
+      getDirectory.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 
   it.each(['error', 'messageerror'])('terminates and rejects on %s', async (event) => {

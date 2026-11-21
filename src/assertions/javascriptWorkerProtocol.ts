@@ -18,7 +18,9 @@ export interface JavascriptWorkerRequest {
 
 export const JavascriptWorkerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('result'), result: z.unknown() }).strict(),
-  z.object({ type: z.literal('error'), message: z.string() }).strict(),
+  z
+    .object({ type: z.literal('error'), message: z.string(), stack: z.string().optional() })
+    .strict(),
   z
     .object({
       type: z.literal('callApi'),

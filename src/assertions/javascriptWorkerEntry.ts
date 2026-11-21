@@ -95,20 +95,13 @@ void cliState
       cliState.withEnv(request.env, execute),
     ),
   )
-  .then(
-    (result) => {
-      try {
-        port.postMessage({ type: 'result', result: cloneJavascriptWorkerData(result) });
-      } catch (error) {
-        port.postMessage({
-          type: 'error',
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
-    },
-    (error: unknown) =>
-      port.postMessage({
-        type: 'error',
-        message: error instanceof Error ? error.message : String(error),
-      }),
-  );
+  .then((result) => {
+    port.postMessage({ type: 'result', result: cloneJavascriptWorkerData(result) });
+  })
+  .catch((error: unknown) => {
+    port.postMessage({
+      type: 'error',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+  });
