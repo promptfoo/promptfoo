@@ -74,7 +74,13 @@ export default defineConfig([
   // Server (ESM only) - stable path for workflows
   // Only public library entry points emit declarations. The server's index declaration
   // otherwise races the library build for dist/src/index.d.ts.
-  esmBuildOptions({ 'server/index': './src/server/index.ts' }, { dts: false }),
+  esmBuildOptions(
+    {
+      'server/index': './src/server/index.ts',
+      'assertions/javascriptWorkerEntry': './src/assertions/javascriptWorkerEntry.ts',
+    },
+    { dts: false },
+  ),
   // CLI binary (ESM only)
   {
     ...esmBuildOptions(['./src/entrypoint.ts', './src/main.ts'], { dts: false }),

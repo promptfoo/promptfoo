@@ -1,5 +1,6 @@
 import { Parser, type TokenType, tokTypes, type YieldExpression } from 'acorn';
 import { type GradingResult } from '../types/index';
+import { isJavascriptFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
 import { isSafeMode, SafeModeError } from '../util/safeMode';
@@ -236,6 +237,10 @@ function normalizeJavascriptAssertionResult(
     : normalizedResult;
 }
 
+export function isJavascriptWorkerReference(value: string): boolean {
+  return value.startsWith('package:') || isJavascriptFileUrl(value);
+}
+
 export const handleJavascript = async ({
   assertion,
   renderedValue,
@@ -245,8 +250,13 @@ export const handleJavascript = async ({
   output,
   inverse,
 }: AssertionParams): Promise<GradingResult> => {
+  const inWorker = assertion.executionMode === 'worker';
   try {
     if (typeof assertion.value === 'function') {
+      invariant(
+        !inWorker,
+        'Worker JavaScript assertions require string values (function closures are unsupported).',
+      );
       const result = await validateResult(assertion.value(outputString, assertionValueContext));
       return normalizeJavascriptAssertionResult(assertion, result, inverse);
     }
@@ -265,7 +275,11 @@ export const handleJavascript = async ({
 
     let result: boolean | number | GradingResult;
     if (typeof valueFromScript === 'undefined') {
-      if (isSafeMode()) {
+      // Only literal script references bypass the inline-code guard. A rendered
+      // expression or a text file cannot turn into a module reference.
+      const workerReference =
+        inWorker && renderedValue === assertion.value && isJavascriptWorkerReference(renderedValue);
+      if (isSafeMode() && !workerReference) {
         throw new SafeModeError(
           'Inline JavaScript execution is disabled in safe mode. Please use a file reference instead (e.g. "file://path/to/assertion.js").',
         );
@@ -275,11 +289,23 @@ export const handleJavascript = async ({
       const functionBody = renderedValue.includes('\n')
         ? renderedValue
         : buildFunctionBody(renderedValue);
-      // Pass process shim for ESM compatibility - allows process.mainModule.require to work
-      const customFunction = new Function('output', 'context', 'process', functionBody);
-      result = await validateResult(
-        customFunction(output, assertionValueContext, getProcessShim()),
-      );
+      if (inWorker) {
+        const { runJavascriptInWorker } = await import('./javascriptWorker');
+        result = await validateResult(
+          runJavascriptInWorker({
+            value: workerReference ? renderedValue : '',
+            functionBody,
+            output,
+            context: assertionValueContext,
+          }),
+        );
+      } else {
+        // Pass process shim for ESM compatibility - allows process.mainModule.require to work
+        const customFunction = new Function('output', 'context', 'process', functionBody);
+        result = await validateResult(
+          customFunction(output, assertionValueContext, getProcessShim()),
+        );
+      }
     } else {
       invariant(
         typeof valueFromScript === 'boolean' ||
@@ -292,6 +318,9 @@ export const handleJavascript = async ({
 
     return normalizeJavascriptAssertionResult(assertion, result, inverse, renderedValue);
   } catch (err) {
+    if (inWorker && err instanceof Error && err.name === 'AbortError') {
+      throw err;
+    }
     if (err instanceof SafeModeError) {
       return {
         pass: false,

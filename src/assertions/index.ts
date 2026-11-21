@@ -68,7 +68,7 @@ import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
 import { handleContainsHtml, handleIsHtml } from './html';
-import { handleJavascript } from './javascript';
+import { handleJavascript, isJavascriptWorkerReference } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
@@ -451,6 +451,12 @@ async function runAssertionInternal({
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
+  const isolatedJavascript = assertion.executionMode === 'worker';
+  invariant(
+    !isolatedJavascript || getAssertionBaseType(assertion) === 'javascript',
+    'Worker execution is supported only by JavaScript assertions',
+  );
+
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
       vars: resolvedVars,
@@ -494,8 +500,13 @@ async function runAssertionInternal({
   let valueFromScript: ValueFromScriptType;
   const scriptFailure = (reason: string): GradingResult =>
     applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
-  if (typeof renderedValue === 'string') {
-    if (renderedValue.startsWith('file://')) {
+  if (
+    typeof renderedValue === 'string' &&
+    !(isolatedJavascript && isJavascriptWorkerReference(renderedValue))
+  ) {
+    if (isolatedJavascript && renderedValue.startsWith('file://')) {
+      renderedValue = processFileReference(renderedValue);
+    } else if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const fileRef = renderedValue.slice('file://'.length);
       let filePath = fileRef;

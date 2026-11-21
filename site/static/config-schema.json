@@ -1044,6 +1044,10 @@
             {}
           ]
         },
+        "executionMode": {
+          "type": "string",
+          "enum": ["in-process", "worker"]
+        },
         "value": {},
         "config": {
           "type": "object",
