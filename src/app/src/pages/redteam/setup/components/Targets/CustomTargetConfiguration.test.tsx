@@ -3,8 +3,9 @@ import React from 'react';
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render as rtlRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
+import { createDefaultProvider } from './providerCatalog';
 
 import type { ProviderOptions } from '../../types';
 
@@ -32,7 +33,206 @@ const replaceText = async (
   await user.paste(value);
 };
 
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('CustomTargetConfiguration - Config Field Handling', () => {
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
+  let mockSetRawConfigJson: (value: string) => void;
+
+  const defaultProps = {
+    selectedTarget: {
+      id: 'custom',
+      config: { temperature: 0.5 },
+      label: 'Custom Target',
+    },
+    rawConfigJson: JSON.stringify({ temperature: 0.5 }, null, 2),
+    bodyError: null,
+  };
+
+  beforeEach(() => {
+    mockUpdateCustomTarget = vi.fn();
+    mockSetRawConfigJson = vi.fn();
+  });
+
+  it('shows the custom target title and documentation', () => {
+    render(
+      <CustomTargetConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setRawConfigJson={mockSetRawConfigJson}
+      />,
+    );
+
+    expect(screen.getByText('Custom Target Configuration')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Custom target documentation' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/red-team/configuration/#custom-providerstargets',
+    );
+  });
+
+  it('updates the config field when JSON is edited', async () => {
+    const user = userEvent.setup();
+    render(
+      <CustomTargetConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setRawConfigJson={mockSetRawConfigJson}
+      />,
+    );
+
+    const newConfig = { temperature: 0.7, max_tokens: 100 };
+    const newConfigJson = JSON.stringify(newConfig, null, 2);
+
+    await replaceText(user, screen.getByTestId('code-editor'), newConfigJson);
+
+    expect(mockSetRawConfigJson).toHaveBeenCalledWith(newConfigJson);
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', newConfig);
+  });
+
+  it('preserves the last valid config and reports invalid JSON', async () => {
+    const user = userEvent.setup();
+    const onConfigErrorChange = vi.fn();
+    render(
+      <CustomTargetConfiguration
+        {...defaultProps}
+        selectedTarget={{ id: 'custom', config: { temperature: 0.7 } }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setRawConfigJson={mockSetRawConfigJson}
+        onConfigErrorChange={onConfigErrorChange}
+      />,
+    );
+
+    const invalidJson = '{ invalid json }';
+
+    await replaceText(user, screen.getByTestId('code-editor'), invalidJson);
+
+    expect(mockSetRawConfigJson).toHaveBeenCalledWith(invalidJson);
+
+    expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
+    expect(onConfigErrorChange).toHaveBeenLastCalledWith('Invalid JSON configuration');
+  });
+
+  it('displays the supplied error', () => {
+    render(
+      <CustomTargetConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setRawConfigJson={mockSetRawConfigJson}
+        bodyError="Invalid JSON format"
+      />,
+    );
+
+    expect(screen.getByText('Invalid JSON format')).toBeInTheDocument();
+
+    const configLabel = screen.getByText('Configuration (JSON)');
+    const editorSection = configLabel.closest('.space-y-2');
+    const editorContainer = editorSection?.querySelector('.border-destructive');
+    expect(editorContainer).toBeTruthy();
+  });
+
+  it('updates the target ID', async () => {
+    const user = userEvent.setup();
+    render(
+      <CustomTargetConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setRawConfigJson={mockSetRawConfigJson}
+      />,
+    );
+
+    const targetIdInput = screen.getByRole('textbox', { name: /Target ID/i });
+    const newId = 'openai:chat:gpt-4o';
+
+    await replaceText(user, targetIdInput, newId);
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', newId);
+  });
+});
+
 describe('CustomTargetConfiguration', () => {
+  it.each(
+    (['llamafile', 'vllm', 'text-generation-webui'] as const).flatMap((type) =>
+      ['false', null].map((value) => ({ type, value })),
+    ),
+  )(
+    'preserves editable $type key selector $value without enabling default credentials',
+    async ({ type, value }) => {
+      const user = userEvent.setup();
+      const updateCustomTarget = vi.fn();
+      render(
+        <CustomTargetConfiguration
+          selectedTarget={{ id: 'openai:chat:local-policy-model', config: { type } }}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson="{}"
+          setRawConfigJson={vi.fn()}
+          bodyError={null}
+          providerType={type}
+        />,
+      );
+      await replaceText(
+        user,
+        screen.getByTestId('code-editor'),
+        JSON.stringify({ useDefaultApiKey: value }),
+      );
+      expect(updateCustomTarget).toHaveBeenLastCalledWith(
+        'config',
+        expect.objectContaining({
+          type,
+          apiKeyRequired: false,
+          useDefaultApiKey: typeof value === 'string' ? value : false,
+        }),
+      );
+    },
+  );
+
+  it.each([
+    'together',
+    'huggingface',
+    'bedrock-agent',
+    'fal',
+    'cloudflare-ai',
+    'llama.cpp',
+    'llamafile',
+    'vllm',
+    'text-generation-webui',
+    'ollama',
+    'databricks',
+    'deepseek',
+    'groq',
+    'cerebras',
+  ])(
+    'shows the generated %s configuration without replacing a user target',
+    async (providerType) => {
+      const user = userEvent.setup();
+      const initialConfig = createDefaultProvider(providerType)!;
+      const updateCustomTarget = vi.fn();
+      render(
+        <CustomTargetConfiguration
+          selectedTarget={{ id: 'my-existing-target', config: { apiKey: 'my-server-key' } }}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson='{"apiKey":"my-server-key"}'
+          setRawConfigJson={vi.fn()}
+          bodyError={null}
+          providerType={providerType}
+        />,
+      );
+      const target = screen.getByLabelText(/Target ID/i);
+      expect(target).toHaveAttribute('placeholder', initialConfig.id);
+      expect(target).toHaveValue('my-existing-target');
+      await user.click(screen.getByRole('button', { name: /Examples/i }));
+      const example = screen.getByText((_, element) => element?.tagName === 'PRE');
+      expect(JSON.parse(example.textContent!)).toEqual(initialConfig.config);
+      expect(updateCustomTarget).not.toHaveBeenCalled();
+      if (providerType === 'llama.cpp') {
+        expect(screen.getByText(/Set LLAMA_BASE_URL/)).toBeInTheDocument();
+        expect(example.textContent).not.toContain('apiBaseUrl');
+      }
+    },
+  );
+
   it('shows valid Open Interpreter target and configuration examples', async () => {
     const user = userEvent.setup();
 
@@ -171,6 +371,36 @@ describe('CustomTargetConfiguration', () => {
   });
 
   describe('file:// prefix handling', () => {
+    it.each([
+      ['openai:chat:tenant/model.js', 'openai:chat:tenant/model.js'],
+      ['openai:chat:tenant/model.py:Q4_K_M', 'openai:chat:tenant/model.py:Q4_K_M'],
+      ['openai:chat:tenant/model.json-v2', 'openai:chat:tenant/model.json-v2'],
+      ['https://example.test/provider.js', 'https://example.test/provider.js'],
+      ['https://example.test/providers.json', 'https://example.test/providers.json'],
+      ['providers-prod.json', 'file://providers-prod.json'],
+      ['./providers-prod.json', 'file://./providers-prod.json'],
+      ['/configs/providers-prod.json', 'file:///configs/providers-prod.json'],
+      ['C:\\configs\\providers-prod.json', 'file://C:\\configs\\providers-prod.json'],
+      ['file://providers-prod.json', 'file://providers-prod.json'],
+      ['providers.json-v2', 'providers.json-v2'],
+      ['provider.js:myFunction', 'file://provider.js:myFunction'],
+      ['C:\\providers\\script.py:call_api', 'file://C:\\providers\\script.py:call_api'],
+    ])('saves %s with its intended provider route', async (value, expectedId) => {
+      const user = userEvent.setup();
+      const updateCustomTarget = vi.fn();
+      render(
+        <CustomTargetConfiguration
+          selectedTarget={{ id: '', config: {} }}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson="{}"
+          setRawConfigJson={vi.fn()}
+          bodyError={null}
+        />,
+      );
+      await replaceText(user, screen.getByLabelText(/Target ID/i), value);
+      expect(updateCustomTarget).toHaveBeenLastCalledWith('id', expectedId);
+    });
+
     it('should add file:// prefix to Python file paths', async () => {
       const user = userEvent.setup();
       const mockUpdateCustomTarget = vi.fn();
