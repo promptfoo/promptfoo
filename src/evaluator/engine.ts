@@ -2515,7 +2515,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         : hooks?.length
           ? withMcpLedgerScope(test, test.vars ?? {}, run)
           : run();
-    const prepared = await waitForPromiseWithAbort(hook, evalStep.abortSignal);
+    // Ordinary cancellations must reach runEvalInternal to record their resume status.
+    const prepared = setup ? await waitForPromiseWithAbort(hook, evalStep.abortSignal) : await hook;
     invariant(
       !privateTest || requiresTraceRedaction(prepared.test.assert),
       'Setup hooks cannot remove privacy checks.',
