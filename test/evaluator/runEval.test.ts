@@ -1,36 +1,61 @@
+import { createTokenOutput } from '../factories/literalFixtures';
 import './setup';
 
+import { getEventListeners } from 'node:events';
 import fs from 'fs/promises';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import * as assertionUtils from '../../src/assertions/utils';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
-import * as llmGrading from '../../src/matchers/llmGrading';
+import logger from '../../src/logger';
 import { geminiFormatAndSystemInstructions } from '../../src/providers/google/util';
-import * as packageParser from '../../src/providers/packageParser';
-import { redteamProviderManager } from '../../src/redteam/providers/shared';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   type ApiProvider,
-  type Assertion,
   type CallApiContextParams,
   type Prompt,
-  type ProviderResponse,
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
 import * as fileExtensions from '../../src/util/fileExtensions';
-import { transform as transformOutput } from '../../src/util/transform';
+import { sleep } from '../../src/util/time';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
+
+const createEmptyEvaluationConfig = () => ({
+  providers: [],
+  prompts: [],
+});
+
+const createAsciiSmugglingMetadata = () => ({
+  pluginId: 'ascii-smuggling',
+});
+
+const createInitialRunOptions = () => ({
+  delay: 0,
+  testIdx: 0,
+  promptIdx: 0,
+  repeatIndex: 0,
+  isRedteam: false,
+});
+
+const createCappedRedteamConfig = () => ({
+  providers: [],
+  prompts: [],
+  redteam: {
+    maxCharsPerMessage: 10,
+  },
+});
 
 describe('runEval', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     resetMockProviders();
   });
 
   afterEach(async () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.clearAllMocks();
     await clearCache();
   });
 
@@ -41,19 +66,10 @@ describe('runEval', () => {
 
   const mockProvider: ApiProvider = {
     id: vi.fn().mockReturnValue('test-provider'),
-    callApi: vi.fn().mockResolvedValue({
-      output: 'Test output',
-      tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-    }),
+    callApi: vi.fn().mockResolvedValue(createTokenOutput()),
   };
 
-  const defaultOptions = {
-    delay: 0,
-    testIdx: 0,
-    promptIdx: 0,
-    repeatIndex: 0,
-    isRedteam: false,
-  };
+  const defaultOptions = createInitialRunOptions();
 
   it('should handle basic prompt evaluation', async () => {
     const results = await runEval({
@@ -412,6 +428,91 @@ describe('runEval', () => {
     });
   });
 
+  it.each([false, true])(
+    'preserves separate native conversation output for cached=%s',
+    async (cached) => {
+      const parts = [
+        { text: 'Signed text', thoughtSignature: 'signature' },
+        {
+          inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' },
+          thoughtSignature: 'image-signature',
+        },
+      ];
+      const original = structuredClone(parts);
+      const conversations = {} as Record<string, any>;
+      const provider: ApiProvider = {
+        id: () => 'native-history',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Display text',
+          conversationOutput: parts,
+          cached,
+          tokenUsage: { total: 3, prompt: 1, completion: 2, numRequests: 1 },
+        }),
+      };
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'native-history' },
+        test: { options: { transform: 'output + "-test"' } },
+        conversations,
+        registers: {},
+      });
+      expect(result.success).toBe(true);
+      expect(result.response?.output).toBe('Display text-test');
+      expect(result.response?.conversationOutput).toEqual(parts);
+      expect(Object.values(conversations)[0][0].output).toEqual(parts);
+      expect(parts).toEqual(original);
+    },
+  );
+
+  it.each([
+    { native: '', expected: '' },
+    { native: undefined, expected: 'Display text' },
+  ])(
+    'honors explicit empty conversation output and legacy fallback: %j',
+    async ({ native, expected }) => {
+      const conversations = {} as Record<string, any>;
+      const provider: ApiProvider = {
+        id: () => 'history-fallback',
+        callApi: vi.fn().mockResolvedValue({ output: 'Display text', conversationOutput: native }),
+      };
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: '{{ _conversation | dump }}', label: 'history-fallback' },
+        test: {},
+        conversations,
+        registers: {},
+      });
+      expect(result.success).toBe(true);
+      expect(Object.values(conversations)[0][0].output).toBe(expected);
+    },
+  );
+
+  it('should not add provider errors to conversation history', async () => {
+    const conversations = {} as Record<string, any>;
+    const errorProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('error-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        error: 'Provider failed',
+        conversationOutput: [{ text: 'Incomplete' }],
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: errorProvider,
+      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' },
+      test: {},
+      conversations,
+      registers: {},
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Provider failed');
+    expect(conversations).toEqual({});
+  });
+
   it('should handle conversation with custom ID', async () => {
     const conversations = {};
 
@@ -703,13 +804,7 @@ describe('runEval', () => {
     };
 
     // Define defaultOptions locally for this test
-    const defaultOptions = {
-      delay: 0,
-      testIdx: 0,
-      promptIdx: 0,
-      repeatIndex: 0,
-      isRedteam: false,
-    };
+    const defaultOptions = createInitialRunOptions();
 
     const results = await runEval({
       ...defaultOptions,
@@ -808,341 +903,6 @@ describe('runEval', () => {
     expect(result.failureReason).toBe(ResultFailureReason.ASSERT);
     expect(result.error).not.toContain('No output');
   });
-
-  describe.each(['vlsu', 'vlguard', 'unsafebench'] as const)('%s image controls', (plugin) => {
-    const testCases = [
-      { name: 'null', response: { output: null }, metadataGrade: 'safe', shouldGrade: true },
-      { name: 'omitted', response: {}, metadataGrade: 'safe', shouldGrade: true },
-      {
-        name: 'assertion override',
-        response: { output: '' },
-        metadataGrade: 'unsafe',
-        value: { combinedGrade: 'safe' },
-        shouldGrade: true,
-      },
-      {
-        name: 'unsafe assertion override',
-        response: { output: '' },
-        metadataGrade: 'safe',
-        value: { combinedGrade: 'unsafe' },
-        shouldGrade: false,
-      },
-      {
-        name: 'legacy safety alias override',
-        response: { output: '' },
-        metadataGrade: 'unsafe',
-        value: { combinedGrade: 'safe' },
-        aliasOnly: true,
-        shouldGrade: true,
-      },
-      {
-        name: 'unsafe legacy safety alias override',
-        response: { output: '' },
-        metadataGrade: 'safe',
-        value: { combinedGrade: 'unsafe' },
-        aliasOnly: true,
-        shouldGrade: false,
-      },
-      { name: 'unsafe omitted', response: {}, metadataGrade: 'unsafe', shouldGrade: false },
-      {
-        name: 'unsafe null',
-        response: { output: null },
-        metadataGrade: 'unsafe',
-        shouldGrade: false,
-      },
-      {
-        name: 'unsafe empty images',
-        response: { output: null, images: [] },
-        metadataGrade: 'unsafe',
-        shouldGrade: false,
-      },
-      {
-        name: 'unsafe empty image descriptor with companion',
-        response: { output: null, images: [{}] },
-        metadataGrade: 'unsafe',
-        companion: true,
-        shouldGrade: false,
-      },
-      {
-        name: 'unsafe empty image data',
-        response: { images: [{ data: '' }] },
-        metadataGrade: 'unsafe',
-        shouldGrade: false,
-      },
-      {
-        name: 'dynamic safe file override',
-        response: { output: '' },
-        metadataGrade: 'unsafe',
-        value: 'file://control.json',
-        shouldGrade: true,
-      },
-      {
-        name: 'dynamic safe package override',
-        response: { output: '' },
-        metadataGrade: 'unsafe',
-        value: 'package:fixture:control',
-        shouldGrade: true,
-      },
-      {
-        name: 'unsafe string value with companion',
-        response: {},
-        metadataGrade: 'unsafe',
-        value: 'C4',
-        companion: true,
-        shouldGrade: false,
-      },
-      {
-        name: 'unsafe string value with transform',
-        response: { output: null },
-        metadataGrade: 'unsafe',
-        value: 'C4',
-        transform: 'JSON.parse(output)',
-        shouldGrade: false,
-      },
-      {
-        name: 'safe string value',
-        response: { output: '' },
-        metadataGrade: 'safe',
-        value: 'C4',
-        shouldGrade: true,
-      },
-      {
-        name: 'nested unsafe companion assertion',
-        response: {},
-        metadataGrade: 'unsafe',
-        nested: true,
-        companion: true,
-        shouldGrade: false,
-      },
-      {
-        name: 'unsafe companion assertion',
-        response: {},
-        metadataGrade: 'unsafe',
-        companion: true,
-        shouldGrade: false,
-      },
-      {
-        name: 'unsafe test transform',
-        response: { output: null },
-        metadataGrade: 'unsafe',
-        transform: 'JSON.parse(output)',
-        shouldGrade: false,
-      },
-      {
-        name: 'nested assertion',
-        response: { output: '' },
-        metadataGrade: 'unsafe',
-        value: { combinedGrade: 'safe' },
-        nested: true,
-        shouldGrade: true,
-      },
-      {
-        name: 'safe image-only',
-        response: { images: [{ data: 'aW1hZ2U=', format: 'png' }] },
-        metadataGrade: 'safe',
-        shouldGrade: true,
-      },
-      {
-        name: 'unsafe image-only',
-        response: { images: [{ data: 'aW1hZ2U=', format: 'png' }] },
-        metadataGrade: 'unsafe',
-        shouldGrade: true,
-      },
-      {
-        name: 'unsafe null image-only',
-        response: { output: null, images: [{ data: 'aW1hZ2U=', format: 'png' }] },
-        metadataGrade: 'unsafe',
-        shouldGrade: true,
-      },
-      {
-        name: 'nested unsafe image-only',
-        response: { images: [{ data: 'aW1hZ2U=', format: 'png' }] },
-        metadataGrade: 'unsafe',
-        nested: true,
-        shouldGrade: true,
-      },
-      {
-        name: 'unsafe image blob reference',
-        response: {
-          images: [
-            {
-              blobRef: {
-                uri: 'promptfoo://blob/fixture',
-                hash: 'fixture',
-                mimeType: 'image/png',
-                sizeBytes: 1,
-                provider: 'local',
-              },
-            },
-          ],
-        },
-        metadataGrade: 'unsafe',
-        shouldGrade: true,
-      },
-    ];
-    it.each(
-      testCases.filter(
-        ({ metadataGrade, value }) =>
-          plugin !== 'unsafebench' || (metadataGrade === 'unsafe' && value === undefined),
-      ),
-    )(
-      'grades $name output through the existing refusal controls',
-      async ({
-        response,
-        metadataGrade,
-        value,
-        nested,
-        companion,
-        transform,
-        shouldGrade,
-        aliasOnly,
-      }) => {
-        const safetyValue = plugin === 'vlguard' ? { safe: true } : { combinedGrade: 'safe' };
-        if (typeof value === 'string' && value.startsWith('file://')) {
-          vi.spyOn(assertionUtils, 'processFileReference').mockReturnValueOnce(safetyValue);
-        } else if (typeof value === 'string' && value.startsWith('package:')) {
-          vi.spyOn(packageParser, 'loadFromPackage').mockResolvedValueOnce(() => safetyValue);
-        }
-        if (transform) {
-          const actual = await vi.importActual<typeof import('../../src/util/transform')>(
-            '../../src/util/transform',
-          );
-          vi.mocked(transformOutput).mockImplementationOnce(actual.transform);
-        }
-        const providerResponse: ProviderResponse = Object.freeze(response);
-        const provider: ApiProvider = {
-          id: () => 'local-image-control-fixture',
-          callApi: vi.fn().mockResolvedValue(providerResponse),
-        };
-        vi.spyOn(redteamProviderManager, 'getGradingProvider').mockResolvedValue(
-          mockGradingApiProviderPasses,
-        );
-        const grade = vi.spyOn(llmGrading, 'matchesLlmRubric').mockResolvedValue({
-          pass: false,
-          score: 0,
-          reason: 'No helpful description of the benign image',
-        });
-        const assertion: Assertion = {
-          type: `promptfoo:redteam:${plugin}`,
-          value:
-            plugin === 'vlguard' && value && typeof value === 'object'
-              ? { [aliasOnly ? 'vlguardSafe' : 'safe']: value.combinedGrade === 'safe' }
-              : value,
-        };
-        const [result] = await runEval({
-          ...defaultOptions,
-          isRedteam: true,
-          provider,
-          prompt: { raw: 'Describe this sunset', label: 'benign fixture' },
-          test: {
-            metadata: {
-              purpose: 'Describe images helpfully',
-              imageDatasetInputVar: 'image',
-              combinedGrade: metadataGrade,
-              safe: metadataGrade === 'safe',
-              vlguardSafe: metadataGrade === 'safe',
-              imageGrade: 'safe',
-              textGrade: 'safe',
-              vlsuCategory: 'C4',
-              vlsuCategoryName: 'Safe fixture',
-              vlsuSeverityPattern: 'safe_safe_safe',
-              isCompositional: false,
-              categoryGuidance: 'Describe the visible shape.',
-              ...(plugin === 'unsafebench' ? { category: 'Violence' } : {}),
-            },
-            vars: {
-              prompt: 'Describe this sunset',
-              image:
-                'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC',
-            },
-            assert: [
-              ...(nested ? [{ type: 'assert-set' as const, assert: [assertion] }] : [assertion]),
-              ...(companion ? [{ type: 'contains' as const, value: 'required' }] : []),
-            ],
-            options: { transform },
-          },
-          conversations: {},
-          registers: {},
-        });
-        const missingOutput =
-          response.output == null &&
-          !providerResponse.images?.some((image) => image.data || image.blobRef);
-        if (missingOutput) {
-          // Missing output is an integration error, even for safe or unsafe controls.
-          expect(result).toMatchObject({
-            success: false,
-            score: 0,
-            error: 'No output',
-            failureReason: ResultFailureReason.ERROR,
-          });
-          expect(grade).not.toHaveBeenCalled();
-          expect(transformOutput).not.toHaveBeenCalled();
-          expect(providerResponse).toEqual(response);
-          return;
-        }
-        expect(result).toMatchObject({ success: !shouldGrade, score: shouldGrade ? 0 : 1 });
-        expect(grade).toHaveBeenCalledTimes(Number(shouldGrade));
-        if (shouldGrade) {
-          expect(grade.mock.calls[0][1]).toBe('');
-          if ('images' in response) {
-            expect(grade.mock.calls[0][5]?.providerResponse?.images).toEqual(response.images);
-          }
-        }
-        expect(providerResponse).toEqual(response);
-      },
-    );
-  });
-
-  it.each([
-    ['non-enumerable false', () => Object.defineProperty({}, 'safe', { value: false }), true],
-    [
-      'inherited true',
-      () => Object.assign(Object.create({ vlguardSafe: true }), { safe: false }),
-      false,
-    ],
-    [
-      'accessor',
-      () => ({
-        get safe() {
-          return true;
-        },
-      }),
-      true,
-    ],
-  ] as const)(
-    'classifies VLGuard %s aliases like the grader',
-    async (_, makeValue, shouldGrade) => {
-      const value = makeValue();
-      const grade = vi.spyOn(llmGrading, 'matchesLlmRubric').mockResolvedValue({
-        pass: false,
-        score: 0,
-        reason: 'Safe control did not respond',
-      });
-      vi.spyOn(redteamProviderManager, 'getGradingProvider').mockResolvedValue(
-        mockGradingApiProviderPasses,
-      );
-      const [result] = await runEval({
-        ...defaultOptions,
-        isRedteam: true,
-        provider: { id: () => 'alias-fixture', callApi: vi.fn().mockResolvedValue({ output: '' }) },
-        prompt: { raw: 'Describe the image', label: 'alias fixture' },
-        test: {
-          vars: { image: 'data:image/png;base64,aW1hZ2U=' },
-          metadata: {
-            purpose: 'Describe images',
-            safe: true,
-            vlguardSafe: true,
-            imageDatasetInputVar: 'image',
-          },
-          assert: [{ type: 'promptfoo:redteam:vlguard', value }],
-        },
-        conversations: {},
-        registers: {},
-      });
-      expect(result.success).toBe(!shouldGrade);
-      expect(grade).toHaveBeenCalledTimes(Number(shouldGrade));
-    },
-  );
 
   it.each(['provider', 'test', 'postprocess', 'assertion'] as const)(
     'grades transformed OpenAI refusal output at the %s level',
@@ -1255,13 +1015,7 @@ describe('runEval', () => {
           prompt: 'this is too long',
         },
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-        redteam: {
-          maxCharsPerMessage: 10,
-        },
-      } as unknown as TestSuite,
+      testSuite: createCappedRedteamConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: true,
@@ -1282,13 +1036,7 @@ describe('runEval', () => {
       },
       prompt: { raw: 'this prompt is longer than ten chars', label: 'test-label' },
       test: {},
-      testSuite: {
-        providers: [],
-        prompts: [],
-        redteam: {
-          maxCharsPerMessage: 10,
-        },
-      } as unknown as TestSuite,
+      testSuite: createCappedRedteamConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1363,14 +1111,9 @@ describe('runEval', () => {
           prompt: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1404,10 +1147,7 @@ describe('runEval', () => {
         },
         options: { provider: mockGradingApiProviderPasses },
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1427,14 +1167,9 @@ describe('runEval', () => {
           query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1459,14 +1194,9 @@ describe('runEval', () => {
           query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
         },
         assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1491,14 +1221,9 @@ describe('runEval', () => {
             assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
           },
         ],
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1518,14 +1243,9 @@ describe('runEval', () => {
           name: 'Alice',
           query: 'Hello {{name}}',
         },
-        metadata: {
-          pluginId: 'ascii-smuggling',
-        },
+        metadata: createAsciiSmugglingMetadata(),
       },
-      testSuite: {
-        providers: [],
-        prompts: [],
-      } as unknown as TestSuite,
+      testSuite: createEmptyEvaluationConfig() as unknown as TestSuite,
       conversations: {},
       registers: {},
       isRedteam: false,
@@ -1595,10 +1315,7 @@ describe('runEval', () => {
           // on a real timer.
           await Promise.resolve();
           vi.advanceTimersByTime(50);
-          return {
-            output: 'Test output',
-            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-          };
+          return createTokenOutput();
         }),
       };
 
@@ -1619,6 +1336,64 @@ describe('runEval', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it.each([
+      { output: 'Test output' },
+      { output: 'Cached output', cached: true },
+      { error: 'Provider error' },
+    ])('measures elapsed latency across wall-clock rollback for %j', async (response) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+
+      const provider: ApiProvider = {
+        id: () => 'clock-rollback-provider',
+        callApi: async () => {
+          await Promise.resolve();
+          vi.setSystemTime(Date.now() - 5000);
+          vi.advanceTimersByTime(50);
+          return response;
+        },
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(50);
+      expect(results[0].success).toBe(!('error' in response));
+      expect(results[0].error).toBe('error' in response ? response.error : undefined);
+    });
+
+    it('reports measured latency in whole milliseconds', async () => {
+      vi.useFakeTimers();
+
+      const provider: ApiProvider = {
+        id: () => 'fractional-latency-provider',
+        callApi: async () => {
+          await Promise.resolve();
+          // performance.now() is fractional; shared results are stored as integers.
+          vi.advanceTimersByTime(12.6);
+          return { output: 'Test output' };
+        },
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(13);
+      expect(Number.isInteger(results[0].latencyMs)).toBe(true);
     });
 
     it('should respect provider latencyMs of 0', async () => {
@@ -1642,5 +1417,136 @@ describe('runEval', () => {
 
       expect(results[0].latencyMs).toBe(0);
     });
+  });
+
+  it.each(['already-aborted', 'during-delay', 'ordinary', 'cached'] as const)(
+    'preserves completed provider diagnostics through %s delay handling',
+    async (phase) => {
+      const actualTime =
+        await vi.importActual<typeof import('../../src/util/time')>('../../src/util/time');
+      vi.mocked(sleep).mockImplementation(actualTime.sleep);
+      vi.useFakeTimers({
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+      });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const controller = new AbortController();
+      const reason = Object.freeze(
+        Object.assign(new Error('caller stopped'), { name: 'AbortException' }),
+      );
+      const response = {
+        error: 'Completed callback diagnostic',
+        cost: 0.25,
+        tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+        metadata: { errorOrigin: 'tool' as const },
+        cached: phase === 'cached',
+      };
+      const provider: ApiProvider = {
+        id: () => 'completed-diagnostic',
+        delay: 60000,
+        callApi: vi.fn(async () => {
+          if (phase === 'already-aborted') {
+            controller.abort(reason);
+          }
+          return response;
+        }),
+      };
+      let outcome: { rows: Awaited<ReturnType<typeof runEval>> } | { error: unknown } | undefined;
+      const pending = runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        abortSignal: controller.signal,
+        rateLimitRegistry: registry,
+      }).then(
+        (rows) => {
+          outcome = { rows };
+        },
+        (error: unknown) => {
+          outcome = { error };
+        },
+      );
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        expect(provider.callApi).toHaveBeenCalledOnce();
+        if (phase === 'ordinary' || phase === 'during-delay') {
+          expect(outcome).toBeUndefined();
+        }
+        if (phase === 'during-delay') {
+          controller.abort(reason);
+          await vi.advanceTimersByTimeAsync(0);
+        } else if (phase === 'ordinary') {
+          await vi.advanceTimersByTimeAsync(59999);
+          expect(outcome).toBeUndefined();
+          await vi.advanceTimersByTimeAsync(1);
+        }
+        await pending;
+        expect(outcome).toBeDefined();
+        if (!outcome || 'error' in outcome) {
+          throw new Error('runEval did not settle with a result');
+        }
+        const [row] = outcome.rows;
+        expect(row.error).toBe(response.error);
+        expect(row.response?.cost).toBe(0.25);
+        expect(row.response?.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+        expect(row.success).toBe(false);
+        expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(provider.callApi).toHaveBeenCalledOnce();
+        expect(
+          Object.values(registry.getMetrics()).every(
+            (m) => m.activeRequests === 0 && m.queueDepth === 0,
+          ),
+        ).toBe(true);
+        // Check this evaluation's cleanup without counting unrelated worker timers.
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+      } finally {
+        registry.dispose();
+        await vi.advanceTimersByTimeAsync(60000);
+        await pending;
+        vi.mocked(sleep).mockReset();
+      }
+    },
+  );
+
+  it.each([
+    { description: 'caller AbortException', name: 'AbortException', aborted: true, logged: false },
+    { description: 'independent SDK AbortError', name: 'AbortError', aborted: false, logged: true },
+    {
+      description: 'unrelated error during caller cancellation',
+      name: 'SyntaxError',
+      aborted: true,
+      logged: true,
+    },
+  ])('classifies provider logging for $description', async ({ name, aborted, logged }) => {
+    const controller = new AbortController();
+    const error = Object.freeze(Object.assign(new Error('Exact provider diagnostic'), { name }));
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+    const provider: ApiProvider = {
+      id: () => 'logging-control',
+      callApi: vi.fn(async () => {
+        if (aborted) {
+          controller.abort(error);
+        }
+        throw error;
+      }),
+    };
+    const [row] = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      abortSignal: controller.signal,
+    });
+    expect(row.error).toContain('Exact provider diagnostic');
+    expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(row.success).toBe(false);
+    expect(provider.callApi).toHaveBeenCalledOnce();
+    expect(error.name).toBe(name);
+    if (aborted) {
+      expect(controller.signal.reason).toBe(error);
+    }
+    expect(
+      errorLog.mock.calls.filter(([message]) => message === 'Provider call failed during eval'),
+    ).toHaveLength(logged ? 1 : 0);
   });
 });

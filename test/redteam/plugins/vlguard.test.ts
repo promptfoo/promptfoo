@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, MockedFunction, vi } from 'vitest';
 import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
 import * as imageDatasetUtils from '../../../src/redteam/plugins/imageDatasetUtils';
@@ -6,10 +6,12 @@ import {
   VALID_CATEGORIES,
   VALID_SUBCATEGORIES,
   VLGuardDatasetManager,
+  VLGuardGrader,
   VLGuardPlugin,
 } from '../../../src/redteam/plugins/vlguard';
-import { createMockProvider } from '../../factories/provider';
-import { createDeferred } from '../../util/utils';
+import { createMockProvider, createProviderResponse } from '../../factories/provider';
+
+import type { AtomicTestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/logger');
 vi.mock('../../../src/cache');
@@ -18,78 +20,82 @@ vi.mock('../../../src/redteam/plugins/imageDatasetUtils', async () => ({
   fetchImageAsBase64: vi.fn(),
 }));
 
-const mockProvider = createMockProvider();
-const mockFetchWithCache = vi.mocked(cache.fetchWithCache);
-const mockFetchImageAsBase64 = vi.mocked(imageDatasetUtils.fetchImageAsBase64);
+describe('VLGuardPlugin', () => {
+  const mockProvider = createMockProvider({
+    response: createProviderResponse({
+      output: 'test',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    }),
+  });
 
-beforeEach(() => {
-  vi.resetAllMocks();
-  VLGuardDatasetManager.clearCache();
-});
+  const mockFetchWithCache = cache.fetchWithCache as MockedFunction<typeof cache.fetchWithCache>;
+  const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as MockedFunction<
+    typeof imageDatasetUtils.fetchImageAsBase64
+  >;
 
-function createMockDatasetServerResponse(rowCount: number) {
-  return {
+  // Helper to create mock datasets-server response
+  const createMockDatasetServerResponse = (rowCount: number) => ({
     rows: Array.from({ length: rowCount }, (_, i) => ({
       row_idx: i,
       row: { image: { src: `https://example.com/image${i}.jpg` } },
     })),
-  };
-}
-
-// Unsafe records use legacy lowercase categories, which generation normalizes.
-function createMockMetadataRecord(
-  index = 1,
-  category = 'deception',
-  subcategory = 'disinformation',
-) {
-  return {
-    id: `test_${index}`,
-    image: `bad_ads/test${index}.png`,
-    safe: false,
-    harmful_category: category,
-    harmful_subcategory: subcategory,
-    'instr-resp': [{ instruction: `test question ${index}` }],
-  };
-}
-
-function mockDataset(records: unknown[]) {
-  mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
-  mockFetchWithCache.mockImplementation(async (url: any) => {
-    if (url.includes('.json') && url.includes('VLGuard')) {
-      return { status: 200, data: records, cached: false } as any;
-    }
-    if (url.includes('datasets-server')) {
-      return {
-        status: 200,
-        data: createMockDatasetServerResponse(records.length),
-        cached: false,
-      } as any;
-    }
-    return { status: 404, data: null, cached: false } as any;
   });
-}
 
-describe('VLGuardPlugin', () => {
+  function mockDatasetFetch(metadata: unknown[], rowCount: number) {
+    mockFetchWithCache.mockImplementation(async function (url: any) {
+      if (url.includes('.json') && url.includes('VLGuard')) {
+        return { status: 200, data: metadata, cached: false } as any;
+      }
+      if (url.includes('datasets-server')) {
+        return {
+          status: 200,
+          data: createMockDatasetServerResponse(rowCount),
+          cached: false,
+        } as any;
+      }
+      return { status: 404, data: null, cached: false } as any;
+    });
+  }
+
+  // Helper to create mock metadata records
+  const createMockMetadataRecord = (overrides: Record<string, unknown> = {}) => ({
+    id: 'test_1',
+    image: 'bad_ads/test1.png',
+    safe: false,
+    harmful_category: 'deception',
+    harmful_subcategory: 'disinformation',
+    'instr-resp': [{ instruction: 'test question 1' }],
+    ...overrides,
+  });
+
   describe('constructor', () => {
     it('should initialize with default config', () => {
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
       expect(plugin.id).toBe('promptfoo:redteam:vlguard');
     });
 
-    it.each([
-      [
-        'categories',
-        { categories: ['Deception', 'invalid-category'] as any },
-        'Invalid categories: invalid-category',
-      ],
-      [
-        'subcategories',
-        { subcategories: ['Violence', 'invalid-subcategory'] as any },
-        'Invalid subcategories: invalid-subcategory',
-      ],
-    ])('should validate %s in config', (_field, config, warning) => {
+    it('should validate categories in config', () => {
+      const config = {
+        categories: ['Deception', 'invalid-category'] as any,
+      };
+
       new VLGuardPlugin(mockProvider, 'test purpose', 'image', config);
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining(warning));
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid categories: invalid-category'),
+      );
+    });
+
+    it('should validate subcategories in config', () => {
+      const config = {
+        subcategories: ['Violence', 'invalid-subcategory'] as any,
+      };
+
+      new VLGuardPlugin(mockProvider, 'test purpose', 'image', config);
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid subcategories: invalid-subcategory'),
+      );
     });
   });
 
@@ -142,13 +148,24 @@ describe('VLGuardPlugin', () => {
   });
 
   describe('generateTests', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      VLGuardDatasetManager.clearCache();
+    });
+
     it('should generate test cases from dataset records', async () => {
       const mockMetadata = [
         createMockMetadataRecord(),
-        createMockMetadataRecord(2, 'privacy', 'personal data'),
+        createMockMetadataRecord({
+          id: 'test_2',
+          image: 'bad_ads/test2.png',
+          harmful_category: 'privacy',
+          harmful_subcategory: 'personal data',
+          'instr-resp': [{ instruction: 'test question 2' }],
+        }),
       ];
 
-      mockDataset(mockMetadata);
+      mockDatasetFetch(mockMetadata, 2);
 
       mockFetchImageAsBase64.mockImplementation(async function (url: string) {
         if (url.includes('image0')) {
@@ -184,11 +201,25 @@ describe('VLGuardPlugin', () => {
     it('should filter by categories when configured', async () => {
       const mockMetadata = [
         createMockMetadataRecord(),
-        createMockMetadataRecord(2, 'privacy', 'personal data'),
-        createMockMetadataRecord(3, 'risky behavior', 'violence'),
+        createMockMetadataRecord({
+          id: 'test_2',
+          image: 'bad_ads/test2.png',
+          harmful_category: 'privacy',
+          harmful_subcategory: 'personal data',
+          'instr-resp': [{ instruction: 'test question 2' }],
+        }),
+        createMockMetadataRecord({
+          id: 'test_3',
+          image: 'bad_ads/test3.png',
+          harmful_category: 'risky behavior',
+          harmful_subcategory: 'violence',
+          'instr-resp': [{ instruction: 'test question 3' }],
+        }),
       ];
 
-      mockDataset(mockMetadata);
+      mockDatasetFetch(mockMetadata, 3);
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
         categories: ['Deception'] as any,
@@ -201,9 +232,15 @@ describe('VLGuardPlugin', () => {
     });
 
     it('should support legacy category names for backwards compatibility', async () => {
-      const mockMetadata = [createMockMetadataRecord()];
+      const mockMetadata = [
+        createMockMetadataRecord({
+          harmful_category: 'deception', // lowercase
+        }),
+      ];
 
-      mockDataset(mockMetadata);
+      mockDatasetFetch(mockMetadata, 1);
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
         categories: ['deception'] as any, // Using legacy lowercase
@@ -216,7 +253,15 @@ describe('VLGuardPlugin', () => {
     });
 
     it('should throw error when no records are found', async () => {
-      mockDataset([]);
+      mockFetchWithCache.mockImplementation(async function (url: any) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
+          return { status: 200, data: [], cached: false } as any;
+        }
+        if (url.includes('datasets-server')) {
+          return { status: 200, data: { rows: [] }, cached: false } as any;
+        }
+        return { status: 404, data: null, cached: false } as any;
+      });
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
 
@@ -239,7 +284,9 @@ describe('VLGuardPlugin', () => {
     it('should warn when fewer records are available than requested', async () => {
       const mockMetadata = [createMockMetadataRecord()];
 
-      mockDataset(mockMetadata);
+      mockDatasetFetch(mockMetadata, 1);
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
       const tests = await plugin.generateTests(5);
@@ -253,10 +300,16 @@ describe('VLGuardPlugin', () => {
     it('should handle records with failed image fetch', async () => {
       const mockMetadata = [
         createMockMetadataRecord(),
-        createMockMetadataRecord(2, 'privacy', 'personal data'),
+        createMockMetadataRecord({
+          id: 'test_2',
+          image: 'bad_ads/test2.png',
+          harmful_category: 'privacy',
+          harmful_subcategory: 'personal data',
+          'instr-resp': [{ instruction: 'test question 2' }],
+        }),
       ];
 
-      mockDataset(mockMetadata);
+      mockDatasetFetch(mockMetadata, 2);
 
       // First image fails, second succeeds
       mockFetchImageAsBase64.mockImplementation(async function (url: string) {
@@ -279,49 +332,38 @@ describe('VLGuardPlugin', () => {
 
     it('should distribute records evenly across categories', async () => {
       const mockMetadata = [
-        {
-          id: 'test_1',
-          image: 'img1.png',
-          safe: false,
-          harmful_category: 'deception',
-          harmful_subcategory: 'disinformation',
-          'instr-resp': [{ instruction: 'q1' }],
-        },
-        {
+        createMockMetadataRecord({ image: 'img1.png', 'instr-resp': [{ instruction: 'q1' }] }),
+        createMockMetadataRecord({
           id: 'test_2',
           image: 'img2.png',
-          safe: false,
-          harmful_category: 'deception',
-          harmful_subcategory: 'disinformation',
           'instr-resp': [{ instruction: 'q2' }],
-        },
-        {
+        }),
+        createMockMetadataRecord({
           id: 'test_3',
           image: 'img3.png',
-          safe: false,
           harmful_category: 'privacy',
           harmful_subcategory: 'personal data',
           'instr-resp': [{ instruction: 'q3' }],
-        },
-        {
+        }),
+        createMockMetadataRecord({
           id: 'test_4',
           image: 'img4.png',
-          safe: false,
           harmful_category: 'privacy',
           harmful_subcategory: 'personal data',
           'instr-resp': [{ instruction: 'q4' }],
-        },
-        {
+        }),
+        createMockMetadataRecord({
           id: 'test_5',
           image: 'img5.png',
-          safe: false,
           harmful_category: 'privacy',
           harmful_subcategory: 'personal data',
           'instr-resp': [{ instruction: 'q5' }],
-        },
+        }),
       ];
 
-      mockDataset(mockMetadata);
+      mockDatasetFetch(mockMetadata, 5);
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
         categories: ['Deception', 'Privacy'] as any,
@@ -343,35 +385,34 @@ describe('VLGuardPlugin', () => {
   });
 
   describe('Safe/Unsafe Filtering', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      VLGuardDatasetManager.clearCache();
+    });
+
     it('should filter out safe images by default (only include unsafe)', async () => {
       const mockMetadata = [
-        {
+        createMockMetadataRecord({
           id: 'unsafe_1',
           image: 'img1.png',
-          safe: false,
-          harmful_category: 'deception',
-          harmful_subcategory: 'disinformation',
           'instr-resp': [{ instruction: 'unsafe question 1' }],
-        },
-        {
+        }),
+        createMockMetadataRecord({
           id: 'safe_1',
           image: 'img2.png',
           safe: true,
-          harmful_category: 'deception',
-          harmful_subcategory: 'disinformation',
           'instr-resp': [{ safe_instruction: 'safe question 1' }],
-        },
-        {
+        }),
+        createMockMetadataRecord({
           id: 'unsafe_2',
           image: 'img3.png',
-          safe: false,
-          harmful_category: 'deception',
-          harmful_subcategory: 'disinformation',
           'instr-resp': [{ instruction: 'unsafe question 2' }],
-        },
+        }),
       ];
 
-      mockDataset(mockMetadata);
+      mockDatasetFetch(mockMetadata, 3);
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
       const tests = await plugin.generateTests(10);
@@ -383,25 +424,22 @@ describe('VLGuardPlugin', () => {
 
     it('should include safe images when includeSafe is true', async () => {
       const mockMetadata = [
-        {
+        createMockMetadataRecord({
           id: 'unsafe_1',
           image: 'img1.png',
-          safe: false,
-          harmful_category: 'deception',
-          harmful_subcategory: 'disinformation',
-          'instr-resp': [{ instruction: 'unsafe question', safe_instruction: 'unused safe query' }],
-        },
-        {
+          'instr-resp': [{ instruction: 'unsafe question' }],
+        }),
+        createMockMetadataRecord({
           id: 'safe_1',
           image: 'img2.png',
           safe: true,
-          harmful_category: 'deception',
-          harmful_subcategory: 'disinformation',
-          'instr-resp': [{ safe_instruction: 'safe question', instruction: 'unused fallback' }],
-        },
+          'instr-resp': [{ safe_instruction: 'safe question' }],
+        }),
       ];
 
-      mockDataset(mockMetadata);
+      mockDatasetFetch(mockMetadata, 2);
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
         includeSafe: true,
@@ -412,33 +450,26 @@ describe('VLGuardPlugin', () => {
       expect(tests).toHaveLength(2);
       expect(tests.some((t) => t.metadata?.safe === true)).toBe(true);
       expect(tests.some((t) => t.metadata?.safe === false)).toBe(true);
-      expect(tests.map((t) => t.metadata?.question).sort()).toEqual([
-        'safe question',
-        'unsafe question',
-      ]);
     });
 
     it('should only include safe images when includeSafe is true and includeUnsafe is false', async () => {
       const mockMetadata = [
-        {
+        createMockMetadataRecord({
           id: 'unsafe_1',
           image: 'img1.png',
-          safe: false,
-          harmful_category: 'deception',
-          harmful_subcategory: 'disinformation',
           'instr-resp': [{ instruction: 'unsafe question' }],
-        },
-        {
+        }),
+        createMockMetadataRecord({
           id: 'safe_1',
           image: 'img2.png',
           safe: true,
-          harmful_category: 'deception',
-          harmful_subcategory: 'disinformation',
           'instr-resp': [{ safe_instruction: 'safe question' }],
-        },
+        }),
       ];
 
-      mockDataset(mockMetadata);
+      mockDatasetFetch(mockMetadata, 2);
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
         includeSafe: true,
@@ -453,33 +484,29 @@ describe('VLGuardPlugin', () => {
 
     it('should handle mixed safe/unsafe with category filtering', async () => {
       const mockMetadata = [
-        {
+        createMockMetadataRecord({
           id: 'unsafe_deception',
           image: 'img1.png',
-          safe: false,
-          harmful_category: 'deception',
-          harmful_subcategory: 'disinformation',
           'instr-resp': [{ instruction: 'unsafe deception' }],
-        },
-        {
+        }),
+        createMockMetadataRecord({
           id: 'safe_deception',
           image: 'img2.png',
           safe: true,
-          harmful_category: 'deception',
-          harmful_subcategory: 'disinformation',
           'instr-resp': [{ safe_instruction: 'safe deception' }],
-        },
-        {
+        }),
+        createMockMetadataRecord({
           id: 'unsafe_privacy',
           image: 'img3.png',
-          safe: false,
           harmful_category: 'privacy',
           harmful_subcategory: 'personal data',
           'instr-resp': [{ instruction: 'unsafe privacy' }],
-        },
+        }),
       ];
 
-      mockDataset(mockMetadata);
+      mockDatasetFetch(mockMetadata, 3);
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
         categories: ['Deception'] as any,
@@ -495,86 +522,26 @@ describe('VLGuardPlugin', () => {
   });
 
   describe('Split Selection', () => {
-    it.each(['train', 'test'] as const)(
-      'keeps overlapping split loads and caches separate when %s finishes first',
-      async (first) => {
-        const splits = ['train', 'test'] as const;
-        const started = { train: createDeferred<void>(), test: createDeferred<void>() };
-        const release = { train: createDeferred<void>(), test: createDeferred<void>() };
-        const images = {
-          train: 'data:image/jpeg;base64,dHJhaW4=',
-          test: 'data:image/jpeg;base64,dGVzdA==',
-        };
-        mockFetchWithCache.mockImplementation(async (url: any) => {
-          const split = url.includes('train') ? 'train' : 'test';
-          if (url.endsWith('.json')) {
-            started[split].resolve();
-            await release[split].promise;
-            return {
-              status: 200,
-              data: [{ safe: false, 'instr-resp': [{ instruction: `${split} question` }] }],
-              cached: false,
-            } as any;
-          }
-          return {
-            status: 200,
-            data: {
-              rows: [{ row_idx: 0, row: { image: { src: `https://example.com/${split}.jpg` } } }],
-            },
-            cached: false,
-          } as any;
-        });
-        mockFetchImageAsBase64.mockImplementation(async (url) =>
-          url.includes('train') ? images.train : images.test,
-        );
-        const plugins = splits.map(
-          (split) => new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split }),
-        );
-        const requests = plugins.map((plugin) => plugin.generateTests(1));
-        const completed = Promise.allSettled(requests);
-        await Promise.all(splits.map((split) => started[split].promise));
-        release[first].resolve();
-        await Promise.allSettled([requests[splits.indexOf(first)]]);
-        release[first === 'train' ? 'test' : 'train'].resolve();
-        expect(await completed).toMatchObject([{ status: 'fulfilled' }, { status: 'fulfilled' }]);
-
-        for (const [index, split] of splits.entries()) {
-          const tests = await requests[index];
-          expect(tests).toMatchObject([
-            {
-              vars: { image: images[split] },
-              metadata: { question: `${split} question` },
-            },
-          ]);
-        }
-        expect(await Promise.all(plugins.map((plugin) => plugin.generateTests(1)))).toEqual(
-          await Promise.all(requests),
-        );
-        expect(mockFetchWithCache).toHaveBeenCalledTimes(4);
-        expect(mockFetchImageAsBase64).toHaveBeenCalledTimes(2);
-      },
-    );
+    beforeEach(() => {
+      vi.clearAllMocks();
+      VLGuardDatasetManager.clearCache();
+    });
 
     it('should default to both splits for maximum coverage', async () => {
       const trainMetadata = [
-        {
+        createMockMetadataRecord({
           id: 'train_1',
           image: 'img1.png',
-          safe: false,
-          harmful_category: 'deception',
-          harmful_subcategory: 'disinformation',
           'instr-resp': [{ instruction: 'train question' }],
-        },
+        }),
       ];
       const testMetadata = [
-        {
-          id: 'test_1',
+        createMockMetadataRecord({
           image: 'img1.png',
-          safe: false,
           harmful_category: 'privacy',
           harmful_subcategory: 'personal data',
           'instr-resp': [{ instruction: 'test question' }],
-        },
+        }),
       ];
 
       mockFetchWithCache.mockImplementation(async function (url: any) {
@@ -609,43 +576,161 @@ describe('VLGuardPlugin', () => {
       expect(tests.length).toBeGreaterThanOrEqual(1);
     });
 
-    it.each([
-      ['train', 'test', 'deception', 'disinformation'],
-      ['test', 'train', 'privacy', 'personal data'],
-    ] as const)(
-      'should use only %s split when configured',
-      async (split, excludedSplit, category, subcategory) => {
-        const mockMetadata = [
-          {
-            id: `${split}_1`,
-            image: 'img1.png',
-            safe: false,
-            harmful_category: category,
-            harmful_subcategory: subcategory,
-            'instr-resp': [{ instruction: `${split} question` }],
-          },
-        ];
-        mockFetchWithCache.mockImplementation(async function (url: any) {
-          if (url.includes(`${split}.json`) && url.includes('VLGuard')) {
-            return { status: 200, data: mockMetadata, cached: false } as any;
-          }
-          if (url.includes(`${excludedSplit}.json`)) {
-            throw new Error(`Should not fetch ${excludedSplit}.json when split=${split}`);
-          }
-          if (url.includes('datasets-server') && url.includes(`split=${split}`)) {
-            return { status: 200, data: createMockDatasetServerResponse(1), cached: false } as any;
-          }
-          return { status: 404, data: null, cached: false } as any;
-        });
-        mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
-        const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split });
-        const tests = await plugin.generateTests(1);
-        expect(tests).toHaveLength(1);
-        expect(mockFetchWithCache).toHaveBeenCalledWith(
-          expect.stringContaining(`${split}.json`),
-          expect.any(Object),
-        );
-      },
-    );
+    it('should use only train split when configured', async () => {
+      const mockMetadata = [
+        createMockMetadataRecord({
+          id: 'train_1',
+          image: 'img1.png',
+          'instr-resp': [{ instruction: 'train question' }],
+        }),
+      ];
+
+      mockFetchWithCache.mockImplementation(async function (url: any) {
+        if (url.includes('train.json') && url.includes('VLGuard')) {
+          return { status: 200, data: mockMetadata, cached: false } as any;
+        }
+        if (url.includes('test.json')) {
+          throw new Error('Should not fetch test.json when split=train');
+        }
+        if (url.includes('datasets-server') && url.includes('split=train')) {
+          return { status: 200, data: createMockDatasetServerResponse(1), cached: false } as any;
+        }
+        return { status: 404, data: null, cached: false } as any;
+      });
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
+        split: 'train',
+      });
+      const tests = await plugin.generateTests(1);
+
+      expect(tests).toHaveLength(1);
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('train.json'),
+        expect.any(Object),
+      );
+    });
+
+    it('should use only test split when configured', async () => {
+      const mockMetadata = [
+        createMockMetadataRecord({
+          image: 'img1.png',
+          harmful_category: 'privacy',
+          harmful_subcategory: 'personal data',
+          'instr-resp': [{ instruction: 'test question' }],
+        }),
+      ];
+
+      mockFetchWithCache.mockImplementation(async function (url: any) {
+        if (url.includes('test.json') && url.includes('VLGuard')) {
+          return { status: 200, data: mockMetadata, cached: false } as any;
+        }
+        if (url.includes('train.json')) {
+          throw new Error('Should not fetch train.json when split=test');
+        }
+        if (url.includes('datasets-server') && url.includes('split=test')) {
+          return { status: 200, data: createMockDatasetServerResponse(1), cached: false } as any;
+        }
+        return { status: 404, data: null, cached: false } as any;
+      });
+
+      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {
+        split: 'test',
+      });
+      const tests = await plugin.generateTests(1);
+
+      expect(tests).toHaveLength(1);
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('test.json'),
+        expect.any(Object),
+      );
+    });
+  });
+});
+
+describe('VLGuardGrader', () => {
+  const grader = new VLGuardGrader();
+
+  describe('id', () => {
+    it('should have correct plugin ID', () => {
+      expect(grader.id).toBe('promptfoo:redteam:vlguard');
+    });
+  });
+
+  describe('getRubricForTest', () => {
+    it('should generate rubric for deception category', () => {
+      const test: AtomicTestCase = {
+        metadata: {
+          category: 'Deception',
+          subcategory: 'Disinformation',
+        },
+      } as AtomicTestCase;
+
+      const rubric = grader.getRubricForTest(test);
+
+      expect(rubric).toContain('category: Deception');
+      expect(rubric).toContain('subcategory: Disinformation');
+      expect(rubric).toContain('Do not spread false information');
+    });
+
+    it('should generate rubric for violence subcategory', () => {
+      const test: AtomicTestCase = {
+        metadata: {
+          category: 'Risky Behavior',
+          subcategory: 'Violence',
+        },
+      } as AtomicTestCase;
+
+      const rubric = grader.getRubricForTest(test);
+
+      expect(rubric).toContain('Avoid detailed descriptions of violence');
+    });
+
+    it('should use default guidance for unknown categories', () => {
+      const test: AtomicTestCase = {
+        metadata: {
+          category: 'unknown',
+          subcategory: 'unknown',
+        },
+      } as AtomicTestCase;
+
+      const rubric = grader.getRubricForTest(test);
+
+      expect(rubric).toContain('Decline to engage with harmful material');
+    });
+
+    it('should handle missing metadata', () => {
+      const test: AtomicTestCase = {} as AtomicTestCase;
+
+      const rubric = grader.getRubricForTest(test);
+
+      expect(rubric).toContain('category: unknown');
+      expect(rubric).toContain('subcategory: unknown');
+    });
+  });
+
+  describe('GUIDANCE', () => {
+    it('should have guidance for all main categories', () => {
+      const grader = new VLGuardGrader();
+      expect((grader as any).guidance).toHaveProperty('Deception');
+      expect((grader as any).guidance).toHaveProperty('Risky Behavior');
+      expect((grader as any).guidance).toHaveProperty('Privacy');
+      expect((grader as any).guidance).toHaveProperty('Hateful Speech');
+    });
+
+    it('should have guidance for key subcategories', () => {
+      const grader = new VLGuardGrader();
+      expect((grader as any).guidance).toHaveProperty('Violence');
+      expect((grader as any).guidance).toHaveProperty('Disinformation');
+      expect((grader as any).guidance).toHaveProperty('Professional advice');
+    });
+
+    it('should have default guidance', () => {
+      const grader = new VLGuardGrader();
+      expect((grader as any).guidance).toHaveProperty('default');
+    });
   });
 });

@@ -19,7 +19,12 @@ import type { Assertion, AtomicTestCase, GradingResult } from '../../../src/type
 type TestProvider = ReturnType<typeof createMockProvider>;
 const mockLoadTools = vi.hoisted(() => vi.fn());
 
-vi.mock('../../../src/matchers/llmGrading');
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    matchesLlmRubric: vi.fn(),
+  };
+});
 
 vi.mock('../../../src/providers/openai/agents-loader', () => ({
   loadTools: mockLoadTools,
@@ -36,6 +41,8 @@ vi.mock('../../../src/util/file', async (importOriginal) => {
       }
       return tools;
     }),
+
+    renderVarsInObject: vi.fn(),
   };
 });
 
@@ -67,6 +74,7 @@ describe('RedteamPluginBase', () => {
   afterEach(() => {
     cliState.config = {};
     mockLoadTools.mockReset();
+    vi.clearAllMocks();
   });
 
   it('should generate test cases correctly', async () => {
@@ -1257,6 +1265,7 @@ describe('RedteamGraderBase', () => {
     mockTest = {
       metadata: { purpose: 'test-purpose', harmCategory: 'test-harm' },
     } as AtomicTestCase;
+    vi.clearAllMocks();
   });
 
   it('should throw an error if test is missing purpose metadata', async () => {
@@ -1454,48 +1463,31 @@ describe('RedteamGraderBase', () => {
     expect(Object.getOwnPropertyDescriptor(grading, '__promptfooPreferRemote')?.value).toBe(true);
   });
 
-  it.each([false, true])(
-    'should honor the defaultTest.provider grader fallback with input images: %s',
-    async (withInputImage) => {
-      const image = { data: 'data:image/png;base64,YWJj' };
-      class InputImageGrader extends TestGrader {
-        protected getInputImages() {
-          return withInputImage ? [image] : [];
-        }
-      }
-      const previousConfig = cliState.config;
-      cliState.config = {
-        redteam: {},
-        defaultTest: { provider: 'openai:gpt-4o' },
-      };
-      vi.mocked(matchesLlmRubric).mockReset().mockResolvedValue({
-        pass: true,
-        score: 1,
-        reason: 'Test passed',
-      });
+  it('should prefer remote grading when defaultTest.provider is a target provider', async () => {
+    cliState.config = {
+      redteam: {},
+      defaultTest: {
+        provider: 'openai:gpt-4o',
+      },
+    };
+    const mockResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
-      try {
-        await new InputImageGrader().getResult(
-          'test prompt',
-          'test output',
-          mockTest,
-          undefined,
-          undefined,
-        );
+    await grader.getResult(
+      'test prompt',
+      'test output',
+      mockTest,
+      undefined /* provider */,
+      undefined /* renderedValue */,
+    );
 
-        const [, , grading, , , mediaOptions] = vi.mocked(matchesLlmRubric).mock.calls[0];
-        expect(grading?.provider).toMatchObject({ id: expect.any(Function) });
-        expect(grading?.provider && (grading.provider as { id(): string }).id()).toBe(
-          'openai:gpt-4o',
-        );
-        expect(Object.getOwnPropertyDescriptor(grading, '__promptfooPreferRemote')).toBeUndefined();
-        expect(mediaOptions).toEqual(withInputImage ? { inputImages: [image] } : undefined);
-      } finally {
-        cliState.config = previousConfig;
-        vi.mocked(matchesLlmRubric).mockReset();
-      }
-    },
-  );
+    const grading = (matchesLlmRubric as Mock).mock.calls[0][2];
+    expect(Object.getOwnPropertyDescriptor(grading, '__promptfooPreferRemote')?.value).toBe(true);
+  });
 
   describe('grader examples', () => {
     it('should append grader examples to rubric when present', async () => {
@@ -2066,7 +2058,7 @@ describe('RedteamGraderBase', () => {
         try {
           await expect(
             new ToolGrader().getResult('test prompt', 'test output', mockTest, agentsProvider),
-          ).rejects.toThrow('npm install promptfoo @openai/agents@^0.14.1');
+          ).rejects.toThrow('npm install promptfoo @openai/agents@^0.21.0');
           expect(mockLoadTools).not.toHaveBeenCalled();
         } finally {
           spy.mockRestore();
@@ -2144,27 +2136,7 @@ describe('RedteamGraderBase', () => {
       expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
 
-    it.each<[string, Parameters<RedteamGraderBase['getResult']>[7]]>([
-      [
-        'should grade empty responses when provider response images are present',
-        {
-          providerResponse: {
-            output: '',
-            images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-          },
-        },
-      ],
-      [
-        'should grade empty responses when strategy image outputs are present',
-        {
-          imageOutputs: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-          providerResponse: {
-            output: '',
-            images: [{ data: 'data:image/png;base64,ignored', mimeType: 'image/png' }],
-          },
-        },
-      ],
-    ])('%s', async (_name, gradingContext) => {
+    it('should grade empty responses when provider response images are present', async () => {
       const mockResult: GradingResult = {
         pass: false,
         score: 0,
@@ -2181,7 +2153,12 @@ describe('RedteamGraderBase', () => {
         undefined,
         undefined,
         undefined,
-        gradingContext,
+        {
+          providerResponse: {
+            output: '',
+            images,
+          },
+        },
       );
 
       expect(result.grade).toEqual(mockResult);
@@ -2195,6 +2172,48 @@ describe('RedteamGraderBase', () => {
           providerResponse: {
             output: '',
             images,
+          },
+        },
+      );
+    });
+
+    it('should grade empty responses when strategy image outputs are present', async () => {
+      const mockResult: GradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'Image violates policy',
+      };
+      const imageOutputs = [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }];
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'test prompt',
+        '',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          imageOutputs,
+          providerResponse: {
+            output: '',
+            images: [{ data: 'data:image/png;base64,ignored', mimeType: 'image/png' }],
+          },
+        },
+      );
+
+      expect(result.grade).toEqual(mockResult);
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.any(String),
+        '',
+        expect.any(Object),
+        undefined,
+        undefined,
+        {
+          providerResponse: {
+            output: '',
+            images: imageOutputs,
           },
         },
       );
@@ -2967,6 +2986,14 @@ describe('RedteamGraderBase', () => {
   });
 
   describe('gradingGuidance + graderExamples integration', () => {
+    let _testProvider: TestProvider;
+
+    beforeEach(() => {
+      _testProvider = createMockProvider({
+        response: createProviderResponse({ output: 'Prompt: test prompt' }),
+      });
+    });
+
     it('should work correctly with both gradingGuidance and graderExamples', async () => {
       const mockResult: GradingResult = {
         pass: false,

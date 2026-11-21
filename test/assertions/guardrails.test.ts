@@ -3,6 +3,21 @@ import { handleGuardrails } from '../../src/assertions/guardrails';
 
 import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 
+const createFlaggedInputResponse = () => ({
+  guardrails: {
+    flagged: true,
+    flaggedInput: true,
+  },
+  output: 'test output',
+});
+
+const createUnflaggedResponse = () => ({
+  guardrails: {
+    flagged: false,
+  },
+  output: 'test output',
+});
+
 describe('handleGuardrail', () => {
   const baseAssertion = {
     type: 'guardrails' as const,
@@ -33,12 +48,7 @@ describe('handleGuardrail', () => {
   it('should pass when guardrails are not flagged', async () => {
     const params: AssertionParams = {
       ...defaultParams,
-      providerResponse: {
-        guardrails: {
-          flagged: false,
-        },
-        output: 'test output',
-      },
+      providerResponse: createUnflaggedResponse(),
     };
 
     const result = await handleGuardrails(params);
@@ -93,13 +103,7 @@ describe('handleGuardrail', () => {
   it('should fail with specific reason when input is flagged', async () => {
     const params: AssertionParams = {
       ...defaultParams,
-      providerResponse: {
-        guardrails: {
-          flagged: true,
-          flaggedInput: true,
-        },
-        output: 'test output',
-      },
+      providerResponse: createFlaggedInputResponse(),
     };
 
     const result = await handleGuardrails(params);
@@ -229,12 +233,7 @@ describe('handleGuardrail', () => {
         ...defaultParams,
         assertion: inverseAssertion,
         inverse: true,
-        providerResponse: {
-          guardrails: {
-            flagged: false,
-          },
-          output: 'test output',
-        },
+        providerResponse: createUnflaggedResponse(),
       };
 
       const result = await handleGuardrails(params);
@@ -270,13 +269,7 @@ describe('handleGuardrail', () => {
         ...defaultParams,
         assertion: inverseAssertion,
         inverse: true,
-        providerResponse: {
-          guardrails: {
-            flagged: true,
-            flaggedInput: true,
-          },
-          output: 'test output',
-        },
+        providerResponse: createFlaggedInputResponse(),
       };
 
       const result = await handleGuardrails(params);

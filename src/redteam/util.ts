@@ -20,7 +20,12 @@ import {
 } from './remoteGeneration';
 import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ImageOutput,
+  ProviderResponse,
+} from '../types/index';
 
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
@@ -49,14 +54,7 @@ export function extractPromptFromTags(text: string): string | null {
  * @returns Array of extracted prompt contents (trimmed)
  */
 export function extractAllPromptsFromTags(text: string): string[] {
-  const results: string[] = [];
-  let match;
-
-  while ((match = PROMPT_TAG_REGEX_GLOBAL.exec(text)) !== null) {
-    results.push(match[1].trim());
-  }
-
-  return results;
+  return Array.from(text.matchAll(PROMPT_TAG_REGEX_GLOBAL), (match) => match[1].trim());
 }
 
 /**
@@ -439,4 +437,12 @@ export function getSessionId(
   context: Pick<CallApiContextParams, 'vars'> | undefined,
 ): string | undefined {
   return toSessionIdString(response?.sessionId) ?? toSessionIdString(context?.vars?.sessionId);
+}
+
+/** Empty descriptors do not provide evidence for multimodal grading. */
+export function hasImagePayload(image: ImageOutput): boolean {
+  return Boolean(
+    (typeof image?.data === 'string' && image.data.trim()) ||
+      (typeof image?.blobRef?.hash === 'string' && image.blobRef.hash.trim()),
+  );
 }

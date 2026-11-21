@@ -2,21 +2,21 @@ import cliProgress from 'cli-progress';
 import dedent from 'dedent';
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
-import { isCI } from '../envars';
+import { getEnvString, isCI } from '../envars';
 import logger from '../logger';
-import { getHuggingFaceHeaders } from './huggingfaceAuth';
 
 import type { TestCase, Vars } from '../types/index';
 
 /**
- * Converts HuggingFace row data to a test case without expanding variables.
+ * Safely casts HuggingFace row data to Vars type
  * HuggingFace typically returns string/number/boolean values which are compatible with Vars
  */
-function rowToTestCase(row: Record<string, unknown>): TestCase {
-  return {
-    vars: row as Vars,
-    options: { disableVarExpansion: true },
-  };
+function castRowToVars(row: Record<string, unknown>): Vars {
+  return row as Record<
+    string,
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME
+    string | number | boolean | any[] | Record<string, any> | (string | number | boolean)[]
+  >;
 }
 
 // Constants for performance optimization thresholds
@@ -40,9 +40,13 @@ const PROGRESS_LOG_FREQUENCY_PAGES = 5;
  */
 class DatasetProgressBar {
   private progressBar: cliProgress.SingleBar | undefined;
-  private isWebUI = Boolean(cliState.webUI);
+  private isWebUI: boolean;
   private totalRows: number = 0;
   private fetchedRows: number = 0;
+
+  constructor() {
+    this.isWebUI = Boolean(cliState.webUI);
+  }
 
   /**
    * Initialize progress bar for dataset fetching
@@ -171,21 +175,30 @@ export async function fetchHuggingFaceDataset(
     return [];
   }
 
+  const pageParams = new URLSearchParams(queryParams);
+  function getPageUrl(offset: number, length: number): string {
+    pageParams.set('offset', offset.toString());
+    pageParams.set('length', length.toString());
+    return `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${pageParams.toString()}`;
+  }
+
   // Single request optimization for small datasets
   if (userLimit !== undefined && userLimit <= pageSize) {
     logger.debug(
       `[HF Dataset] Single request optimization for ${owner}/${repo} (limit: ${userLimit})`,
     );
 
-    // Build single request URL with exact limit needed
-    const requestParams = new URLSearchParams(queryParams);
-    requestParams.set('offset', '0');
-    requestParams.set('length', userLimit.toString());
-
-    const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${requestParams.toString()}`;
+    const url = getPageUrl(0, userLimit);
 
     // Set up headers for authentication
-    const headers = getHuggingFaceHeaders();
+    const hfToken =
+      getEnvString('HF_TOKEN') ||
+      getEnvString('HF_API_TOKEN') ||
+      getEnvString('HUGGING_FACE_HUB_TOKEN');
+    const headers: Record<string, string> = {};
+    if (hfToken) {
+      headers.Authorization = `Bearer ${hfToken}`;
+    }
 
     const response = await fetchWithCache(url, { headers });
 
@@ -205,12 +218,19 @@ export async function fetchHuggingFaceDataset(
     );
 
     // Convert HuggingFace rows to test cases
+    const singleRequestTests: TestCase[] = [];
     for (const { row } of data.rows) {
-      tests.push(rowToTestCase(row));
+      const test: TestCase = {
+        vars: castRowToVars(row),
+        options: {
+          disableVarExpansion: true,
+        },
+      };
+      singleRequestTests.push(test);
     }
 
-    logger.debug(`[HF Dataset] Successfully loaded ${tests.length} test cases`);
-    return tests;
+    logger.debug(`[HF Dataset] Successfully loaded ${singleRequestTests.length} test cases`);
+    return singleRequestTests;
   }
 
   // Initialize progress bar for multi-page datasets
@@ -218,20 +238,9 @@ export async function fetchHuggingFaceDataset(
 
   try {
     while (true) {
-      // Create a new URLSearchParams for this request
-      const requestParams = new URLSearchParams(queryParams);
-      requestParams.set('offset', offset.toString());
-
-      const remainingUserLimit =
-        userLimit === undefined ? undefined : Math.max(userLimit - offset, 0);
-      const remainingDatasetRows =
-        totalRows === undefined ? undefined : Math.max(totalRows - offset, 0);
+      const rowLimit = userLimit ?? totalRows;
       const requestedLength =
-        remainingUserLimit === undefined
-          ? remainingDatasetRows === undefined
-            ? pageSize
-            : Math.min(pageSize, remainingDatasetRows)
-          : Math.min(pageSize, remainingUserLimit);
+        rowLimit === undefined ? pageSize : Math.min(pageSize, Math.max(rowLimit - offset, 0));
 
       if (requestedLength <= 0) {
         logger.debug(
@@ -240,14 +249,17 @@ export async function fetchHuggingFaceDataset(
         break;
       }
 
-      requestParams.set('length', requestedLength.toString());
-
-      const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${requestParams.toString()}`;
+      const url = getPageUrl(offset, requestedLength);
       logger.debug(`[HF Dataset] Fetching page from ${url}`);
 
-      const headers = getHuggingFaceHeaders();
-      if (headers.Authorization) {
+      const hfToken =
+        getEnvString('HF_TOKEN') ||
+        getEnvString('HF_API_TOKEN') ||
+        getEnvString('HUGGING_FACE_HUB_TOKEN');
+      const headers: Record<string, string> = {};
+      if (hfToken) {
         logger.debug('[HF Dataset] Using token for authentication');
+        headers.Authorization = `Bearer ${hfToken}`;
       }
 
       // Use fetchWithCache defaults (30s timeout, json format, 4 retries)
@@ -344,7 +356,14 @@ export async function fetchHuggingFaceDataset(
 
       // Convert HuggingFace rows to test cases
       for (const { row } of data.rows) {
-        tests.push(rowToTestCase(row));
+        const test: TestCase = {
+          vars: castRowToVars(row),
+          options: {
+            disableVarExpansion: true,
+          },
+        };
+
+        tests.push(test);
       }
 
       // Check if we've reached user's limit or end of dataset
@@ -371,16 +390,16 @@ export async function fetchHuggingFaceDataset(
         tests.length < totalNeeded * CONCURRENT_FETCH_PROGRESS_THRESHOLD
       ) {
         // Still have significant work left
+        const maxConcurrent = Math.min(MAX_CONCURRENT_REQUESTS, pagesRemaining);
         const concurrentPromises: Promise<ConcurrentFetchResult>[] = [];
 
-        for (let i = 0; i < MAX_CONCURRENT_REQUESTS - 1; i++) {
+        for (let i = 0; i < maxConcurrent - 1; i++) {
           // Start from the next page and prefetch additional pages
           const futureOffset = offset + i * pageSize;
-          const futureParams = new URLSearchParams(queryParams);
-          futureParams.set('offset', futureOffset.toString());
-          futureParams.set('length', Math.min(pageSize, totalNeeded - futureOffset).toString());
-
-          const futureUrl = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${futureParams.toString()}`;
+          const futureUrl = getPageUrl(
+            futureOffset,
+            Math.min(pageSize, totalNeeded - futureOffset),
+          );
 
           const p = fetchWithCache<HuggingFaceResponse>(futureUrl, { headers })
             .then((resp) => ({
@@ -397,61 +416,69 @@ export async function fetchHuggingFaceDataset(
           concurrentPromises.push(p);
         }
 
-        logger.debug(`[HF Dataset] Fetching ${concurrentPromises.length} pages concurrently`);
-        const concurrentResults = await Promise.allSettled(concurrentPromises);
+        if (concurrentPromises.length > 0) {
+          logger.debug(`[HF Dataset] Fetching ${concurrentPromises.length} pages concurrently`);
+          const concurrentResults = await Promise.allSettled(concurrentPromises);
 
-        // Process concurrent results in order
-        let concurrentRowCount = 0;
-        for (const result of concurrentResults) {
-          if (result.status === 'rejected') {
-            logger.warn(`[HF Dataset] Concurrent fetch promise rejected`, {
-              reason: result.reason,
-            });
-            continue;
-          }
+          // Process concurrent results in order
+          let concurrentRowCount = 0;
+          for (const result of concurrentResults) {
+            if (result.status === 'rejected') {
+              logger.warn(`[HF Dataset] Concurrent fetch promise rejected`, {
+                reason: result.reason,
+              });
+              continue;
+            }
 
-          // Consume only contiguous pages; retry a failed or short-page gap in the main loop.
-          if (result.value.offset !== offset + concurrentRowCount) {
-            break;
-          }
-
-          if (!result.value.success) {
-            const errorInfo = result.value.error
-              ? String(result.value.error)
-              : `HTTP ${result.value.response?.status ?? 'unknown'}`;
-            logger.warn(
-              `[HF Dataset] Concurrent fetch at offset ${result.value.offset} failed: ${errorInfo}`,
-            );
-            continue;
-          }
-
-          const concurrentData = result.value.response?.data;
-          if (!concurrentData) {
-            logger.warn(
-              `[HF Dataset] Concurrent fetch at offset ${result.value.offset} returned success but no data`,
-            );
-            continue;
-          }
-          if (totalRows === undefined && typeof concurrentData.num_rows_total === 'number') {
-            totalRows = concurrentData.num_rows_total;
-          }
-          for (const { row } of concurrentData.rows) {
-            if (tests.length >= totalNeeded) {
+            // `offset` advances by the rows taken here, so a page is usable only if it starts
+            // where those rows end. After a page that failed or came back short, taking this
+            // one would drop the rows in between and fetch it again on the next iteration.
+            // Stop instead: the main loop refetches the gap with its usual error handling.
+            if (result.value.offset !== offset + concurrentRowCount) {
               break;
             }
-            tests.push(rowToTestCase(row));
-            concurrentRowCount++;
+
+            if (!result.value.success) {
+              const errorInfo = result.value.error
+                ? String(result.value.error)
+                : `HTTP ${result.value.response?.status ?? 'unknown'}`;
+              logger.warn(
+                `[HF Dataset] Concurrent fetch at offset ${result.value.offset} failed: ${errorInfo}`,
+              );
+              continue;
+            }
+
+            const concurrentData = result.value.response?.data;
+            if (!concurrentData) {
+              logger.warn(
+                `[HF Dataset] Concurrent fetch at offset ${result.value.offset} returned success but no data`,
+              );
+              continue;
+            }
+            if (totalRows === undefined && typeof concurrentData.num_rows_total === 'number') {
+              totalRows = concurrentData.num_rows_total;
+            }
+            for (const { row } of concurrentData.rows) {
+              if (tests.length >= totalNeeded) {
+                break;
+              }
+              tests.push({
+                vars: castRowToVars(row),
+                options: { disableVarExpansion: true },
+              });
+              concurrentRowCount++;
+            }
           }
+
+          // Update progress with concurrent results
+          progressBar.update(concurrentRowCount);
+
+          // Skip ahead by the actual number of rows fetched concurrently
+          offset += concurrentRowCount;
+          logger.debug(
+            `[HF Dataset] Processed ${concurrentPromises.length} concurrent pages, now at offset ${offset}`,
+          );
         }
-
-        // Update progress with concurrent results
-        progressBar.update(concurrentRowCount);
-
-        // Skip ahead by the actual number of rows fetched concurrently
-        offset += concurrentRowCount;
-        logger.debug(
-          `[HF Dataset] Processed ${concurrentPromises.length} concurrent pages, now at offset ${offset}`,
-        );
       }
 
       // Progress logging for large datasets (every PROGRESS_LOG_FREQUENCY_PAGES pages)

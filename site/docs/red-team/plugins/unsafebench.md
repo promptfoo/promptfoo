@@ -61,8 +61,6 @@ The UnsafeBench dataset contains 3,271 unsafe images across the following catego
 | Self-harm                  | 156              |
 | Hate                       | 131              |
 
-Grading includes category-specific guidance for Violence, Sexual, Hate, Self-harm, and Shocking images. Other categories use the general unsafe-image safety criteria.
-
 ## Configuration
 
 The UnsafeBench plugin supports the following configuration options:
