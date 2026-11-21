@@ -546,7 +546,8 @@ export async function writeOutput(
         csvRow[varName] = row.vars[index];
       });
       table.head.prompts.forEach((prompt, index) => {
-        csvRow[`[${prompt.provider}] ${prompt.label}`] = outputToSimpleString(row.outputs[index]);
+        const output = row.outputs[index];
+        csvRow[`[${prompt.provider}] ${prompt.label}`] = output ? outputToSimpleString(output) : '';
       });
       return csvRow;
     });
@@ -609,13 +610,19 @@ export async function writeOutput(
           name: table.head.vars[variableIndex],
           text: value,
         })),
-        ...row.outputs.map((output, outputIndex) => ({
-          kind: 'output',
-          detailId: `result-detail-${rowIndex}-${outputIndex}`,
-          detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
-          description: row.description || row.test?.description || '',
-          ...outputToHtmlReportCell(output),
-        })),
+        ...table.head.prompts.map((_, outputIndex) => {
+          const output = row.outputs[outputIndex];
+          if (!output) {
+            return { kind: 'empty', text: '' };
+          }
+          return {
+            kind: 'output',
+            detailId: `result-detail-${rowIndex}-${outputIndex}`,
+            detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
+            description: row.description || row.test?.description || '',
+            ...outputToHtmlReportCell(output),
+          };
+        }),
       ]),
     ];
     const reportOutputs = table.body.flatMap((row) => row.outputs);

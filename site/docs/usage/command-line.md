@@ -1129,3 +1129,5 @@ promptfoo will load environment variables from the `.env` in your current workin
 :::tip
 For detailed information on using timeout features, including configuration examples and troubleshooting tips, see [Timeout errors in the troubleshooting guide](/docs/usage/troubleshooting#how-to-triage-stuck-evals).
 :::
+
+Use `promptfoo delete eval-result <result-id>` to remove one saved result by its exact ID from the evaluation export. The evaluation and its other saved results remain available. Wait for any evaluation or retry to finish before deleting a result. Individual result deletion retains evaluation-level media and traces.

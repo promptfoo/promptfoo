@@ -1,6 +1,11 @@
 import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
+import {
+  EvalResultDeletionConflict,
+  evalResultsObject,
+  resultDeletionRevision,
+} from '../database/evalResultWrite';
 import { getDb } from '../database/index';
 import {
   datasetsTable,
@@ -419,6 +424,8 @@ export default class Eval {
     return await Eval.findById(db_results[0].id);
   }
 
+  resultDeletionRevision?: number;
+
   static async findById(id: string) {
     const db = await getDb();
 
@@ -471,6 +478,10 @@ export default class Eval {
       generationDurationMs,
       evaluationDurationMs,
     });
+    const deletionRevision = resultsObj?.__promptfooResultDeletionRevision;
+    if (typeof deletionRevision === 'number') {
+      evalInstance.resultDeletionRevision = deletionRevision;
+    }
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
     }
@@ -681,7 +692,7 @@ export default class Eval {
       // For V4 evals, atomically merge duration fields into the results column
       // using json_set so concurrent save() calls don't clobber each other's keys.
       // Guard against malformed or non-object JSON (arrays, strings, null) in legacy rows.
-      let expr: SQL = sql`CASE WHEN json_valid(${evalsTable.results}) AND json_type(${evalsTable.results}) = 'object' THEN ${evalsTable.results} ELSE '{}' END`;
+      let expr: SQL = evalResultsObject;
       if (this.durationMs !== undefined) {
         expr = sql`json_set(${expr}, '$.durationMs', ${this.durationMs})`;
       }
@@ -693,7 +704,22 @@ export default class Eval {
       }
       updateObj.results = expr;
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    const revision = this.resultDeletionRevision ?? 0;
+    const { rowsAffected } = await db
+      .update(evalsTable)
+      .set(updateObj)
+      .where(
+        and(
+          eq(evalsTable.id, this.id),
+          this.useOldResults() ? undefined : eq(resultDeletionRevision, revision),
+        ),
+      )
+      .run();
+    if (rowsAffected === 0 && !this.useOldResults()) {
+      throw new EvalResultDeletionConflict(
+        'The evaluation changed while saving. Reload it and try again.',
+      );
+    }
     notifyEvaluationChanged(this.id);
     this.persisted = true;
   }

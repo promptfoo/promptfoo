@@ -2,7 +2,13 @@ import confirm from '@inquirer/confirm';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { deleteAllEvals, deleteEval, hasRecentEvalWithIdPrefix } from '../util/database';
+import {
+  deleteAllEvals,
+  deleteEval,
+  deleteEvalResultById,
+  EvalResultNotFoundError,
+  hasRecentEvalWithIdPrefix,
+} from '../util/database';
 import { setupEnv } from '../util/index';
 import type { Command } from 'commander';
 
@@ -26,6 +32,23 @@ export async function handleEvalDeleteAll() {
   }
   await deleteAllEvals();
   logger.info('All evaluations have been deleted.');
+}
+
+export async function handleEvalResultDelete(resultId: string) {
+  try {
+    await deleteEvalResultById(resultId);
+    logger.info(`Eval result with ID ${resultId} has been successfully deleted.`);
+  } catch (error) {
+    if (error instanceof EvalResultNotFoundError) {
+      logger.error(`No eval result found with ID ${resultId}.`);
+      process.exitCode = 1;
+      return;
+    }
+    logger.error(
+      `Could not delete eval result with ID ${resultId}:\n${error instanceof Error ? error.message : error}`,
+    );
+    process.exitCode = 1;
+  }
 }
 
 export function deleteCommand(program: Command) {
@@ -73,5 +96,19 @@ export function deleteCommand(program: Command) {
       } else {
         await handleEvalDelete(evalId, cmdObj.envPath);
       }
+    });
+
+  deleteCommand
+    .command('eval-result <id>')
+    .description(
+      'Delete a single result row within an eval session, leaving the rest of the eval intact.',
+    )
+    .option('--env-file, --env-path <path>', 'Path to .env file')
+    .action(async (resultId: string, cmdObj: { envPath?: string }) => {
+      setupEnv(cmdObj.envPath);
+      telemetry.record('command_used', {
+        name: 'delete eval-result',
+      });
+      await handleEvalResultDelete(resultId);
     });
 }
