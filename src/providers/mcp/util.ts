@@ -22,6 +22,7 @@ export function sanitizeMcpToolData<T>(value: T): T {
   return sanitizeObject(value, { context: 'MCP tool data', sanitizeUrls: true });
 }
 
+/** Join text blocks while preserving structured and binary content metadata. */
 export function normalizeMcpToolContent(
   content: unknown,
   onUnknownContent?: (part: object) => void,
@@ -32,6 +33,9 @@ export function normalizeMcpToolContent(
   if (typeof content === 'string') {
     return content;
   }
+  if (Buffer.isBuffer(content)) {
+    return content.toString();
+  }
   if (Array.isArray(content)) {
     return content
       .map((part) => {
@@ -39,6 +43,10 @@ export function normalizeMcpToolContent(
           return part;
         }
         if (part && typeof part === 'object') {
+          if (typeof part.type === 'string' && part.type !== 'text' && part.type !== 'json') {
+            onUnknownContent?.(part);
+            return JSON.stringify(part);
+          }
           if ('text' in part && (part as { text?: unknown }).text != null) {
             return String((part as { text: unknown }).text);
           }
@@ -82,7 +90,46 @@ export function isMcpErrorResult(result: MCPToolResult): boolean {
  * to a generic message for tools that signal `isError` without any detail.
  */
 export function getMcpErrorMessage(result: MCPToolResult): string {
-  return result.error || result.content || 'Tool returned an error result';
+  const message = result.error?.trim() || normalizeMcpToolContent(result.content).trim();
+  return message || 'Tool returned an error result';
+}
+
+/** Extract messages from MCP errors, including plain objects. */
+export function getThrownMcpErrorMessage(error: unknown): string {
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+  if (error && typeof error === 'object') {
+    if ('message' in error && typeof error.message === 'string' && error.message.trim()) {
+      return error.message;
+    }
+    // Thrown objects may contain request headers or credentials.
+    if (
+      'code' in error &&
+      typeof error.code === 'string' &&
+      /^E[A-Z0-9_]{1,32}$/.test(error.code)
+    ) {
+      return error.code;
+    }
+  }
+  return 'Tool execution failed';
+}
+
+export const MCP_FAILURE_METADATA = { errorOrigin: 'tool', rateLimitRetryable: false } as const;
+
+/** Combine MCP failures for ProviderResponse.error. */
+export function joinMcpErrors(errors: string[]): string | undefined {
+  return errors.length > 0 ? errors.join('; ') : undefined;
+}
+
+/** Format an MCP tool failure. */
+export function formatMcpToolError(name: string, message: string): string {
+  return `MCP Tool Error (${name}): ${message}`;
+}
+
+/** Format a tool result while retaining typed content metadata. */
+export function formatMcpToolResult(name: string, content: unknown): string {
+  return `MCP Tool Result (${name}): ${normalizeMcpToolContent(content)}`;
 }
 
 /**

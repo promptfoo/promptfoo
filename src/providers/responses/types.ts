@@ -33,4 +33,6 @@ export interface ProcessedOutput {
   refusal: string;
   isRefusal: boolean;
   annotations?: any[];
+  /** Joined MCP tool-error messages, surfaced on `ProviderResponse.error`. */
+  mcpError?: string;
 }

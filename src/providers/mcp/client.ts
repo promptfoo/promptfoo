@@ -14,6 +14,8 @@ import {
   getAuthHeaders,
   getAuthQueryParams,
   getOAuthTokenWithExpiry,
+  getThrownMcpErrorMessage,
+  normalizeMcpToolContent,
   renderAuthVars,
   sanitizeMcpToolData,
 } from './util';
@@ -484,21 +486,13 @@ export class MCPClient {
           signal?.throwIfAborted();
         }
 
-        // Handle different content types appropriately
-        let content = '';
-        if (result?.content) {
-          if (typeof result.content === 'string') {
-            // Try to parse JSON first, fall back to raw string
-            try {
-              const parsed = JSON.parse(result.content);
-              content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
-            } catch {
-              content = result.content;
-            }
-          } else if (Buffer.isBuffer(result.content)) {
-            content = result.content.toString();
-          } else {
-            content = JSON.stringify(result.content);
+        let content = normalizeMcpToolContent(result.content);
+        if (typeof result.content === 'string') {
+          try {
+            const parsed = JSON.parse(result.content);
+            content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+          } catch {
+            // Plain text is already normalized.
           }
         }
 
@@ -511,7 +505,7 @@ export class MCPClient {
         if (isCallerAbortError(error, signal, { requireReasonMatch: true })) {
           throw signal!.reason;
         }
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = getThrownMcpErrorMessage(error);
         if (this.isDebugEnabled) {
           logger.error(`Error calling tool ${name}: ${errorMessage}`);
         }
