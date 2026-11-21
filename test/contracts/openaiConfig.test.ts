@@ -123,6 +123,7 @@ const chatValid = [
     modalities: ['audio'],
     audio: { format: 'wav', voice: 'alloy', speed: 1, bitrate: '64k' },
   },
+  { audio: { format: 'wav', voice: { id: 'voice_123' } } },
   {
     mcp: {
       enabled: true,
@@ -134,6 +135,7 @@ const chatValid = [
   },
 ];
 const responseValid = [
+  { prompt_cache_options: { mode: 'explicit', ttl: '12h' } },
   { tools: [{ type: 'web_search_2025_08_26' }, { type: 'web_search_preview_2025_03_11' }] },
   {
     tools: [
@@ -327,6 +329,8 @@ const invalidCommon = [
 ];
 
 const invalidChat = [
+  { audio: { voice: { name: 'voice_123' } } },
+  { prompt_cache_options: { ttl: '12h' } },
   { best_of: 1 },
   ...invalidCommon,
   { tools: [{ type: 'function', name: 'lookup' }] },

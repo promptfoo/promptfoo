@@ -160,7 +160,7 @@ export async function loadWebSearchProvider(
 
   const loadOpenAIWebSearch = providerLoader('OpenAI web search', 'openai:responses:gpt-6-sol', {
     options: {
-      config: { tools: [{ type: 'web_search_preview' }] },
+      config: { tools: [{ type: 'web_search' }] },
     },
   });
 
