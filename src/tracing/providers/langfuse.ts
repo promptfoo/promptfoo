@@ -473,19 +473,6 @@ export class LangfuseProvider implements TraceProvider {
         await releaseResponse(response, 'Langfuse');
         return null;
       }
-      if (!response.ok) {
-        await releaseResponse(response, 'Langfuse');
-        throw new TraceProviderError(`Langfuse returned HTTP ${response.status}`, {
-          statusCode: response.status,
-          retryable: response.status === 408 || response.status === 429 || response.status >= 500,
-        });
-      }
-
-      const contentLength = Number(response.headers.get('content-length'));
-      if (contentLength > remainingBytes) {
-        await releaseResponse(response, 'Langfuse');
-        throw new TraceProviderError('Langfuse trace exceeds the maximum response size');
-      }
       const body = await readLimitedResponse(response, 'Langfuse', remainingBytes);
       remainingBytes -= new TextEncoder().encode(body).byteLength;
       const result = JSON.parse(body) as LangfuseObservationsResponse;

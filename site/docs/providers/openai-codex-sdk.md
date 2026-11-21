@@ -30,7 +30,7 @@ You can reference this provider using either base ID, and you can inline the mod
 | Final assistant text               | Yes        | Returned in `response.output` as a string.                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Text + local image prompt inputs   | Partial    | Pass plain text as usual, or pass a JSON array of `{"type":"text","text":"..."}` and `{"type":"local_image","path":"/abs/file.png"}` entries. Other JSON prompt shapes are treated as plain text.                                                                                                                                                                                                                                                 |
 | JSON schema output                 | Yes        | Pass `output_schema`; use `is-json` and `JSON.parse(output)` in JS assertions because the provider does not auto-parse the final text.                                                                                                                                                                                                                                                                                                            |
-| Token usage and estimated cost     | Yes        | `tokenUsage` is returned when available, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Standard API cost is estimated when `config.model` is known to promptfoo's pricing table, including GPT-6 Astra, Sol, and Luna. Missing cache-write counts can understate costs. Codex's instruction preamble and tool schemas are included in prompt tokens, so small prompts can still report high `input_tokens`. |
+| Token usage and estimated cost     | Yes        | `tokenUsage` is returned when available, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Standard API cost is estimated when `config.model` is known to promptfoo's pricing table, including GPT-6 Astra, Sol, and Luna. A missing cache-write count leaves cost unknown. Codex's instruction preamble and tool schemas are included in prompt tokens, so small prompts can still report high `input_tokens`. |
 | Session/thread IDs                 | Yes        | `sessionId` is returned from the underlying Codex thread.                                                                                                                                                                                                                                                                                                                                                                                         |
 | Shell/MCP/search/file trajectories | Yes        | Enable `enable_streaming` for provider-level spans. Enable `deep_tracing` to propagate OTEL context into the Codex CLI process.                                                                                                                                                                                                                                                                                                                   |
 | Skill usage assertions             | Partial    | `skill-used` relies on heuristic detection of direct `SKILL.md` command reads, not a first-class SDK skill event.                                                                                                                                                                                                                                                                                                                                 |
@@ -41,10 +41,10 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-Install Promptfoo and the Codex SDK together in your eval project. Promptfoo supports SDK versions from 0.156.1 through 0.166.x. Model availability depends on your Codex version and account. The [0.165.0 catalog](https://github.com/openai/codex/releases/tag/rust-v0.165.0) includes GPT-6.1 Sol and Terra with Ultra reasoning.
+Install Promptfoo and the Codex SDK together in your eval project. Promptfoo supports SDK versions from 0.156.1 through 0.169.x. For GPT-6.2 Astra and Sol, install SDK 0.169.1 or later in this range. Its bundled CLI includes both models in the [Codex model catalog](https://github.com/openai/codex/blob/rust-v0.169.1/codex-rs/models-manager/models.json). Model access depends on your account.
 
 ```bash
-npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.167.0"
+npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.170.0"
 ```
 
 Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
@@ -99,33 +99,23 @@ ChatGPT login support is specific to the Codex SDK provider. Promptfoo can use t
 
 ### Option 3: Run on Amazon Bedrock
 
-Codex can run OpenAI's frontier models hosted on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models) instead of the OpenAI Platform. Set `model_provider: amazon-bedrock`, use the Bedrock model id (the `openai.`-prefixed form), and provide AWS credentials and a Region to the Codex CLI through `cli_env`:
+Set `model_provider: amazon-bedrock` to run Codex through Bedrock's Mantle Responses API. Choose a Bedrock model ID from your Codex CLI's catalog and enable access in the AWS Region where you plan to run it. This example uses GPT-6.1 Terra in US East (N. Virginia). [Codex 0.165.0 Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.165.0/codex-rs/model-provider/src/amazon_bedrock/catalog.rs) · [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-terra.html)
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: openai.gpt-5.6-sol # Bedrock model id (note the openai. prefix)
       model_provider: amazon-bedrock
-      model_reasoning_effort: max
+      model: openai.gpt-6.1-terra
       sandbox_mode: read-only
       cli_env:
-        AWS_REGION: us-east-2
-        AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
-        AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
-
-prompts:
-  - 'Write a Python function that calculates the factorial of a number'
+        AWS_REGION: us-east-1
+        AWS_BEARER_TOKEN_BEDROCK: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
 ```
 
-Notes:
+Export a Bedrock API key as `AWS_BEARER_TOKEN_BEDROCK` before running the example. To use AWS credentials instead, replace that entry in `cli_env` with `AWS_PROFILE` or with `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. Temporary key pairs also require `AWS_SESSION_TOKEN`.
 
-- **Model ids are Bedrock ids**: use `openai.gpt-5.6-sol`, `openai.gpt-5.6-terra`, or `openai.gpt-5.6-luna`, not a bare `gpt-5.6` alias. The Codex Bedrock provider serves frontier models through Bedrock's OpenAI-compatible Responses endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), which is separate from the classic `bedrock-runtime` `InvokeModel` API.
-- **Region matters**: GPT-5.6 Sol is available in `us-east-1` and `us-east-2`; GPT-5.6 Terra and Luna also support `us-west-2`. GPT-5.5 remains available in `us-east-1` and `us-east-2`, and GPT-5.4 in `us-east-1`, `us-east-2`, and `us-west-2`. Request model access first.
-- **Use a current Codex CLI**: GPT-5.6 Bedrock catalog support and `max` reasoning require Codex 0.144.0 or later. Codex `ultra` is a multi-agent mode for supported models, not a Responses API reasoning-effort value.
-- **GPT-6 on Bedrock**: AWS serves Sol and Luna on Mantle in `us-east-1`, but the [Codex 0.156.1 Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/model-provider/src/amazon_bedrock/catalog.rs) does not list them. Use the [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) to evaluate these models without the Codex agent runtime.
-- **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. If you use **temporary credentials** (SSO, STS, assumed roles, or MFA), also forward `AWS_SESSION_TOKEN` — without it the credentials are incomplete and Codex will fail to authenticate. For direct inference, the [Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) accepts a Bedrock API key or AWS credentials.
+For Bedrock Runtime, Codex 0.165.0 supports `model_provider: amazon-bedrock-runtime` with an inference profile ID such as `us.openai.gpt-6.1-terra`. Check the catalog for your CLI version and AWS partition when choosing a different model. [Codex Runtime catalog](https://github.com/openai/codex/blob/rust-v0.165.0/codex-rs/model-provider/src/amazon_bedrock/runtime_catalog.rs) · [OpenAI models on Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models)
 
 :::warning
 
@@ -276,21 +266,21 @@ Select a model available to your account and sign-in method. See [installation](
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-6-sol
+      model: gpt-6.2-sol
       model_reasoning_effort: max
 ```
 
 Choose a model based on your eval's needs:
 
-- **GPT-6 Astra** (`gpt-6-astra`) - Use for the most demanding reasoning and coding tasks, when your account has access.
-- **GPT-6 Sol** (`gpt-6-sol`) - Use for complex professional and coding workflows.
+- **GPT-6.2 Astra** (`gpt-6.2-astra`) - Use for demanding reasoning and coding tasks.
+- **GPT-6.2 Sol** (`gpt-6.2-sol`) - Use for everyday coding and agent workflows.
 - **GPT-6 Luna** (`gpt-6-luna`) - Use for cost-sensitive, high-volume evals.
 
 With ChatGPT sign-in, `gpt-5.4` and `gpt-5.4-mini` retired from Codex on August 31, 2026; `gpt-5.2` and `gpt-5.3-codex` are also deprecated for that sign-in method. Use `gpt-6-sol` or `gpt-6-luna` in new saved configurations when available. API-key authentication follows the separate [OpenAI API model lifecycle](https://developers.openai.com/api/docs/deprecations), so this Codex sign-in retirement does not invalidate API-key configurations or Promptfoo's native API grading pins. `gpt-5.3-codex-spark` requires eligible ChatGPT Pro/Codex authentication and is not available through the public Responses API.
 
 If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
 
-GPT-6 Astra, Sol, and Luna, GPT-5.6, and GPT-5.5 receive Standard API cost estimates from the token usage reported by Codex. Missing cache-write counts can understate costs. Batch, Flex, and Fast mode are not automatically inferred from Codex runtime settings. See the [OpenAI provider cost estimates](/docs/providers/openai#cost-estimates).
+GPT-6.2 Astra and Sol receive Standard API cost estimates when Codex reports input, output, and cache-write token counts. Batch, Flex, and Fast mode are not automatically inferred from Codex runtime settings. See the [OpenAI provider cost estimates](/docs/providers/openai#cost-estimates).
 
 ### Mini Models
 
@@ -630,7 +620,7 @@ providers:
       model_reasoning_effort: high # Thorough reasoning for complex tasks
 ```
 
-Available levels vary by model:
+GPT-6.2 Astra and Sol support `low`, `medium`, `high`, `xhigh`, `max`, and `ultra` in Codex. Available levels for earlier models vary:
 
 | Level     | Description                                     | Supported Models                                                                                                                                 |
 | --------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1005,7 +995,7 @@ See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/ex
 - [Skills testing](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skills) - Evaluate local Codex skills with `skill-used` and traced skill evidence
 - [Thread persistence](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/thread-persistence) - Reuse one prompt-template thread across multiple tests
 - [Sandbox enforcement](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/sandbox) - Verify `read-only` mode blocks writes in a sample workspace
-- [Amazon Bedrock](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/bedrock) - Run Codex against OpenAI GPT-5.6 Sol, Terra, and Luna on Amazon Bedrock
+- [Amazon Bedrock](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/bedrock) - Run Codex with a Bedrock model and a regional Bedrock API key
 - [Agentic SDK comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks) - Side-by-side comparison with Claude Agent SDK
 
 ### Verified end-to-end example runs
