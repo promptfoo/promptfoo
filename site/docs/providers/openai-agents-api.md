@@ -150,7 +150,7 @@ The provider polls for session usage after the root turn completes. `usageTimeou
 | `usageMayExcludeSubagents` | The session or root totals may omit delegated work. When all subagent turn counts are available, `subagentUsage` reports their sum separately. Adding it to the total can double-count tokens. |
 | `usageUnavailable`         | The answer is available, but token counts and cost are missing.                                                                                                                                |
 
-For a single agent, the cost estimate covers model tokens. Tools and sandbox time can incur additional charges. The provider omits cost when subagents are enabled or observed because their models and service tiers can differ.
+For a single agent, Promptfoo estimates model token costs using the root turn's start time. Tools and sandbox time can incur additional charges. The provider omits cost when subagents are enabled or observed because their models and service tiers can differ.
 
 ### Session cleanup
 

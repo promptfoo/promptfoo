@@ -2286,6 +2286,38 @@ describe('OpenAiAgentsApiProvider', () => {
     },
   );
 
+  it.each([
+    { model: 'gpt-6.2-sol', started: '2027-03-01T07:59:59Z', expected: 0.000972 },
+    { model: 'gpt-6.2-astra', started: '2027-03-01T08:00:00Z', expected: 0.007776 },
+  ])(
+    'uses the root turn start to price $model Ultrafast usage',
+    async ({ model, started, expected }) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2027-03-02T00:00:00Z'));
+      const agent = { model, service_tier: 'ultrafast', reasoning: { effort: 'high' } };
+      mockApi((pathname) => {
+        if (pathname.endsWith('/turns')) {
+          return json(
+            page([
+              {
+                ...turn,
+                created_at: Date.parse('2027-03-01T07:00:00Z') / 1000,
+                started_at: Date.parse(started) / 1000,
+              },
+            ]),
+          );
+        }
+        return pathname.endsWith('/sessions') || pathname.endsWith('/sess_test')
+          ? json({ ...session, agent })
+          : undefined;
+      });
+      const result = await provider({ agent }).callApi('hi');
+      expect(JSON.parse(calls()[0].options!.body as string).agent).toEqual(agent);
+      expect(result.output).toBe('42');
+      expect(result.cost).toBeCloseTo(expected, 10);
+    },
+  );
+
   it('uses the configured service tier when the final session omits it', async () => {
     const standard = await provider().callApi('hi');
     const priority = await provider({
