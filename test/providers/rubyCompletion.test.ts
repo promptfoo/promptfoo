@@ -340,7 +340,9 @@ describe('RubyProvider', () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
+        get: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ output: 'cached result', cacheHit: false })),
         set: vi.fn(),
       };
       vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);

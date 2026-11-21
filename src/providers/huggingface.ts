@@ -290,7 +290,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
         };
       }
 
-      return { output };
+      return { output, ...(response.cached && { cached: true }) };
     } catch (err) {
       return {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,

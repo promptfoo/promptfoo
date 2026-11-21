@@ -228,6 +228,7 @@ describe('ReplicateProvider', () => {
     expect(result).toMatchObject({
       error: 'API call error: Error: Model error',
       cached: true,
+      cacheHit: true,
       tokenUsage: { total: 0, cached: 0, numRequests: 0 },
     });
   });
@@ -364,6 +365,7 @@ describe('ReplicateProvider', () => {
     expect(mockCache.set).toHaveBeenCalledWith(cacheKey, expect.any(String));
     expect(JSON.parse(mockCache.set.mock.calls[0][1])).toEqual({
       output: 'test response',
+      cacheHit: false,
       tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
     });
   });
@@ -743,21 +745,22 @@ describe('ReplicateImageProvider', () => {
     );
   });
 
-  it('should handle failed image generation', async () => {
-    mockedFetchWithCache.mockResolvedValue(
-      createMockFetchResponse({
+  it.each([true, false])('marks replayed image failures (cached: %s)', async (cached) => {
+    mockedFetchWithCache.mockResolvedValue({
+      ...createMockFetchResponse({
         id: 'test-id',
         status: 'failed',
         error: 'Image generation failed',
       }),
-    );
+      cached,
+    });
 
     const provider = new ReplicateImageProvider('test-model', {
       config: { apiKey: mockApiKey },
     });
 
     const result = await provider.callApi('test prompt');
-    expect(result.error).toBe('Image generation failed');
+    expect(result).toMatchObject({ error: 'Image generation failed', cached, cacheHit: cached });
   });
 
   it('should ellipsize long prompts in markdown', async () => {

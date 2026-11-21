@@ -376,6 +376,7 @@ export class ReplicateProvider implements ApiProvider {
             numRequests: 0,
           },
           cached: true,
+          cacheHit: true,
         };
       }
     }
@@ -383,6 +384,7 @@ export class ReplicateProvider implements ApiProvider {
     logger.debug('Calling Replicate', { modelName: this.modelName, promptLength: prompt.length });
     let response;
     let cached = false;
+    let cacheHit = false;
     try {
       // Create prediction with sync mode (wait up to 60 seconds)
       const { creation, shared, claim, release } = await createPrediction(
@@ -398,6 +400,7 @@ export class ReplicateProvider implements ApiProvider {
 
       // If still processing, poll for completion
       const polled = response.status === 'starting' || response.status === 'processing';
+      cacheHit = creation.cached && !polled;
       if (polled) {
         cached = shared;
         response = await this.pollForCompletion(response.id, options?.abortSignal);
@@ -421,6 +424,7 @@ export class ReplicateProvider implements ApiProvider {
       }
       return {
         error: `API call error: ${String(err)}`,
+        cacheHit,
         ...(cached && { cached: true, tokenUsage: createEmptyTokenUsage() }),
       };
     }
@@ -431,6 +435,7 @@ export class ReplicateProvider implements ApiProvider {
 
     const responseMetadata = {
       ...(cached && { cached: true }),
+      cacheHit,
       tokenUsage: { ...createEmptyTokenUsage(), numRequests: Number(!cached) },
     };
 
@@ -646,12 +651,14 @@ export class ReplicateImageProvider extends ReplicateProvider {
 
     let response: any | undefined;
     let cached = false;
+    let cacheHit = false;
     if (isCacheEnabled()) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug('Retrieved cached Replicate image response', { modelName: this.modelName });
         response = JSON.parse(cachedResponse as string);
         cached = true;
+        cacheHit = true;
       }
     }
 
@@ -692,7 +699,9 @@ export class ReplicateImageProvider extends ReplicateProvider {
 
       // If still processing, poll for completion
       const polled = prediction.status === 'starting' || prediction.status === 'processing';
+      cacheHit = creation.cached && !polled;
       if (polled) {
+        cached = shared;
         prediction = await this.pollForCompletion(prediction.id, options?.abortSignal);
       }
 
@@ -705,6 +714,8 @@ export class ReplicateImageProvider extends ReplicateProvider {
       if (prediction.status === 'failed') {
         return {
           error: prediction.error || 'Image generation failed',
+          cached,
+          cacheHit,
         };
       }
 
@@ -721,6 +732,8 @@ export class ReplicateImageProvider extends ReplicateProvider {
     if (!response) {
       return {
         error: 'No output received from Replicate',
+        cached,
+        cacheHit,
       };
     }
 
@@ -734,6 +747,8 @@ export class ReplicateImageProvider extends ReplicateProvider {
     if (!url) {
       return {
         error: `No image URL found in response: ${JSON.stringify(response)}`,
+        cached,
+        cacheHit,
       };
     }
 
@@ -753,6 +768,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
     return {
       output: `![${ellipsizedPrompt}](${url})`,
       cached,
+      cacheHit,
     };
   }
 }
