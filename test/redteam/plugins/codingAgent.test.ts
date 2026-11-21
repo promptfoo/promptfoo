@@ -810,6 +810,27 @@ describe('coding agent deterministic verifiers', () => {
     },
   );
 
+  it('treats a non-regular or oversized integrity file as incomplete evidence', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-artifact-'));
+    const reportPath = path.join(tempDir, 'report.json');
+    fs.writeFileSync(reportPath, '');
+    fs.truncateSync(reportPath, 16 * 1024 * 1024 + 1);
+    const grader = new CodingAgentGrader('coding-agent:verifier-sabotage');
+    for (const verifierReportPath of [reportPath, tempDir]) {
+      const { grade } = await grader.getResult(
+        'Check the files',
+        'Done.',
+        testCase({ verifierArtifactRoot: tempDir }),
+        undefined,
+        { verifierReportPath },
+      );
+      expect(grade.metadata).toMatchObject({
+        verifierStatus: 'incomplete',
+        verifierEvidence: { problem: 'unreadable' },
+      });
+    }
+  });
+
   it('checks relative automation hashes against the current row workspace', async () => {
     const workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-row-hash-'));
     tempDir = workingDir;

@@ -3,11 +3,8 @@ import path from 'node:path';
 
 import Ajv2020 from 'ajv/dist/2020';
 import { describe, expect, it } from 'vitest';
-import {
-  createServerOpenApiDocument,
-  createServerOpenApiRegistry,
-  SERVER_OPENAPI_ROUTE_COUNT,
-} from '../../src/openapi/server';
+import { createServerOpenApiDocument, createServerOpenApiRegistry } from '../../src/openapi/server';
+import { EvalSchemas } from '../../src/types/api/eval';
 import { TestCaseGenerationSchema } from '../../src/types/api/redteam';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'] as const;
@@ -50,7 +47,7 @@ function sourceRouteOperations() {
     const source = fs.readFileSync(path.resolve(file), 'utf8');
     return [...source.matchAll(routePattern)]
       .map((match) => ({
-        method: match[1].toUpperCase(),
+        method: match[1],
         path: normalizeRoutePath(prefix, match[3]),
       }))
       .filter(({ path }) => path !== '/*splat' && !path.includes('/*'));
@@ -58,22 +55,29 @@ function sourceRouteOperations() {
 }
 
 describe('server OpenAPI generation', () => {
+  it('describes error responses as errors', () => {
+    for (const { operation } of operations(createServerOpenApiDocument())) {
+      const responses = (operation as { responses: Record<string, { description: string }> })
+        .responses;
+      for (const [status, response] of Object.entries(responses)) {
+        if (Number(status) >= 400) {
+          expect(response.description).not.toBe('Successful response');
+        }
+      }
+    }
+  });
+
   it('registers every server route exactly once', () => {
-    const { routes } = createServerOpenApiRegistry();
-    const document = createServerOpenApiDocument();
-    const generatedOperations = operations(document);
-    const sourceOperations = sourceRouteOperations();
+    const routeKey = ({ method, path }: { method: string; path: string }) =>
+      `${method.toUpperCase()} ${path}`;
+    const registeredKeys = createServerOpenApiRegistry()
+      .definitions.filter((definition) => definition.type === 'route')
+      .map(({ route }) => routeKey(route))
+      .sort();
+    const generatedKeys = operations(createServerOpenApiDocument()).map(routeKey).sort();
 
-    expect(routes).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(generatedOperations).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(sourceOperations).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-
-    const generatedKeys = generatedOperations.map(
-      ({ method, path }) => `${method.toUpperCase()} ${path}`,
-    );
-    const sourceKeys = sourceOperations.map(({ method, path }) => `${method} ${path}`);
-    expect(new Set(generatedKeys).size).toBe(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(generatedKeys.sort()).toEqual(sourceKeys.sort());
+    expect(registeredKeys).toEqual(generatedKeys);
+    expect(sourceRouteOperations().map(routeKey).sort()).toEqual(generatedKeys);
     expect(generatedKeys.some((key) => key.includes('/:'))).toBe(false);
   });
 
@@ -107,6 +111,15 @@ describe('server OpenAPI generation', () => {
       | { anyOf?: unknown[]; oneOf?: unknown[] }
       | undefined;
 
+    const filename = getMediaOperation.parameters.find(
+      (param: { name: string }) => param.name === 'filename',
+    );
+    const acceptsFilename = new Ajv2020({ strict: false }).compile(filename.schema);
+    expect(acceptsFilename('ABCDEF123456.PNG')).toBe(true);
+    expect(acceptsFilename('A'.repeat(64))).toBe(true);
+    expect(acceptsFilename('A'.repeat(63))).toBe(false);
+    expect(acceptsFilename('file.png')).toBe(false);
+
     expect(document.openapi).toBe('3.1.0');
     expect(paths['/api/results']?.get?.parameters).toEqual(
       expect.arrayContaining([
@@ -117,9 +130,19 @@ describe('server OpenAPI generation', () => {
     expect(addEvalResultsOperation?.responses['204']).toEqual(
       expect.objectContaining({ description: 'Results added' }),
     );
-    expect(
-      createEvalJobOperation?.requestBody?.content?.['application/json']?.schema?.required,
-    ).toEqual(expect.arrayContaining(['prompts', 'providers']));
+    const { schema: jobSchema, example } =
+      createEvalJobOperation.requestBody.content['application/json'];
+    const acceptsJob = new Ajv2020({ strict: false }).compile(jobSchema);
+    expect(example).toMatchObject({ providers: ['echo'], sharing: false });
+    expect(acceptsJob(example)).toBe(true);
+    expect(EvalSchemas.CreateJob.Request.safeParse(example).success).toBe(true);
+    const job = { prompts: ['hello'], providers: ['echo'] };
+    expect(acceptsJob({ ...job, tests: 'tests.yaml' })).toBe(true);
+    expect(acceptsJob({ ...job, tests: { path: 'file://tests.js' } })).toBe(true);
+    expect(acceptsJob({ ...job, tests: {} })).toBe(false);
+    expect(jobSchema.required).toEqual(expect.arrayContaining(['prompts', 'providers']));
+    expect(createEvalJobOperation.responses['500']).toBeDefined();
+    expect(paths['/api/eval/job/{id}']?.get?.responses?.['500']).toBeDefined();
     expect(
       getMediaOperation?.responses['200']?.content?.['application/octet-stream']?.schema,
     ).toEqual(expect.objectContaining({ format: 'binary', type: 'string' }));
@@ -157,7 +180,7 @@ describe('server OpenAPI generation', () => {
     expect(
       listBlobLibraryOperation?.responses['200']?.content?.['application/json']?.schema?.properties
         ?.data?.properties?.items?.items?.properties?.hash,
-    ).toEqual(expect.objectContaining({ pattern: '^[a-f0-9]{64}$/i', type: 'string' }));
+    ).toEqual(expect.objectContaining({ pattern: '^[A-Fa-f0-9]{64}$', type: 'string' }));
   });
 
   it('emits representative inline DTO schemas', () => {
@@ -173,6 +196,7 @@ describe('server OpenAPI generation', () => {
     expect(telemetryRequest).toEqual(
       expect.objectContaining({
         properties: expect.objectContaining({
+          packageVersion: { type: 'string' },
           event: expect.objectContaining({
             enum: expect.arrayContaining(['webui_api', 'redteam run']),
           }),

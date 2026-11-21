@@ -55,7 +55,7 @@ redteam:
     - id: coding-agent:core
 ```
 
-Use the full collection for comprehensive coverage across all coding-agent plugin IDs:
+Use the full collection to run all coding-agent plugin IDs:
 
 ```yaml
 redteam:
@@ -198,6 +198,8 @@ For best signal, expose one or more of these surfaces from your coding-agent pro
 - A per-row workspace identifier or reset marker so reviewers can confirm tests did not share mutated state.
 
 ## Interpreting Failures
+
+For integrity checks, supply regular files up to 16 MiB. Keep automation files inside the evaluated workspace, and keep verifier artifacts and sidecar reports inside a trusted verifier root. Unreadable files leave verification incomplete.
 
 A failed row may reflect an observed effect, an unsafe recommendation, or an incomplete host check. Inspect the agent transcript, raw provider events, trace, changed files, and sidecar report before deciding whether the issue belongs in model training, provider configuration, sandbox policy, verifier design, or the surrounding CI harness.
 
