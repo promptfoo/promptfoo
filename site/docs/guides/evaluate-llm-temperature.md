@@ -117,8 +117,6 @@ tests:
         - 'environment'
 ```
 
-It's worth spending a few minutes to set up these automated checks. They help streamline the evaluation process and quickly identify bad outputs.
-
 After the evaluation is complete, you can use the web viewer to review the outputs and compare the performance at different temperatures:
 
 ```sh
