@@ -30,22 +30,23 @@ export const handleIsValidOpenAiToolsCall = async ({
     outputStr = '';
   }
 
-  // Check for MCP tool results in the output
-  if (outputStr.includes('MCP Tool Result') || outputStr.includes('MCP Tool Error')) {
-    // For MCP tools, we validate that the tool call was successful
-    if (outputStr.includes('MCP Tool Error')) {
-      const errorMatch = outputStr.match(
-        /MCP Tool Error(?: \(([^)]+)\))?:[ \t]*([\s\S]*?)(?=\r?\n[ \t]*MCP Tool (?:Result|Error)(?: \([^)]+\))?:|$)/,
-      );
-      const toolName = errorMatch?.[1] ?? 'unknown';
-      const errorMsg = errorMatch?.[2].trim() || 'unknown error';
-      return verdict(false, `MCP tool call failed for ${toolName}: ${errorMsg}`);
-    }
-
-    // MCP tool call succeeded
-    const resultMatch = outputStr.match(/MCP Tool Result \(([^)]+)\):/);
-    const toolName = resultMatch ? resultMatch[1] : 'unknown';
-    return verdict(true, `MCP tool call succeeded for ${toolName}`);
+  // Match one header before examining the body. Even malformed subsequent
+  // MCP records delimit the error, so approval arguments never enter the reason.
+  const failure = /^[ \t]*MCP Tool Error\b/m.exec(outputStr);
+  if (failure) {
+    const rest = outputStr.slice(failure.index + failure[0].length);
+    const header = /^(?: \(([^()\r\n]+)\))?:/.exec(rest);
+    const body = header ? rest.slice(header[0].length) : '';
+    const next = body.search(/[\r\n][ \t]*MCP\b/);
+    const detail = (next < 0 ? body : body.slice(0, next)).trim() || 'unknown error';
+    return verdict(false, 'MCP tool call failed for ' + (header?.[1] ?? 'unknown') + ': ' + detail);
+  }
+  const result = /^[ \t]*MCP Tool Result(?: \(([^()\r\n]+)\))?:/m.exec(outputStr);
+  const successReason = result
+    ? 'MCP tool call succeeded for ' + (result[1] ?? 'unknown')
+    : undefined;
+  if (successReason && !(output && typeof output === 'object' && 'tool_calls' in output)) {
+    return verdict(true, successReason);
   }
 
   // Handle traditional OpenAI function/tool calls
@@ -117,7 +118,7 @@ export const handleIsValidOpenAiToolsCall = async ({
         test.vars,
       );
     });
-    return verdict(true, 'Assertion passed');
+    return verdict(true, successReason ?? 'Assertion passed');
   } catch (err) {
     return toolCallErrorVerdict(assertion, inverse, err, 'OpenAI tools call');
   }

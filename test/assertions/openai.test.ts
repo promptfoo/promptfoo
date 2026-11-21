@@ -1323,23 +1323,42 @@ describe('OpenAI assertions', () => {
       });
     });
 
-    it.each(['MCP Tool Result (other): done', 'MCP Tool Error: another failure'])(
-      'keeps later MCP output out of the first failure reason: %s',
-      async (nextOutput) => {
-        const result = await runAssertion({
-          prompt: 'Some prompt',
+    it.each([
+      'MCP Tool Result (other): done',
+      'MCP Tool Error: another failure',
+      'MCP Approval Required for fixture.lookup: request',
+      'MCP Tools from fixture: catalog',
+      'MCP Tool Result (',
+    ])('keeps later MCP output out of the first failure reason: %s', async (nextOutput) => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: toolsAssertion,
+        provider: mockProvider,
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output: `MCP Tool Error (weather): first line\nsecond line\n${nextOutput}`,
+        },
+      });
+
+      expect(result.reason).toBe('MCP tool call failed for weather: first line\nsecond line');
+      expect(result.pass).toBe(false);
+    });
+
+    it('bounds malformed record parsing and rejects result text beside invalid calls', async () => {
+      const run = (output: unknown) =>
+        runAssertion({
           assertion: toolsAssertion,
           provider: mockProvider,
-          test: {} as AtomicTestCase,
-          providerResponse: {
-            output: `MCP Tool Error (weather): first line\nsecond line\n${nextOutput}`,
-          },
+          test: {},
+          providerResponse: { output },
         });
-
-        expect(result.reason).toBe('MCP tool call failed for weather: first line\nsecond line');
-        expect(result.pass).toBe(false);
-      },
-    );
+      expect(
+        (await run('MCP Tool Error: first\n' + 'MCP Tool Result (\n'.repeat(8192))).reason,
+      ).toBe('MCP tool call failed for unknown: first');
+      expect((await run({ content: 'MCP Tool Result (ping): done', tool_calls: [] })).pass).toBe(
+        false,
+      );
+    });
 
     it('should handle MCP tool result without tool name match', async () => {
       const mcpOutput = 'MCP Tool Result: General success';

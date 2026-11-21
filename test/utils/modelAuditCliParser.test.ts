@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { parseModelAuditArgs } from '../../src/util/modelAuditCliParser';
+import {
+  getModelAuditDelegationEnv,
+  parseModelAuditArgs,
+} from '../../src/util/modelAuditCliParser';
+
+describe('getModelAuditDelegationEnv', () => {
+  it.each(['OPENAI_API_KEY', 'OpenAI_Api_Key'])('withholds %s from scanner triage', (key) => {
+    const env = { [key]: 'test-only', HF_TOKEN: 'fixture-token' };
+    expect(getModelAuditDelegationEnv(env)).toEqual({
+      HF_TOKEN: 'fixture-token',
+      PROMPTFOO_DELEGATED: 'true',
+    });
+    expect(env[key]).toBe('test-only');
+  });
+});
 
 describe('parseModelAuditArgs', () => {
   it('should parse basic options', () => {
