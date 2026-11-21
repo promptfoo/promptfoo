@@ -85,7 +85,7 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
       (usage?.input_tokens ?? 0) +
       (usage?.cache_read_input_tokens ?? 0) +
       (usage?.cache_creation_input_tokens ?? 0);
-    const rates = selectBedrockTokenRates(modelName, regionalPricing, totalInput);
+    const rates = selectBedrockTokenRates(regionalPricing, totalInput);
     const pricingConfig = {
       ...config,
       inputCost: config.inputCost ?? rates.input / 1e6,

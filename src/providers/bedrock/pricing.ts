@@ -33,7 +33,7 @@ type BedrockPricing = {
   input: number;
   output: number;
   /**
-   * Rates that replace `input`/`output` once total input tokens reach `threshold`.
+   * Rates that replace `input`/`output` when total input tokens exceed `threshold`.
    * Cache rates are derived from the tier's input rate, matching how AWS prices the
    * `-cache-read/-cache-write-...-long-context-...` meters.
    */
@@ -100,7 +100,7 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // explicit entry here for any future 4.x release for the same reason.
   'anthropic.claude-sonnet-4-6': { input: 3, output: 15 },
   'anthropic.claude-sonnet-4-5': { input: 3, output: 15 },
-  // Claude Sonnet 4 is the only Bedrock Claude model with published long-context meters
+  // Claude Sonnet 4 has published long-context meters
   // (verified 2026-09-01 in us-east-1, us-east-2, us-west-2, eu-west-1 and ap-northeast-1):
   // above 200K input tokens input doubles to $6 and output is 1.5x at $22.50. The matching
   // `-cache-read/-cache-write-...-long-context-...` meters are 10% and 1.25x of the tier's
@@ -482,15 +482,8 @@ export function getBedrockPricing(
   return undefined;
 }
 
-export function selectBedrockTokenRates(
-  normalizedModelId: string,
-  pricing: BedrockPricing,
-  totalInputTokens: number,
-) {
-  return pricing.longContext &&
-    (isClaudeHaiku55Model(normalizedModelId)
-      ? totalInputTokens > pricing.longContext.threshold
-      : totalInputTokens >= pricing.longContext.threshold)
+export function selectBedrockTokenRates(pricing: BedrockPricing, totalInputTokens: number) {
+  return pricing.longContext && totalInputTokens > pricing.longContext.threshold
     ? pricing.longContext
     : pricing;
 }
@@ -684,7 +677,7 @@ export function calculateBedrockCost(
   // Long-context tiers are billed on total input size, which for Anthropic means the uncached
   // prompt plus any cache reads and writes (`input_tokens` excludes cached tokens).
   const totalInputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
-  const tier = selectBedrockTokenRates(normalizedModelId, pricing, totalInputTokens);
+  const tier = selectBedrockTokenRates(pricing, totalInputTokens);
 
   const inputRate = (tier.input / 1_000_000) * pricingMultiplier;
   const inputCost = normalizedModelId.includes('anthropic.claude')

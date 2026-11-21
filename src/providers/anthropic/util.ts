@@ -24,8 +24,6 @@ export function formatLegacyCompletionPrompt(prompt: string): string {
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.
-  // Fast mode on Fable/Mythos 5.2 ($16/$80) is not encoded here; set `inputCost` and
-  // `outputCost` to track it.
   ...modelsWithCost(['claude-fable-5-2', 'claude-mythos-5-2'], {
     input: 8 / 1e6, // $8 / MTok
     output: 40 / 1e6, // $40 / MTok
@@ -45,7 +43,7 @@ export const ANTHROPIC_MODELS = [
     longContext: { threshold: 100_000, input: 0.5 / 1e6, output: 2.5 / 1e6 },
   }),
   // Claude Opus 5.5 — 1M context billed at a flat rate. Fast mode ($8/$40, Claude API only)
-  // is a separate research-preview rate that is intentionally not encoded here.
+  // doubles these rates (see `fastModePriceMultiplier`).
   ...modelsWithCost(['claude-opus-5-5'], {
     input: 4 / 1e6, // $4 / MTok
     output: 20 / 1e6, // $20 / MTok
@@ -53,8 +51,7 @@ export const ANTHROPIC_MODELS = [
   // Claude Opus 5 — the Opus-tier Claude 5 model. 1M context window (both the default
   // and the maximum) with the full low→max effort ladder, at the same list pricing as
   // Opus 4.8 ($5/$25), so it is a drop-in cost swap. The full 1M context bills at this
-  // flat rate. Fast mode ($10/$50, Claude API only) is a separate research-preview rate
-  // that is intentionally not encoded here; set an explicit `cost` to track it.
+  // flat rate. Fast mode ($10/$50, Claude API only) doubles these rates.
   ...modelsWithCost(['claude-opus-5'], {
     input: 5 / 1e6, // $5 / MTok
     output: 25 / 1e6, // $25 / MTok
@@ -257,6 +254,8 @@ interface ClaudeModelFamily {
   regionalPremium?: boolean;
   /** Cache-read price as a fraction of the input rate, when it differs from the usual 0.1. */
   cacheReadMultiplier?: number;
+  /** Fast mode (`usage.speed: 'fast'`) price as a multiple of the standard rates. */
+  fastModePriceMultiplier?: number;
 }
 
 /**
@@ -287,6 +286,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   // sampling params and forced `tool_choice` return 400, and cache reads cost 0.025x input.
   {
     match: CLAUDE_FABLE_MYTHOS_52_PATTERN,
+    fastModePriceMultiplier: 2,
     warningName: 'Claude Fable 5.2 and Claude Mythos 5.2',
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
@@ -315,6 +315,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   // live). Unlike Opus 5, lowering `effort` is the only way to reduce thinking.
   {
     match: CLAUDE_OPUS_55_PATTERN,
+    fastModePriceMultiplier: 2,
     warningName: 'Claude Opus 5.5',
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
@@ -326,6 +327,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   // still accepts `disabled`, but only at effort `high` or below.
   {
     match: CLAUDE_OPUS_5_PATTERN,
+    fastModePriceMultiplier: 2,
     warningName: 'Claude Opus 5',
     samplingParamsDeprecated: true,
     thinkingOnByDefault: true,
@@ -358,6 +360,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   // Opus 4.7 and 4.8 share behavior and warning wording.
   {
     match: CLAUDE_OPUS_48_PATTERN,
+    fastModePriceMultiplier: 2,
     warningName: 'Claude Opus 4.7 and 4.8',
     samplingParamsDeprecated: true,
     regionalPremium: true,
@@ -968,6 +971,7 @@ export function calculateAnthropicCost(
   cacheCreationTokens?: number,
   cacheCreation1hTokens?: number,
   reportedInferenceGeo?: string | null,
+  reportedSpeed?: string | null,
 ): number | undefined {
   const pricingModelName = normalizeAnthropicModelName(modelName);
   const hasExplicitPricing =
@@ -979,11 +983,27 @@ export function calculateAnthropicCost(
       : undefined);
   const totalInputTokens =
     (promptTokens ?? 0) + (cacheReadTokens ?? 0) + (cacheCreationTokens ?? 0);
-  const modelInfo =
+  let modelInfo =
     registeredModel?.cost.longContext &&
     totalInputTokens > registeredModel.cost.longContext.threshold
       ? { ...registeredModel, cost: registeredModel.cost.longContext }
       : registeredModel;
+  // Adjust the model rates before applying either per-direction override.
+  if (reportedSpeed === 'fast' && modelInfo) {
+    const multiplier = CLAUDE_MODEL_FAMILIES.find((family) =>
+      family.match.test(pricingModelName),
+    )?.fastModePriceMultiplier;
+    if (multiplier) {
+      modelInfo = {
+        id: modelInfo.id,
+        cost: {
+          input: modelInfo.cost.input * multiplier,
+          output: modelInfo.cost.output * multiplier,
+        },
+      };
+    }
+  }
+
   // A model name that normalizeAnthropicModelName rewrote carries a Bedrock
   // prefix. Bare and geo-prefixed Bedrock IDs bill at the regional premium;
   // only the `global.` endpoint bills at base rate.

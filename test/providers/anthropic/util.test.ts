@@ -2930,6 +2930,40 @@ describe('Anthropic utilities', () => {
     });
   });
 
+  describe('fast mode', () => {
+    it.each([
+      ['claude-fable-5-2', 48, 96],
+      ['claude-mythos-5-2', 48, 96],
+      ['claude-opus-5-5', 24, 48],
+      ['claude-opus-5', 30, 60],
+      ['claude-opus-4-8', 30, 60],
+      ['claude-sonnet-5-5', 12, 12],
+    ] as const)('bills %s at its reported speed', (model, standard, fast) => {
+      const cost = (speed: string) =>
+        calculateAnthropicCost(model, {}, 1e6, 1e6, 0, 0, 0, null, speed);
+      expect(cost('fast')).toBeCloseTo(fast, 10);
+      expect(cost('standard')).toBeCloseTo(standard, 10);
+    });
+
+    it('applies cache and US-only multipliers to fast mode rates', () => {
+      expect(
+        calculateAnthropicCost('claude-opus-5-5', {}, 1e6, 1e6, 1e6, 0, 0, 'us', 'fast'),
+      ).toBeCloseTo((8 + 0.4 + 40) * 1.1, 10);
+    });
+
+    it.each([
+      [{ inputCost: 6e-6 }, 6 + 40, 0.3],
+      [{ outputCost: 30e-6 }, 8 + 30, 0.4],
+      [{ inputCost: 0, outputCost: 30e-6 }, 30, 0],
+      [{ cost: 1e-6 }, 2, 0],
+    ] as const)('preserves only the overridden rates in %j', (config, base, cache) => {
+      const cost = (reads: number) =>
+        calculateAnthropicCost('claude-opus-5-5', config, 1e6, 1e6, reads, 0, 0, null, 'fast');
+      expect(cost(0)).toBeCloseTo(base, 10);
+      expect(cost(1e6)).toBeCloseTo(base + cache, 10);
+    });
+  });
+
   describe('Claude Haiku 5.5', () => {
     const HAIKU_55_IDS = [
       'claude-haiku-5-5',

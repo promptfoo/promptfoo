@@ -1534,6 +1534,28 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.cost).toBeCloseTo(33, 10);
     });
 
+    it.each([
+      ['standard', 24],
+      ['fast', 48],
+    ] as const)('prices web searches separately at reported speed %s', async (speed, tokens) => {
+      const provider = createProvider('claude-opus-5-5', {
+        config: { extra_body: { speed: 'fast' } },
+      });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Searched' }],
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 1_000_000,
+          output_tokens: 1_000_000,
+          speed,
+          server_tool_use: { web_search_requests: 3, web_fetch_requests: 2 },
+        },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Search the web');
+      expect(result.cost).toBeCloseTo(tokens + 0.03, 10);
+    });
+
     it('should forward cache tokens from cached responses', async () => {
       const provider = createProvider('claude-3-5-sonnet-20241022');
 

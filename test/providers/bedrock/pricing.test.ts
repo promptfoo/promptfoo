@@ -348,9 +348,13 @@ describe('calculateBedrockCost', () => {
       );
     });
 
-    it('switches to $6/$22.50 at and above 200k input tokens', () => {
+    it('switches to $6/$22.50 above 200k input tokens', () => {
       expect(calculateBedrockCost(ID, 200_000, 1_000)).toBeCloseTo(
-        (200_000 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
+        (200_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
+        6,
+      );
+      expect(calculateBedrockCost(ID, 200_001, 1_000)).toBeCloseTo(
+        (200_001 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
         6,
       );
     });

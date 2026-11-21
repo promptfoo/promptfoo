@@ -10,6 +10,7 @@ describe('predefinedTargets', () => {
     expect(values).toContain('claude-mythos-5-2');
     expect(values).toContain('claude-opus-5-5');
     expect(values).toContain('claude-sonnet-5-5');
+    expect(values).toContain('claude-haiku-5-5');
     expect(values).not.toContain('claude-opus-4-1-20250805');
   });
 
