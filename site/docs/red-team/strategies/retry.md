@@ -23,13 +23,13 @@ redteam:
   strategies:
     - id: 'retry'
       config:
-        numTests: 10 # History limit for each plugin, provider ID and source
+        numTests: 10 # Maximum number of retries
         plugins:
           - harmful:hate # Only retry failed tests from these plugins
           - harmful:illegal
 ```
 
-The optional `plugins` list limits which plugins contribute failures. `numTests` limits each lookup by plugin, provider ID and history source. By default, each lookup uses the number of new cases for that plugin.
+The optional `plugins` list limits which plugins contribute failures. With `numTests` set, generation considers up to that many new cases and adds at most that many retries overall. By default, each lookup uses the number of new cases for that plugin, per provider ID and history source.
 
 To use the defaults, add `retry` to your strategies.
 
@@ -43,7 +43,7 @@ redteam:
 
 Promptfoo combines failed cases from local SQLite and, when connected, Promptfoo Cloud. Either source can supply cases if the other is empty or unavailable. Duplicate inputs with the same strategy appear once.
 
-Cloud retries use a plain-text prompt with the current plugin’s local settings and assertions. Promptfoo skips ambiguous or incompatible cases, including multi-turn, multimodal and structured inputs, template expressions and file or package references. Goal-based tests such as `intent` require a historical goal matching a current local goal. Single-turn agentic strategies and Best-of-N need a recorded final prompt. Layered and authoritative markup attacks use local history only. Local retries retain their saved configuration.
+Cloud retries use a plain-text prompt with the current plugin’s local settings and assertions. Promptfoo skips ambiguous or incompatible cases, including multi-turn, multimodal and structured inputs, template expressions and file or package references. Grading markers and companion variables must match the local test. Goal-based tests such as `intent` require a historical goal matching a current local goal. Single-turn agentic strategies and Best-of-N need a recorded final prompt. Layered and authoritative markup attacks use local history only. Local retries retain their saved configuration.
 
 ## Example Scenarios
 
