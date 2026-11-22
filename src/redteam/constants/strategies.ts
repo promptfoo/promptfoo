@@ -15,6 +15,33 @@ export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak:meta', 'jailbreak:composite'] as const;
 export const DEFAULT_STRATEGIES_SET: ReadonlySet<string> = new Set(DEFAULT_STRATEGIES);
 
+// Synthesis keeps the first strategy per ID. Layer labels or ordered steps distinguish layers.
+export function strategyDeduplicationKey(strategy: {
+  id: string;
+  config?: Record<string, unknown>;
+}): string {
+  if (strategy.id === 'layer' && strategy.config) {
+    const { label, steps } = strategy.config;
+    if (typeof label === 'string' && label.trim()) {
+      return `layer/${label}`;
+    }
+    if (Array.isArray(steps)) {
+      const ids = steps.map((step) => (typeof step === 'string' ? step : (step?.id ?? 'unknown')));
+      return `layer:${ids.join('->')}`;
+    }
+  }
+  return strategy.id;
+}
+
+// Target filters can name a plugin or a category (e.g. harmful matches harmful:hate).
+export function pluginIdMatchesTargets(pluginId: string, targets?: readonly string[]): boolean {
+  return (
+    !targets?.length ||
+    (typeof pluginId === 'string' &&
+      targets.some((target) => pluginId === target || pluginId.startsWith(`${target}:`)))
+  );
+}
+
 export const DEFAULT_MULTI_TURN_MAX_TURNS = 5;
 
 export const MULTI_TURN_STRATEGIES = [

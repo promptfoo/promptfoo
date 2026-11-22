@@ -207,6 +207,48 @@ describe('addRetryTestCases', () => {
     expect(result).toHaveLength(0);
   });
 
+  it('skips historical outcomes filed under an ordinary plugin before replaying failed prompts', async () => {
+    const seed = { metadata: { pluginId: 'bias:age' }, vars: { prompt: 'Ordinary prompt' } };
+    const outcome = {
+      metadata: {
+        ...seed.metadata,
+        strategyId: 'jailbreak:meta',
+        agentOutcome: {
+          pluginId: 'agentic:unauthorized-sharing',
+          caseId: 'ticket-84',
+          mode: 'indirect',
+          variant: 'attack',
+        },
+      },
+      vars: { prompt: 'Owner task', artifact: 'External note' },
+    };
+    const mockDb = {
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi
+        .fn()
+        .mockResolvedValueOnce([{}])
+        .mockResolvedValueOnce([
+          {
+            testCase: outcome,
+            response: { metadata: { redteamFinalPrompt: 'Overwritten owner task' } },
+            evalId: 'old-outcome',
+          },
+          { testCase: seed, response: {}, evalId: 'ordinary' },
+        ]),
+    };
+    const getDb = await getMockDb();
+    getDb.mockReturnValue(mockDb as any);
+
+    const result = await addRetryTestCases([seed], 'prompt', {
+      targetIds: ['test-target'],
+      numTests: 2,
+    });
+    expect(result.map((test) => test.metadata?.originalEvalId)).toEqual(['ordinary']);
+  });
+
   it('should preserve provider with injectVar from stored test case', async () => {
     const storedTestCase = {
       vars: { prompt: 'test prompt' },

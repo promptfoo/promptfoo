@@ -39,6 +39,89 @@ describe('getStrategyId', () => {
 });
 
 describe('getEstimatedProbes', () => {
+  const outcomes = [
+    'agentic:private-to-public-disclosure',
+    'agentic:unauthorized-sharing',
+    'coding-agent:consent-bypass',
+  ];
+  const adaptive = ['jailbreak:meta', 'jailbreak:hydra', 'jailbreak:goblin'];
+  const noBasic = { id: 'basic', config: { enabled: false } };
+
+  it('counts only basic probes for exempt outcome plugins', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: outcomes,
+      strategies: adaptive,
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(6);
+    expect(getEstimatedProbes({ ...config, strategies: [...adaptive, noBasic] } as Config)).toBe(0);
+  });
+
+  it('applies adaptive budgets only to ordinary seeds in mixed, multilingual scans', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: [...outcomes, 'bola'],
+      strategies: adaptive,
+      language: ['en', 'es'],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(136); // 16 basic + 4 ordinary × 30
+    expect(
+      getEstimatedProbes({
+        ...config,
+        strategies: [{ id: 'jailbreak:meta', config: { plugins: ['agentic'] } }],
+      } as Config),
+    ).toBe(16);
+  });
+
+  it.each([
+    // The default alias includes basic, Meta and composite. Their first settings win.
+    {
+      strategies: ['default', noBasic, { id: 'jailbreak:meta', config: { numTests: 1 } }],
+      expected: 38,
+    },
+    { strategies: [noBasic, 'default'], expected: 30 },
+    { strategies: ['retry', { id: 'retry', config: { numTests: 10 } }], expected: 10 },
+    { strategies: [noBasic, { id: 'retry', config: { numTests: 10 } }], expected: 0 },
+    { strategies: [{ id: 'jailbreak:hydra', config: { numTests: 0 } }], expected: 8 },
+    { strategies: [{ id: 'jailbreak:goblin', config: { numTests: 1 } }], expected: 18 },
+    {
+      strategies: [
+        { id: 'layer', config: { label: 'one', steps: ['hex'] } },
+        { id: 'layer', config: { label: 'two', steps: ['hex'] } },
+        { id: 'layer', config: { steps: ['base64', 'hex'] } },
+        { id: 'layer', config: { steps: [{ id: 'base64' }, 'hex'] } },
+        { id: 'layer', config: { steps: ['hex', 'base64'] } },
+      ],
+      expected: 16,
+    },
+  ])('counts effective mixed-scan strategies $strategies', ({ strategies, expected }) => {
+    expect(
+      getEstimatedProbes({
+        ...baseConfig,
+        numTests: 2,
+        plugins: [...outcomes, 'bola'],
+        strategies,
+      } as Config),
+    ).toBe(expected);
+  });
+
+  it('respects other strategy exemptions and per-plugin exclusions in mixed scans', () => {
+    expect(
+      getEstimatedProbes({
+        ...baseConfig,
+        numTests: 2,
+        plugins: [
+          ...outcomes,
+          'aegis',
+          { id: 'bola', config: { excludeStrategies: ['jailbreak:meta'] } },
+        ],
+        strategies: ['jailbreak:meta', 'jailbreak:hydra'],
+      } as Config),
+    ).toBe(30); // Ten basic cases, only two eligible for Hydra.
+  });
+
   it.each([
     { plugins: [{ id: 'toxicity', numTests: 2 }], numTests: 5, expected: 12 },
     { plugins: [{ id: 'bola', numTests: -2 }], numTests: 5, expected: 5 },
