@@ -404,7 +404,7 @@ function scopeMergedHeaderReferences(
       source.match(/^\{\{\s*env(?:\.(\w+)|\[['"](\w+)['"]\])\s*\}\}$/);
     if (alias) {
       const backing = alias[1] ?? alias[2];
-      if (!Object.hasOwn(mergedEnv, backing) && !Object.hasOwn(provider.env ?? {}, backing)) {
+      if (!(backing in mergedEnv) && !(backing in (provider.env ?? {}))) {
         references.headers[header] = template.replace(headerEnvReference, 'env.' + backing);
         continue;
       }
