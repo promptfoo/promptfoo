@@ -432,7 +432,7 @@ async function loadClaudeCodeSDK() {
       dedent`Failed to load @anthropic-ai/claude-agent-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js >=22.22.0)
+      - Incompatible Node.js version (requires Node.js ^22.22.2 || ^24.15.0 || >=26)
       - Corrupted installation
 
       Try reinstalling:

@@ -29,7 +29,7 @@ The example uses `gpt-6-luna` through the SDK’s default Responses API. Set `co
 ## Requirements
 
 - Python 3.10+
-- Node.js >=22.22.0 (Node.js 24 LTS recommended)
+- A [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support)
 - `OPENAI_API_KEY`
 
 ## Setup
