@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { containsConnectionDetails, testSetupConnection } from '../../node/redteamSetupConnection';
+import { containsSetupSecret, testSetupConnection } from '../../node/redteamSetupConnection';
 import {
   DATASET_EXEMPT_PLUGINS,
   isMultiTurnStrategy,
@@ -392,22 +392,35 @@ redteamRouter.post('/setup-plan', async (req, res) => {
   const input = RedteamSchemas.SetupPlan.Request.safeParse(req.body);
   if (!input.success) {
     res.status(400).json({
-      error: 'Check your message. The agent accepts up to 24 messages of 2,000 characters each.',
+      error:
+        req.body?.version === 2
+          ? 'Check your draft and message size. The agent accepts up to 24 messages totaling 48,000 characters.'
+          : 'Reload setup to use the hosted agent. The new chat shares API descriptions with Promptfoo Cloud.',
     });
     return;
   }
-  const { messages, previous } = input.data;
+  const { version: _version, ...conversation } = input.data;
+  const { messages, previous, connection, verification, validationError } = conversation;
   const fields = [
     ...messages.map(({ content }) => content),
     previous?.purpose,
     previous?.note,
     ...Object.values(previous?.application ?? {}),
     ...(previous?.plugins.map(({ reason }) => reason) ?? []),
+    connection?.url,
+    connection?.authEnv,
+    connection?.authHeader,
+    connection?.model,
+    connection?.responsePath,
+    JSON.stringify(connection?.body),
+    verification?.message,
+    ...(verification?.paths ?? []),
+    validationError,
   ];
-  if (fields.some((value) => value && containsConnectionDetails(value))) {
+  if (fields.some((value) => value && containsSetupSecret(value))) {
     res.status(400).json({
       error:
-        'Keep endpoints and credentials out of the app description. Add connection details locally when the agent asks how to reach your app.',
+        'This looks like a credential. I didn’t send it to Cloud. Remove the value and use the environment variable name instead.',
     });
     return;
   }
@@ -419,7 +432,7 @@ redteamRouter.post('/setup-plan', async (req, res) => {
     const response = await fetchWithProxy(getRemoteGenerationUrl(), {
       method: 'POST',
       headers: getRemoteGenerationHeaders(),
-      body: JSON.stringify({ task: 'redteam-setup', ...input.data }),
+      body: JSON.stringify({ task: 'redteam-setup', ...conversation }),
       signal: AbortSignal.any([timeout, disconnected.signal]),
       redirect: 'error',
     });

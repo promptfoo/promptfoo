@@ -4856,7 +4856,7 @@
         "operationId": "draftRedteamSetupPlan",
         "tags": ["Redteam"],
         "summary": "Continue a red team setup conversation",
-        "description": "Send the app and test scope conversation to get a clarifying question or a plan. Keep connection details local. This never contacts the target or starts a run.",
+        "description": "Send the setup conversation, draft and optional verification feedback to the configured generation service. Never send keys or private records. The agent proposes changes and cannot contact the target or start a scan.",
         "requestBody": {
           "description": "JSON request body",
           "required": true,
@@ -4865,13 +4865,14 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "version": { "type": "number", "enum": [2] },
                   "messages": {
                     "type": "array",
                     "items": {
                       "type": "object",
                       "properties": {
                         "role": { "type": "string", "enum": ["user", "assistant"] },
-                        "content": { "type": "string", "minLength": 1, "maxLength": 2000 }
+                        "content": { "type": "string", "minLength": 1, "maxLength": 16000 }
                       },
                       "required": ["role", "content"],
                       "additionalProperties": false
@@ -4940,9 +4941,42 @@
                     },
                     "required": ["purpose", "plugins"],
                     "additionalProperties": false
-                  }
+                  },
+                  "connection": {
+                    "type": "object",
+                    "properties": {
+                      "url": { "type": "string", "minLength": 1, "maxLength": 4096 },
+                      "body": { "type": "object", "additionalProperties": {} },
+                      "authEnv": { "type": "string", "maxLength": 128 },
+                      "authHeader": { "type": "string", "minLength": 1, "maxLength": 128 },
+                      "responsePath": { "type": "string", "maxLength": 200 },
+                      "model": { "type": "string", "minLength": 1, "maxLength": 200 }
+                    },
+                    "additionalProperties": false
+                  },
+                  "hasTarget": { "type": "boolean" },
+                  "verification": {
+                    "type": "object",
+                    "properties": {
+                      "success": { "type": "boolean" },
+                      "message": { "type": "string", "maxLength": 500 },
+                      "paths": {
+                        "type": "array",
+                        "items": {
+                          "oneOf": [
+                            { "type": "string", "enum": ["Plain text"] },
+                            { "type": "string" }
+                          ]
+                        },
+                        "maxItems": 4
+                      }
+                    },
+                    "required": ["success", "message"],
+                    "additionalProperties": false
+                  },
+                  "validationError": { "type": "string", "maxLength": 500 }
                 },
-                "required": ["messages"],
+                "required": ["version", "messages"],
                 "additionalProperties": false
               }
             }
@@ -4954,24 +4988,10 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "question": { "type": "string", "minLength": 1, "maxLength": 400 }
-                      },
-                      "required": ["question"],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "explanation": { "type": "string", "minLength": 1, "maxLength": 300 }
-                      },
-                      "required": ["explanation"],
-                      "additionalProperties": false
-                    },
-                    {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                    "plan": {
                       "type": "object",
                       "properties": {
                         "purpose": { "type": "string", "minLength": 1, "maxLength": 1000 },
@@ -5036,8 +5056,22 @@
                       },
                       "required": ["purpose", "plugins"],
                       "additionalProperties": false
+                    },
+                    "connection": {
+                      "type": "object",
+                      "properties": {
+                        "url": { "type": "string", "minLength": 1, "maxLength": 4096 },
+                        "body": { "type": "object", "additionalProperties": {} },
+                        "authEnv": { "type": "string", "maxLength": 128 },
+                        "authHeader": { "type": "string", "minLength": 1, "maxLength": 128 },
+                        "responsePath": { "type": "string", "maxLength": 200 },
+                        "model": { "type": "string", "minLength": 1, "maxLength": 200 }
+                      },
+                      "additionalProperties": false
                     }
-                  ]
+                  },
+                  "required": ["message"],
+                  "additionalProperties": false
                 }
               }
             }

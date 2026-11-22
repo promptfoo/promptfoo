@@ -1040,7 +1040,7 @@ export function createServerOpenApiRegistry() {
     tags: ['Redteam'],
     summary: 'Continue a red team setup conversation',
     description:
-      'Send the app and test scope conversation to get a clarifying question or a plan. Keep connection details local. This never contacts the target or starts a run.',
+      'Send the setup conversation, draft and optional verification feedback to the configured generation service. Never send keys or private records. The agent proposes changes and cannot contact the target or start a scan.',
     request: { body: jsonBody(RedteamSchemas.SetupPlan.Request) },
     responses: {
       200: jsonResponse(RedteamSchemas.SetupPlan.Response),

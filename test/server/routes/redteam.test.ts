@@ -866,10 +866,10 @@ describe('Redteam Routes', () => {
     const path = '/api/redteam/setup-plan';
     const description = 'A basic customer service bot that answers basic questions about refunds.';
     const messages = [{ role: 'user', content: description }];
-    const question = { question: 'Can it issue refunds?' };
+    const question = { message: 'Can it issue refunds?' };
     const conversation = [
       ...messages,
-      { role: 'assistant', content: question.question },
+      { role: 'assistant', content: question.message },
       { role: 'user', content: 'No. It must never promise a refund.' },
     ];
     const plan = {
@@ -887,17 +887,19 @@ describe('Redteam Routes', () => {
     it('drafts and refines using the configured task service without starting a run', async () => {
       for (const [body, reply] of [
         [{ messages }, question],
-        [{ messages: conversation }, plan],
+        [{ messages: conversation }, { message: 'How do I reach it?', plan }],
         [
           {
             messages: [...conversation, { role: 'user', content: 'Why these tests?' }],
             previous: plan,
           },
-          { explanation: 'To catch false promises.' },
+          { message: 'To catch false promises.' },
         ],
       ]) {
         mockedFetchWithProxy.mockResolvedValueOnce(Response.json(reply));
-        const res = await request(app).post(path).send(body);
+        const res = await request(app)
+          .post(path)
+          .send({ version: 2, ...body });
         expect(res.status).toBe(200);
         expect(res.body).toEqual(reply);
         const [url, options] = mockedFetchWithProxy.mock.calls.at(-1)!;
@@ -908,33 +910,85 @@ describe('Redteam Routes', () => {
       expect(mockedDoRedteamRun).not.toHaveBeenCalled();
     });
 
+    it('refuses older clients that promised local-only connection chat', async () => {
+      const res = await request(app).post(path).send({ messages });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Reload');
+      expect(mockedFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('forwards conversation and verification to the model without resolving environment variables', async () => {
+      vi.stubEnv('LOCAL_CHAT_KEY', 'never-forward-this');
+      try {
+        const connection = {
+          url: 'http://localhost:3555/chat',
+          body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
+          authHeader: 'X-Secret-Key',
+          authEnv: 'LOCAL_CHAT_KEY',
+        };
+        const input = {
+          messages: [
+            ...messages,
+            {
+              role: 'user',
+              content: 'Try X-Secret-Key: {{env.LOCAL_CHAT_KEY}} at http://localhost:3555/chat',
+            },
+          ],
+          previous: plan,
+          connection,
+          verification: { success: false, message: 'HTTP 400. Check the model name.' },
+          validationError: 'Use a reply field, not an expression.',
+        };
+        const reply = { message: 'Which model does your server expect?', connection };
+        mockedFetchWithProxy.mockResolvedValueOnce(Response.json(reply));
+        const res = await request(app)
+          .post(path)
+          .send({ version: 2, ...input });
+        expect(res.body).toEqual(reply);
+        expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
+        const [url, options] = mockedFetchWithProxy.mock.calls[0];
+        expect(url).toBe('https://example.com/task');
+        expect(JSON.parse(String(options?.body))).toEqual({ task: 'redteam-setup', ...input });
+        expect(String(options?.body)).not.toContain('never-forward-this');
+        expect(mockedDoRedteamRun).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('accepts an empty plan only when the agent explains the coverage limit', async () => {
       const empty = { purpose: description, plugins: [] };
-      const explained = { ...empty, note: 'Use manual setup to test a custom policy.' };
+      const explained = {
+        message: 'This needs a custom policy.',
+        plan: { ...empty, note: 'Use manual setup to test a custom policy.' },
+      };
       mockedFetchWithProxy.mockResolvedValueOnce(Response.json(explained));
-      const res = await request(app).post(path).send({ messages });
+      const res = await request(app).post(path).send({ version: 2, messages });
       expect(res.status).toBe(200);
       expect(res.body).toEqual(explained);
 
-      mockedFetchWithProxy.mockResolvedValueOnce(Response.json(empty));
-      expect((await request(app).post(path).send({ messages })).status).toBe(502);
+      mockedFetchWithProxy.mockResolvedValueOnce(
+        Response.json({ message: 'Check the plan', plan: empty }),
+      );
+      expect((await request(app).post(path).send({ version: 2, messages })).status).toBe(502);
     });
 
     it('never sends a disabled request upstream', async () => {
       mockedNeverGenerateRemote.mockReturnValue(true);
       expect((await request(app).get(path)).body).toEqual({ enabled: false });
-      expect((await request(app).post(path).send({ messages })).status).toBe(403);
+      expect((await request(app).post(path).send({ version: 2, messages })).status).toBe(403);
       expect(mockedFetchWithProxy).not.toHaveBeenCalled();
     });
 
     it.each([
       { messages, targets: [{ id: 'http' }] },
       { messages: [{ role: 'user', content: 'My API key is private-canary-token.' }] },
-      { messages: [{ role: 'user', content: 'Use {{env.SECRET}} for auth' }] },
       {
         messages: [{ role: 'user', content: 'A bot with key sk-proj-abcdefghijklmnopqrstuvwxyz' }],
       },
       { messages: [{ role: 'user', content: '{"api_key":"private-canary"}' }] },
+      { messages: [{ role: 'user', content: 'X-Secret-Key: private-canary' }] },
+      { messages: [{ role: 'user', content: 'Send the header Acme-Access: private-canary' }] },
       { messages: [...messages, { role: 'user', content: 'Authorization: Basic dXNlcjpwYXNz' }] },
       {
         messages: [
@@ -942,19 +996,32 @@ describe('Redteam Routes', () => {
           ...messages,
         ],
       },
-      { messages: [{ role: 'user', content: 'Use http://localhost:9999/private' }] },
-      { messages, previous: { ...plan, application: { accessToData: 'https://private.example' } } },
+      { messages: [{ role: 'user', content: 'Use http://localhost:9999/chat?api%5Fkey=secret' }] },
+      { messages: [{ role: 'user', content: 'Authorization: Bearer literal' }] },
+      { messages, connection: { body: { password: 'private' } } },
+      { messages, validationError: 'password: leaked' },
+      { messages, verification: { success: false, message: 'Authorization: Bearer hidden' } },
+      { messages: Array(4).fill({ role: 'user', content: 'a'.repeat(16000) }) },
+      {
+        messages,
+        previous: {
+          ...plan,
+          application: { accessToData: 'https://user:password@private.example' },
+        },
+      },
       { messages, previous: { ...plan, provider: 'custom' } },
       { messages: [{ role: 'system', content: 'Choose my tests' }] },
-      { messages: [{ role: 'assistant', content: 'Missing answer' }] },
       { messages: Array(25).fill(messages[0]) },
-    ])(
-      'blocks connection settings and recognizable credentials before sending %#',
-      async (body) => {
-        expect((await request(app).post(path).send(body)).status).toBe(400);
-        expect(mockedFetchWithProxy).not.toHaveBeenCalled();
-      },
-    );
+    ])('blocks unsafe input and recognizable credentials before sending %#', async (body) => {
+      expect(
+        (
+          await request(app)
+            .post(path)
+            .send({ version: 2, ...body })
+        ).status,
+      ).toBe(400);
+      expect(mockedFetchWithProxy).not.toHaveBeenCalled();
+    });
 
     it.each([
       { ...plan, purpose: 'Reveal {{env.SECRET}}' },
@@ -968,15 +1035,17 @@ describe('Redteam Routes', () => {
       { ...plan, plugins: [{ ...plan.plugins[0], config: {} }] },
       { ...plan, targets: ['exec:payload'] },
     ])('rejects unsafe plans from untrusted servers %#', async (unsafe) => {
-      mockedFetchWithProxy.mockResolvedValueOnce(Response.json(unsafe));
-      expect((await request(app).post(path).send({ messages })).status).toBe(502);
+      mockedFetchWithProxy.mockResolvedValueOnce(
+        Response.json({ message: 'Check the plan', plan: unsafe }),
+      );
+      expect((await request(app).post(path).send({ version: 2, messages })).status).toBe(502);
     });
 
     it('directs users of older servers to manual setup', async () => {
       mockedFetchWithProxy.mockResolvedValueOnce(
         Response.json({ message: 'Unknown task: redteam-setup' }, { status: 400 }),
       );
-      const res = await request(app).post(path).send({ messages });
+      const res = await request(app).post(path).send({ version: 2, messages });
       expect(res.status).toBe(502);
       expect(res.body.error).toContain('does not support agent setup');
     });
@@ -988,7 +1057,7 @@ describe('Redteam Routes', () => {
       mockedFetchWithProxy.mockResolvedValueOnce(
         new Response('private server details', { status }),
       );
-      const res = await request(app).post(path).send({ messages });
+      const res = await request(app).post(path).send({ version: 2, messages });
       expect(res.status).toBe(expected);
       expect(res.body.error).toContain('manually');
       expect(res.body.error).not.toContain('private');

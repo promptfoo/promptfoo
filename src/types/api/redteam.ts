@@ -11,6 +11,7 @@ import { JsonProviderOptionsWithIdSchema } from './providers';
 import {
   RedteamSetupPlanSchema,
   RedteamSetupReplySchema,
+  SetupConnectionDraftSchema,
   SetupConnectionTest,
 } from './redteamSetup';
 
@@ -140,17 +141,23 @@ export const RedteamSchemas = {
   SetupConnectionTest,
   SetupPlan: {
     Request: z.strictObject({
+      // Require a client that discloses hosted processing of connection messages.
+      version: z.literal(2),
       messages: z
         .array(
           z.strictObject({
             role: z.enum(['user', 'assistant']),
-            content: z.string().trim().min(1).max(2000),
+            content: z.string().trim().min(1).max(16000),
           }),
         )
         .min(1)
         .max(24)
-        .refine((messages) => messages.at(-1)?.role === 'user'),
+        .refine((messages) => messages.reduce((n, m) => n + m.content.length, 0) <= 48000),
       previous: RedteamSetupPlanSchema.optional(),
+      connection: SetupConnectionDraftSchema.optional(),
+      hasTarget: z.boolean().optional(),
+      verification: SetupConnectionTest.Response.optional(),
+      validationError: z.string().max(500).optional(),
     }),
     Response: RedteamSetupReplySchema,
   },

@@ -49,12 +49,6 @@ export const RedteamSetupPlanSchema = z
   .refine((plan) => plan.plugins.length > 0 || Boolean(plan.note));
 export type RedteamSetupPlan = z.infer<typeof RedteamSetupPlanSchema>;
 
-export const RedteamSetupReplySchema = z.union([
-  z.strictObject({ question: setupText(400) }),
-  z.strictObject({ explanation: setupText(300) }),
-  RedteamSetupPlanSchema,
-]);
-
 // The HTTP provider evaluates transformResponse. Only property reads may become a reply path.
 export function isSetupReplyPath(path: string): boolean {
   return (
@@ -66,11 +60,25 @@ export function isSetupReplyPath(path: string): boolean {
 
 const replyPath = z.string().refine(isSetupReplyPath);
 
-// Only credential headers that the HTTP provider redacts. Never let a chat
-// request override routing, framing, cookies or Promptfoo's internal headers.
+// The caller names the credential header. Reserve HTTP control headers, routing,
+// and identifiers that are intentionally visible in logs and traces.
+const reservedHeaders = new Set(
+  (
+    'host origin referer cookie cookie2 set-cookie connection keep-alive upgrade expect ' +
+    'te trailer transfer-encoding forwarded via accept user-agent range traceparent tracestate baggage ' +
+    'x-real-ip x-host x-method-override x-org-id x-organization-id x-scope-orgid x-tenant-id ' +
+    'constructor prototype'
+  ).split(' '),
+);
+const reservedPrefixes =
+  /^(?:accept-|content-|proxy-|sec-|access-control-|openai-|x-(?:promptfoo|openai|forwarded|original|rewrite|http|proxy|envoy)-)/;
+
 export function isSetupAuthHeader(name: string): boolean {
-  return /^(?:authorization|(?:x-)?(?:api-key|auth-token|access-token)|apiKey|x-auth|x-portkey-api-key)$/i.test(
-    name,
+  const normalized = name.toLowerCase().replace(/_/g, '-');
+  return (
+    /^[a-z][a-z0-9_-]{0,127}$/i.test(name) &&
+    !reservedHeaders.has(normalized) &&
+    !reservedPrefixes.test(normalized)
   );
 }
 
@@ -118,3 +126,24 @@ export const SetupConnectionTest = {
   }),
 };
 export type SetupConnection = z.infer<typeof SetupConnectionTest.Request>;
+
+// Drafts can be incomplete. Bind proposed URLs and credentials to user input
+// before turning a draft into a testable or runnable target.
+export const SetupConnectionDraftSchema = z.strictObject({
+  url: setupText(4096).optional(),
+  body: z
+    .record(z.string(), z.unknown())
+    .refine((body) => JSON.stringify(body).length <= 16000)
+    .optional(),
+  authEnv: z.string().max(128).optional(),
+  authHeader: setupText(128).optional(),
+  responsePath: z.string().max(200).optional(),
+  model: setupText(200).optional(),
+});
+export type SetupConnectionDraft = z.infer<typeof SetupConnectionDraftSchema>;
+
+export const RedteamSetupReplySchema = z.strictObject({
+  message: setupText(2000),
+  plan: RedteamSetupPlanSchema.optional(),
+  connection: SetupConnectionDraftSchema.optional(),
+});

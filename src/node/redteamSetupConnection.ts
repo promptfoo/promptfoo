@@ -1,17 +1,57 @@
 import { getEnvBool, getEnvOverrides, isTemplateProcessEnvDisabled } from '../envars';
 import { isSetupReplyPath, type SetupConnection } from '../types/api/redteamSetup';
 import { fetchWithProxy, readBoundedText } from '../util/fetch/index';
-import { isSecretField, looksLikeSecret } from '../util/sanitizer';
+import { isCredentialHeader, isSecretField, looksLikeSecret } from '../util/sanitizer';
 
-// Catch common accidental pastes before sending free text to a hosted model.
-export function containsConnectionDetails(value: string): boolean {
-  const endpoint =
-    /(?:https?|wss?|file):\/\/|\bcurl\s+-|\b(?:localhost|[\w.-]+\.internal):\d+|\{[{%#]|\$\{/i;
-  const credential =
-    /\bbearer\s+[\w.+/=-]{8,}|\b(?:api[-_ ]?key|password|(?:access[-_ ]?)?token|authorization)\b["']?\s*(?:[:=]\s*\S+|is\s+\S{12,})/i;
-  return (
-    endpoint.test(value) || credential.test(value) || value.split(/[\s"':=]+/).some(looksLikeSecret)
+// Best-effort paste protection before forwarding free text. The agent never has
+// access to the environment. Only the local target test resolves a variable.
+export function containsSetupSecret(input: string): boolean {
+  const value = input.replace(
+    /\{\{\s*(?:env\.[A-Z_]\w*|prompt|sessionId)\s*\}\}|\$\{?[A-Z_][A-Z0-9_]*\}?/g,
+    'ENV_REFERENCE',
   );
+  if (
+    /:\/\/[^/\s?#]*@|\b(?:sk-[\w-]{8,}|gh[pousr]_\w{12,}|github_pat_\w+|eyJ[\w-]+\.[\w-]+\.[\w-]+)|-----BEGIN [\w ]*PRIVATE KEY-----/i.test(
+      value,
+    ) ||
+    value.split(/[\s"':=]+/).some(looksLikeSecret)
+  ) {
+    return true;
+  }
+  const reference = (s: string) => /^[A-Z_][A-Z0-9_]*$/.test(s);
+  for (const [url] of value.matchAll(/https?:\/\/[^\s"'<>]+/gi)) {
+    if (URL.canParse(url)) {
+      for (const [name, credential] of new URL(url).searchParams) {
+        if (credential && isCredentialHeader(name, '')) {
+          return true;
+        }
+      }
+    }
+  }
+  const assignments = /\b(header\s+)?([\w-]+)["']?\s*[:=]\s*["']?([^\s"',;}&]+)/gi;
+  for (const [, header, name, supplied] of value.matchAll(assignments)) {
+    if (
+      (header || /^x-/i.test(name) || isCredentialHeader(name, '')) &&
+      !reference(supplied) &&
+      !/^(?:bearer|basic)$/i.test(supplied)
+    ) {
+      return true;
+    }
+  }
+  for (const [, raw] of value.matchAll(
+    /\bauthorization["']?\s*[:=]\s*["']?(?:bearer|basic)\s+([^\s"',;]+)/gi,
+  )) {
+    if (!reference(raw.replace(/\.$/, '')) && !/^(?:or|with|for|from|using|and)$/i.test(raw)) {
+      return true;
+    }
+  }
+  const tokens = /\b(?:bearer\s+|(?:api[-_ ]?key|password|token|secret)\s+is\s+)([\w.+/=-]{12,})/gi;
+  for (const [, token] of value.matchAll(tokens)) {
+    if (!reference(token.replace(/\.$/, '')) && !/^[a-z]+\.?$/i.test(token)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 const maxBytes = 256 * 1024;

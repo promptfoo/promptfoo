@@ -108,7 +108,7 @@ const withStatefulTargetConfig = (
   return { ...target, config: { ...target.config, stateful: true } };
 };
 
-const EMPTY_DRAFT: SetupDraft = { messages: [], input: '', step: 'scope' };
+const EMPTY_DRAFT: SetupDraft = { messages: [], input: '' };
 
 const TAB_CONFIG = [
   { value: '0', label: 'Target Type', icon: Crosshair },
@@ -173,13 +173,8 @@ export default function RedTeamSetupPage() {
     chat.approved && !isEqual(chat.approved.config, config)
       ? {
           ...EMPTY_DRAFT,
-          messages: [
-            {
-              role: 'assistant',
-              content:
-                'You changed the setup in the editor. I’ll keep your current target. What should we test now?',
-            },
-          ],
+          notice:
+            'You changed the setup in the editor. Start a new conversation with your current target.',
         }
       : chat;
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);

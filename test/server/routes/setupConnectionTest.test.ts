@@ -100,55 +100,58 @@ describe('local chat connection test', () => {
     expect(model.text).not.toContain('private-value');
   });
 
-  it('posts an authenticated Chat Completions message to a real local endpoint', async () => {
-    vi.stubEnv('LOCAL_CHAT_KEY', 'fixture-only');
-    vi.stubEnv('NO_PROXY', '127.0.0.1');
-    const transport = await vi.importActual<typeof import('../../../src/util/fetch/index')>(
-      '../../../src/util/fetch/index',
-    );
-    fetchTarget.mockImplementationOnce(transport.fetchWithProxy);
-    const received: unknown[] = [];
-    const server = createServer(async (req, res) => {
-      let body = '';
-      for await (const chunk of req) {
-        body += chunk;
+  it.each(['X-API-Key', 'X-Secret-Key', 'Acme-Access'])(
+    'posts a Chat Completions message with %s to a real local endpoint',
+    async (header) => {
+      vi.stubEnv('LOCAL_CHAT_KEY', 'fixture-only');
+      vi.stubEnv('NO_PROXY', '127.0.0.1');
+      const transport = await vi.importActual<typeof import('../../../src/util/fetch/index')>(
+        '../../../src/util/fetch/index',
+      );
+      fetchTarget.mockImplementationOnce(transport.fetchWithProxy);
+      const received: unknown[] = [];
+      const server = createServer(async (req, res) => {
+        let body = '';
+        for await (const chunk of req) {
+          body += chunk;
+        }
+        received.push([
+          req.method,
+          req.url,
+          req.headers[header.toLowerCase()],
+          req.headers.authorization,
+          JSON.parse(body),
+        ]);
+        res.end(JSON.stringify({ choices: [{ message: { content: 'private reply' } }] }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      try {
+        const address = server.address() as import('node:net').AddressInfo;
+        const res = await test({
+          url: `http://127.0.0.1:${address.port}/chat`,
+          body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
+          responsePath: 'choices[0].message.content',
+          authEnv: 'LOCAL_CHAT_KEY',
+          authHeader: header,
+        });
+        expect(received).toEqual([
+          [
+            'POST',
+            '/chat',
+            'fixture-only',
+            undefined,
+            { messages: [{ role: 'user', content: 'Hello' }] },
+          ],
+        ]);
+        expect(res.body).toEqual({
+          success: true,
+          message: 'HTTP 200. I read a non-empty reply at choices[0].message.content.',
+        });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
       }
-      received.push([
-        req.method,
-        req.url,
-        req.headers['x-api-key'],
-        req.headers.authorization,
-        JSON.parse(body),
-      ]);
-      res.end(JSON.stringify({ choices: [{ message: { content: 'private reply' } }] }));
-    });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    try {
-      const address = server.address() as import('node:net').AddressInfo;
-      const res = await test({
-        url: `http://127.0.0.1:${address.port}/chat`,
-        body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
-        responsePath: 'choices[0].message.content',
-        authEnv: 'LOCAL_CHAT_KEY',
-        authHeader: 'X-API-Key',
-      });
-      expect(received).toEqual([
-        [
-          'POST',
-          '/chat',
-          'fixture-only',
-          undefined,
-          { messages: [{ role: 'user', content: 'Hello' }] },
-        ],
-      ]);
-      expect(res.body).toEqual({
-        success: true,
-        message: 'HTTP 200. I read a non-empty reply at choices[0].message.content.',
-      });
-    } finally {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    }
-  });
+    },
+  );
 
   it.each([
     ['Hello', '', true, 'non-empty text'],
@@ -227,6 +230,12 @@ describe('local chat connection test', () => {
     { authHeader: 'Proxy-Authorization', authEnv: 'KEY' },
     { authHeader: 'X-Forwarded-Host', authEnv: 'KEY' },
     { authHeader: 'X-Promptfoo-Silent', authEnv: 'KEY' },
+    { authHeader: 'X_Forwarded_Host', authEnv: 'KEY' },
+    { authHeader: 'X-HTTP-Method-Override', authEnv: 'KEY' },
+    { authHeader: 'Content-Length', authEnv: 'KEY' },
+    { authHeader: 'Cookie', authEnv: 'KEY' },
+    { authHeader: 'X-Tenant-Id', authEnv: 'KEY' },
+    { authHeader: 'constructor', authEnv: 'KEY' },
     { providerOptions: { id: 'exec:script.sh' } },
   ])('rejects invalid or executable input before contacting the target %j', async (data) => {
     expect((await test(data)).status).toBe(400);

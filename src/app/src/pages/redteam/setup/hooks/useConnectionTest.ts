@@ -9,19 +9,14 @@ import { EXAMPLE_CONFIG } from './useRedTeamConfig';
 import type { ProviderOptions } from '../types';
 import type { SetupDraft, useSetupAgent } from './useSetupAgent';
 
-const requestTest =
-  /^(?:(?:can|could|would) (?:you|we|i) |let['’]s )?(?:please )?(?:test|check|try|verify|ping)(?: (?:the |my |our |this )?(?:connection|endpoint|api|it|that|target|this))?(?: (?:please|now|first|before (?:running|the scan)))?[.!?]*$/i;
 const unavailable = 'Couldn’t finish the connection test. Check your local server before retrying.';
 
 // Only offer to test a request we can reproduce. Custom providers, transforms,
 // extra headers and other imported settings need the full manual provider tester.
 function connectionFor(draft: SetupDraft, target?: ProviderOptions): SetupConnection | undefined {
   if (draft.connection) {
-    const { url, body, responsePath, authEnv, authHeader } = draft.connection;
-    if (url && body && authEnv !== undefined && authHeader !== null) {
-      return { url, body, responsePath, authEnv, authHeader };
-    }
-    return undefined;
+    const parsed = SetupConnectionTest.Request.safeParse(draft.connection);
+    return parsed.success ? parsed.data : undefined;
   }
   if (!target || target.id !== 'http') {
     return undefined;
@@ -61,8 +56,12 @@ export function connectionStatus(
   draft: SetupDraft,
   target?: ProviderOptions,
 ): 'success' | 'error' | undefined {
-  if (target && draft.tested && isEqual(draft.tested.target, target)) {
-    return draft.tested.success ? 'success' : 'error';
+  if (
+    draft.tested &&
+    isEqual(draft.tested.target, target) &&
+    isEqual(draft.tested.connection, draft.connection)
+  ) {
+    return draft.tested.result.success ? 'success' : 'error';
   }
   return undefined;
 }
@@ -80,32 +79,6 @@ export function useConnectionTest(
   useEffect(() => () => request.current?.abort(), []);
   const status = connectionStatus(draft, target);
 
-  function send(answer: string) {
-    if (request.current || agent.pending) {
-      return;
-    }
-    if (!requestTest.test(answer)) {
-      return agent.send(answer);
-    }
-    if (!connection && !agent.connected) {
-      agent.prepareTest(answer);
-      return;
-    }
-    agent.clearError();
-    const content = connection
-      ? `Select Test connection to send one “Hello” to ${destination}. This won’t start a scan.`
-      : 'I can test JSON POST endpoints here. Use manual setup to test this type of target.';
-    setDraft({
-      ...draft,
-      input: '',
-      messages: [
-        ...draft.messages,
-        { role: 'user', content: answer },
-        { role: 'assistant', content },
-      ],
-    });
-  }
-
   async function test() {
     if (!connection || request.current || agent.pending || draft.input.trim()) {
       return;
@@ -114,11 +87,6 @@ export function useConnectionTest(
     request.current = controller;
     setTesting(true);
     agent.clearError();
-    const messages: SetupDraft['messages'] = [
-      ...draft.messages,
-      { role: 'user', content: 'Test connection to ' + destination },
-    ];
-    setDraft({ ...draft, tested: undefined, messages });
     let result: { success: boolean; message: string; paths?: string[] } = {
       success: false,
       message: unavailable,
@@ -143,19 +111,14 @@ export function useConnectionTest(
     }
     request.current = null;
     setTesting(false);
-    const { success, message, paths } = result;
-    // A saved chat target can be tested before planning, then corrected in place.
-    const editable =
-      draft.connection ?? (isEqual(target, EXAMPLE_CONFIG.target) ? undefined : connection);
-    setDraft({
+    const { success, message } = result;
+    const updated: SetupDraft = {
       ...draft,
-      connection: editable,
-      tested: { target, success, paths: editable ? paths : undefined },
-      messages: [
-        ...messages,
-        { role: 'assistant', content: message, test: success ? 'success' : 'error' },
-      ],
-    });
+      tested: { target, connection: draft.connection, result },
+      messages: [...draft.messages, { role: 'test', content: message, success }],
+    };
+    setDraft(updated);
+    await agent.feedback(updated);
   }
 
   return {
@@ -165,9 +128,6 @@ export function useConnectionTest(
     authHeader: connection?.authEnv ? (connection.authHeader ?? 'Authorization') : undefined,
     testing,
     status,
-    paths: connection && isEqual(draft.tested?.target, target) ? (draft.tested?.paths ?? []) : [],
-    selectPath: agent.chooseTestedPath,
-    send,
     test,
   };
 }

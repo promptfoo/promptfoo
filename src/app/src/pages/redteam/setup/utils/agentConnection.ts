@@ -3,107 +3,27 @@ import {
   looksLikeRequestCredentialParameter,
 } from '@app/stores/evalConfig';
 import {
-  authHeaderName,
-  type Field,
-  readConnectionSlots,
-  replyField,
-  type Slots,
-} from './agentConnectionLanguage';
+  isSetupAuthHeader,
+  isSetupReplyPath,
+  type SetupConnectionDraft,
+  SetupConnectionDraftSchema,
+} from '@promptfoo/types/api/redteamSetup';
 
 import type { ProviderOptions } from '../types';
 
-export interface ConnectionDraft {
-  url?: string;
-  body?: Record<string, unknown>;
-  responsePath?: string;
-  authEnv?: string;
-  // null means the user requested a key but hasn't named the header.
-  authHeader?: string | null;
-  openai?: boolean;
-  modelName?: string;
-  model?: string;
-}
-const loopback = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:[/?#]|$)/i;
+// A provider ID can start a process or load local code. Limit direct targets
+// to text model providers, including only their text generation APIs.
+const modelId =
+  /^(?:openai:(?:(?:chat|responses):)?(?:gpt-|o[134]\b|chatgpt-)[\w.-]*|anthropic:(?:messages:)?claude-(?!code\b|agent\b)[\w.-]+|google:gemini-[\w.-]+|ollama:(?:chat:)?[\w.-]+(?:[/:][\w.-]+)*)$/;
+const loopback = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:[/?]|$)/i;
+const unsafeTemplate = /\{\{(?!(?:prompt|sessionId)\}\})|\{[%#]|\$\{/;
+const secretError = 'Leave out secrets. Use an environment variable name for authentication.';
 
-const prompt = '{{prompt}}';
-const key = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
-const reserved = /^(?:__proto__|prototype|constructor)$/;
-const unsafe = /\{[{%#]|\$\{|file:\/\//i;
-const secretError = 'Leave out secrets. Give the environment variable name that holds your key.';
-const pathError =
-  'Give the JSON field that holds the reply, like result.answer or choices[0].message.content, or say “plain text”.';
-const bodyError =
-  'Give the input field name or paste a JSON object with {{prompt}} where the message goes.';
-const curlError =
-  'Use a POST cURL with a JSON body, or enter the URL alone. For other methods or non-authentication headers, use manual setup.';
-
-function modelId(value: string): boolean {
-  // Only text model providers. Never interpret file, executable or coding agent IDs.
-  return /^(?:openai:(?:(?:chat|responses):)?(?:gpt-|o[134]\b|chatgpt-)[\w.-]*|anthropic:(?:messages:)?claude-(?!code\b|agent\b)[\w.-]+|google:gemini-[\w.-]+|ollama:(?:chat:)?[\w.-]+(?:[/:][\w.-]+)*)$/.test(
-    value,
-  );
-}
-
-function endpoint(value: string): string {
-  if (loopback.test(value)) {
-    value = 'http://' + value;
-  }
-  if (looksLikeCredentialValue(value)) {
-    throw new Error(secretError);
-  }
-  if (
-    !/^https?:\/\//i.test(value) ||
-    unsafe.test(value) ||
-    /[\s\\]/.test(value) ||
-    !URL.canParse(value)
-  ) {
-    throw new Error(
-      'Enter a full HTTP(S) URL, a POST cURL request, or a model ID like ollama:chat:llama3.',
-    );
-  }
-  const url = new URL(value);
-  if (
-    url.username ||
-    url.password ||
-    url.hash ||
-    [...url.searchParams.keys()].some(looksLikeRequestCredentialParameter)
-  ) {
-    throw new Error('Use an endpoint without embedded credentials or a fragment.');
-  }
-  return value;
-}
-
-function object(value: string, message: string): Record<string, unknown> {
-  try {
-    const result = JSON.parse(value);
-    if (result && typeof result === 'object' && !Array.isArray(result)) {
-      return result;
-    }
-  } catch {}
-  throw new Error(message);
-}
-
-// A valid but ambiguous example can be clarified without discarding other
-// settings from the same message. Unsafe or malformed input still fails.
-class AmbiguousExample extends Error {}
-
-function requestBody(input: string): Record<string, unknown> {
-  const fields = input.split('.');
-  const body =
-    fields.every((field) => key.test(field)) && fields.length <= 16
-      ? fields.reduceRight<Record<string, unknown>>(
-          (nested, field, index) => ({ [field]: index === fields.length - 1 ? prompt : nested }),
-          {},
-        )
-      : object(input, bodyError);
+function validateBody(body: Record<string, unknown>) {
   let hasPrompt = false;
-  // JSON.stringify visits nested fields and arrays without evaluating user input.
   JSON.stringify(body, (name, value) => {
-    if (name === '$ref') {
-      throw new Error('Paste inline JSON. A $ref could load a file or URL when the scan runs.');
-    }
-    if (reserved.test(name) || unsafe.test(name)) {
-      throw new Error(bodyError);
+    if (['$ref', 'constructor', 'prototype', '__proto__'].includes(name) || /[{}]/.test(name)) {
+      throw new Error('Use inline JSON without references, templates in keys, or reserved keys.');
     }
     if (
       looksLikeRequestCredentialParameter(name) ||
@@ -112,326 +32,202 @@ function requestBody(input: string): Record<string, unknown> {
       throw new Error(secretError);
     }
     if (typeof value === 'string') {
-      if (unsafe.test(value.split(prompt).join(''))) {
-        throw new Error('Use {{prompt}} as the only template in your request.');
+      if (unsafeTemplate.test(value) || /file:\/\//i.test(value)) {
+        throw new Error(
+          'Use only {{prompt}} and {{sessionId}} in request values. Leave out file references.',
+        );
       }
-      hasPrompt ||= value.includes(prompt);
+      hasPrompt ||= value.includes('{{prompt}}');
     }
     return value;
   });
   if (!hasPrompt) {
-    let node = body;
-    while (true) {
-      const fields = Object.keys(node);
-      if (fields.length !== 1) {
-        throw new AmbiguousExample(bodyError);
-      }
-      const entry = node[fields[0]];
-      if (typeof entry === 'string') {
-        node[fields[0]] = prompt;
-        break;
-      }
-      if (!entry || typeof entry !== 'object') {
-        throw new AmbiguousExample(bodyError);
-      }
-      node = entry as Record<string, unknown>;
-    }
+    throw new Error('Include {{prompt}} where the test message goes in the JSON body.');
   }
-  return body;
 }
 
-function responsePath(answer: string): string {
-  const value = answer;
-  if (/^(?:plain\s*text|raw text)$/i.test(value)) {
-    return '';
+function validateUrl(value: string, authenticated: boolean) {
+  if (!/^https?:\/\//i.test(value) || !URL.canParse(value) || /[\s\\{}#]/.test(value)) {
+    throw new Error('Use a full HTTP or HTTPS endpoint without a fragment or templates.');
   }
-  if (value.startsWith('{')) {
-    let node: unknown = object(value, pathError);
-    let path = 'json';
-    while (node && typeof node === 'object') {
-      const entries: [string, unknown][] = Object.entries(node);
-      if (entries.length !== 1) {
-        throw new AmbiguousExample(pathError);
-      }
-      const [field, next] = entries[0];
-      if (Array.isArray(node)) {
-        path += '[0]';
-      } else if (key.test(field)) {
-        path += '.' + field;
-      } else {
-        throw new Error(pathError);
-      }
-      node = next;
-    }
-    if (typeof node !== 'string') {
-      throw new Error(pathError);
-    }
-    return responsePath(path);
-  }
-  const path = replyField(value);
-  if (!path) {
-    throw new Error(pathError);
-  }
-  return path;
-}
-
-function authEnv(value: string): string {
+  const url = new URL(value);
   if (
-    /^(?:none|no(?: auth(?:entication)?| token)?|public)(?: (?:needed|required))?[.!]?$/i.test(
-      value,
-    )
+    url.username ||
+    url.password ||
+    looksLikeCredentialValue(value) ||
+    [...url.searchParams.keys()].some(looksLikeRequestCredentialParameter)
   ) {
-    return '';
+    throw new Error('Use a URL without credentials.');
   }
-  const name = value
-    .replace(/^(?:bearer(?: token (?:in|from))?\s+|env(?:ironment variable)?\s+)/i, '')
-    .replace(/^(?:\$\{(\w+)\}|\{\{\s*env\.(\w+)\s*\}\}|\$(\w+))$/, '$1$2$3');
-  if (!/^[A-Z_][A-Z0-9_]{0,127}$/.test(name) || looksLikeCredentialValue(name)) {
-    throw new Error(
-      'Enter the environment variable name, like APP_TOKEN, or say “no auth”. Never paste the key.',
-    );
+  if (authenticated && url.protocol !== 'https:' && !loopback.test(url.hostname)) {
+    throw new Error('Use HTTPS to send credentials outside localhost.');
   }
-  return name;
 }
 
-// Parse a small, explicit subset. Never execute a shell command or silently drop flags.
-function parseCurl(input: string): ConnectionDraft {
-  const tokens = input.replace(/\\\r?\n/g, ' ').match(/'[^']*'|"[^"]*"|[^\s]+/g) ?? [];
-  const draft: ConnectionDraft = {};
-  for (let i = 1; i < tokens.length; i++) {
-    const token = unquote(tokens[i]);
-    if ((/^https?:/i.test(token) || loopback.test(token)) && !draft.url) {
-      draft.url = endpoint(token);
-      continue;
+function validate(draft: SetupConnectionDraft) {
+  const { url, body, responsePath, authHeader, authEnv, model } = draft;
+  if (model !== undefined) {
+    if (!modelId.test(model) || Object.keys(draft).some((name) => name !== 'model')) {
+      throw new Error('Use a text model provider ID alone, or configure an HTTP target.');
     }
-    const value = unquote(tokens[++i] ?? '');
-    if (['-X', '--request'].includes(token) && value.toUpperCase() === 'POST') {
-      continue;
-    }
-    if (['-d', '--data', '--data-raw', '--json', '--data-binary'].includes(token) && !draft.body) {
-      draft.body = requestBody(value);
-    } else if (['-H', '--header'].includes(token)) {
-      if (/^content-type:\s*application\/json$/i.test(value)) {
-        continue;
-      }
-      const auth = value.match(
-        /^([\w-]+):\s*(bearer\s+)?(\$\w+|\$\{\w+\}|\{\{\s*env\.\w+\s*\}\})$/i,
-      );
-      const name = auth && authHeaderName(auth[1]);
-      if (!auth || draft.authEnv || !name || (name === 'Authorization') !== Boolean(auth[2])) {
-        throw new Error(
-          'Use a single authentication header with an environment variable. Remove secrets or use manual setup.',
-        );
-      }
-      if (!auth[2]) {
-        draft.authHeader = name;
-      }
-      draft.authEnv = authEnv(auth[3]);
-    } else {
-      throw new Error(curlError);
-    }
+    return;
   }
-  if (!draft.url || !draft.body) {
-    throw new Error(curlError);
+  if (url !== undefined) {
+    validateUrl(url, Boolean(authEnv));
   }
-  return { ...draft, authEnv: draft.authEnv ?? '' };
+  if (body !== undefined) {
+    validateBody(body);
+  }
+  if (responsePath && !isSetupReplyPath(responsePath)) {
+    throw new Error('Use a reply path like result.answer without code.');
+  }
+  if (authEnv && (!/^[A-Z_][A-Z0-9_]{0,127}$/.test(authEnv) || looksLikeCredentialValue(authEnv))) {
+    throw new Error(secretError);
+  }
+  if (
+    authHeader !== undefined &&
+    (!isSetupAuthHeader(authHeader) || looksLikeCredentialValue(authHeader) || authEnv === '')
+  ) {
+    throw new Error('Use a safe credential header only when the endpoint requires authentication.');
+  }
 }
 
-function unquote(value: string) {
-  return value.replace(/^(['"])([\s\S]*)\1$/, '$2');
+// These checks establish provenance, never infer intent or interpret a reply.
+// Compare whole URL literals so a trusted prefix can't authorize a different host.
+function literals(input: string) {
+  return input.split(/[\s"'\x60<>()]+/).flatMap((word) => [word, word.replace(/[.,;!?]+$/, '')]);
 }
 
-export function parseConnection(
-  answer: string,
-  draft: ConnectionDraft,
-  field: Field,
-): ConnectionDraft {
-  const next = readConnection(answer.trim(), draft, field);
-  if (next.url && next.authEnv) {
-    const url = new URL(next.url);
-    if (url.protocol !== 'https:' && !loopback.test(url.hostname)) {
-      throw new Error('Use HTTPS to send credentials outside localhost. What is the secure URL?');
-    }
-  }
-  return next;
+function statesEndpoint(input: string, url: URL) {
+  return literals(input).some((word) => {
+    const value = loopback.test(word) ? 'http://' + word : word;
+    return /^https?:\/\//i.test(value) && URL.canParse(value) && new URL(value).href === url.href;
+  });
 }
 
-function readConnection(value: string, draft: ConnectionDraft, field: Field): ConnectionDraft {
-  if (/^curl\s/i.test(value)) {
-    return parseCurl(value);
+function statesEdit(input: string, previous: URL, url: URL) {
+  if (url.hostname !== previous.hostname || url.protocol !== previous.protocol) {
+    return false;
   }
-  const model =
-    value.match(
-      /^(?:actually[, ]+)?(?:use|switch to|try|the model is) (\S+?)(?: instead)?[.!]?$/i,
-    )?.[1] ?? value;
-  if (modelId(model)) {
-    const switchProvider = /^(?:actually[, ]+)?switch to /i.test(value);
-    if (field === 'modelName' || (draft.openai && !switchProvider)) {
-      const next = { ...draft };
-      updateModelName(next, { modelName: model });
-      return next;
-    }
-    return { model };
+  const parts = literals(input);
+  if (
+    url.port !== previous.port &&
+    !parts.includes(url.port || (url.protocol === 'https:' ? '443' : '80'))
+  ) {
+    return false;
   }
-  const slots = connectionSlots(
-    field === 'modelName' && model !== value && !model.includes('://') ? model : value,
-    field,
+  return (
+    (url.pathname === previous.pathname && url.search === previous.search) ||
+    parts.includes(url.pathname + url.search)
   );
-  return applySlots(draft, slots);
 }
 
-function applySlots(draft: ConnectionDraft, slots: Slots): ConnectionDraft {
-  const url = slots.url ? endpoint(slots.url) : draft.url;
-  // Keep answers given before the URL, but never send a previous host's
-  // credentials or request body to a different origin.
-  const replacing =
-    draft.model || (draft.url && url && new URL(url).origin !== new URL(draft.url).origin);
-  const next: ConnectionDraft = replacing ? {} : { ...draft };
-  if (url) {
-    next.url = url;
-  }
-  if (slots.openai && !next.openai) {
-    next.openai = true;
-    next.body = { messages: [{ role: 'user', content: prompt }] };
-    next.responsePath = 'choices[0].message.content';
-  }
-  for (const field of ['body', 'responsePath', 'authEnv'] as const) {
-    const value = slots[field];
-    if (value === undefined) {
-      continue;
-    }
-    if (value === null) {
-      delete next[field];
-      continue;
-    }
-    try {
-      if (field === 'body') {
-        next.body = requestBody(value);
-      } else {
-        next[field] = field === 'authEnv' ? authEnv(value) : responsePath(value);
-      }
-    } catch (error) {
-      if (!(error instanceof AmbiguousExample) || Object.keys(slots).length === 1) {
-        throw error;
-      }
-      delete next[field];
-    }
-  }
-  updateAuthHeader(next, slots);
-  updateModelName(next, slots);
-  return next;
+function namesVariable(input: string, variable: string) {
+  // A name in a URL path/query is not permission to send that credential.
+  const reference = input.replace(
+    /(?:https?:\/\/|(?:localhost|127\.0\.0\.1|\[::1\])[:/?])[^\s"'\x60]+/gi,
+    '',
+  );
+  return new RegExp('(?:^|[^\\w-])' + variable + '(?![\\w-])').test(reference);
 }
 
-function updateAuthHeader(next: ConnectionDraft, slots: Slots) {
-  if (slots.authEnv !== undefined && next.authEnv === '') {
-    delete next.authHeader;
-    return;
-  }
-  const header = slots.authHeader;
-  if (header === undefined) {
-    return;
-  }
-  if (next.authEnv === '') {
-    delete next.authEnv;
-  }
-  const name = header && authHeaderName(header);
-  if (name === 'Authorization') {
-    if (next.authHeader !== undefined || slots.authEnv === undefined || next.openai) {
-      next.authHeader = 'Authorization';
-    }
-  } else if (header === null || name) {
-    next.authHeader = header;
-  } else {
-    throw new Error(
-      'Choose X-API-Key or Authorization: Bearer, or use manual setup for other headers. Never paste a key here.',
+function verifyModel(
+  draft: SetupConnectionDraft,
+  previous: SetupConnectionDraft | undefined,
+  userTurns: string[],
+) {
+  const latest = userTurns[userTurns.length - 1] ?? '';
+  if (draft.model && previous?.model !== draft.model) {
+    // A direct provider may use ambient API keys. The user must name the
+    // provider and model, especially when moving away from their own endpoint.
+    const parts = literals(
+      (previous?.url || previous?.model ? latest : userTurns.join(' ')).toLowerCase(),
     );
+    const id = draft.model.toLowerCase();
+    const [provider] = id.split(':');
+    const name = id.replace(/^[^:]+:(?:(?:chat|responses|messages|completion):)?/, '');
+    if (!parts.includes(id) && !(parts.includes(provider) && parts.includes(name))) {
+      throw new Error(
+        'Ask which provider and model to test directly. Never substitute a direct provider for the user’s app or guess a model ID.',
+      );
+    }
   }
-}
-
-function updateModelName(next: ConnectionDraft, slots: Slots) {
-  if (slots.body?.startsWith('{') && next.openai) {
-    next.modelName = typeof next.body?.model === 'string' ? next.body.model : '';
-  }
-  const name = slots.modelName ?? next.modelName;
-  if (name === undefined) {
-    return;
-  }
-  if (
-    name &&
-    (!/^[a-z0-9][\w.:/-]{0,199}$/i.test(name) ||
-      name.includes('://') ||
-      /^sk-/i.test(name) ||
-      looksLikeCredentialValue(name))
-  ) {
-    throw new Error('Give the model name without credentials, URLs, or templates.');
-  }
-  next.modelName = name;
-  if (next.body) {
-    next.body = { ...next.body };
-    if (name) {
-      next.body.model = name;
-    } else {
-      delete next.body.model;
+  const model = draft.body?.model;
+  if (model !== undefined && model !== previous?.body?.model) {
+    const turns = previous?.body?.model ? [latest] : userTurns;
+    if (
+      typeof model !== 'string' ||
+      !model ||
+      !turns.some((turn) => literals(turn.replace(/=/g, ' ')).includes(model))
+    ) {
+      throw new Error('Omit model from the request body unless the user supplies its exact name.');
     }
   }
 }
 
-function connectionSlots(value: string, field: Field): Slots {
-  // Keep standalone values intact, particularly JSON, expressions and URLs.
-  // The prose reader must never turn a rejected expression into a valid field.
-  if (/^https?:\/\/\S+$/i.test(value) || (loopback.test(value) && !/\s/.test(value))) {
-    return { url: value };
+export function bindConnection(
+  proposal: SetupConnectionDraft,
+  previous: SetupConnectionDraft | undefined,
+  userTurns: string[],
+): SetupConnectionDraft {
+  const result = SetupConnectionDraftSchema.safeParse(proposal);
+  if (!result.success) {
+    throw new Error('The connection contains unsupported or malformed settings.');
   }
-  if (
-    field === 'modelName' &&
-    /^(?:skip|none|remove|omit|no)(?: (?:the )?model(?: name)?)?[.!]?$/i.test(value)
-  ) {
-    return { modelName: '' };
-  }
-  if (/^(?:plain|raw) text$/i.test(value)) {
-    return { responsePath: value };
-  }
-  if (value.startsWith('{') && !value.startsWith('{{') && value.endsWith('}')) {
-    return field === 'responsePath' ? { responsePath: value } : { body: value };
-  }
-  if (!/\s/.test(value)) {
-    const header = /^bearer$/i.test(value) ? 'Authorization' : authHeaderName(value);
-    if (header) {
-      return { authHeader: header };
+  const draft = result.data;
+  validate(draft);
+  verifyModel(draft, previous, userTurns);
+  const latest = userTurns[userTurns.length - 1] ?? '';
+  const url = draft.url ? new URL(draft.url) : undefined;
+  const prior = previous?.url ? new URL(previous.url) : undefined;
+  if (url && url.href !== prior?.href) {
+    const grounded =
+      statesEndpoint(latest, url) ||
+      (prior
+        ? statesEdit(latest, prior, url)
+        : !previous?.authEnv && userTurns.some((turn) => statesEndpoint(turn, url)));
+    if (!grounded) {
+      throw new Error('Ask for the exact endpoint URL before setting or changing the destination.');
     }
-    if (/^openai-(?:compatible|style|like)$/i.test(value)) {
-      return { openai: true };
-    }
-    if (/^(?:[A-Z][A-Z0-9_]+_(?:TOKEN|KEY)|\$[A-Z_][A-Z0-9_]*)$/.test(value)) {
-      return { authEnv: value };
-    }
-    return { [field]: value.replace(/^(['"`])([\w.\[\]]+)\1$/, '$2') };
   }
-  const slots = readConnectionSlots(value, field);
-  return Object.keys(slots).length ? slots : { [field]: value };
+  if (draft.authEnv) {
+    // A credential grant follows its origin. Dropping the URL or changing a
+    // port must never free that grant for reuse at another destination.
+    const sameGrant =
+      draft.authEnv === previous?.authEnv && (!prior || prior.origin === url?.origin);
+    if (!sameGrant && !namesVariable(latest, draft.authEnv)) {
+      throw new Error(
+        'Ask for the environment variable name for this destination. Never guess or reuse a credential from a different origin.',
+      );
+    }
+  }
+  if (draft.authHeader?.toLowerCase() === 'authorization') {
+    draft.authHeader = 'Authorization';
+  }
+  return draft;
 }
 
-export function toTarget(draft: ConnectionDraft): ProviderOptions | undefined {
-  if (draft.model && modelId(draft.model)) {
+export function toTarget(
+  draft: SetupConnectionDraft,
+  { partial = false }: { partial?: boolean } = {},
+): ProviderOptions | undefined {
+  try {
+    validate(draft);
+  } catch {
+    return undefined;
+  }
+  if (draft.model) {
     return { id: draft.model, config: {} };
   }
-  if (
-    !draft.url ||
-    !draft.body ||
-    draft.responsePath === undefined ||
-    draft.authEnv === undefined ||
-    draft.authHeader === null
-  ) {
+  const { url, body, responsePath, authEnv } = draft;
+  if (!url || (!partial && (!body || responsePath === undefined || authEnv === undefined))) {
     return undefined;
   }
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (draft.authEnv) {
-    const header = authHeaderName(draft.authHeader || 'Authorization');
-    if (!header) {
-      return undefined;
-    }
-    const variable = '{{env.' + authEnv(draft.authEnv) + '}}';
-    if (header === 'Authorization') {
+  if (authEnv) {
+    const header = draft.authHeader || 'Authorization';
+    const variable = '{{env.' + authEnv + '}}';
+    if (header.toLowerCase() === 'authorization') {
       headers.Authorization = 'Bearer ' + variable;
     } else {
       headers[header] = variable;
@@ -439,17 +235,17 @@ export function toTarget(draft: ConnectionDraft): ProviderOptions | undefined {
   }
   return {
     id: 'http',
-    label: new URL(draft.url).host,
+    label: new URL(url).host,
     config: {
-      url: draft.url,
+      url,
       method: 'POST',
       headers,
-      // Fetch forwards custom headers across origins on redirects.
-      ...(draft.authEnv && !headers.Authorization && { redirect: 'error' as const }),
-      body: draft.body,
-      transformResponse: draft.responsePath
-        ? 'json.' + responsePath('json.' + draft.responsePath)
-        : 'text',
+      // Fetch otherwise forwards custom credentials across origins on redirects.
+      ...(authEnv && { redirect: 'error' as const }),
+      ...(body && { body }),
+      ...(responsePath !== undefined && {
+        transformResponse: responsePath ? 'json.' + responsePath : 'text',
+      }),
     },
   };
 }
