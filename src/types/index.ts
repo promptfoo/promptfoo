@@ -596,6 +596,7 @@ export interface GradingResult {
     // that the criterion was or was not met. `true`-literal so the field is
     // only meaningful when present; never set `false` explicitly.
     graderError?: true;
+    rubricComponents?: true;
     [key: string]: any;
   };
 }
@@ -791,6 +792,7 @@ export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 export const AssertionSchema = z.object({
   // Type of assertion
   type: AssertionTypeSchema,
+  rubricComponents: z.boolean().optional(),
 
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),
