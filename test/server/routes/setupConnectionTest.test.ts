@@ -83,7 +83,7 @@ describe('local chat connection test', () => {
     expect((await test({ responsePath: 'choices[0].message.content' })).body.success).toBe(true);
   });
 
-  it('explains auth and model errors without revealing the key or error body', async () => {
+  it('reports HTTP evidence without guessing the cause or revealing the key', async () => {
     vi.stubEnv('PRIVATE_CHAT_TOKEN', 'private-value');
     const chat = {
       authEnv: 'PRIVATE_CHAT_TOKEN',
@@ -92,11 +92,11 @@ describe('local chat connection test', () => {
     };
     fetchTarget.mockResolvedValueOnce(new Response('private-value', { status: 401 }));
     const auth = await test(chat);
-    expect(auth.body.message).toMatch(/401.*X-API-Key.*PRIVATE_CHAT_TOKEN/);
+    expect(auth.body.message).toBe('HTTP 401 Unauthorized.');
     expect(auth.text).not.toContain('private-value');
     fetchTarget.mockResolvedValueOnce(new Response('private-value', { status: 400 }));
     const model = await test(chat);
-    expect(model.body.message).toMatch(/400.*model name/);
+    expect(model.body.message).toBe('HTTP 400 Bad Request.');
     expect(model.text).not.toContain('private-value');
   });
 
@@ -145,7 +145,7 @@ describe('local chat connection test', () => {
         ]);
         expect(res.body).toEqual({
           success: true,
-          message: 'HTTP 200. I read a non-empty reply at choices[0].message.content.',
+          message: 'HTTP 200. Found text at choices[0].message.content.',
         });
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -169,21 +169,12 @@ describe('local chat connection test', () => {
     });
   });
 
-  it.each([
-    [302, 'final URL'],
-    [401, 'token'],
-    [403, 'token'],
-    [422, 'body'],
-    [404, 'URL'],
-    [429, 'rate limited'],
-    [500, 'endpoint'],
-  ] as const)('explains HTTP %s without echoing error bodies', async (status, hint) => {
-    fetchTarget.mockResolvedValue(new Response('private detail', { status }));
+  it('never echoes the target’s status text or error body', async () => {
+    fetchTarget.mockResolvedValue(
+      new Response('private detail', { status: 429, statusText: 'private token' }),
+    );
     const { body } = await test();
-    expect(body.success).toBe(false);
-    expect(body.message).toContain('HTTP ' + status);
-    expect(body.message).toContain(hint);
-    expect(body.message).not.toContain('private detail');
+    expect(body).toEqual({ success: false, message: 'HTTP 429 Too Many Requests.' });
   });
 
   it('bounds response size and hides transport errors', async () => {
