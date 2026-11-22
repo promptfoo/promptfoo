@@ -101,6 +101,10 @@ export async function doRedteamRun({
     // the eval below via `evalOptions`, which is destructured from the untouched `options`
     // object (see the `doEval` call), where they are persisted onto the eval result.
     const { maxConcurrency, tags: _runtimeTags, ...passThroughOptions } = options;
+    // Generation's envFile is a caller option that mutates process.env before
+    // evaluation. A live config must not use it to change remote task policy.
+    const { envFile: _configEnvFile, ...generationCommandOptions } =
+      options.liveRedteamConfig?.commandLineOptions ?? {};
 
     let redteamConfig;
     const generationRunId = randomUUID();
@@ -108,7 +112,7 @@ export async function doRedteamRun({
     try {
       redteamConfig = await doGenerateRedteam({
         ...passThroughOptions,
-        ...(options.liveRedteamConfig?.commandLineOptions || {}),
+        ...generationCommandOptions,
         ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
         config: configPath,
         output: redteamPath,

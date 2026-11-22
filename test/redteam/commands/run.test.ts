@@ -61,6 +61,14 @@ describe('redteamRunCommand', () => {
     process.exitCode = originalExitCode;
   });
 
+  it('keeps a caller env file parsed by the parent command through generation and evaluation', async () => {
+    program.option('--env-file, --env-path <path>');
+    await program.parseAsync(['node', 'test', 'run', '--env-file', 'caller-selected.env']);
+    expect(doRedteamRun).toHaveBeenCalledWith(
+      expect.objectContaining({ envPath: 'caller-selected.env' }),
+    );
+  });
+
   it('should use target option to set cloud target when UUID is provided', async () => {
     // Mock the getConfigFromCloud function
     const mockConfig = {
