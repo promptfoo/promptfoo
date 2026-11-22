@@ -424,6 +424,11 @@ async function renderRunEvalPrompt({
     skipRenderVars,
     { literalFunctionResult: Boolean(literalVars?.length) },
   );
+  if (outcome?.requireExactOwner && renderedPrompt !== outcome.message) {
+    throw new Error(
+      '[inconclusive] Ticket revision requires the exact assigned owner request. Check the prompt template.',
+    );
+  }
   if (isRedteam || outcome) {
     const limit =
       testSuite?.redteam?.maxCharsPerMessage ??
