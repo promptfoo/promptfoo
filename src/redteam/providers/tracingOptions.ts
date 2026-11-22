@@ -43,6 +43,15 @@ export type RawTracingConfig = Partial<
 
 const DEFAULT_QUERY_DELAY = 3000;
 
+// Providers that resolve options under an internal id, mapped to the strategy id users configure
+// in `redteam.strategies`. Overrides keyed by either id apply; at the same level the configured
+// id wins.
+const CONFIGURED_STRATEGY_IDS = new Map([
+  ['iterative-meta', 'jailbreak:meta'],
+  ['hydra', 'jailbreak:hydra'],
+  ['goblin', 'jailbreak:goblin'],
+]);
+
 const DEFAULT_TRACING_OPTIONS: Omit<RedteamTracingOptions, 'provider' | 'queryDelay'> = {
   enabled: false,
   includeInAttack: true,
@@ -61,6 +70,14 @@ function mergeTracingConfig(...configs: Array<RawTracingConfig | undefined>): Ra
     (acc, config) => (config ? { ...acc, ...config } : acc),
     {},
   );
+}
+
+function getStrategyOverride(
+  config: RawTracingConfig | undefined,
+  strategyIds: string[],
+): RawTracingConfig | undefined {
+  const strategies = config?.strategies;
+  return strategies ? mergeTracingConfig(...strategyIds.map((id) => strategies[id])) : undefined;
 }
 
 function normalizeTracingOptions(
@@ -110,18 +127,13 @@ export function resolveTracingOptions({
   )?.tracing as RawTracingConfig | undefined;
   const providerStrategyConfig = (config?.tracing as RawTracingConfig | undefined) ?? undefined;
 
-  const globalStrategyOverride =
-    strategyId && globalConfig?.strategies ? globalConfig.strategies[strategyId] : undefined;
-  const testStrategyOverride =
-    strategyId && testConfig?.strategies ? testConfig.strategies[strategyId] : undefined;
-  const metadataStrategyOverride =
-    strategyId && metadataStrategyConfig?.strategies
-      ? metadataStrategyConfig.strategies[strategyId]
-      : undefined;
-  const providerStrategyOverride =
-    strategyId && providerStrategyConfig?.strategies
-      ? providerStrategyConfig.strategies[strategyId]
-      : undefined;
+  const configuredStrategyId = CONFIGURED_STRATEGY_IDS.get(strategyId);
+  const strategyIds = configuredStrategyId ? [strategyId, configuredStrategyId] : [strategyId];
+
+  const globalStrategyOverride = getStrategyOverride(globalConfig, strategyIds);
+  const testStrategyOverride = getStrategyOverride(testConfig, strategyIds);
+  const metadataStrategyOverride = getStrategyOverride(metadataStrategyConfig, strategyIds);
+  const providerStrategyOverride = getStrategyOverride(providerStrategyConfig, strategyIds);
 
   const merged = mergeTracingConfig(
     globalConfig,
