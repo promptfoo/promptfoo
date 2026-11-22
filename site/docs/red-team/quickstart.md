@@ -74,30 +74,27 @@ Start with what you know. If you say “customer support bot,” the agent will 
 
 The agent suggests tests based on your answers. You can ask why it chose a test, correct its assumptions, or change the count. By default it proposes three direct tests per risk for up to four risks. **App and test messages go to Promptfoo Cloud.** Leave out secrets and customer records.
 
-To try it without your own app, select **Try the demo app**, send the suggested message, and choose **Review setup**. Nothing runs until you select **Run Now**.
+To try it without your own app, select **Try the demo app** and send the suggested message. You can test the connection or go straight to **Review setup**. The scan starts only when you select **Run Now**.
 
 You can also select **Set up manually**, load a saved configuration, or import YAML.
 
 ### Configure the target
 
-Stay in the chat to connect your app. Connection replies stay in your browser during setup. Promptfoo won't contact your target while drafting. Only test systems you have permission to scan.
+Describe your API in plain English. The chat picks up the details you give it and asks for what's missing. You can also paste a POST cURL example without secrets.
+
+> POST to http://localhost:8000/chat. Put the question in message. No auth. I don't know what comes back.
+
+**Test connection** sends one “Hello” from your local Promptfoo server to the displayed host. It can use credits or create a conversation on your app. Only test systems you have permission to contact. Writing a message in chat never sends the test.
+
+If you haven't specified the reply field, or the field you gave is missing, pick one from the response, such as **Use result.answer**. The test checks that the field contains text. It doesn't grade the answer. You can also tell the chat “Actually, the reply is in result.answer” and test again.
+
+For bearer auth, give the chat the variable name, for example “Bearer token from SUPPORT_BOT_TOKEN”. Set the variable where Promptfoo runs. Never paste the token itself. The chat test requires HTTPS for bearer tokens outside localhost. For other auth methods, custom headers or non-POST requests, use manual setup.
 
 If you don't have a target yet, select **I don’t have an endpoint yet** and **Review draft**. You can save YAML, but you’ll need to add a target before running.
 
-For an HTTP endpoint, you can paste a POST cURL example without secrets or answer the connection questions one at a time. For example, a local support bot might use these settings.
-
-| When asked about           | Example reply                    |
-| -------------------------- | -------------------------------- |
-| Endpoint                   | `http://localhost:8000/chat`     |
-| JSON request body          | `{"message":"{{prompt}}"}`       |
-| Field containing the reply | `result.answer`                  |
-| Bearer token               | `SUPPORT_BOT_TOKEN` or `No auth` |
-
-For bearer auth, set the variable in the environment where Promptfoo runs. Give the chat only its name. For other authentication methods, custom headers or non-POST requests, use the manual editor.
-
 To test a **model directly**, enter a model ID such as `ollama:chat:llama3` or `openai:gpt-4o-mini` instead of a URL. This tests the model without your app's instructions or tools. See [common target types](#common-target-types).
 
-Select **Review setup** to [review and save](#review-and-save). In manual setup you can also test the connection. That sends a request to your app and can share its configuration and response with Cloud. [Learn what data leaves your machine](/docs/red-team/troubleshooting/data-handling/).
+Select **Review setup** to [review and save](#review-and-save). The chat connection test works for JSON POST endpoints and the demo. It keeps connection details and replies out of Cloud planning and grading. The manual editor's provider test can share your configuration and response with Cloud. [Learn what data leaves your machine](/docs/red-team/troubleshooting/data-handling/).
 
 ### Select plugins
 
