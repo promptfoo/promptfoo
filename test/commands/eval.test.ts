@@ -3134,7 +3134,7 @@ describe('evalCommand', () => {
       testSuite: { prompts: [], providers: [], defaultTest: { vars: { ...vars } } },
       basePath: path.resolve('/'),
     });
-    vi.mocked(evaluate).mockImplementation(async (_suite, record) => record as Eval);
+    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
 
     await doEval({ var: { word: 'blue' }, write: true, table: false }, config, undefined, {});
 
