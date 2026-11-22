@@ -68,11 +68,11 @@ The command opens red team setup in your browser. For a new scan, start with the
 
 ### Provide application details
 
-Start with what you know. If you say “customer support bot,” the agent will ask what it can access or change. If you already know what you want to test, you can tell it in one message.
+Start with your app, your endpoint or a question. A hosted agent drafts the configuration as you talk. You can correct it or switch topics at any time. **Messages and draft API details go to Promptfoo Cloud.** Use variable names for keys and leave out private records. Choose manual setup if you don’t want to share that information.
 
 > Our bot looks up orders and issues refunds. Customers should only see their own orders. Only managers can approve refunds. Test each of those twice.
 
-The agent suggests tests based on your answers. You can ask why it chose a test, correct its assumptions, or change the count. By default it proposes three direct tests per risk for up to four risks. **App and test messages go to Promptfoo Cloud.** Leave out secrets and customer records.
+The agent suggests tests based on your answers. You can ask why it chose a test, correct its assumptions, or change the count. By default it proposes three direct tests per risk for up to four risks.
 
 To try it without your own app, select **Try the demo app** and send the suggested message. You can test the connection or go straight to **Review setup**. The scan starts only when you select **Run Now**.
 
@@ -80,31 +80,23 @@ You can also select **Set up manually**, load a saved configuration, or import Y
 
 ### Configure the target
 
-Describe your API in plain English. The chat picks up the details you give it and asks for what's missing. You can also paste a POST cURL example without secrets.
+Describe your API or paste a POST cURL example with the credentials removed. You can start with an incomplete description.
 
-> POST to http://localhost:8000/chat. Put the question in message. No auth. I don't know what comes back.
+> Our support bot listens at localhost:3555/chat. It works like OpenAI, but needs a key in a header.
 
-**Test connection** sends one “Hello” from your local Promptfoo server to the displayed host. It can use credits or create a conversation on your app. Only test systems you have permission to contact. Writing a message in chat never sends the test.
+The agent can infer a request format, ask which header to use and draft the connection. Check the proposed URL and fields. You can answer in your own words.
 
-If you haven't specified the reply field, or the field you gave is missing, pick one from the response, such as **Use result.answer**. The test checks that the field contains text. It doesn't grade the answer. You can also tell the chat “Actually, the reply is in result.answer” and test again.
+> The header is X-Secret-Key. Read it from SUPPORT_BOT_TOKEN. Leave out the model name.
 
-For an API that uses the OpenAI Chat Completions format, you can start with a message like this.
+Set the variable where Promptfoo runs. Never paste the key. For bearer authentication, ask for an Authorization header with a bearer token. For a custom header, Promptfoo sends the key directly. Authenticated connections need HTTPS outside localhost.
 
-> POST to localhost:3555/chat. It works like OpenAI and needs an API key in a header.
+1. Select **Test connection** to send one “Hello” from your local server to the displayed endpoint. Sending a chat message never contacts the target. Only test systems you have permission to contact.
+2. Check the result in the conversation. Promptfoo checks for a nonempty reply and reports the status and possible reply fields to the agent. If a setting needs to change, the agent can propose a correction. Check the change and select **Test connection** again to verify it.
+3. Select **Review setup** to see the configuration before saving YAML or running the scan. [Learn what data leaves your machine](/docs/red-team/troubleshooting/data-handling/).
 
-The chat proposes sending a user message in `messages` and reading `choices[0].message.content`. It keeps your URL. If your API needs a model name, add it before testing.
+The chat supports JSON POST with one credential header. Use manual setup for other methods or multiple headers. To test a **model directly**, give its ID, such as `ollama:chat:llama3` or `openai:gpt-4o-mini`. Direct model targets skip your app’s instructions and tools. The connection test in chat works on HTTP targets.
 
-1. Choose **X-API-Key** to send the key directly or **Authorization: Bearer** for a bearer token. You can also name a supported header such as `api-key` or `X-Auth-Token`.
-2. Give the environment variable name, for example `SUPPORT_BOT_TOKEN`. Set it where Promptfoo runs. Never paste the key itself.
-3. Select **Test connection**. Check the result in chat before you run the scan. The test requires HTTPS for credentials outside localhost.
-
-For other auth methods, extra headers or non-POST requests, use manual setup.
-
-If you don't have a target yet, select **I don’t have an endpoint yet** and **Review draft**. You can save YAML, but you’ll need to add a target before running.
-
-To test a **model directly**, enter a model ID such as `ollama:chat:llama3` or `openai:gpt-4o-mini` instead of a URL. This tests the model without your app's instructions or tools. See [common target types](#common-target-types).
-
-Select **Review setup** to [review and save](#review-and-save). The chat connection test works for JSON POST endpoints and the demo. It keeps connection details and replies out of Cloud planning and grading. The manual editor's provider test can share your configuration and response with Cloud. [Learn what data leaves your machine](/docs/red-team/troubleshooting/data-handling/).
+If you don’t have a target yet, you can draft the tests and select **Review draft** to save the plan. You’ll need a target before you run it.
 
 ### Select plugins
 

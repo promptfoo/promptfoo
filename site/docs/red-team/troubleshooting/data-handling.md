@@ -10,9 +10,11 @@ This page explains what data leaves your machine during red team testing and how
 
 ## Data Flow Overview
 
-The [setup agent](/docs/red-team/quickstart/#initialize-the-project) sends the conversation about your app and tests, plus the current plan, to Promptfoo Cloud by default. This applies even if you have a model API key. Leave secrets and private records out of those messages. The chat handles target connection replies locally, including the URL, request body, response field, auth header and environment variable name. Those replies stay out of later planning requests. Drafting never contacts your target. Use manual setup to skip the agent.
+The [setup agent](/docs/red-team/quickstart/#initialize-the-project) sends your conversation, the proposed test plan and the connection you describe to Promptfoo Cloud by default. This includes URLs, example requests, header names and environment variable names. It also sends validation feedback so the agent can correct its proposals. This applies even if you have a model API key. **Never paste keys, passwords or private records.** Promptfoo catches some accidental pastes, but cannot recognize every secret. Use manual setup to skip the hosted conversation.
 
-In chat, **Test connection** sends one “Hello” from your local server to the endpoint you chose. The server reads any API key from the named variable and sends it in the selected header. The test checks the reply locally and may suggest field names. It doesn't forward the response to Promptfoo Cloud for analysis or include it in later planning messages. The **manual editor's** provider test can send the target configuration, request headers and response to Cloud.
+**Test connection** sends one “Hello” from your local server to the endpoint you approve. Promptfoo reads the key locally and sends it to your target. For a connection discussed in chat, the agent receives the check status and suggested reply field names. Promptfoo keeps the actual reply text and resolved key out of that feedback. If you use a saved target without sharing its details in chat, the agent sees only whether its test passed. The **manual editor’s** provider test can send the target configuration, request headers and response to Cloud.
+
+Drafting never contacts your target. Only **Run Now** starts the scan, which can send target replies for grading as described below.
 
 Running a scan involves three operations.
 
