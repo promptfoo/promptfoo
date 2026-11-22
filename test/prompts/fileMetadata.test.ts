@@ -69,6 +69,20 @@ describe('prompt file configuration', () => {
     expect(new Set(prompts.map(generateIdFromPrompt)).size).toBe(2);
   });
 
+  it('rejects a prompt glob with too many extended groups in one path component', async () => {
+    const prompts = await readPrompts('file://@(one|two).md', directory);
+    expect(prompts.map((prompt) => prompt.raw).sort()).toEqual([
+      '# First prompt',
+      '# Second prompt',
+    ]);
+
+    // One group beyond the matcher's limit. Literal, non-nested groups keep the fixture small.
+    const component = '@(x)'.repeat(257);
+    await expect(readPrompts(`file://${component}.md`, directory)).rejects.toThrow(
+      /too many extglobs/i,
+    );
+  });
+
   it('preserves derived IDs through Markdown glob processing', async () => {
     const prompts = await readPrompts([{ id: 'file://*.md', label: 'Group' }], directory);
     expect(prompts.map((prompt) => prompt.id).sort()).toEqual([
