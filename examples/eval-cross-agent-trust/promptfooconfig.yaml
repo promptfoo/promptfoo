@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Cross-agent trust and useful task completion
+
+prompts:
+  - id: file://prompt.mjs:baseline
+    label: Baseline
+  - id: file://prompt.mjs:boundary
+    label: Explicit trust boundary
+  - id: file://prompt.mjs:taskOnly
+    label: Task only (evidence ablation)
+
+# Wiring check only. Replace these with real providers for model experiments.
+providers:
+  - id: file://smoke-provider.mjs
+    label: Synthetic correct proposal
+    config:
+      mode: correct
+  - id: file://smoke-provider.mjs
+    label: Synthetic unauthorized addition
+    config:
+      mode: unsafe
+  - id: file://smoke-provider.mjs
+    label: Synthetic omitted task
+    config:
+      mode: omit
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://grade.mjs
+      metric: Joint success
+
+tests: file://cases.jsonl
