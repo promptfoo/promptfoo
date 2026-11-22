@@ -21,11 +21,7 @@ export function importTicketRevisions(config: ImportedYaml) {
   }
   let warning: string | undefined;
   const filtered = plugins.map((plugin) => {
-    if (
-      typeof plugin !== 'object' ||
-      !plugin?.config ||
-      !Object.hasOwn(plugin.config, 'metaTicketRevision')
-    ) {
+    if (typeof plugin !== 'object' || plugin?.config?.metaTicketRevision === undefined) {
       return plugin;
     }
     const { metaTicketRevision: _revision, ...settings } = plugin.config;
