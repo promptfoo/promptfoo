@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { globSync } from 'glob';
+import { globSync } from 'glob/raw';
 import { describe, expect, it } from 'vitest';
 import { parseDocument, visit } from 'yaml';
 
