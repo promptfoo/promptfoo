@@ -72,7 +72,7 @@ describe('agent-led red team setup', () => {
     await send(user, 'View and change orders');
     expect(input()).toHaveAccessibleName('Connection reply');
     await send(user, 'http://localhost:8888/chat');
-    await user.click(button('{"message":"{{prompt}}"}'));
+    await user.click(button('Use message'));
     await send(user, '{"result":{"answer":"Example reply"}}');
     await send(user, 'CUSTOMER_API_TOKEN');
     expect(button('Review setup')).toHaveFocus();
@@ -121,6 +121,189 @@ describe('agent-led red team setup', () => {
       },
     });
     expect(postCalls().every(([path]) => path === '/redteam/setup-plan')).toBe(true);
+  });
+
+  it('asks only for missing auth, then tests once on explicit request and takes the result to Review', async () => {
+    const { user } = setup();
+    await send(user, 'Order bot');
+    await send(
+      user,
+      'POST to https://private.example/chat. Send the question in input and read the reply from result.answer.',
+    );
+    await send(user, 'Bearer token from APP_TOKEN');
+    expect(button('Review setup')).toBeEnabled();
+    await send(user, 'Can I test the connection first?');
+    expect(postCalls()).toHaveLength(1);
+    expect(button('Test connection')).toHaveAccessibleDescription(/one “Hello” to private.example/);
+    const result = 'HTTP 200. I read a non-empty reply at result.answer.';
+    api.mockResolvedValueOnce(Response.json({ success: true, message: result }));
+    await user.click(button('Test connection'));
+    expect(postCalls().pop()?.[0]).toBe('/redteam/setup/connection-test');
+    expect(payloads().pop()).toEqual({
+      url: 'https://private.example/chat',
+      body: { input: '{{prompt}}' },
+      responsePath: 'result.answer',
+      authEnv: 'APP_TOKEN',
+    });
+    expect(screen.getByRole('log')).toHaveTextContent(result);
+    await send(user, 'Just test order access.');
+    expect(JSON.stringify(payloads().pop())).not.toMatch(
+      /private.example|APP_TOKEN|result\.answer|HTTP 200|test the connection first/,
+    );
+    await user.click(button('Review setup'));
+    expect(screen.getByText('Connection test passed')).toBeVisible();
+    await user.click(button('Continue conversation'));
+    await send(user, 'The reply is at result.text');
+    expect(screen.getByText('Untested')).toBeVisible();
+    await user.click(button('Review setup'));
+    expect(screen.queryByText('Connection test passed')).toBeNull();
+    expect(config().target.config.transformResponse).toBe('json.result.text');
+  });
+
+  it('discovers the reply field from one explicit test and requires the user to pick it', async () => {
+    const { user } = setup();
+    await send(user, 'Order bot');
+    await send(user, 'Can we test it?');
+    await send(user, 'https://private.example/chat');
+    await send(user, 'message');
+    await user.click(button('No auth'));
+    expect(screen.queryByRole('button', { name: 'Review setup' })).toBeNull();
+    api.mockResolvedValueOnce(
+      Response.json({
+        success: true,
+        message: 'HTTP 200. Which field holds the reply?',
+        paths: ['result.answer', 'id'],
+      }),
+    );
+    await user.click(button('Test connection'));
+    expect(payloads().pop()).toEqual({
+      url: 'https://private.example/chat',
+      body: { message: '{{prompt}}' },
+      authEnv: '',
+    });
+    await user.click(button('Use result.answer'));
+    expect(screen.getByText('Test passed')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Use id' })).toBeNull();
+    await user.click(button('Review setup'));
+    expect(config().target.config.transformResponse).toBe('json.result.answer');
+    expect(postCalls()).toHaveLength(2);
+  });
+
+  it('keeps a failed check actionable through Review and clears it on correction', async () => {
+    const { user } = setup();
+    await send(user, 'Order bot');
+    await send(user, 'https://private.example/chat');
+    await send(user, 'message');
+    await send(user, 'result.wrong');
+    await send(user, 'No auth');
+    api.mockResolvedValueOnce(
+      Response.json({
+        success: false,
+        message: 'HTTP 200. Couldn’t read text at result.wrong.',
+        paths: ['result.reply'],
+      }),
+    );
+    await user.click(button('Test connection'));
+    expect(button('Use result.reply')).toHaveFocus();
+    await user.click(button('Review setup'));
+    expect(screen.getByText(/Connection test failed/)).toBeVisible();
+    await user.click(button('Continue conversation'));
+    await user.click(button('Use result.reply'));
+    expect(screen.getByText('Test passed')).toBeVisible();
+    expect(postCalls()).toHaveLength(2);
+  });
+
+  it('handles local test errors without displaying private transport details or retrying', async () => {
+    const { user } = setup();
+    await user.click(button('Try the demo app'));
+    await user.click(button('Send reply'));
+    api.mockRejectedValueOnce(new Error('secret transport detail'));
+    await user.click(button('Test connection'));
+    expect(screen.getByRole('log')).toHaveTextContent(/Couldn’t finish the connection test/);
+    expect(screen.getByRole('log')).not.toHaveTextContent(/secret transport detail/);
+    expect(payloads().pop()).toMatchObject({
+      body: EXAMPLE_CONFIG.target.config.body,
+      authEnv: '',
+      responsePath: 'response',
+    });
+    api.mockResolvedValueOnce(new Response(null, { status: 403 }));
+    await user.click(button('Test connection'));
+    expect(screen.getByRole('log')).toHaveTextContent(/Open Promptfoo on localhost/);
+    expect(postCalls()).toHaveLength(3);
+  });
+
+  it('locks pending tests, aborts on leaving and ignores a late reply', async () => {
+    const { user } = setup();
+    await user.click(button('Try the demo app'));
+    await user.click(button('Send reply'));
+    let finish!: (response: Response) => void;
+    api.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await user.click(button('Test connection'));
+    expect(button('Test connection')).toBeDisabled();
+    expect(button('Review setup')).toBeDisabled();
+    expect(input()).toHaveAttribute('readonly');
+    const signal = postCalls().pop()?.[1]?.signal;
+    await user.click(button('Set up manually'));
+    expect(signal?.aborted).toBe(true);
+    await act(() => finish(Response.json({ success: true, message: 'Stale test' })));
+    await user.click(button('Return to chat'));
+    expect(screen.queryByText('Stale test')).toBeNull();
+  });
+
+  it('tests a saved chat connection before planning and keeps the verified correction', async () => {
+    const target = {
+      id: 'http',
+      label: 'private.example',
+      config: {
+        url: 'https://private.example/chat',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer {{env.SAVED_TOKEN}}',
+        },
+        body: { input: '{{prompt}}' },
+        transformResponse: 'json.old',
+      },
+    };
+    useRedTeamConfig.getState().setFullConfig({ ...EXAMPLE_CONFIG, target });
+    const { user } = setup();
+    await user.click(button('Plan with agent'));
+    await send(user, 'Can I test the connection first?');
+    expect(button('Test connection')).toHaveAccessibleDescription(
+      /private.example using SAVED_TOKEN/,
+    );
+    api.mockResolvedValueOnce(
+      Response.json({ success: false, message: 'Which field holds the reply?', paths: ['answer'] }),
+    );
+    await user.click(button('Test connection'));
+    await user.click(button('Use answer'));
+    await send(user, 'An order bot. Customers should only see their own records.');
+    expect(screen.getByText('Test passed')).toBeVisible();
+    expect(postCalls().map(([path]) => path)).toEqual([
+      '/redteam/setup/connection-test',
+      '/redteam/setup-plan',
+    ]);
+    expect(JSON.stringify(payloads()[1])).not.toMatch(/private.example|SAVED_TOKEN|Use answer/);
+    await user.click(button('Review setup'));
+    expect(config().target.config.transformResponse).toBe('json.answer');
+  });
+
+  it('keeps unsupported target tests local and leaves the scan available', async () => {
+    const { user } = setup();
+    await send(user, 'Order bot');
+    await send(user, 'ollama:chat:llama3');
+    await send(user, 'Test the connection');
+    expect(screen.getByRole('log')).toHaveTextContent(
+      /Use manual setup to test this type of target/,
+    );
+    expect(screen.queryByRole('button', { name: 'Test connection' })).toBeNull();
+    expect(button('Review setup')).toBeEnabled();
+    expect(postCalls()).toHaveLength(1);
   });
 
   it('preserves the transcript and changes stale application facts on a post-review correction', async () => {
@@ -258,7 +441,7 @@ describe('agent-led red team setup', () => {
     expect(input()).toHaveValue('A private order bot');
     await user.click(button('Send reply'));
     expect(payloads()).toEqual([{ messages: [userMessage('A private order bot')] }]);
-    await user.click(button('{"prompt":"{{prompt}}"}'));
+    await user.click(button('Use prompt'));
     await user.click(button('Plain text'));
     await user.click(button('No auth'));
     await user.click(button('Review setup'));

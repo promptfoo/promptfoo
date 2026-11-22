@@ -51,6 +51,7 @@ import EstimationsDisplay from './EstimationsDisplay';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
+import { ConnectionStatus } from './SetupPlan';
 import type { PluginConfig, Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
@@ -71,10 +72,12 @@ function setupRunError({ target, plugins }: Config, guided: boolean): string | n
 
 function AgentReview({
   config,
+  connectionStatus,
   onContinue,
   children,
 }: {
   config: Config;
+  connectionStatus?: ReviewProps['connectionStatus'];
   onContinue: () => void;
   children: React.ReactNode;
 }) {
@@ -84,6 +87,7 @@ function AgentReview({
         <div className="min-w-0 break-words">
           <p className="text-sm text-muted-foreground">Target</p>
           <p className="font-medium">{targetDestination(config.target)}</p>
+          {connectionStatus && <ConnectionStatus status={connectionStatus} review />}
         </div>
         <Button variant="outline" size="sm" onClick={onContinue}>
           Continue conversation
@@ -117,6 +121,7 @@ function AgentReview({
 interface ReviewProps {
   onBack?: () => void;
   continueConversation?: () => void;
+  connectionStatus?: 'success' | 'error';
   navigateToPlugins: () => void;
   navigateToStrategies: () => void;
   navigateToPurpose: () => void;
@@ -219,6 +224,7 @@ function removeIntentEntry(
 export default function Review({
   onBack,
   continueConversation,
+  connectionStatus,
   navigateToPlugins,
   navigateToStrategies,
   navigateToPurpose,
@@ -1292,7 +1298,11 @@ export default function Review({
     >
       <div>
         {continueConversation ? (
-          <AgentReview config={config} onContinue={continueConversation}>
+          <AgentReview
+            config={config}
+            onContinue={continueConversation}
+            connectionStatus={connectionStatus}
+          >
             {renderDetails()}
           </AgentReview>
         ) : (

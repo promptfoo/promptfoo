@@ -2,6 +2,8 @@ import {
   looksLikeCredentialValue,
   looksLikeRequestCredentialParameter,
 } from '@app/stores/evalConfig';
+import { isSetupReplyPath } from '@promptfoo/types/api/redteamSetup';
+import { readConnectionSlots } from './agentConnectionLanguage';
 
 import type { ProviderOptions } from '../types';
 
@@ -69,12 +71,19 @@ function object(value: string, message: string): Record<string, unknown> {
   throw new Error(message);
 }
 
+// A valid but ambiguous example can be clarified without discarding other
+// settings from the same message. Unsafe or malformed input still fails.
+class AmbiguousExample extends Error {}
+
 function requestBody(input: string): Record<string, unknown> {
-  const field = input.replace(
-    /^(?:the )?(?:message|prompt|input) (?:goes in|is in|field is) /i,
-    '',
-  );
-  const body = key.test(field) ? { [field]: prompt } : object(input, bodyError);
+  const fields = input.split('.');
+  const body =
+    fields.every((field) => key.test(field)) && fields.length <= 16
+      ? fields.reduceRight<Record<string, unknown>>(
+          (nested, field, index) => ({ [field]: index === fields.length - 1 ? prompt : nested }),
+          {},
+        )
+      : object(input, bodyError);
   let hasPrompt = false;
   // JSON.stringify visits nested fields and arrays without evaluating user input.
   JSON.stringify(body, (name, value) => {
@@ -99,20 +108,28 @@ function requestBody(input: string): Record<string, unknown> {
     return value;
   });
   if (!hasPrompt) {
-    const fields = Object.keys(body);
-    if (fields.length !== 1 || typeof body[fields[0]] !== 'string') {
-      throw new Error(bodyError);
+    let node = body;
+    while (true) {
+      const fields = Object.keys(node);
+      if (fields.length !== 1) {
+        throw new AmbiguousExample(bodyError);
+      }
+      const entry = node[fields[0]];
+      if (typeof entry === 'string') {
+        node[fields[0]] = prompt;
+        break;
+      }
+      if (!entry || typeof entry !== 'object') {
+        throw new AmbiguousExample(bodyError);
+      }
+      node = entry as Record<string, unknown>;
     }
-    body[fields[0]] = prompt;
   }
   return body;
 }
 
 function responsePath(answer: string): string {
-  const value = answer.replace(
-    /^(?:(?:actually[, ]+)?(?:the )?(?:response|reply|answer|output)(?: field| path)? (?:is (?:at |in )?|comes (?:from|in) )|(?:it )?returns )/i,
-    '',
-  );
+  const value = answer;
   if (/^(?:plain\s*text|raw text)$/i.test(value)) {
     return '';
   }
@@ -122,7 +139,7 @@ function responsePath(answer: string): string {
     while (node && typeof node === 'object') {
       const entries: [string, unknown][] = Object.entries(node);
       if (entries.length !== 1) {
-        throw new Error(pathError);
+        throw new AmbiguousExample(pathError);
       }
       const [field, next] = entries[0];
       if (Array.isArray(node)) {
@@ -141,10 +158,7 @@ function responsePath(answer: string): string {
   }
   const path = value.replace(/^(?:json|\$)\./, '');
   // The HTTP provider evaluates transformResponse. Accept property reads only.
-  if (
-    !/^[A-Za-z_]\w*(?:(?:\.[A-Za-z_]\w*)|(?:\[(?:0|[1-9]\d*)\]))*$/.test(path) ||
-    path.split(/[.\[\]]/).some((part) => reserved.test(part))
-  ) {
+  if (!isSetupReplyPath(path)) {
     throw new Error(pathError);
   }
   return path;
@@ -221,26 +235,68 @@ export function parseConnection(
   if (/^curl\s/i.test(value)) {
     return parseCurl(value);
   }
-  if (modelId(value)) {
-    return { model: value };
+  const model =
+    value.match(
+      /^(?:actually[, ]+)?(?:use|switch to|try|the model is) (\S+?)(?: instead)?[.!]?$/i,
+    )?.[1] ?? value;
+  if (modelId(model)) {
+    return { model };
   }
-  if (field === 'url' || /^https?:\/\//i.test(value)) {
-    const url = endpoint(
-      value.replace(/^(?:POST\s+|(?:the )?(?:url|endpoint) is |it['’]s at )/i, ''),
-    );
-    if (draft.url && new URL(url).origin === new URL(draft.url).origin) {
-      return { ...draft, url };
+  const slots = connectionSlots(value, field);
+  const url = slots.url ? endpoint(slots.url) : draft.url;
+  // Keep answers given before the URL, but never send a previous host's
+  // credentials or request body to a different origin.
+  const replacing =
+    draft.model || (draft.url && url && new URL(url).origin !== new URL(draft.url).origin);
+  const next: ConnectionDraft = replacing ? {} : { ...draft };
+  if (url) {
+    next.url = url;
+  }
+  for (const field of ['body', 'responsePath', 'authEnv'] as const) {
+    const value = slots[field];
+    if (value === undefined) {
+      continue;
     }
-    // A new host must not inherit an old host's credentials or request data.
-    return { url };
+    if (value === null) {
+      delete next[field];
+      continue;
+    }
+    try {
+      if (field === 'body') {
+        next.body = requestBody(value);
+      } else {
+        next[field] = field === 'authEnv' ? authEnv(value) : responsePath(value);
+      }
+    } catch (error) {
+      if (!(error instanceof AmbiguousExample) || Object.keys(slots).length === 1) {
+        throw error;
+      }
+      delete next[field];
+    }
   }
-  if (field === 'body') {
-    return { ...draft, body: requestBody(value) };
+  return next;
+}
+
+function connectionSlots(value: string, field: Field): Partial<Record<Field, string | null>> {
+  // Keep standalone values intact, particularly JSON, expressions and URLs.
+  // The prose reader must never turn a rejected expression into a valid field.
+  if (/^https?:\/\/\S+$/i.test(value)) {
+    return { url: value };
   }
-  if (field === 'responsePath') {
-    return { ...draft, responsePath: responsePath(value) };
+  if (/^(?:plain|raw) text$/i.test(value)) {
+    return { responsePath: value };
   }
-  return { ...draft, authEnv: authEnv(value) };
+  if (value.startsWith('{') && !value.startsWith('{{') && value.endsWith('}')) {
+    return field === 'responsePath' ? { responsePath: value } : { body: value };
+  }
+  if (!/\s/.test(value)) {
+    if (/^(?:[A-Z][A-Z0-9_]+_(?:TOKEN|KEY)|\$[A-Z_][A-Z0-9_]*)$/.test(value)) {
+      return { authEnv: value };
+    }
+    return { [field]: value.replace(/^(['"`])([\w.\[\]]+)\1$/, '$2') };
+  }
+  const slots = readConnectionSlots(value, field);
+  return Object.keys(slots).length ? slots : { [field]: value };
 }
 
 export function toTarget(draft: ConnectionDraft): ProviderOptions | undefined {

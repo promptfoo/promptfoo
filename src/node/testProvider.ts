@@ -16,7 +16,6 @@ import {
 } from '../validators/util';
 
 import type { ApiProvider, ProviderResponse } from '../types/providers';
-import type { Inputs } from '../types/shared';
 
 /**
  * Minimal view of the session-relevant fields read off `provider.config` when
@@ -74,7 +73,7 @@ export async function testProviderConnectivity({
   /** An optional prompt to test with */
   prompt?: string;
   /** Input variable definitions for multi-input configurations */
-  inputs?: Inputs;
+  inputs?: ApiProvider['inputs'];
 }): Promise<ProviderTestResult> {
   const vars: Record<string, string> = {};
 
@@ -346,7 +345,7 @@ export async function testProviderSession({
   /** Test options */
   options?: { skipConfigValidation?: boolean };
   /** Input variable definitions for multi-input configurations */
-  inputs?: Inputs;
+  inputs?: ApiProvider['inputs'];
   /**
    * For multi-input configurations, specifies which variable to use for
    * the conversation prompts (e.g., 'user_message'). Other input variables get dummy test values.

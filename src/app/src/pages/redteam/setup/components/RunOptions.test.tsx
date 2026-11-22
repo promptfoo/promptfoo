@@ -3,7 +3,6 @@ import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Config } from '../types';
 import {
   DelayBetweenAPICallsInput,
   MaxCharsPerMessageInput,
@@ -12,7 +11,6 @@ import {
   RUNOPTIONS_TEXT,
   RunOptionsContent,
 } from './RunOptions';
-import type { RedteamRunOptions } from '@promptfoo/types';
 
 const renderWithTooltipProvider = (component: React.ReactNode) => {
   return render(<TooltipProvider>{component}</TooltipProvider>);
@@ -30,8 +28,8 @@ describe('RunOptionsContent', () => {
       maxConcurrency: 1,
       verbose: false,
     },
-    updateConfig: mockUpdateConfig as (section: keyof Config, value: any) => void,
-    updateRunOption: mockUpdateRunOption as (key: keyof RedteamRunOptions, value: any) => void,
+    updateConfig: mockUpdateConfig,
+    updateRunOption: mockUpdateRunOption,
   };
 
   beforeEach(() => {

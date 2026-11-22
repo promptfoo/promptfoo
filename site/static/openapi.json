@@ -5117,6 +5117,104 @@
         }
       }
     },
+    "/api/redteam/setup/connection-test": {
+      "post": {
+        "operationId": "testRedteamSetupConnection",
+        "tags": ["Redteam"],
+        "summary": "Send one Hello to a JSON POST endpoint from the local server",
+        "description": "Tests the configured reply path, or suggests fields if it is missing. Requires a local caller. Does not send the reply to Cloud or start a scan.",
+        "requestBody": {
+          "description": "JSON request body",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": { "type": "string", "maxLength": 4096, "format": "uri" },
+                  "body": { "type": "object", "additionalProperties": {} },
+                  "authEnv": {
+                    "oneOf": [
+                      { "type": "string", "enum": [""] },
+                      { "type": "string", "maxLength": 128, "pattern": "^[A-Z_][A-Z0-9_]*$" }
+                    ]
+                  },
+                  "responsePath": {
+                    "oneOf": [{ "type": "string", "enum": [""] }, { "type": "string" }]
+                  }
+                },
+                "required": ["url", "body", "authEnv"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string", "maxLength": 500 },
+                    "paths": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          { "type": "string", "enum": ["Plain text"] },
+                          { "type": "string" }
+                        ]
+                      },
+                      "maxItems": 4
+                    }
+                  },
+                  "required": ["success", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires a local caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/redteam/{taskId}": {
       "post": {
         "operationId": "runRedteamTask",

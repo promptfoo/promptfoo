@@ -1019,6 +1019,22 @@ export function createServerOpenApiRegistry() {
 
   register({
     method: 'post',
+    path: '/api/redteam/setup/connection-test',
+    operationId: 'testRedteamSetupConnection',
+    tags: ['Redteam'],
+    summary: 'Send one Hello to a JSON POST endpoint from the local server',
+    description:
+      'Tests the configured reply path, or suggests fields if it is missing. Requires a local caller. Does not send the reply to Cloud or start a scan.',
+    request: { body: jsonBody(RedteamSchemas.SetupConnectionTest.Request) },
+    responses: {
+      200: jsonResponse(RedteamSchemas.SetupConnectionTest.Response),
+      400: jsonResponse(ErrorResponseSchema, 'Invalid connection'),
+      403: jsonResponse(ErrorResponseSchema, 'Requires a local caller'),
+    },
+  });
+
+  register({
+    method: 'post',
     path: '/api/redteam/setup-plan',
     operationId: 'draftRedteamSetupPlan',
     tags: ['Redteam'],

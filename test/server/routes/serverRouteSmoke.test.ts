@@ -669,6 +669,13 @@ const smokeCases: SmokeCase[] = [
   },
   {
     method: 'post',
+    openApiPath: '/api/redteam/setup/connection-test',
+    path: '/api/redteam/setup/connection-test',
+    body: {},
+    expectedStatus: 400,
+  },
+  {
+    method: 'post',
     openApiPath: '/api/redteam/setup-plan',
     path: '/api/redteam/setup-plan',
     body: {},

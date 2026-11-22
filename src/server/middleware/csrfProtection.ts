@@ -14,7 +14,7 @@ const KNOWN_LOCAL_HOSTS = new Set([
   'local.promptfoo.app',
 ]);
 
-function isLocalHost(hostname: string): boolean {
+export function isLocalHost(hostname: string): boolean {
   return KNOWN_LOCAL_HOSTS.has(hostname);
 }
 

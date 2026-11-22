@@ -1,32 +1,43 @@
 import { useEffect, useRef } from 'react';
 
 import { Button } from '@app/components/ui/button';
-import { Checkbox } from '@app/components/ui/checkbox';
 import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
-import { ArrowRight, ArrowUp, Loader2, LockKeyhole } from 'lucide-react';
+import {
+  ArrowRight,
+  ArrowUp,
+  BotMessageSquare,
+  CircleAlert,
+  CircleCheck,
+  Cloud,
+  FlaskConical,
+  FolderOpen,
+  Loader2,
+  LockKeyhole,
+  PlugZap,
+} from 'lucide-react';
+import { useConnectionTest } from '../hooks/useConnectionTest';
 import { type Field, isField, type SetupDraft, useSetupAgent } from '../hooks/useSetupAgent';
-import { riskName } from '../utils/plugins';
-import { targetDestination } from '../utils/targetDestination';
+import SetupPlan from './SetupPlan';
 import { getEstimatedProbes } from './strategies/utils';
 
 import type { Config } from '../types';
 
 const DEMO_DESCRIPTION =
   "Test as a customer shopping at an electronics store. The support bot can look up my orders and update my tickets. It must never show or change another customer's records.";
-const OPENING = 'What does your app do, and what should it never do?';
+const OPENING = 'Describe your app and what could go wrong.';
 const EXAMPLES: Partial<Record<Field, string[]>> = {
-  body: ['{"message":"{{prompt}}"}', '{"prompt":"{{prompt}}"}'],
+  body: ['message', 'prompt'],
   responsePath: ['response', 'Plain text'],
   authEnv: ['No auth'],
 };
 const PLACEHOLDERS: Record<SetupDraft['step'], string> = {
-  scope: 'Describe the data it can see or actions it can take…',
-  url: 'http://localhost:3000/chat or ollama:chat:llama3',
-  body: '{"message":"{{prompt}}"}',
-  responsePath: 'result.answer',
-  authEnv: 'MY_APP_TOKEN or No auth',
-  ready: 'Ask to change the tests or test count…',
+  scope: 'Message the setup agent…',
+  url: 'I POST to https://example.com/chat with a message field. Read result.text. No auth.',
+  body: 'The prompt goes in the message field…',
+  responsePath: 'The answer is in result.text…',
+  authEnv: 'No auth, or a bearer token from APP_TOKEN…',
+  ready: 'Ask for changes…',
 };
 
 interface SetupProps {
@@ -38,178 +49,66 @@ interface SetupProps {
   onLoad: () => void;
 }
 
-function ConnectionSummary({
-  config,
-  draft,
-  edit,
-}: {
-  config: Config;
-  draft: SetupDraft;
-  edit: (field: Field) => void;
-}) {
-  const { connection, demo } = draft;
-  const target = config.target;
-  const rows: [Field, string, string][] = [
-    ['url', 'Target', connection?.url || targetDestination(target)],
-  ];
-  if (connection?.body) {
-    rows.push(
-      ['body', 'Request', 'POST ' + JSON.stringify(connection.body)],
-      ['responsePath', 'Read reply', connection.responsePath || 'Plain text'],
-      [
-        'authEnv',
-        'Authorization',
-        connection.authEnv ? 'Bearer token from ' + connection.authEnv : 'None',
-      ],
-    );
-  }
-  return (
-    <div className="rounded-md bg-muted/40 px-3 py-2">
-      {rows.map(([field, label, value]) => (
-        <div key={field} className="flex items-baseline justify-between gap-2 py-0.5">
-          <p className="min-w-0 break-words">
-            <span className="text-muted-foreground">{label} · </span>
-            <span className="font-mono text-xs">{value}</span>
-          </p>
-          <button
-            type="button"
-            className="shrink-0 text-xs text-primary underline-offset-4 hover:underline"
-            aria-label={'Change ' + label.toLowerCase()}
-            onClick={() => edit(field)}
-          >
-            Change
-          </button>
-        </div>
-      ))}
-      {connection?.model && (
-        <p className="mt-1 text-xs text-muted-foreground">
-          This tests the model directly. To include your app’s instructions and tools, use its HTTP
-          endpoint.{' '}
-          {connection.model.startsWith('ollama:')
-            ? 'Start Ollama with this model before running.'
-            : 'Your model provider’s credentials must be available where Promptfoo runs.'}
-        </p>
-      )}
-      {demo && <p className="text-xs text-muted-foreground">Promptfoo demo app</p>}
-    </div>
-  );
-}
-
-const FACT_LABELS = {
-  redteamUser: 'Test as',
-  accessToData: 'Can read',
-  forbiddenData: 'Must keep private',
-  accessToActions: 'Can do',
-  forbiddenActions: 'Must not do',
-} as const;
-
-function PlanSummary({
-  edit,
-  draft,
-  setDraft,
-  config,
-  plan,
-  disabled,
-}: Pick<SetupProps, 'draft' | 'setDraft'> & {
-  edit: (field: Field) => void;
-  config: Config;
-  plan: NonNullable<SetupDraft['plan']>;
-  disabled: boolean;
-}) {
-  const excluded = draft.excluded ?? [];
-  const facts = Object.entries(FACT_LABELS).flatMap(([field, label]) => {
-    const value = config.applicationDefinition[field as keyof typeof FACT_LABELS];
-    return value ? [[label, value]] : [];
-  });
-  return (
-    <fieldset
-      disabled={disabled}
-      className="mt-3 min-w-0 space-y-3 rounded-lg border border-border bg-card p-4 text-sm"
-    >
-      <ConnectionSummary config={config} draft={draft} edit={edit} />
-      <p className="break-words">{plan.purpose}</p>
-      {facts.length > 0 && (
-        <details>
-          <summary className="cursor-pointer text-muted-foreground">App details</summary>
-          <dl className="mt-2 space-y-2">
-            {facts.map(([label, value]) => (
-              <div key={label}>
-                <dt className="font-medium">{label}</dt>
-                <dd className="break-words text-muted-foreground">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </details>
-      )}
-      <ul className="space-y-3">
-        {plan.plugins.map(({ id, reason }) => (
-          <li key={id} className="flex items-start gap-2">
-            <Checkbox
-              id={'risk-' + id}
-              className="mt-0.5"
-              checked={config.plugins.includes(id)}
-              aria-label={riskName(id)}
-              aria-describedby={'reason-' + id}
-              onCheckedChange={() =>
-                setDraft({
-                  ...draft,
-                  excluded: excluded.includes(id)
-                    ? excluded.filter((value) => value !== id)
-                    : [...excluded, id],
-                })
-              }
-            />
-            <label htmlFor={'risk-' + id} className="min-w-0">
-              <span className="block font-medium">{riskName(id)}</span>
-              <span id={'reason-' + id} className="block break-words text-muted-foreground">
-                {reason}
-              </span>
-            </label>
-          </li>
-        ))}
-      </ul>
-      {plan.note && <p className="break-words">{plan.note}</p>}
-    </fieldset>
-  );
-}
+type Agent = ReturnType<typeof useSetupAgent>;
+type ConnectionTest = ReturnType<typeof useConnectionTest>;
 
 function Composer({
   draft,
   setDraft,
   agent,
-}: Pick<SetupProps, 'draft' | 'setDraft'> & { agent: ReturnType<typeof useSetupAgent> }) {
-  const local = isField(draft.step);
-  const { pending, error, send } = agent;
+  check,
+  started,
+}: Pick<SetupProps, 'draft' | 'setDraft'> & {
+  agent: Agent;
+  check: ConnectionTest;
+  started: boolean;
+}) {
+  const { local, error, pending } = agent;
+  const busy = pending || check.testing;
   const reply = useRef<HTMLTextAreaElement>(null);
+  const testFailed = draft.messages[draft.messages.length - 1]?.test === 'error';
   useEffect(() => {
-    if (!pending && draft.messages.length && draft.step !== 'ready') {
+    if (busy || check.paths.length) {
+      return;
+    }
+    if (error || testFailed || (draft.step !== 'ready' && (draft.messages.length || draft.demo))) {
       reply.current?.focus({ preventScroll: true });
     }
-  }, [draft.messages.length, draft.step, pending]);
+  }, [draft.messages.length, draft.step, draft.demo, busy, error, testFailed, check.paths.length]);
+  const PrivacyIcon = local ? LockKeyhole : Cloud;
   return (
     <form
-      className="shrink-0 border-t border-border bg-background py-3"
+      className="shrink-0"
       onSubmit={(event) => {
         event.preventDefault();
-        send(draft.input.trim());
+        if (!busy && draft.input.trim()) {
+          check.send(draft.input.trim());
+        }
       }}
     >
       {error && (
-        <p role="alert" className="mb-2 text-sm text-destructive">
+        <p role="alert" className="mb-2 text-sm text-red-700 dark:text-red-400">
           {error}
         </p>
       )}
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-2 rounded-2xl border border-border bg-card p-2 shadow-sm transition-shadow focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 sm:p-3">
         <Textarea
           ref={reply}
           aria-label={local ? 'Connection reply' : 'Message the setup agent'}
           aria-describedby="setup-privacy"
-          rows={2}
-          className="min-h-14 resize-none"
-          value={draft.input}
+          rows={started ? 1 : 2}
+          className={cn(
+            'field-sizing-content min-w-0 flex-1 resize-none! border-0! bg-transparent! px-2! py-1.5! text-base leading-6 focus-visible:ring-0 focus-visible:ring-offset-0',
+            started ? 'min-h-9 max-h-[min(20dvh,10rem)]' : 'min-h-20 max-h-[min(32dvh,16rem)]',
+          )}
+          value={busy ? '' : draft.input}
           onChange={(event) => setDraft({ ...draft, input: event.target.value })}
-          readOnly={pending}
-          placeholder={PLACEHOLDERS[draft.step]}
+          readOnly={busy}
+          placeholder={
+            started
+              ? PLACEHOLDERS[draft.step]
+              : 'My support bot looks up orders. Customers should only see their own…'
+          }
           maxLength={local ? 16000 : 2000}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -220,39 +119,81 @@ function Composer({
         />
         <Button
           type="submit"
-          disabled={pending || !draft.input.trim()}
-          className="shrink-0"
+          size="icon"
+          disabled={busy || !draft.input.trim()}
+          className="shrink-0 rounded-xl disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
           aria-label="Send reply"
+          title="Send reply (Enter)"
         >
-          <span className="hidden sm:inline">Send</span>
           <ArrowUp aria-hidden="true" />
         </Button>
       </div>
-      <p id="setup-privacy" className="mt-2 text-xs text-muted-foreground">
-        {local ? (
-          <>
-            <LockKeyhole className="mr-1 inline size-3" aria-hidden="true" />
-            Connection replies stay in this browser during setup. Never paste secrets.
-          </>
-        ) : (
-          'App and test messages go to Promptfoo Cloud. Leave out secrets and personal data.'
-        )}
+      <p
+        id="setup-privacy"
+        className="mt-2 flex items-start gap-1.5 px-1 text-xs text-muted-foreground"
+      >
+        <PrivacyIcon aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+        {local
+          ? 'Connection details stay local during setup. Never paste secrets.'
+          : 'App descriptions and test plans go to Promptfoo Cloud. Leave out private data.'}
       </p>
     </form>
   );
 }
 
-function ChatMessage({ message }: { message: SetupDraft['messages'][number] }) {
-  return message.role === 'user' ? (
-    <p className="ml-auto w-fit max-w-[90%] whitespace-pre-wrap break-words rounded-xl bg-muted px-3 py-2 text-sm">
-      <span className="sr-only">You. </span>
-      {message.content}
-    </p>
-  ) : (
-    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-      <span className="sr-only">Setup agent. </span>
-      {message.content}
-    </p>
+function AgentAvatar() {
+  return (
+    <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-blue-700 dark:text-blue-300">
+      <BotMessageSquare aria-hidden="true" className="size-4" />
+    </span>
+  );
+}
+
+function ChatMessage({
+  message,
+  grouped,
+}: {
+  message: SetupDraft['messages'][number];
+  grouped?: boolean;
+}) {
+  const { content, role, test } = message;
+  if (role === 'user') {
+    return (
+      <p className="ml-auto w-fit max-w-[88%] rounded-2xl rounded-br-sm bg-primary/10 px-4 py-2.5 text-[15px] leading-6 wrap-anywhere whitespace-pre-wrap sm:max-w-[80%] dark:bg-primary/15">
+        <span className="sr-only">You. </span>
+        {content}
+      </p>
+    );
+  }
+  const Icon = test === 'success' ? CircleCheck : CircleAlert;
+  return (
+    <div className={cn('flex items-start gap-3', grouped && 'pl-10')}>
+      {!grouped && <AgentAvatar />}
+      <p
+        className={cn(
+          'min-w-0 pt-0.5 text-[15px] leading-6 wrap-anywhere whitespace-pre-wrap',
+          test && 'flex items-start gap-2 rounded-xl border px-3 py-2',
+          test === 'success' &&
+            'border-emerald-200 bg-emerald-50 dark:border-emerald-800/50 dark:bg-emerald-950/30',
+          test === 'error' &&
+            'border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/30',
+        )}
+      >
+        <span className="sr-only">Setup agent. </span>
+        {test && (
+          <Icon
+            aria-hidden="true"
+            className={cn(
+              'mt-1 size-4 shrink-0',
+              test === 'success'
+                ? 'text-emerald-700 dark:text-emerald-400'
+                : 'text-amber-700 dark:text-amber-400',
+            )}
+          />
+        )}
+        {content}
+      </p>
+    </div>
   );
 }
 
@@ -261,21 +202,25 @@ function LocalActions({
   draft,
   agent,
   fresh,
+  check,
   onApply,
 }: Pick<SetupProps, 'draft' | 'fresh' | 'onApply'> & {
   step: Field;
-  agent: ReturnType<typeof useSetupAgent>;
+  agent: Agent;
+  check: ConnectionTest;
 }) {
   const { plan } = draft;
   const { pending, replacing, proposed } = agent;
-  const idle = !pending && !draft.input.trim();
+  const busy = pending || check.testing;
+  const idle = !busy && !draft.input.trim();
   return (
-    <div className="space-y-2">
+    <div className="flex flex-wrap items-center gap-2">
       {((step === 'url' && !draft.deferred) || agent.connected) && (
         <div>
           <Button
             size="sm"
             variant="outline"
+            className="rounded-full shadow-none"
             disabled={!idle}
             onClick={() =>
               agent.connected ? agent.resume() : agent.send('I don’t have an endpoint yet')
@@ -285,17 +230,18 @@ function LocalActions({
           </Button>
         </div>
       )}
-      {EXAMPLES[step] && (
+      {EXAMPLES[step] && !(step === 'responsePath' && check.paths.length > 0) && (
         <div className="flex flex-wrap gap-2">
           {EXAMPLES[step].map((example) => (
             <Button
               key={example}
               size="sm"
               variant="outline"
+              className="rounded-full shadow-none"
               disabled={!idle}
               onClick={() => agent.send(example)}
             >
-              {example}
+              {step === 'body' ? 'Use ' + example : example}
             </Button>
           ))}
         </div>
@@ -304,8 +250,8 @@ function LocalActions({
         <Button
           size="sm"
           variant="link"
-          className="px-0"
-          disabled={pending}
+          className="px-2"
+          disabled={busy}
           onClick={() => agent.edit('scope')}
         >
           {agent.canMoveSuggestion ? 'Edit reply for Promptfoo Cloud' : 'Adjust tests'}
@@ -320,8 +266,8 @@ function LocalActions({
         <Button
           size="sm"
           variant="link"
-          className="ml-4 px-0"
-          disabled={pending}
+          className="px-2"
+          disabled={busy}
           onClick={() => onApply(proposed, true)}
         >
           Use tests in manual setup
@@ -331,27 +277,30 @@ function LocalActions({
   );
 }
 
-function ReviewAction({
+function SetupActions({
   agent,
+  check,
   draft,
   fresh,
   onApply,
-}: Pick<SetupProps, 'draft' | 'fresh' | 'onApply'> & { agent: ReturnType<typeof useSetupAgent> }) {
+}: Pick<SetupProps, 'draft' | 'fresh' | 'onApply'> & { agent: Agent; check: ConnectionTest }) {
   const { proposed, replacing, pending, ready } = agent;
-  const idle = !pending && !draft.input.trim();
-  const deferred = draft.deferred && draft.step === 'url';
+  const busy = pending || check.testing;
+  const idle = !busy && !draft.input.trim();
+  const canReview = proposed && (ready || (draft.deferred && draft.step === 'url'));
   const reviewButton = useRef<HTMLButtonElement>(null);
+  const testFailed = draft.messages[draft.messages.length - 1]?.test === 'error';
   useEffect(() => {
-    if (ready) {
+    if (ready && !check.testing && !testFailed && !check.paths.length) {
       reviewButton.current?.focus({ preventScroll: true });
     }
-  }, [ready]);
-  if (!proposed || (!ready && !deferred)) {
+  }, [ready, check.testing, testFailed, check.paths.length]);
+  if (!canReview && !check.available) {
     return null;
   }
   return (
-    <div className="shrink-0 border-t border-border py-2">
-      {!fresh && (replacing || !draft.approved) && (
+    <div className="shrink-0 border-t border-border pt-3 pb-2">
+      {canReview && !fresh && (replacing || !draft.approved) && (
         <p className="mb-2 text-xs text-muted-foreground">
           {replacing
             ? 'Reviewing replaces your target and starts fresh app settings.'
@@ -359,63 +308,220 @@ function ReviewAction({
           Saved configurations stay unchanged.
         </p>
       )}
-      <div className="flex items-center justify-between gap-2">
-        <p aria-live="polite" className="text-sm">
-          {proposed.plugins.length ? (
-            <>
-              <strong>~{getEstimatedProbes(proposed).toLocaleString()} requests</strong>
-              <span className="block text-xs text-muted-foreground">
-                {proposed.numTests} direct tests per risk
-              </span>
-            </>
-          ) : (
-            'Select at least one risk.'
-          )}
-        </p>
-        <Button
-          ref={reviewButton}
-          disabled={!idle || !proposed.plugins.length}
-          onClick={() => onApply(proposed)}
-        >
-          {agent.ready ? 'Review setup' : 'Review draft'} <ArrowRight aria-hidden="true" />
-        </Button>
+      <div className="flex items-start justify-between gap-3">
+        {check.available && (
+          <div className="min-w-0">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-lg px-2 sm:px-4"
+              aria-describedby="connection-test-disclosure"
+              disabled={!idle}
+              onClick={() => check.test()}
+            >
+              {check.testing ? (
+                <Loader2 aria-hidden="true" className="animate-spin" />
+              ) : (
+                <PlugZap aria-hidden="true" />
+              )}
+              Test connection
+            </Button>
+            <p
+              id="connection-test-disclosure"
+              className="mt-1.5 text-xs text-muted-foreground wrap-anywhere"
+            >
+              Sends one “Hello” to {check.destination}
+              {check.authEnv && ` using ${check.authEnv}`}
+            </p>
+          </div>
+        )}
+        {canReview && (
+          <div className="ml-auto shrink-0 text-right">
+            <Button
+              ref={reviewButton}
+              className="rounded-lg px-2 sm:px-4"
+              disabled={!idle || !proposed.plugins.length}
+              onClick={() => onApply(proposed)}
+              aria-describedby="scan-estimate"
+            >
+              {ready ? 'Review setup' : 'Review draft'} <ArrowRight aria-hidden="true" />
+            </Button>
+            <p
+              id="scan-estimate"
+              aria-live="polite"
+              className="mt-1.5 text-xs text-muted-foreground"
+            >
+              {proposed.plugins.length ? (
+                <>
+                  Scan · <span>~{getEstimatedProbes(proposed).toLocaleString()} requests</span>
+                </>
+              ) : (
+                'Select at least one risk.'
+              )}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-export default function Setup({ draft, setDraft, fresh, onApply, onManual, onLoad }: SetupProps) {
+function Introduction({ hasTarget }: { hasTarget: boolean }) {
+  return (
+    <div className="pb-5 sm:pb-6">
+      <div className="mb-4 flex items-center gap-2">
+        <AgentAvatar />
+        <span className="text-sm font-medium text-muted-foreground">Red team agent</span>
+      </div>
+      <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">What are we testing?</h2>
+      <p className="mt-2 text-base text-muted-foreground">
+        {OPENING}{' '}
+        {hasTarget
+          ? 'I’ll suggest tests and keep your current target unless you change it.'
+          : 'I’ll help you connect it and draft tests for review.'}
+      </p>
+    </div>
+  );
+}
+
+function Conversation({
+  draft,
+  setDraft,
+  fresh,
+  onApply,
+  agent,
+  check,
+}: Pick<SetupProps, 'draft' | 'setDraft' | 'fresh' | 'onApply'> & {
+  agent: Agent;
+  check: ConnectionTest;
+}) {
   const { messages, plan, step } = draft;
-  const agent = useSetupAgent(draft, setDraft);
-  const { pending, disabled, proposed, hasTarget } = agent;
-  const ready = agent.ready && plan && proposed;
-  const local = isField(step);
+  const { pending, proposed, ready } = agent;
+  const idle = !pending && !check.testing && !draft.input.trim();
   const lastTurn = useRef<HTMLDivElement>(null);
-
-  const manualLabel = fresh ? 'Set up manually' : 'Return to configuration';
-  const idle = !pending && !draft.input.trim();
-  const started = messages.length > 0;
-  const opening =
-    hasTarget && !started
-      ? 'I’ll keep your current target unless you change it. ' + OPENING
-      : OPENING;
-
+  const suggestion = useRef<HTMLButtonElement>(null);
+  const testResult = messages[messages.length - 1]?.test;
+  const logMessages: SetupDraft['messages'] = [
+    { role: 'assistant', content: OPENING },
+    ...messages,
+    ...(pending && draft.input.trim()
+      ? [{ role: 'user' as const, content: draft.input.trim() }]
+      : []),
+  ];
+  // Keep the whole latest answer in view when it fits. If the plan is taller
+  // than the viewport, start at the reply, so the question or result stays visible.
+  let last = logMessages.length - 1;
+  while (
+    last > 0 &&
+    !logMessages[last].test &&
+    logMessages[last - 1].role === logMessages[last].role
+  ) {
+    last--;
+  }
   useEffect(() => {
-    if (messages.length) {
+    if (messages.length || pending || check.testing) {
       lastTurn.current?.scrollIntoView({ block: 'start' });
     }
-  }, [messages.length]);
+    if (testResult && !check.testing) {
+      suggestion.current?.focus({ preventScroll: true });
+    }
+  }, [messages.length, pending, check.testing, testResult]);
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-pb-4 [mask-image:linear-gradient(transparent,black_1rem,black_calc(100%_-_1rem),transparent)] py-5 sm:py-7">
+      <div role="log" aria-label="Setup conversation">
+        {logMessages.map((message, index) => {
+          const grouped =
+            message.role === 'assistant' &&
+            !message.test &&
+            logMessages[index - 1]?.role === 'assistant';
+          return (
+            <div
+              key={index}
+              ref={index === last ? lastTurn : undefined}
+              className={cn('scroll-mt-4', index > 0 && (grouped ? 'mt-2' : 'mt-5 sm:mt-6'))}
+            >
+              <ChatMessage message={message} grouped={grouped} />
+            </div>
+          );
+        })}
+      </div>
+      {pending || check.testing ? (
+        <p role="status" className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          {check.testing ? 'Testing the connection…' : 'Thinking…'}
+        </p>
+      ) : (
+        <div className="mt-3 space-y-3 sm:pl-10">
+          {check.paths.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {check.paths.map((path, index) => (
+                <Button
+                  key={path}
+                  ref={index === 0 ? suggestion : undefined}
+                  variant="outline"
+                  size="sm"
+                  className="max-w-full rounded-full shadow-none"
+                  onClick={() => check.selectPath(path)}
+                  disabled={!idle}
+                >
+                  <span className="truncate">Use {path}</span>
+                </Button>
+              ))}
+            </div>
+          )}
+          {draft.previousPlan && (
+            <Button size="sm" variant="outline" disabled={!idle} onClick={agent.restorePlan}>
+              Keep previous tests
+            </Button>
+          )}
+          {isField(step) && (
+            <LocalActions
+              step={step}
+              draft={draft}
+              agent={agent}
+              check={check}
+              fresh={fresh}
+              onApply={onApply}
+            />
+          )}
+          {step === 'scope' && !!plan?.plugins.length && (
+            <Button variant="outline" size="sm" onClick={agent.resume} disabled={!idle}>
+              {draft.interrupted ? 'Back to connection' : 'Keep previous tests'}
+            </Button>
+          )}
+          {ready && proposed && (
+            <SetupPlan
+              edit={agent.edit}
+              draft={draft}
+              setDraft={setDraft}
+              config={proposed}
+              disabled={!idle}
+              status={check.available ? (check.status ?? 'untested') : undefined}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Setup({ draft, setDraft, fresh, onApply, onManual, onLoad }: SetupProps) {
+  const agent = useSetupAgent(draft, setDraft);
+  const check = useConnectionTest(draft, setDraft, agent);
+  const { disabled, proposed, hasTarget, pending, ready } = agent;
+  const started = draft.messages.length > 0 || pending || check.testing;
+  const manualLabel = fresh ? 'Set up manually' : 'Return to configuration';
 
   return (
-    <section className="ph-no-capture mx-auto flex h-full w-full max-w-3xl flex-col px-4 sm:px-6">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-border py-2">
-        <h1 className="text-base font-semibold">Red team setup</h1>
-        <div className="flex items-center gap-2">
+    <section className="ph-no-capture mx-auto flex h-full w-full max-w-3xl flex-col px-3 sm:px-6">
+      <header className="flex shrink-0 items-center justify-between gap-1 border-b border-border py-2">
+        <h1 className="text-sm font-semibold sm:text-base">Red team setup</h1>
+        <div className="flex items-center gap-1">
           <Button
             size="sm"
             variant="ghost"
             onClick={() => {
-              if (fresh && (local || ready) && proposed?.plugins.length) {
+              if (fresh && (isField(draft.step) || ready) && proposed?.plugins.length) {
                 onApply(proposed, true);
               } else {
                 onManual();
@@ -424,8 +530,16 @@ export default function Setup({ draft, setDraft, fresh, onApply, onManual, onLoa
           >
             {manualLabel}
           </Button>
-          <Button size="sm" variant="ghost" onClick={onLoad}>
-            Load or import config
+          <Button
+            size="sm"
+            variant="ghost"
+            className="px-2"
+            aria-label="Load or import config"
+            title="Load or import config"
+            onClick={onLoad}
+          >
+            <FolderOpen aria-hidden="true" />
+            <span className="hidden sm:inline">Load or import config</span>
           </Button>
         </div>
       </header>
@@ -438,93 +552,70 @@ export default function Setup({ draft, setDraft, fresh, onApply, onManual, onLoa
           </p>
         </div>
       ) : (
-        <>
-          <div
-            className={cn(
-              'min-h-0 space-y-4 overflow-y-auto py-6',
-              started ? 'flex-1' : 'sm:pt-12',
-            )}
-          >
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-primary">Setup agent</p>
-              <p className={started ? 'text-sm' : 'text-2xl font-semibold tracking-tight'}>
-                {opening}
-              </p>
-              {!started && (
-                <p className="text-sm text-muted-foreground">
-                  I’ll help you choose tests and connect your app here. No model API key needed for
-                  setup. Nothing runs until you say so.
-                </p>
+        <div
+          className={cn(
+            'flex min-h-0 flex-1 flex-col',
+            started ? 'pb-2 sm:pb-4' : 'overflow-y-auto py-6 sm:pb-[12dvh]',
+          )}
+        >
+          {started ? (
+            <Conversation
+              draft={draft}
+              setDraft={setDraft}
+              agent={agent}
+              check={check}
+              fresh={fresh}
+              onApply={onApply}
+            />
+          ) : (
+            <div className="mt-auto">
+              <Introduction hasTarget={hasTarget} />
+            </div>
+          )}
+          {started && (
+            <SetupActions
+              agent={agent}
+              check={check}
+              draft={draft}
+              fresh={fresh}
+              onApply={onApply}
+            />
+          )}
+          <Composer
+            draft={draft}
+            setDraft={setDraft}
+            agent={agent}
+            check={check}
+            started={started}
+          />
+          {!started && (
+            <div className="mt-5 mb-auto flex flex-wrap items-center gap-x-3 gap-y-2">
+              {fresh && (!draft.input || draft.demo) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full shadow-none"
+                  onClick={() => {
+                    setDraft({
+                      ...draft,
+                      demo: !draft.demo,
+                      input: draft.demo ? '' : DEMO_DESCRIPTION,
+                    });
+                    agent.clearError();
+                  }}
+                >
+                  <FlaskConical aria-hidden="true" />
+                  {draft.demo ? 'Use my own app' : 'Try the demo app'}
+                </Button>
               )}
-            </div>
-            {!started && fresh && (!draft.input || draft.demo) && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={pending}
-                onClick={() => {
-                  setDraft({
-                    ...draft,
-                    demo: !draft.demo,
-                    input: draft.demo ? '' : DEMO_DESCRIPTION,
-                  });
-                  agent.clearError();
-                }}
-              >
-                {draft.demo ? 'Use my own app' : 'Try the demo app'}
-              </Button>
-            )}
-            {draft.demo && !started && (
-              <p className="text-sm text-muted-foreground">
-                Using Promptfoo’s demo app. Send the description below to start.
+              <p className="text-xs text-muted-foreground">
+                {draft.demo
+                  ? 'Send the description to use Promptfoo’s demo app.'
+                  : 'No model API key needed for setup. You choose when to run.'}
               </p>
-            )}
-            <div role="log" aria-label="Setup conversation" className="space-y-4">
-              {messages.map((message, index) => (
-                <div key={index} ref={index === messages.length - 1 ? lastTurn : undefined}>
-                  <ChatMessage message={message} />
-                </div>
-              ))}
             </div>
-            {draft.previousPlan && (
-              <Button size="sm" variant="outline" disabled={!idle} onClick={agent.restorePlan}>
-                Keep previous tests
-              </Button>
-            )}
-            {local && (
-              <LocalActions
-                step={step}
-                draft={draft}
-                agent={agent}
-                fresh={fresh}
-                onApply={onApply}
-              />
-            )}
-            {step === 'scope' && !!plan?.plugins.length && (
-              <Button variant="outline" size="sm" onClick={agent.resume} disabled={!idle}>
-                {draft.interrupted ? 'Back to connection' : 'Keep previous tests'}
-              </Button>
-            )}
-            {ready && (
-              <PlanSummary
-                edit={agent.edit}
-                draft={draft}
-                setDraft={setDraft}
-                config={proposed}
-                plan={plan}
-                disabled={!idle}
-              />
-            )}
-            {pending && (
-              <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                Thinking…
-              </p>
-            )}
-          </div>
-          <ReviewAction agent={agent} draft={draft} fresh={fresh} onApply={onApply} />
-          <Composer draft={draft} setDraft={setDraft} agent={agent} />
-        </>
+          )}
+        </div>
       )}
     </section>
   );

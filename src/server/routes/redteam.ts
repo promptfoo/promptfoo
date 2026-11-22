@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
+import { containsConnectionDetails, testSetupConnection } from '../../node/redteamSetupConnection';
 import {
   DATASET_EXEMPT_PLUGINS,
   isMultiTurnStrategy,
@@ -21,7 +22,7 @@ import { type Strategy as StrategyFactory } from '../../redteam/strategies/types
 import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { looksLikeSecret, sanitizeObject } from '../../util/sanitizer';
+import { isLocalHost } from '../middleware/csrfProtection';
 import { evalJobService } from '../services/evalJobService';
 import {
   extractGeneratedPrompt,
@@ -347,16 +348,41 @@ redteamRouter.get('/setup-plan', (_req, res) => {
   res.json({ enabled: !neverGenerateRemote() });
 });
 
-// Catch common accidental pastes before sending free text to a hosted model.
-function containsConnectionDetails(value: string): boolean {
-  const endpoint =
-    /(?:https?|wss?|file):\/\/|\bcurl\s+-|\b(?:localhost|[\w.-]+\.internal):\d+|\{[{%#]|\$\{/i;
-  const credential =
-    /\bbearer\s+[\w.+/=-]{8,}|\b(?:api[-_ ]?key|password|(?:access[-_ ]?)?token|authorization)\b["']?\s*(?:[:=]\s*\S+|is\s+\S{12,})/i;
-  return (
-    endpoint.test(value) || credential.test(value) || value.split(/[\s"':=]+/).some(looksLikeSecret)
-  );
-}
+// Keep this off /:taskId, even on older servers. Connection details must never
+// fall through to the Cloud task proxy. Only local users can send server credentials.
+redteamRouter.post('/setup/connection-test', async (req, res) => {
+  const caller = req.socket.remoteAddress?.replace(/^::ffff:/, '');
+  if (!isLocalHost(req.hostname) || (caller !== '127.0.0.1' && caller !== '::1')) {
+    res.status(403).json({ error: 'Open Promptfoo on localhost to test a connection from chat.' });
+    return;
+  }
+  const input = RedteamSchemas.SetupConnectionTest.Request.safeParse(req.body);
+  if (!input.success) {
+    res
+      .status(400)
+      .json({ error: 'Check the endpoint, JSON body, reply path and bearer variable name.' });
+    return;
+  }
+  const timeout = AbortSignal.timeout(15_000);
+  const disconnected = new AbortController();
+  res.once('close', () => disconnected.abort());
+  try {
+    const result = await testSetupConnection(
+      input.data,
+      AbortSignal.any([timeout, disconnected.signal]),
+    );
+    res.json(RedteamSchemas.SetupConnectionTest.Response.parse(result));
+  } catch {
+    if (!disconnected.signal.aborted) {
+      res.json({
+        success: false,
+        message: timeout.aborted
+          ? 'No reply within 15 seconds. Check your app before retrying. It may have received the message.'
+          : 'Couldn’t reach the endpoint. Check the URL and that Promptfoo can reach your app.',
+      });
+    }
+  }
+});
 
 redteamRouter.post('/setup-plan', async (req, res) => {
   if (neverGenerateRemote()) {
@@ -463,7 +489,6 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
   logger.debug(`Received ${taskId} task request`, {
     method: req.method,
     url: req.url,
-    body: sanitizeObject(bodyResult.data, { context: 'request body' }),
   });
 
   try {
@@ -483,7 +508,7 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
     }
 
     const data = await response.json();
-    logger.debug(`Received response from cloud function: ${JSON.stringify(data)}`);
+    logger.debug(`Received ${taskId} response from cloud function`);
     res.json(RedteamSchemas.Task.Response.parse(data));
   } catch (error) {
     logger.error(`Error in ${taskId} task: ${error}`);

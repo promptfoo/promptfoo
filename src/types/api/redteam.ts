@@ -8,7 +8,11 @@ import {
 import { BaseTokenUsageSchema } from '../shared';
 import { MessageResponseSchema } from './common';
 import { JsonProviderOptionsWithIdSchema } from './providers';
-import { RedteamSetupPlanSchema, RedteamSetupReplySchema } from './redteamSetup';
+import {
+  RedteamSetupPlanSchema,
+  RedteamSetupReplySchema,
+  SetupConnectionTest,
+} from './redteamSetup';
 
 // POST /api/redteam/generate-test
 
@@ -133,6 +137,7 @@ export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
 
 /** Grouped schemas for server-side validation. */
 export const RedteamSchemas = {
+  SetupConnectionTest,
   SetupPlan: {
     Request: z.strictObject({
       messages: z

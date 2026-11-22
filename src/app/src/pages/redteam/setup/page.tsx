@@ -54,11 +54,11 @@ import TargetConfiguration from './components/Targets/TargetConfiguration';
 import TargetTypeSelection from './components/Targets/TargetTypeSelection';
 import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvider';
 import { NAVBAR_HEIGHT, SIDEBAR_WIDTH } from './constants';
+import { connectionStatus } from './hooks/useConnectionTest';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
 import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
-import type { RedteamStrategy } from '@promptfoo/types';
 
 import type { SetupDraft } from './hooks/useSetupAgent';
 import type { Config } from './types';
@@ -91,7 +91,7 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 
 const withStatefulTargetConfig = (
   target: Config['target'] | string,
-  strategies: RedteamStrategy[],
+  strategies: Config['strategies'],
 ): Config['target'] | string => {
   const hasStatefulStrategy = strategies.some(
     (strategy) => typeof strategy !== 'string' && strategy?.config?.stateful,
@@ -786,6 +786,7 @@ export default function RedTeamSetupPage() {
           {value === 5 && (
             <ErrorBoundary name="Review Page">
               <Review
+                connectionStatus={guided ? connectionStatus(draft, config.target) : undefined}
                 continueConversation={guided ? openAgent : undefined}
                 navigateToPlugins={() => updateHash(3)}
                 navigateToStrategies={() => updateHash(4)}

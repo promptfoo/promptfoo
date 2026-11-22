@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
-import { type RedteamSetupPlan, RedteamSetupReplySchema } from '@promptfoo/types/api/redteamSetup';
+import {
+  isSetupReplyPath,
+  type RedteamSetupPlan,
+  RedteamSetupReplySchema,
+} from '@promptfoo/types/api/redteamSetup';
 import isEqual from 'fast-deep-equal';
 import { type ConnectionDraft, parseConnection, toTarget } from '../utils/agentConnection';
+import { connectionIntent } from '../utils/agentConnectionLanguage';
 import { riskName } from '../utils/plugins';
 import { applicationDefinitionToPurpose } from '../utils/purposeParser';
 import { missingEndpoint } from '../utils/targetDestination';
@@ -14,13 +19,17 @@ import type { Config, ProviderOptions } from '../types';
 const API_PATH = '/redteam/setup-plan';
 const UNAVAILABLE = 'Could not reach the setup agent. Send your reply again or set up manually.';
 const QUESTIONS = {
-  url: 'Where should I send the tests? Share an HTTP endpoint, a model ID like ollama:chat:llama3, or a cURL request. Leave out credentials.',
-  body: 'What JSON does your app expect? Pick an example or paste a request body with {{prompt}} where the test goes.',
+  url: 'What’s the URL of your API? You can also use a model ID like ollama:chat:llama3.',
+  body: 'Where should I put the test prompt in your request? Tell me the field name, or share an example JSON body.',
   responsePath:
     'Where is the answer in the response? Give me a field like result.answer, paste an example, or choose plain text.',
   authEnv:
     'Does the endpoint need a bearer token? Give me the name of an environment variable set where you run Promptfoo. Never paste the token itself.',
 };
+const CONNECT =
+  'How do I reach your app? Describe your API in your own words, paste a cURL request, or give me a model ID. Share what you know and leave out secrets.';
+const DISCOVER =
+  'Test the connection to find the reply field, or tell me where to read it. I won’t contact your API until you confirm.';
 export type Field = keyof typeof QUESTIONS;
 type Step = Field | 'scope' | 'ready';
 interface Message {
@@ -28,6 +37,7 @@ interface Message {
   content: string;
   // Only app and test-scope exchanges belong in requests to the hosted agent.
   scope?: true;
+  test?: 'success' | 'error';
 }
 
 export interface SetupDraft {
@@ -36,6 +46,8 @@ export interface SetupDraft {
   step: Step;
   demo?: boolean;
   deferred?: boolean;
+  discoverResponse?: boolean;
+  tested?: { target?: ProviderOptions; success: boolean; paths?: string[] };
   plan?: RedteamSetupPlan;
   connection?: ConnectionDraft;
   excluded?: string[];
@@ -59,12 +71,15 @@ function targetFor(draft: SetupDraft, config: Config) {
   return draft.demo ? EXAMPLE_CONFIG.target : existingTarget(config);
 }
 
-function nextField(connection?: ConnectionDraft): Field {
+function nextField(connection?: ConnectionDraft, discover = false): Field {
   if (!connection?.url) {
     return 'url';
   }
   if (!connection.body) {
     return 'body';
+  }
+  if (discover && connection.authEnv === undefined) {
+    return 'authEnv';
   }
   return connection.responsePath === undefined ? 'responsePath' : 'authEnv';
 }
@@ -74,7 +89,7 @@ function ask(draft: SetupDraft, step: Step, content: string): SetupDraft {
 }
 
 function advance(draft: SetupDraft, config: Config): SetupDraft {
-  if (!draft.plan?.plugins.length) {
+  if (!draft.plan?.plugins.length && !(draft.discoverResponse && !targetFor(draft, config))) {
     const lastScopeMessage = draft.messages.filter((message) => message.scope).pop();
     const question =
       lastScopeMessage?.role === 'assistant'
@@ -93,7 +108,20 @@ function advance(draft: SetupDraft, config: Config): SetupDraft {
       'Ready to review. You can still change the connection or ask me to adjust the tests.',
     );
   }
-  const field = nextField(draft.connection);
+  const field = nextField(draft.connection, draft.discoverResponse);
+  if (field === 'url' && !draft.connection && !draft.discoverResponse) {
+    return ask(draft, field, CONNECT);
+  }
+  if (field === 'responsePath' && draft.discoverResponse) {
+    return ask(draft, field, DISCOVER);
+  }
+  if (field === 'body' && draft.step === 'body') {
+    return ask(
+      draft,
+      field,
+      'Look for an example JSON request in your API docs. Paste it without secrets and mark where the message goes with {{prompt}}. You can also try an example below, then test the connection.',
+    );
+  }
   return ask(draft, field, QUESTIONS[field]);
 }
 
@@ -159,31 +187,8 @@ export function isField(step: Step): step is Field {
   return step !== 'scope' && step !== 'ready';
 }
 
-// A pasted connection belongs in the local conversation, even at the opening question.
-function connectionField(input: string): Field | undefined {
-  if (input.startsWith('{')) {
-    return 'body';
-  }
-  if (
-    /https?:\/\/|\bcurl\s|^(?:openai|anthropic|ollama|google|file|exec|python|javascript):/i.test(
-      input,
-    )
-  ) {
-    return 'url';
-  }
-  if (/(?:reply|response|answer) (?:is |field )?(?:at|in)\s+\w+/i.test(input)) {
-    return 'responsePath';
-  }
-  if (input.includes('{{prompt}}')) {
-    return 'body';
-  }
-  if (
-    /\b(?:authorization:|bearer\s)/i.test(input) ||
-    /^[A-Z][A-Z0-9_]+_(?:TOKEN|KEY)$/.test(input)
-  ) {
-    return 'authEnv';
-  }
-  return undefined;
+function connectionField(input: string, step: Step) {
+  return isField(step) ? step : connectionIntent(input, step === 'ready');
 }
 
 // A partial connection reply stays local when switching topics. Offer to move
@@ -199,7 +204,7 @@ function testSuggestion(input: string) {
 }
 
 const WHY: Record<Field, string> = {
-  url: 'Promptfoo needs a destination to test. Nothing will be sent there until you start a run.',
+  url: 'Promptfoo needs a destination to test. Nothing will be sent there until you test the connection or start a run.',
   body: 'Every test prompt will replace {{prompt}} in this JSON before it goes to your app.',
   responsePath: 'Promptfoo grades the reply. This tells it which part of your response to read.',
   authEnv: 'Promptfoo reads the token at run time. Your setup will only contain the variable name.',
@@ -235,55 +240,81 @@ function localReply(draft: SetupDraft, config: Config, answer: string, field: Fi
       'You can add a connection later. Review and save your test draft now, or send an endpoint or model ID here. Running stays disabled until you connect a target.',
     );
   }
-  if (field !== 'url' && draft.connection?.model) {
+  if (testSuggestion(answer) && !connectionIntent(answer, false)) {
+    throw new Error('Choose “Adjust tests” to discuss the scope.');
+  }
+  const { description, details } = draft.messages.length
+    ? { details: answer }
+    : splitOpening(answer);
+  const previous = draft.connection ?? {};
+  const connection = parseConnection(details, previous, field);
+  if (previous.model && !connection.url && !connection.model) {
     throw new Error(
       'The model handles its own requests and responses. Change the target to an HTTP endpoint to customize them.',
     );
   }
-  // Split a URL out of an opening description locally. Have the user check
-  // and send the remaining text separately before it can reach the model.
-  if (!draft.messages.length && field === 'url' && !/^curl\s/i.test(answer)) {
-    const match = answer.match(/https?:\/\/[^\s<>"']+/i);
-    if (match && match[0] !== answer) {
-      const url = match[0].replace(/[.,;]$/, '');
-      const connection = parseConnection(url, {}, 'url');
-      const remaining = answer
-        .replace(match[0], '')
-        .replace(/\bat\s*(?=$|[.,;])/i, '')
-        .trim();
-      const prose =
-        remaining.length > 8 &&
-        !/[{}]|https?:|bearer|token|password|authorization|api[-_ ]?key/i.test(remaining);
-      return ask(
-        {
-          ...next,
-          messages: [{ role: 'user', content: url }],
-          connection,
-          demo: false,
-          input: prose ? remaining : '',
-        },
-        'scope',
-        prose
-          ? 'I’ve kept the endpoint here. Check the description below, remove any private details and send it to choose tests.'
-          : 'I’ve kept the endpoint here. What does the app do, and what should it never do? Leave out connection details.',
-      );
-    }
-  }
-  const destination = answer.match(
-    /^(?:actually[, ]+)?(?:use|switch to|change (?:the )?(?:target|url|endpoint) to) (https?:\/\/\S+)(?: instead)?$/i,
-  );
-  const connection = parseConnection(destination?.[1] ?? answer, draft.connection ?? {}, field);
-  // Response examples can contain private records. Keep only the selected field.
-  if (field === 'responsePath' && answer.startsWith('{')) {
+  const discoverResponse =
+    connection.responsePath === undefined &&
+    (draft.discoverResponse ||
+      (field === 'responsePath' &&
+        !connection.model &&
+        (isEqual(previous, connection) ||
+          (previous.responsePath !== undefined && previous.url === connection.url))) ||
+      /\b(?:not sure|unsure|don['’]t know|no idea)\b.{0,50}\b(?:response|reply|comes back|returns?)\b/i.test(
+        answer,
+      ));
+  // Examples can contain private records. Show the extracted field instead.
+  if (
+    answer.includes('{') &&
+    (field === 'responsePath' || /(?:returns?|response|responds?|reply|->|→)/i.test(answer))
+  ) {
     messages[messages.length - 1] = {
       role: 'user',
-      content: connection.responsePath || 'Plain text',
+      content:
+        connection.responsePath === undefined
+          ? 'Shared an API response example.'
+          : 'Read the reply from ' + (connection.responsePath || 'plain text') + '.',
     };
   }
-  return advance(
-    { ...next, connection, demo: false, deferred: false, interrupted: undefined },
-    config,
+  const updated = {
+    ...next,
+    connection,
+    demo: false,
+    deferred: false,
+    interrupted: undefined,
+    discoverResponse,
+    tested: isEqual(previous, connection) ? draft.tested : undefined,
+  };
+  if (description) {
+    return ask(
+      { ...updated, input: description },
+      'scope',
+      'I’ve kept the connection details here. Check the app description below, remove any private details and send it to choose tests.',
+    );
+  }
+  return advance(updated, config);
+}
+
+// Offer only a separate app description for explicit confirmation. All API
+// clauses remain local, including field names and environment references.
+function splitOpening(input: string): { description?: string; details: string } {
+  const match = input.match(
+    /^(.+?)(?:\s+at\s+(?=https?:\/\/)|[.!?]\s+(?=(?:post|send|curl|https?:\/\/|the (?:api|endpoint|url))\b))/i,
   );
+  if (!match) {
+    return { details: input };
+  }
+  const description = match[1].trim();
+  if (
+    description.length < 9 ||
+    connectionIntent(description, true) ||
+    /[{}$\/]|\w\.\w|\b(?:api|post|get|put|patch|delete|header|auth|body|field|response|reply|input|bearer|token|password|authorization|api[-_ ]?key)\b/i.test(
+      description,
+    )
+  ) {
+    return { details: input };
+  }
+  return { description, details: input.slice(match[0].length) };
 }
 
 function scopeReply(draft: SetupDraft, config: Config, response: unknown): SetupDraft {
@@ -368,12 +399,7 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
       return;
     }
     setError('');
-    // An explicit correction can answer an earlier question. JSON alone is
-    // ambiguous, so interpret it as a response when asking for a reply field.
-    const field =
-      draft.step === 'responsePath' && answer.startsWith('{')
-        ? draft.step
-        : (connectionField(answer) ?? (isField(draft.step) ? draft.step : undefined));
+    const field = connectionField(answer, draft.step);
     if (field) {
       try {
         setDraft(localReply(draft, config, answer, field));
@@ -427,10 +453,12 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
   }
   const selected = selectedPlan(draft);
   const proposed = selected && buildConfig(config, selected, draft);
-  const ready = draft.step === 'ready' && !!draft.plan && !!targetFor(draft, config);
+  const target = targetFor(draft, config);
+  const ready = draft.step === 'ready' && !!draft.plan && !!target;
   const replacing = proposed && !isEqual(proposed.target, config.target);
   const hasTarget = Boolean(existingTarget(config));
-  const canMoveSuggestion = isField(draft.step) && testSuggestion(draft.input);
+  const canMoveSuggestion =
+    isField(draft.step) && testSuggestion(draft.input) && !connectionIntent(draft.input, false);
   function edit(field: Field | 'scope') {
     setError('');
     if (field === 'scope' && isField(draft.step)) {
@@ -444,6 +472,57 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
     } else if (field !== 'scope') {
       setDraft(ask(draft, field, QUESTIONS[field]));
     }
+  }
+  function chooseTestedPath(path: string) {
+    const { tested, connection } = draft;
+    if (
+      pending ||
+      draft.input.trim() ||
+      !connection ||
+      !tested?.paths?.includes(path) ||
+      !isEqual(tested.target, toTarget(connection)) ||
+      (path !== 'Plain text' && !isSetupReplyPath(path))
+    ) {
+      return;
+    }
+    const updated = { ...connection, responsePath: path === 'Plain text' ? '' : path };
+    const target = toTarget(updated);
+    if (!target) {
+      return;
+    }
+    setError('');
+    setDraft(
+      advance(
+        {
+          ...draft,
+          connection: updated,
+          tested: { target, success: true },
+          discoverResponse: false,
+          messages: [
+            ...draft.messages,
+            { role: 'user', content: 'Use ' + path + ' for the reply.' },
+          ],
+        },
+        config,
+      ),
+    );
+  }
+  function prepareTest(answer: string) {
+    setError('');
+    const field = nextField(draft.connection, true);
+    setDraft(
+      ask(
+        {
+          ...draft,
+          input: '',
+          discoverResponse: true,
+          interrupted: undefined,
+          messages: [...draft.messages, { role: 'user', content: answer }],
+        },
+        field,
+        'Before testing the connection, I need one more detail. ' + QUESTIONS[field],
+      ),
+    );
   }
   function resume() {
     setError('');
@@ -463,8 +542,12 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
     ready,
     replacing,
     hasTarget,
-    connected: Boolean(targetFor(draft, config)),
+    target,
+    connected: Boolean(target),
     canMoveSuggestion,
+    local: connectionField(draft.input.trim(), draft.step) !== undefined,
+    prepareTest,
+    chooseTestedPath,
     resume,
     edit,
     restorePlan,
