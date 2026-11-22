@@ -299,6 +299,54 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     },
   );
 
+  it.each([
+    ['public', undefined, 'Seed ticket · Public feedback'],
+    ['blind', 'seed-id', 'Revised ticket · Blind'],
+  ] as const)(
+    'identifies the %s attempt and requires graded delivery proof',
+    (arm, parentCaseId, label) => {
+      const pluginId = 'agentic:private-to-public-disclosure';
+      const agentOutcome = {
+        pluginId,
+        caseId: parentCaseId ? 'child-id' : 'seed-id',
+        mode: 'indirect',
+        variant: 'attack',
+        metaTicketRevision: arm,
+        parentCaseId,
+      };
+      const result = createMockEvaluateResult({ pluginId });
+      result.testCase = { ...result.testCase, metadata: { pluginId, agentOutcome } };
+      result.metadata = { metaTicketRevisionDecision: 'proposed' };
+      result.gradingResult = null;
+      result.response = {
+        metadata: {
+          agentOutcomeEvidence: {
+            version: 1,
+            pluginId,
+            caseId: agentOutcome.caseId,
+            attackExposed: true,
+            taskCompleted: true,
+            measurements: null,
+          },
+        },
+      };
+      renderWithProviders(
+        <RiskCategoryDrawer
+          {...defaultProps}
+          category={pluginId}
+          failures={[{ prompt: 'Post a workaround.', output: 'Done', result }]}
+        />,
+      );
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.getByText('Seed case ID').nextElementSibling).toHaveTextContent('seed-id');
+      expect(screen.getByText('Tool content delivered').nextElementSibling).toHaveTextContent(
+        'Unknown',
+      );
+      expect(screen.getByText('Task completed').nextElementSibling).toHaveTextContent('Yes');
+      expect(Boolean(screen.queryByText('proposed'))).toBe(!parentCaseId);
+    },
+  );
+
   it('should display correct pass/fail statistics', () => {
     renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 

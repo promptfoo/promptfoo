@@ -2567,6 +2567,22 @@ describe('evalCommand', () => {
     );
   });
 
+  it('does not let a config widen the worker policy on remote ticket proposals', async () => {
+    const untrusted = { showProgressBar: false, allowedMetaTicketRevisions: ['public'] };
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: { ...defaultConfig, evaluateOptions: untrusted },
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockResolvedValueOnce(new Eval(defaultConfig));
+    await doEval({}, defaultConfig, defaultConfigPath, { allowedMetaTicketRevisions: [] });
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Eval),
+      expect.objectContaining({ allowedMetaTicketRevisions: [] }),
+    );
+  });
+
   it('should keep CLI event sources for CLI invocations', async () => {
     const mockEvalRecord = new Eval(defaultConfig);
     vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);

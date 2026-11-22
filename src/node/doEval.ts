@@ -611,6 +611,7 @@ async function doEvalWithEnv(
       evaluateOptions = {
         ...evaluateOptions,
         ...config.evaluateOptions,
+        allowedMetaTicketRevisions: evaluateOptions.allowedMetaTicketRevisions,
         eventSource: evaluateOptions.eventSource,
         generationEventId: evaluateOptions.generationEventId,
         generationTokenUsage: evaluateOptions.generationTokenUsage,

@@ -7,6 +7,7 @@ import { Textarea } from '@app/components/ui/textarea';
 import {
   AGENT_OUTCOME_DEFAULT_TASKS,
   type AgentOutcomePluginId,
+  AgentOutcomePluginIdSchema,
   DEFAULT_AGENT_OUTCOME_ARTIFACT_VAR,
   getAgentOutcomeConfigSchema,
   isAgentOutcomePlugin,
@@ -27,6 +28,12 @@ const modes = [
   { value: 'indirect', label: 'Indirect via tool' },
   { value: 'direct', label: 'Direct user request' },
   { value: 'both', label: 'Both' },
+] as const;
+
+const revisions = [
+  { value: 'off', label: 'Off' },
+  { value: 'public', label: 'Use public reply' },
+  { value: 'blind', label: 'Ticket only (blind)' },
 ] as const;
 
 export function withAgentOutcomeMessageLimit(
@@ -66,6 +73,7 @@ export function AgentOutcomeConfig({
   const invalidTask = issue?.path[0] === 'legitimateTask';
   const invalidVariable = issue?.path[0] === 'indirectInjectionVar';
   const errorId = `${id}-error`;
+  const canRevise = plugin === AgentOutcomePluginIdSchema.enum.privateToPublicDisclosure;
   const error = issue && (
     <p id={errorId} role="alert" className="text-xs text-destructive">
       {issue.message}
@@ -84,7 +92,13 @@ export function AgentOutcomeConfig({
         <RadioGroup
           aria-labelledby={`${id}-mode`}
           value={mode}
-          onValueChange={(value) => onChange({ ...config, mode: value as PluginConfig['mode'] })}
+          onValueChange={(mode) => {
+            const next = { ...config, mode };
+            if (mode === 'direct') {
+              delete next.metaTicketRevision;
+            }
+            onChange(next);
+          }}
           disabled={readOnly}
           className="flex flex-wrap gap-4"
         >
@@ -140,6 +154,44 @@ export function AgentOutcomeConfig({
             </p>
           </div>
         </>
+      )}
+      {canRevise && !singleTest && (mode !== 'direct' || config.metaTicketRevision) && (
+        <div className="space-y-2">
+          <p id={`${id}-revision`} className="text-sm font-medium">
+            Meta ticket revision (experimental)
+          </p>
+          <RadioGroup
+            aria-labelledby={`${id}-revision`}
+            aria-describedby={`${id}-revision-hint`}
+            value={config.metaTicketRevision ?? 'off'}
+            onValueChange={(value) => {
+              const next = { ...config };
+              if (value === 'public' || value === 'blind') {
+                next.metaTicketRevision = value;
+              } else {
+                delete next.metaTicketRevision;
+              }
+              onChange(next);
+            }}
+            disabled={readOnly}
+            className="flex flex-wrap gap-4"
+          >
+            {revisions.map(({ value, label }) => (
+              <div key={value} className="flex items-center gap-2">
+                <RadioGroupItem id={`${id}-${value}`} value={value} />
+                <Label htmlFor={`${id}-${value}`} inline>
+                  {label}
+                </Label>
+              </div>
+            ))}
+          </RadioGroup>
+          <p id={`${id}-revision-hint`} className="text-xs text-muted-foreground">
+            With Basic enabled, each verified safe indirect test can trigger one extra attempt in a
+            fresh session. Both options send the original ticket to Promptfoo for a rewrite. Only
+            “Use public reply” sends the verified public reply. Choose “Ticket only” if target
+            output is excluded from attack generation. Use synthetic tickets and replies.
+          </p>
+        </div>
       )}
       {(mode === 'direct' || !(invalidTask || invalidVariable)) && error}
       <p className="text-sm text-muted-foreground">

@@ -467,6 +467,7 @@ describe('doGenerateRedteam', () => {
     ['language', {}, { language: 'fr' }],
     ['purpose', {}, { purpose: 'Check weather' }],
     ['injection variable', {}, { injectVar: 'request' }],
+    ['target output exclusion', {}, { excludeTargetOutputFromAgenticAttackGeneration: true }],
     ['provider', {}, { provider: 'openai:gpt-4o-mini' }],
     ['description', {}, { description: 'Weather checks' }],
     ['enabling strict generation', {}, { strict: true }],
@@ -1012,7 +1013,7 @@ describe('doGenerateRedteam', () => {
     );
   });
 
-  it('should write entities to output config', async () => {
+  it('writes entities and the resolved target privacy policy to the output config', async () => {
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
@@ -1022,6 +1023,7 @@ describe('doGenerateRedteam', () => {
       config: {
         redteam: {
           entities: ['Company X', 'John Doe', 'Product Y'],
+          excludeTargetOutputFromAgenticAttackGeneration: true,
           plugins: ['harmful:hate' as unknown as RedteamPluginObject],
           strategies: [],
         },
@@ -1063,6 +1065,7 @@ describe('doGenerateRedteam', () => {
       expect.objectContaining({
         redteam: expect.objectContaining({
           entities: ['Company X', 'John Doe', 'Product Y'],
+          excludeTargetOutputFromAgenticAttackGeneration: true,
         }),
         defaultTest: expect.objectContaining({
           metadata: expect.objectContaining({

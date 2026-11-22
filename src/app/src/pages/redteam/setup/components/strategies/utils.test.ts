@@ -58,6 +58,35 @@ describe('getEstimatedProbes', () => {
     expect(getEstimatedProbes({ ...config, strategies: [...adaptive, noBasic] } as Config)).toBe(0);
   });
 
+  it.each([
+    // Three seeds per language. Both starts with indirect, so two are eligible in each language.
+    ['both', 'public', false, 10],
+    ['indirect', 'blind', true, 12],
+    ['indirect', 'public', true, 6],
+    ['direct', 'blind', false, 6],
+  ] as const)(
+    'bounds %s %s ticket revisions at one per eligible Basic seed (private %s)',
+    (mode, metaTicketRevision, excludeTargetOutputFromAgenticAttackGeneration, expected) => {
+      const config = {
+        ...baseConfig,
+        language: ['en', 'es'],
+        plugins: [
+          {
+            id: 'agentic:private-to-public-disclosure',
+            numTests: 3,
+            config: { mode, metaTicketRevision },
+          },
+        ],
+        strategies: adaptive,
+        excludeTargetOutputFromAgenticAttackGeneration,
+      } as Config;
+      expect(getEstimatedProbes(config)).toBe(expected);
+      expect(getEstimatedProbes({ ...config, strategies: [...adaptive, noBasic] } as Config)).toBe(
+        0,
+      );
+    },
+  );
+
   it('applies adaptive budgets only to ordinary seeds in mixed, multilingual scans', () => {
     const config = {
       ...baseConfig,

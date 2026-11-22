@@ -73,6 +73,7 @@ export interface Config {
   strategies: RedteamStrategy[];
   purpose?: string;
   numTests?: number;
+  excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   maxCharsPerMessage?: number;
   maxConcurrency?: number;
   applicationDefinition: ApplicationDefinition;

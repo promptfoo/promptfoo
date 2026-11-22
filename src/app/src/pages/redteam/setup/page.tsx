@@ -391,6 +391,8 @@ export default function RedTeamSetupPage() {
         strategies,
         purpose: yamlConfig.redteam?.purpose || '',
         provider: yamlConfig.redteam?.provider,
+        excludeTargetOutputFromAgenticAttackGeneration:
+          yamlConfig.redteam?.excludeTargetOutputFromAgenticAttackGeneration,
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,

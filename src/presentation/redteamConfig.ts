@@ -1,6 +1,7 @@
 // This file is imported by the frontend and shouldn't use native dependencies.
 
 import {
+  AgentOutcomePluginIdSchema,
   isAgentOutcomePlugin,
   MULTI_TURN_STRATEGIES,
   type Plugin,
@@ -56,7 +57,14 @@ function getValidPluginSeverity(value: unknown) {
 
 /** Normalize the workload preview with the same aliases and duplicate precedence as generation. */
 export function normalizeRedteamConfigForPreview(
-  config: Pick<SavedRedteamConfig, 'plugins' | 'strategies' | 'numTests' | 'language'>,
+  config: Pick<
+    SavedRedteamConfig,
+    | 'plugins'
+    | 'strategies'
+    | 'numTests'
+    | 'language'
+    | 'excludeTargetOutputFromAgenticAttackGeneration'
+  >,
 ) {
   const numTests = getValidPluginNumTests(config.numTests) ?? 5;
   const plugins = config.plugins.map((entry) => {
@@ -82,12 +90,15 @@ export function normalizeRedteamConfigForPreview(
       ...(validSeverity !== undefined && { severity: validSeverity }),
     };
   });
-  const normalized = RedteamConfigSchema.safeParse({
+  const preview = {
     plugins,
     numTests,
     strategies: config.strategies,
     language: config.language,
-  });
+    excludeTargetOutputFromAgenticAttackGeneration:
+      config.excludeTargetOutputFromAgenticAttackGeneration,
+  };
+  const normalized = RedteamConfigSchema.safeParse(preview);
   // Keep a best-effort preview while plugin or strategy fields are incomplete in the editor.
   return normalized.success
     ? {
@@ -96,13 +107,21 @@ export function normalizeRedteamConfigForPreview(
         plugins: normalized.data.plugins ?? [],
         strategies: normalized.data.strategies ?? [],
       }
-    : { plugins, numTests, strategies: config.strategies, language: config.language };
+    : preview;
 }
 
 type PreviewConfig = ReturnType<typeof normalizeRedteamConfigForPreview>;
 
-function getPreviewSeeds({ plugins, language, numTests }: PreviewConfig) {
-  const counts = new Map<string, { id: string; count: number; exclusions: unknown }>();
+function getPreviewSeeds({
+  plugins,
+  language,
+  numTests,
+  excludeTargetOutputFromAgenticAttackGeneration,
+}: PreviewConfig) {
+  const counts = new Map<
+    string,
+    { id: string; count: number; revisions: number; exclusions: unknown }
+  >();
   for (const entry of plugins) {
     const plugin = typeof entry === 'string' ? { id: entry } : entry;
     const severity = 'severity' in plugin ? plugin.severity : undefined;
@@ -113,10 +132,19 @@ function getPreviewSeeds({ plugins, language, numTests }: PreviewConfig) {
     const count =
       plugin.id === 'intent' ? intentCount : ('numTests' in plugin && plugin.numTests) || numTests;
     const languages = plugin.config?.language ?? language;
+    const languageCount = Array.isArray(languages) ? languages.length : 1;
+    const { mode = 'both', metaTicketRevision } = plugin.config ?? {};
+    const canRevise =
+      plugin.id === AgentOutcomePluginIdSchema.enum.privateToPublicDisclosure &&
+      (metaTicketRevision === 'blind' ||
+        (metaTicketRevision === 'public' && !excludeTargetOutputFromAgenticAttackGeneration));
+    // Only an indirect seed can lead to a revision. Each language starts with an indirect case.
+    const indirect = mode === 'both' ? Math.ceil(count / 2) : mode === 'indirect' ? count : 0;
     counts.set(key, {
       id: plugin.id,
       exclusions: plugin.config?.excludeStrategies,
-      count: count * (Array.isArray(languages) ? languages.length : 1),
+      count: count * languageCount,
+      revisions: canRevise ? indirect * languageCount : 0,
     });
   }
   return Array.from(counts.values());
@@ -149,7 +177,8 @@ export function getEstimatedProbeCount(
   const hasOutcomes = seeds.some((seed) => isAgentOutcomePlugin(seed.id));
   const ordinary = seeds.filter((seed) => !STRATEGY_EXEMPT_PLUGINS.some((id) => id === seed.id));
   const basicEnabled = strategies.find((s) => s.id === 'basic')?.config?.enabled !== false;
-  let total = basicEnabled ? base : 0;
+  // Revisions are conditional evaluation attempts. They never feed strategy generation.
+  let total = basicEnabled ? seeds.reduce((n, seed) => n + seed.revisions, base) : 0;
   for (const { id, config: options } of strategies) {
     if (id === 'basic') {
       continue;
@@ -207,6 +236,9 @@ export function getUnifiedConfig(
     redteam: {
       purpose: config.purpose,
       numTests: config.numTests,
+      ...(config.excludeTargetOutputFromAgenticAttackGeneration && {
+        excludeTargetOutputFromAgenticAttackGeneration: true,
+      }),
       ...(config.maxCharsPerMessage && {
         maxCharsPerMessage: config.maxCharsPerMessage,
       }),
