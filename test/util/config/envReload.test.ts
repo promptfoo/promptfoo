@@ -179,6 +179,53 @@ describe('suite environment loading', () => {
     expect(config.env).toEqual({ OPENCLAW_GATEWAY_PORT: 18789, FEATURE_FLAG: true });
   });
 
+  it.each([
+    ['X-API-Key', ''],
+    ['X-Private-Header', ''],
+    ['Authorization', 'Bearer '],
+  ])(
+    'keeps %s templated in saved HTTP targets and resolves the current key on replay',
+    async (name, prefix) => {
+      const template = prefix + '{{env.OPENAI_API_KEY}}';
+      const configPath = path.join(tempDir, 'redteam.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          prompts: ['{{prompt}}'],
+          targets: [
+            {
+              id: 'http',
+              config: {
+                url: 'http://localhost:3555/chat',
+                body: { message: '{{prompt}}' },
+                headers: { [name]: template },
+              },
+            },
+          ],
+          redteam: { plugins: [], strategies: [] },
+        }),
+      );
+
+      const { config, testSuite, selectedProviderConfigs } = await resolveConfigs(
+        { config: [configPath] },
+        {},
+      );
+      expect(testSuite.providers[0].config?.headers[name]).toBe(prefix + 'process-key');
+      expect(config.providers).toMatchObject([{ config: { headers: { [name]: template } } }]);
+      expect(selectedProviderConfigs).toEqual(config.providers);
+      expect(JSON.stringify(config)).not.toContain('process-key');
+
+      const restore = mockProcessEnv({ OPENAI_API_KEY: 'rotated-key' });
+      try {
+        const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(config)));
+        expect(replay.testSuite.providers[0].config?.headers[name]).toBe(prefix + 'rotated-key');
+        expect(JSON.stringify(replay.config)).not.toContain('rotated-key');
+      } finally {
+        restore();
+      }
+    },
+  );
+
   it('applies published tracing defaults to executable and saved file configurations', async () => {
     const input = { enabled: true, otlp: { http: {}, grpc: {} }, storage: {} };
     const configPath = writeConfig('tracing-defaults', {

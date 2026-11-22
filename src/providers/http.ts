@@ -2654,7 +2654,9 @@ export class HttpProvider implements ApiProvider {
         statusText,
         headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
         ...(context?.debug && {
-          requestHeaders: sanitizeObject(renderedConfig.headers, { context: 'request headers' }),
+          // Reuse the header-aware redaction used in debug logs. A custom API
+          // key header needn't have a recognizable secret name or value.
+          requestHeaders: sanitizedRenderedConfig.headers,
         }),
       },
     };

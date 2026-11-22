@@ -256,17 +256,29 @@ describe('constructor validation', () => {
 });
 
 describe('content type handling', () => {
-  it('passes the redirect policy to fetch for API key headers', async () => {
+  it('sends custom keys only to the target and masks them in debug metadata', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         ...createJsonPostOptions().config,
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'fixture' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Secret-Key': 'private',
+          'X-Acme': 'opaque',
+        },
         redirect: 'error',
       },
     });
     vi.mocked(fetchWithCache).mockResolvedValueOnce(createSuccessJsonResponse());
-    await provider.callApi('test');
-    expect(vi.mocked(fetchWithCache).mock.calls.at(-1)?.[1]).toMatchObject({ redirect: 'error' });
+    const result = await provider.callApi('test', createDebugContextFixture('test', 'test'));
+    expect(vi.mocked(fetchWithCache).mock.calls.at(-1)?.[1]).toMatchObject({
+      redirect: 'error',
+      headers: { 'x-secret-key': 'private', 'x-acme': 'opaque' },
+    });
+    expect(result.metadata?.http?.requestHeaders).toEqual({
+      'content-type': 'application/json',
+      'x-secret-key': '[REDACTED]',
+      'x-acme': '[REDACTED]',
+    });
   });
 
   it('should handle JSON content type with object body', async () => {

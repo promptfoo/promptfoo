@@ -1915,6 +1915,33 @@ describe('cloud utils', () => {
       );
     });
 
+    it('checks HTTP target identity without sending connection settings or resolved credentials', async () => {
+      const provider = {
+        id: 'http',
+        label: 'order assistant',
+        config: {
+          url: 'http://localhost:3555/chat',
+          linkedTargetId: 'promptfoo://provider/linked',
+          headers: { 'X-API-Key': 'custom-secret', Authorization: 'Bearer bearer-secret' },
+        },
+      };
+      mockFetchWithProxy.mockResolvedValueOnce({ ok: true } as Response);
+      await checkCloudPermissions({ providers: [provider] });
+
+      expect(JSON.parse(mockFetchWithProxy.mock.calls[0][1]!.body as string)).toEqual({
+        config: {
+          providers: [
+            {
+              id: provider.id,
+              label: provider.label,
+              config: { linkedTargetId: provider.config.linkedTargetId },
+            },
+          ],
+        },
+      });
+      expect(provider.config.headers['X-API-Key']).toBe('custom-secret');
+    });
+
     it('should throw ConfigPermissionError when response is 403', async () => {
       const errorData = {
         errors: [

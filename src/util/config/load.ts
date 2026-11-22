@@ -34,7 +34,7 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
-import { isApiProvider } from '../../types/providers';
+import { isApiProvider, isProviderOptions } from '../../types/providers';
 import { maybeLoadFromExternalFile, pathExists } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
@@ -43,8 +43,9 @@ import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
+import { isHttpProvider } from '../httpProvider';
 import { promptfooCommand } from '../promptfooCommand';
-import { preserveTracingCredentialReferences } from '../sanitizer';
+import { getSafeHeaderTemplates, preserveTracingCredentialReferences } from '../sanitizer';
 import {
   isRemoteTestsReference,
   readTest,
@@ -351,6 +352,41 @@ type LoadedConfig = UnifiedConfig & {
   strategies?: RedteamStrategyObject[];
 };
 
+// Bind references to each rendered target so combining files and filtering providers
+// can't associate a key with the wrong target. Only the executable provider needs its value.
+const httpHeaderReferences = new WeakMap<ProviderOptions, Record<string, string>>();
+
+function rememberHttpHeaderReferences(source: LoadedConfig, rendered: LoadedConfig) {
+  const originals = source.targets ?? source.providers;
+  const providers = rendered.targets ?? rendered.providers;
+  if (!Array.isArray(originals) || !Array.isArray(providers)) {
+    return;
+  }
+  providers.forEach((provider, index) => {
+    const original = originals[index];
+    if (!isProviderOptions(original) || !isProviderOptions(provider) || !isHttpProvider(provider)) {
+      return;
+    }
+    const references = getSafeHeaderTemplates(original.config?.headers ?? {});
+    if (Object.keys(references).length) {
+      httpHeaderReferences.set(provider, references);
+    }
+  });
+}
+
+function restoreHttpHeaderReferences<T>(provider: T): T {
+  if (!isProviderOptions(provider)) {
+    return provider;
+  }
+  const references = httpHeaderReferences.get(provider);
+  return references
+    ? {
+        ...provider,
+        config: { ...provider.config, headers: { ...provider.config?.headers, ...references } },
+      }
+    : provider;
+}
+
 async function readConfigInScope(
   configPath: string,
   cacheCjsFallback = false,
@@ -391,7 +427,9 @@ function normalizeLoadedConfig(
   // Runtime templates like {{ vars.x }} are preserved for later evaluation.
   // JS configs use the same rendering path as declarative configs.
   // This ensures consistent behavior across config file types.
-  ret = renderConfigEnvTemplates(ret);
+  const source = ret;
+  ret = renderConfigEnvTemplates(source);
+  rememberHttpHeaderReferences(source, ret);
   const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
     ret.commandLineOptions,
     `configuration file ${configPath}`,
@@ -1194,6 +1232,11 @@ async function resolveLoadedConfig(
     env: runtimeEnv,
     basePath,
   });
+  // Persist env references so replay reads the current key without storing the secret.
+  config.providers = config.providers.map(restoreHttpHeaderReferences);
+  const selectedProviderConfigs = Array.isArray(filteredProviderConfigs)
+    ? filteredProviderConfigs.map(restoreHttpHeaderReferences)
+    : filteredProviderConfigs;
   const testConfigs = await readTestSources(
     testSources?.length
       ? testSources
@@ -1328,7 +1371,7 @@ async function resolveLoadedConfig(
     { promptReferenceSources },
   );
 
-  cliState.selectedProviderConfigs = filteredProviderConfigs;
+  cliState.selectedProviderConfigs = selectedProviderConfigs;
 
   // Extract commandLineOptions from either explicit config files or default config
   // Resolve relative envPath(s) against the config file directory
@@ -1351,6 +1394,6 @@ async function resolveLoadedConfig(
     testSuite,
     basePath,
     commandLineOptions,
-    selectedProviderConfigs: filteredProviderConfigs,
+    selectedProviderConfigs,
   };
 }
