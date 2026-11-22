@@ -1062,8 +1062,8 @@ describe('dependency ownership report', () => {
     "function f(module){}module.require('driver');",
     "{let require;}require('driver');",
     "{let module;}module.require('driver');",
-    "try{}catch(require){}require('driver');",
-    "try{}catch(module){}module.require('driver');",
+    "try {} catch ({ require, value = require('local') }) {}require('driver');",
+    "try {} catch ([module, value = module.require('local')]) {}module.require('driver');",
     "class C { static { let require; } }require('driver');",
     "class C { static { let module; } }module.require('driver');",
     "function f(require){}const module = {};require('driver');",
@@ -1452,6 +1452,12 @@ ${call}('external');`,
   });
 
   it('prints the assigned owner of a workspace with no declarations', () => {
+    // The CLI scans the two scripts copied into this fixture too.
+    json('package.json', {
+      type: 'module',
+      workspaces: ['src/app', 'packages/*'],
+      devDependencies: { glob: '1', minimatch: '1', 'oxc-parser': '1', zod: '1' },
+    });
     json('src/app/package.json', { name: 'app', private: true });
     json('architecture/layers.json', { ...config, aliases: {} });
     write('src/index.ts', 'export {};');
@@ -1470,12 +1476,13 @@ ${call}('external');`,
       '--import',
       import.meta.resolve('tsx'),
       fs.realpathSync(path.join(root, 'scripts/reportDependencyOwnership.ts')),
+      '--check',
     ];
     const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain('src/app/package.json: app/browser (0 declarations)');
     write('src/index.ts', "import 'undeclared';");
-    expect(spawnSync(process.execPath, [...args, '--check']).status).toBe(1);
+    expect(spawnSync(process.execPath, args).status).toBe(1);
   });
 
   it('records documented computed usage without pretending it is a literal import', () => {

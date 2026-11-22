@@ -284,8 +284,8 @@ function getShadowRanges(
       }
     },
     CatchClause(node) {
-      if (node.param && bindsName(node.param)) {
-        ranges.push([node.body.start, node.body.end]);
+      if (bindsName(node.param)) {
+        ranges.push([node.start, node.end]);
       }
     },
   }).visit(program);
