@@ -1,5 +1,9 @@
 import * as path from 'path';
 
+import {
+  expandInlineAssertionIncludes,
+  expandScenarioAssertionIncludes,
+} from './assertions/expandAssertionFileRefs';
 import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
@@ -218,16 +222,38 @@ async function createRuntimeTestSuite(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
   loadedProviders: ApiProvider[],
 ): Promise<TestSuite> {
-  const defaultTest =
+  let defaultTest = testSuiteConfig.defaultTest;
+  let defaultTestBaseDir: string | undefined;
+
+  if (
     typeof testSuiteConfig.defaultTest === 'string' &&
     testSuiteConfig.defaultTest.startsWith('file://')
-      ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
-      : testSuiteConfig.defaultTest;
+  ) {
+    const defaultTestPath = path.resolve(
+      cliState.basePath || '',
+      testSuiteConfig.defaultTest.slice('file://'.length),
+    );
+    defaultTestBaseDir = path.dirname(defaultTestPath);
+    defaultTest = await maybeLoadFromExternalFile(testSuiteConfig.defaultTest);
+  }
+
+  defaultTest = await expandInlineAssertionIncludes(
+    defaultTest,
+    defaultTestBaseDir ?? testSuiteConfig.basePath,
+  );
 
   return {
     ...testSuiteConfig,
     defaultTest: defaultTest as TestSuite['defaultTest'],
-    scenarios: testSuiteConfig.scenarios as Scenario[],
+    scenarios:
+      testSuiteConfig.scenarios &&
+      (await Promise.all(
+        (testSuiteConfig.scenarios as Scenario[]).map((scenario) =>
+          typeof scenario === 'object' && scenario
+            ? expandScenarioAssertionIncludes(scenario, testSuiteConfig.basePath)
+            : scenario,
+        ),
+      )),
     providers: loadedProviders,
     tests: await readTests(testSuiteConfig.tests, testSuiteConfig.basePath, testSuiteConfig.env),
     nunjucksFilters: await readFilters(

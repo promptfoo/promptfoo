@@ -325,6 +325,25 @@ describe('Script value resolution', () => {
     });
   });
 
+  it('preserves Windows drive prefixes in script-valued assertion references', async () => {
+    vi.mocked(runPython).mockResolvedValue('test output');
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'contains',
+        value: 'file://C:/suite/assertions/value.py:get_assert',
+      },
+      test: { vars: {} },
+      providerResponse: baseProviderResponse,
+    });
+
+    const [[scriptPath, functionName, args]] = vi.mocked(runPython).mock.calls;
+    expect(scriptPath.replaceAll('\\', '/')).toContain('C:/suite/assertions/value.py');
+    expect(functionName).toBe('get_assert');
+    expect(args).toEqual(expect.any(Array));
+    expect(result.pass).toBe(true);
+  });
+
   // REGRESSION TESTS: Ensure javascript/python/ruby assertions still work correctly
   describe('javascript assertion regression', () => {
     it('should use script return value as assertion result (NOT as comparison)', async () => {

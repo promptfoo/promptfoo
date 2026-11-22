@@ -6,7 +6,14 @@ import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
+import { renderEnvOnlyInObject } from './render';
 import { loadYaml } from './yamlLoad';
+
+/** Resolve environment placeholders in a declarative file URL before splitting its callable suffix. */
+export function parseConfigFileUrl(value: string) {
+  const rendered = renderEnvOnlyInObject(value);
+  return { ...parseFileUrl(rendered), rendered };
+}
 
 /**
  * Loads the content from a file reference
