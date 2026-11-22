@@ -17,6 +17,7 @@ interface SequenceProviderConfig {
 }
 
 export class SequenceProvider implements ApiProvider {
+  readonly orchestratesTargetTurns = true;
   private readonly sequenceInputs: string[];
   private readonly separator: string;
   private readonly identifier: string;

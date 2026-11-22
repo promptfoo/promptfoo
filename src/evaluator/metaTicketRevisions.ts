@@ -5,7 +5,7 @@ import { hasMetaTicketRevision, proposeMetaTicketRevision } from '../redteam/met
 import { isApiProvider } from '../types/providers';
 import { promptUsesConversationVariable } from './runEval';
 
-import type { AtomicTestCase, EvaluateResult, RunEvalOptions } from '../types/index';
+import type { AtomicTestCase, EvaluateResult, RunEvalOptions, TestSuite } from '../types/index';
 
 type Decision = 'proposed' | 'ineligible' | 'unsupported' | 'proposal-failed' | 'aborted';
 
@@ -26,17 +26,23 @@ function supportsRevision(step: RunEvalOptions): boolean {
   const stateful = [provider.config, step.prompt.config, test.options].some(
     (config) =>
       config &&
-      [
+      ([
         'persistSession',
+        'persist_session',
+        'persist_sessions',
         'persist_threads',
         'thread_id',
         'session_id',
+        'session_key',
         'sessionId',
         'previous_response_id',
         'conversation',
         'continue',
         'resume',
-      ].some((key) => Boolean(config[key])),
+      ].some((key) => Boolean(config[key])) ||
+        Object.keys(config.headers ?? {}).some(
+          (key) => key.toLowerCase() === 'x-openclaw-session-key',
+        )),
   );
   // Post-scan comparisons don't have a final grade yet. Shared state or hooks can
   // change the owner or carry private history into what must be a fresh trial.
@@ -54,6 +60,7 @@ function supportsRevision(step: RunEvalOptions): boolean {
     test.metadata?.conversationId ||
     promptUsesConversationVariable(step.prompt) ||
     test.vars?._conversation ||
+    provider.retainsSession ||
     stateful
   );
 }
@@ -64,14 +71,38 @@ export class MetaTicketRevisions {
   private readonly children = new Map<number, RunEvalOptions>();
   private nextTestIdx = 0;
 
+  // The saved policy bounds what a beforeAll hook may enable. Hook-only
+  // opt-ins would be absent on retry and leave failed child rows unprotected.
+  static operatorArms(redteam: TestSuite['redteam']): Set<string> {
+    const arms = new Set<string>();
+    if (!Array.isArray(redteam?.plugins) || redteam.remote === false) {
+      return arms;
+    }
+    for (const plugin of redteam.plugins) {
+      if (plugin?.id === 'agentic:private-to-public-disclosure') {
+        const arm = plugin.config?.metaTicketRevision;
+        if (
+          arm === 'blind' ||
+          (arm === 'public' && !redteam.excludeTargetOutputFromAgenticAttackGeneration)
+        ) {
+          arms.add(arm);
+        }
+      }
+    }
+    return arms;
+  }
+
   constructor(
     steps: RunEvalOptions[],
     readonly signal: AbortSignal,
+    operatorArms?: ReadonlySet<string>,
   ) {
     for (const [index, step] of steps.entries()) {
       this.nextTestIdx = Math.max(this.nextTestIdx, step.testIdx + 1);
       if (step.test.metadata?.agentOutcome?.metaTicketRevision && hasMetaTicketRevision(step)) {
-        const supported = supportsRevision(step);
+        const supported =
+          (!operatorArms || operatorArms.has(step.test.metadata.agentOutcome.metaTicketRevision)) &&
+          supportsRevision(step);
         if (supported) {
           step.test = freshClientSession(step.test);
           step.registers = {};

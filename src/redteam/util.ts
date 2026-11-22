@@ -95,9 +95,15 @@ export function getAgentOutcomePrompt(
         ? override.id()
         : override?.id;
   if (
+    provider.orchestratesTargetTurns ||
+    (override &&
+      typeof override === 'object' &&
+      'orchestratesTargetTurns' in override &&
+      override.orchestratesTargetTurns) ||
     [provider.id(), overrideId].some(
       (id) =>
         id?.startsWith('promptfoo:redteam:') ||
+        id === 'promptfoo:simulated-user' ||
         id === 'agentic:memory-poisoning' ||
         id === 'sequence' ||
         id === 'sequence-provider',
