@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'util';
 
 import async from 'async';
 import chalk from 'chalk';
-import { globSync } from 'glob';
+import { globSync } from 'glob/raw';
 import Clone from 'rfdc';
 import {
   getAssertionBaseType,

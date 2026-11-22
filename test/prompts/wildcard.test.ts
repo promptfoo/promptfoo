@@ -48,7 +48,7 @@ vi.mock('fs', () => ({
 }));
 
 // Mock glob results
-vi.mock('glob', () => ({
+vi.mock('glob/raw', () => ({
   globSync: vi.fn((pattern: string) => {
     if (pattern.includes('test/prompts/**/*.py')) {
       return [

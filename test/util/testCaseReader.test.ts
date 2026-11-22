@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import dedent from 'dedent';
-import { globSync } from 'glob';
+import { globSync } from 'glob/raw';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testCaseFromCsvRow } from '../../src/csv';
@@ -39,8 +39,8 @@ vi.mock('../../src/util/fetch/index', () => ({
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
-vi.mock('glob', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('glob')>()),
+vi.mock('glob/raw', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('glob/raw')>()),
   globSync: vi.fn(),
 }));
 vi.mock('../../src/providers', () => ({
