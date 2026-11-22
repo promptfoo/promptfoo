@@ -107,7 +107,7 @@ function resetGoogleAuthMock() {
 // Mock both the module and dynamic imports
 vi.mock('google-auth-library', () => googleAuthMock);
 
-vi.mock('glob', createEmptyGlobFactory());
+vi.mock('glob/raw', createEmptyGlobFactory());
 
 vi.mock('fs', async (importOriginal) => {
   return {

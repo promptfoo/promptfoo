@@ -148,6 +148,7 @@
           "level": "error",
           "options": {
             "paths": {
+              "glob": "Use glob/raw so glob uses the installed minimatch security fixes.",
               "node-fetch": "Use fetchWithProxy() (do not import node-fetch directly).",
               "undici": {
                 "importNames": ["fetch", "default"],
