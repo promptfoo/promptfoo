@@ -10,6 +10,7 @@ import {
   type RunEvalOptions,
 } from '../types/index';
 import { fetchWithProxy, readBoundedText } from '../util/fetch';
+import { withSingleAttempt } from '../util/fetch/retryContext';
 import {
   AgentOutcomeCaseSchema,
   AgentOutcomePluginIdSchema,
@@ -185,14 +186,15 @@ async function requestTicket(
   try {
     // Use the configured remote task endpoint and its origin-scoped auth. No
     // provider selection, implicit context, private trace headers, retries or cache.
-    const response = await fetchWithProxy(getTicketRevisionUrl(worker), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-promptfoo-silent': 'true' },
-      body: JSON.stringify({ task, ticket, publicReply }),
-      signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
-      requireSecureTransport: true,
-      disableTransientRetries: true,
-    });
+    const response = await withSingleAttempt(() =>
+      fetchWithProxy(getTicketRevisionUrl(worker), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-promptfoo-silent': 'true' },
+        body: JSON.stringify({ task, ticket, publicReply }),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
+        requireSecureTransport: true,
+      }),
+    );
     if (!response.ok) {
       await response.body?.cancel();
       throw new Error('Meta ticket request failed.');

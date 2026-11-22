@@ -18,6 +18,8 @@ import {
 } from '../../src/evaluator/resultProcessing';
 import Eval from '../../src/models/eval';
 import { HttpProvider } from '../../src/providers/http';
+import { SequenceProvider } from '../../src/providers/sequence';
+import { SimulatedUser } from '../../src/providers/simulatedUser';
 import {
   getGradingAssertionHash,
   getGradingInputHash,
@@ -86,6 +88,7 @@ describe('agent outcomes via the standard red-team evaluation path', () => {
     ['promptfoo:redteam:hydra', true],
     ['promptfoo:redteam:goblin', true],
     ['sequence', false],
+    ['promptfoo:simulated-user', true],
   ] as const)(
     'rejects imported %s before dispatch even without strategy metadata',
     async (id, override) => {
@@ -113,6 +116,46 @@ describe('agent outcomes via the standard red-team evaluation path', () => {
         repeatIndex: 0,
         isRedteam: true,
         evaluateOptions: {},
+      });
+      expect(calls).toBe(0);
+      expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(result.error).toContain('Remove the strategy provider');
+    },
+  );
+
+  it.each(['simulation', 'sequence'])(
+    'blocks an aliased %s before any target call',
+    async (kind) => {
+      let calls = 0;
+      const target = {
+        id: () => 'target',
+        callApi: async () => {
+          calls++;
+          return { error: 'Unexpected target call' };
+        },
+      };
+      const wrapper =
+        kind === 'simulation'
+          ? new SimulatedUser({
+              id: 'custom-dialogue',
+              config: { initialMessages: [{ role: 'user', content: artifact }], maxTurns: 0 },
+            })
+          : new SequenceProvider({ id: 'custom-dialogue', config: { inputs: [artifact] } });
+      const trial = { pluginId, caseId: crypto.randomUUID(), mode: 'indirect', variant: 'attack' };
+      const [result] = await runEval({
+        provider: target,
+        prompt: { raw: '{{prompt}}', label: 'Owner task' },
+        test: {
+          provider: wrapper,
+          metadata: { agentOutcome: trial },
+          vars: { prompt: owner, artifact, agentOutcome: trial },
+          assert: [assertion],
+        },
+        delay: 0,
+        testIdx: 0,
+        promptIdx: 0,
+        repeatIndex: 0,
+        isRedteam: true,
       });
       expect(calls).toBe(0);
       expect(result.failureReason).toBe(ResultFailureReason.ERROR);

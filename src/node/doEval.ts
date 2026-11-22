@@ -320,6 +320,8 @@ async function doEvalWithEnv(
   const isCliInvocation = isCliEventSource(evaluateOptions);
   const inputCommand = cmdObj;
   const initialEnvFileOverrides = envFileOverrides && { ...envFileOverrides };
+  // CLI watch iterations share process.env even when a later config removes envPath.
+  let loadedConfigEnvFile = false;
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -571,24 +573,28 @@ async function doEvalWithEnv(
         isCliInvocation,
       );
     }
-    if (resumeEval) {
-      if (retryErrorResultIds) {
-        const retryError = ticketRevisionRetryError(resumeEval.config.redteam, testSuite.redteam);
-        if (retryError) {
-          return failEvalRun(retryError, isCliInvocation);
-        }
-      }
-      cliState.resume = true;
-      if (retryErrorResultIds) {
-        cliState.retryMode = true;
-        cliState._retryErrorResultIds = retryErrorResultIds;
+    if (resumeEval && retryErrorResultIds) {
+      const retryError = ticketRevisionRetryError(resumeEval.config.redteam, testSuite.redteam);
+      if (retryError) {
+        return failEvalRun(retryError, isCliInvocation);
       }
     }
 
     // Phase 2: Load environment from config files if not already set via CLI
     if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
+      loadedConfigEnvFile = true;
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
       setupEnv(commandLineOptions.envPath, { processEnv: envFileOverrides });
+    }
+    // A suite-selected dotenv file can overwrite the trusted task URL, CA or
+    // remote-disable flags. Keep the seed, but never send feedback in this run.
+    if (loadedConfigEnvFile) {
+      evaluateOptions.allowedMetaTicketRevisions = [];
+      if (testSuite.redteam?.plugins?.some((p) => p?.config?.metaTicketRevision)) {
+        logger.warn(
+          'Meta ticket revisions disabled for config-selected env files. Pass a trusted --env-file explicitly to enable them.',
+        );
+      }
     }
 
     warnIfRedteamConfigHasNoTests(config, testSuite);
@@ -952,6 +958,15 @@ async function doEvalWithEnv(
     // Run the evaluation!!!!!!
     let ret;
     try {
+      // Preflight can fail before this try/finally. Limit replay flags to
+      // evaluation so a missing key cannot affect the next run in this host.
+      if (resumeEval) {
+        cliState.resume = true;
+        if (retryErrorResultIds) {
+          cliState.retryMode = true;
+          cliState._retryErrorResultIds = retryErrorResultIds;
+        }
+      }
       if (resumeRaw && !evalRecord.useOldResults()) {
         // Older evals lack this counter. Recover it without recalculating other metrics.
         const missingCacheCounts = evalRecord.prompts.map(({ metrics }) =>
@@ -987,8 +1002,8 @@ async function doEvalWithEnv(
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
       // Skip if evaluation was paused - no point cleaning up incomplete retry
-      if (retryErrors && cliState._retryErrorResultIds && !paused) {
-        const errorResultIds = cliState._retryErrorResultIds;
+      if (retryErrors && retryErrorResultIds && !paused) {
+        const errorResultIds = retryErrorResultIds;
         try {
           await deleteErrorResults(errorResultIds);
           await recalculatePromptMetrics(ret);

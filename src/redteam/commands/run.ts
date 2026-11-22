@@ -65,8 +65,11 @@ export function redteamRunCommand(program: Command) {
       (value: string, previous: Record<string, string> | undefined) =>
         collectKeyValueOption('--tag', value, previous),
     )
-    .action(async (rawOpts: RedteamRunCliOptions) => {
+    .action(async (rawOpts: RedteamRunCliOptions, command: Command) => {
       const opts: RedteamRunOptions = normalizeTagOption(rawOpts);
+      if (command.getOptionValueSourceWithGlobals('envPath') === 'cli') {
+        opts.envPath = command.optsWithGlobals().envPath;
+      }
 
       setupEnv(opts.envPath);
       telemetry.record('redteam run', {});

@@ -3978,6 +3978,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (recovery) {
       testSuite = { ...testSuite, prompts: recovery.hookPrompts };
     }
+    const operatorArms = testSuite.extensions?.length
+      ? MetaTicketRevisions.operatorArms(testSuite.redteam)
+      : undefined;
     testSuite = await runBeforeAllExtensions(testSuite);
     if (cliState.retryMode) {
       const retryError = ticketRevisionRetryError(this.store.config.redteam, testSuite.redteam);
@@ -4044,7 +4047,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
 
-    const revisions = new MetaTicketRevisions(runEvalOptions, combinedAbortSignal);
+    const revisions = new MetaTicketRevisions(runEvalOptions, combinedAbortSignal, operatorArms);
     const processingContext: EvalProcessingContext = {
       assertionTypes,
       concurrency,

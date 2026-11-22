@@ -6,6 +6,8 @@ import { evaluate } from '../../src/evaluator';
 import * as helpers from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { getUnifiedConfig } from '../../src/presentation/redteamConfig';
+import { OpenClawAgentProvider } from '../../src/providers/openclaw/agent';
+import { OpenClawToolInvokeProvider } from '../../src/providers/openclaw/tools';
 import * as remote from '../../src/redteam/remoteGeneration';
 import telemetry from '../../src/telemetry';
 import { ResultFailureReason, TestSuiteSchema } from '../../src/types/index';
@@ -258,6 +260,33 @@ describe('separately graded Meta ticket revisions', () => {
     },
   );
 
+  it.each(['absent', 'blind', 'private'])(
+    'cannot enable public feedback solely in beforeAll (%s)',
+    async (policy) => {
+      const { suite, proposals } = setup();
+      const enabled = suite.redteam;
+      suite.redteam =
+        policy === 'absent'
+          ? undefined
+          : policy === 'blind'
+            ? { plugins: [{ id: pluginId, config: { metaTicketRevision: 'blind' } }] }
+            : { ...enabled, excludeTargetOutputFromAgenticAttackGeneration: true };
+      suite.extensions = ['file://example.mjs:beforeAll'];
+      vi.spyOn(helpers, 'runExtensionHook').mockImplementation(
+        async (_extensions, hook, context) => {
+          if (hook === 'beforeAll') {
+            (context as helpers.BeforeAllExtensionHookContext).suite.redteam = enabled;
+          }
+          return context;
+        },
+      );
+      const { results } = await evaluate(suite, new Eval({}), {});
+      expect(results).toHaveLength(1);
+      expect(results[0].metadata?.metaTicketRevisionDecision).toBe('unsupported');
+      expect(proposals).not.toHaveBeenCalled();
+    },
+  );
+
   it('disables proposals on resume', async () => {
     const { suite, proposals } = setup();
     const original = cliState.resume;
@@ -307,12 +336,30 @@ describe('separately graded Meta ticket revisions', () => {
 
   it.each([
     { persist_threads: true },
+    { persist_sessions: true },
+    { persist_session: true },
+    { session_key: 'shared-agent' },
+    { headers: { 'X-OpenClaw-Session-Key': 'shared-agent' } },
     { resume: 'existing-thread' },
     { previous_response_id: 'existing-response' },
     { conversation: 'existing-conversation' },
   ])('skips a revision against retained session state %j', async (config) => {
     const { suite, proposals } = setup();
     suite.providers[0].config = config;
+    const { results } = await evaluate(suite, new Eval({}), {});
+    expect(results[0].metadata?.metaTicketRevisionDecision).toBe('unsupported');
+    expect(proposals).not.toHaveBeenCalled();
+  });
+
+  it.each(['agent', 'tool'])('blocks a private fixed OpenClaw %s session', async (kind) => {
+    const { suite, target, proposals } = setup();
+    const options = { config: { session_key: 'fixed', gateway_url: 'http://127.0.0.1:18789' } };
+    const provider: ApiProvider =
+      kind === 'agent'
+        ? new OpenClawAgentProvider('main', options)
+        : new OpenClawToolInvokeProvider('session_status', options);
+    provider.callApi = target;
+    suite.providers = [provider];
     const { results } = await evaluate(suite, new Eval({}), {});
     expect(results[0].metadata?.metaTicketRevisionDecision).toBe('unsupported');
     expect(proposals).not.toHaveBeenCalled();

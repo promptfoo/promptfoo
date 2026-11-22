@@ -54,6 +54,7 @@ import { NAVBAR_HEIGHT, SIDEBAR_WIDTH } from './constants';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
 import { useSetupState } from './hooks/useSetupState';
+import { importTicketRevisions } from './utils/importTicketRevisions';
 import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
@@ -379,11 +380,12 @@ export default function RedTeamSetupPage() {
         : purposeToApplicationDefinition(yamlConfig.redteam?.purpose);
 
       // Map the YAML structure to our expected Config format
+      const { plugins, warning } = importTicketRevisions(yamlConfig);
       const mappedConfig: Config = {
         description: yamlConfig.description || 'My Red Team Configuration',
         prompts: yamlConfig.prompts || ['{{prompt}}'],
         target,
-        plugins: yamlConfig.redteam?.plugins || ['default'],
+        plugins,
         strategies,
         purpose: yamlConfig.redteam?.purpose || '',
         provider: yamlConfig.redteam?.provider,
@@ -399,7 +401,10 @@ export default function RedTeamSetupPage() {
       };
 
       setFullConfig(mappedConfig);
-      toast.showToast('Configuration loaded successfully', 'success');
+      toast.showToast(
+        warning ?? 'Configuration loaded successfully',
+        warning ? 'warning' : 'success',
+      );
       setLoadDialogOpen(false);
     } catch (error) {
       console.error('Failed to load configuration file', error);

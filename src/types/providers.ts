@@ -138,6 +138,10 @@ export interface ProviderCleanupContext {
 
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
+  /** The provider generates or sequences messages for a separate target provider. */
+  readonly orchestratesTargetTurns?: boolean;
+  /** The provider retains session state across calls, including via private configuration. */
+  readonly retainsSession?: boolean;
   callClassificationApi?: (
     prompt: string,
     options?: CallApiOptionsParams,

@@ -8,6 +8,7 @@ import {
 } from '../../src/redteam/metaTicketRevision';
 import { ResultFailureReason } from '../../src/types/results';
 import { sha256 } from '../../src/util/createHash';
+import { requiresSingleAttempt } from '../../src/util/fetch/retryContext';
 
 import type { EvaluateResult, RunEvalOptions } from '../../src/types/index';
 
@@ -207,6 +208,20 @@ describe('bounded Meta ticket revision', () => {
       await proposeMetaTicketRevision(scenario.step, scenario.row, new AbortController().signal),
     ).toBeUndefined();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('prevents transport redispatch on a misdirected proposal request', async () => {
+    const { step, row } = seed();
+    const singleAttempt: boolean[] = [];
+    fetch.mockImplementationOnce(async () => {
+      singleAttempt.push(requiresSingleAttempt());
+      return new Response(null, { status: 421 });
+    });
+    await expect(
+      proposeMetaTicketRevision(step, row, new AbortController().signal),
+    ).rejects.toThrow('Meta ticket proposal failed.');
+    expect(singleAttempt).toEqual([true]);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('uses identical public-readback eligibility in the blind arm', async () => {

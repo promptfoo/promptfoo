@@ -330,6 +330,13 @@ describe('doRedteamRun', () => {
       );
     });
 
+    it('does not promote a live config envFile to a trusted generation option', async () => {
+      await doRedteamRun({
+        liveRedteamConfig: { ...mockConfig, commandLineOptions: { envFile: 'untrusted.env' } },
+      });
+      expect(vi.mocked(doGenerateRedteam).mock.lastCall?.[0]).not.toHaveProperty('envFile');
+    });
+
     it('logs the live config path while keeping its contents private', async () => {
       const mockLogger = (await import('../../src/logger')).default;
       const privatePrompt = 'private-prompt-for-log-test';
