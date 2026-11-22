@@ -10,7 +10,7 @@ This page explains what data leaves your machine during red team testing and how
 
 ## Data Flow Overview
 
-The [setup agent](/docs/red-team/quickstart/#initialize-the-project) sends your description to Promptfoo Cloud by default, even if you have a model API key. Refining sends the description, current plan, and your feedback. Drafting a plan doesn't contact your target or send its saved configuration. Leave secrets out of your answers or choose manual setup to skip the agent.
+The [setup agent](/docs/red-team/quickstart/#initialize-the-project) sends the conversation about your app and tests, plus the current plan, to Promptfoo Cloud by default. This applies even if you have a model API key. Leave secrets and private records out of those messages. The chat handles target connection replies locally, including the URL, request body, response field and bearer token variable name. Those replies stay out of later planning requests. Drafting never contacts your target. Use manual setup to skip the agent.
 
 Testing the connection to your target is a separate step that can send the target configuration, request headers, and response to Cloud.
 

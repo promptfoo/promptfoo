@@ -68,28 +68,36 @@ The command opens red team setup in your browser. For a new scan, start with the
 
 ### Provide application details
 
-Tell the agent what your app does and what you want to catch. Here's an example for a support bot.
+Start with what you know. If you say “customer support bot,” the agent will ask what it can access or change. If you already know what you want to test, you can tell it in one message.
 
-> Our bot looks up orders and issues refunds. A customer should never see someone else's order or get a refund without approval.
+> Our bot looks up orders and issues refunds. Customers should only see their own orders. Only managers can approve refunds. Test each of those twice.
 
-Select **Draft test plan**. Your answers go to Promptfoo Cloud, so leave out secrets and real customer records. Drafting doesn't contact your target.
+The agent suggests tests based on your answers. You can ask why it chose a test, correct its assumptions, or change the count. By default it proposes three direct tests per risk for up to four risks. **App and test messages go to Promptfoo Cloud.** Leave out secrets and customer records.
 
-The plan starts with three direct tests for each of up to four risks. Uncheck any risks you want to skip or ask the agent to adjust the plan. Select **Use plan &amp; connect app** when you're ready.
+To try it without your own app, select **Try the demo app**, send the suggested message, and choose **Review setup**. Nothing runs until you select **Run Now**.
 
-No app yet? Select **Try the demo app**, then **Draft test plan**. **Review demo setup** takes you straight to [review and save](#review-and-save) with Promptfoo's example support bot as the target.
-
-To skip the agent, select **Set up manually**. You can also load a saved configuration or import YAML.
+You can also select **Set up manually**, load a saved configuration, or import YAML.
 
 ### Configure the target
 
-You can test endpoints reachable from your machine, including localhost. Only test systems you have permission to scan.
+Stay in the chat to connect your app. Connection replies stay in your browser during setup. Promptfoo won't contact your target while drafting. Only test systems you have permission to scan.
 
-- **HTTP endpoint** is selected by default. Select **Configure target**, enter your URL, and adjust the request body and response parser to match your app. See the [HTTP example](#attacking-an-api-endpoint).
-- For a **model or another connection type**, select **Change target type**. Choose a provider and enter the model or deployment ID. See [common target types](#common-target-types).
+If you don't have a target yet, select **I don’t have an endpoint yet** and **Review draft**. You can save YAML, but you’ll need to add a target before running.
 
-Testing the connection sends a request to your app and can share the target configuration and response with Cloud. [Learn what data leaves your machine](/docs/red-team/troubleshooting/data-handling/).
+For an HTTP endpoint, you can paste a POST cURL example without secrets or answer the connection questions one at a time. For example, a local support bot might use these settings.
 
-With the agent, select **Review setup** to [review and save](#review-and-save). In manual setup, enter your app's purpose in **Application Details**, then select plugins and strategies.
+| When asked about           | Example reply                    |
+| -------------------------- | -------------------------------- |
+| Endpoint                   | `http://localhost:8000/chat`     |
+| JSON request body          | `{"message":"{{prompt}}"}`       |
+| Field containing the reply | `result.answer`                  |
+| Bearer token               | `SUPPORT_BOT_TOKEN` or `No auth` |
+
+For bearer auth, set the variable in the environment where Promptfoo runs. Give the chat only its name. For other authentication methods, custom headers or non-POST requests, use the manual editor.
+
+To test a **model directly**, enter a model ID such as `ollama:chat:llama3` or `openai:gpt-4o-mini` instead of a URL. This tests the model without your app's instructions or tools. See [common target types](#common-target-types).
+
+Select **Review setup** to [review and save](#review-and-save). In manual setup you can also test the connection. That sends a request to your app and can share its configuration and response with Cloud. [Learn what data leaves your machine](/docs/red-team/troubleshooting/data-handling/).
 
 ### Select plugins
 
@@ -103,7 +111,7 @@ For manual setup, choose individual plugins or start with the **Default** preset
 
 ### Review and save
 
-Check the target and estimated number of requests. To change the test count in the agent's plan, select **Adjust test settings**. For broader coverage, add plugins or attack strategies.
+Check where requests will go, which risks are selected, and the estimated request count. Select **Continue conversation** to revise the setup. The full editor offers more plugins and strategies, including multi-turn attacks.
 
 **Save YAML** downloads `promptfooconfig.yaml` without starting a scan. To run it from the browser, select **Run Now**. Promptfoo may ask you to verify your email before the first scan.
 
