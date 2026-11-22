@@ -922,7 +922,7 @@ Run the complete red teaming process (init, generate, and evaluate).
 | `--remote`                                         | Force remote inference wherever possible                                         | false                |
 | `--force`                                          | Force generation even if no changes are detected                                 | false                |
 | `--no-progress-bar`                                | Do not show progress bar                                                         |                      |
-| `--strict`                                         | Fail if any plugins fail to generate test cases                                  | false                |
+| `--strict`                                         | Fail if any plugin fails or no final test cases are generated                    | false                |
 | `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern          |                      |
 | `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                                |                      |
 | `-t, --target <id>`                                | Cloud provider target ID to run the scan on                                      |                      |
@@ -974,8 +974,10 @@ Generate adversarial test cases to challenge your prompts and models.
 | `--remote`                       | Force remote inference wherever possible                             | false                |
 | `--force`                        | Force generation even if no changes are detected                     | false                |
 | `--no-progress-bar`              | Do not show progress bar                                             |                      |
-| `--strict`                       | Fail if any plugins fail to generate test cases                      | false                |
+| `--strict`                       | Fail if any plugin fails or no final test cases are generated        | false                |
 | `--burp-escape-json`             | Escape special characters in .burp output for JSON payloads          | false                |
+
+If generation yields no final tests, any previous output file stays unchanged. In CI, use `--force --strict` to require fresh cases and only run the evaluation if generation succeeds.
 
 For example, let's suppose we have the following `promptfooconfig.yaml`:
 
