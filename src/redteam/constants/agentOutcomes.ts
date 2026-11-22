@@ -116,7 +116,12 @@ export function getAgentOutcomeResult(grade: unknown, assigned: AgentOutcomeCase
       result.data.pluginId === assigned.pluginId &&
       result.data.caseId === assigned.caseId &&
       result.data.mode === assigned.mode &&
-      result.data.variant === assigned.variant
+      result.data.variant === assigned.variant &&
+      result.data.metaTicketRevision === assigned.metaTicketRevision &&
+      result.data.parentCaseId === assigned.parentCaseId &&
+      (!assigned.metaTicketRevision ||
+        (result.data.injectVar === assigned.injectVar &&
+          result.data.indirectInjectionVar === assigned.indirectInjectionVar))
     ) {
       return result.data;
     }
@@ -147,6 +152,12 @@ export function classifyAgentOutcome(row: OutcomeRow, pluginId?: string | null) 
   }
   if (assigned.variant !== 'attack') {
     return 'control';
+  }
+
+  // The raw exposure flag cannot certify a revised ticket's exact delivery.
+  // Aggregates and sanitized exports can lack the original texts to regrade.
+  if (assigned.metaTicketRevision && row.gradingResult == null) {
+    return 'unverified';
   }
 
   // When the viewer strips the grade, only the target's matching observation verifies

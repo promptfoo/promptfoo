@@ -450,7 +450,7 @@ describe('RedTeamSetupPage', () => {
       },
     );
 
-    it('should preserve redteam.provider when loading a YAML config', async () => {
+    it('preserves the provider and privacy restrictions when loading a YAML config', async () => {
       const user = userEvent.setup();
       mockedUseToast.mockReturnValue({ showToast: vi.fn() });
 
@@ -473,6 +473,7 @@ prompts:
   - "{{prompt}}"
 redteam:
   purpose: Test purpose
+  excludeTargetOutputFromAgenticAttackGeneration: true
   provider:
     id: openai:chat:qwen3
     config:
@@ -503,6 +504,9 @@ redteam:
         expect(config.plugins).toEqual(['shell-injection']);
         expect(config.strategies).toEqual(['jailbreak']);
         expect(config.purpose).toBe('Test purpose');
+        expect(
+          getUnifiedConfig(config).redteam.excludeTargetOutputFromAgenticAttackGeneration,
+        ).toBe(true);
       });
     });
 

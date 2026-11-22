@@ -85,6 +85,28 @@ export function getAgentOutcomePrompt(
   if (!outcome) {
     return undefined;
   }
+  // Imported rows can bypass strategy synthesis. A chat wrapper changes the
+  // owner's instructions and can collapse several service receipts into one.
+  const override = test.provider;
+  const overrideId =
+    typeof override === 'string'
+      ? override
+      : typeof override?.id === 'function'
+        ? override.id()
+        : override?.id;
+  if (
+    [provider.id(), overrideId].some(
+      (id) =>
+        id?.startsWith('promptfoo:redteam:') ||
+        id === 'agentic:memory-poisoning' ||
+        id === 'sequence' ||
+        id === 'sequence-provider',
+    )
+  ) {
+    throw new Error(
+      '[inconclusive] Agent outcome trials require a single target dispatch. Remove the strategy provider.',
+    );
+  }
   let raw = prompt.raw;
   if (outcome.injectVar === MULTI_INPUT_VAR && !prompt.function) {
     const inputs = test.metadata?.pluginConfig?.inputs ?? provider.inputs;
@@ -96,13 +118,14 @@ export function getAgentOutcomePrompt(
       raw = `{{${MULTI_INPUT_VAR}}}`;
     }
   }
-  return { raw, message: outcome.message };
+  return { raw, message: outcome.message, requireExactOwner: Boolean(outcome.metaTicketRevision) };
 }
 
 /** Independent trials must never reuse measurements from concurrent requests or earlier runs. */
-export function needsFreshTargetResponse(test: AtomicTestCase): boolean {
+export function getAgentOutcomeDispatchPolicy(test: AtomicTestCase) {
   const trial = test.metadata?.agentOutcome;
-  return Boolean(trial && AgentOutcomeCaseSchema.safeParse(trial).success);
+  const assigned = trial ? AgentOutcomeCaseSchema.safeParse(trial).data : undefined;
+  return assigned && { singleAttempt: Boolean(assigned.metaTicketRevision) };
 }
 
 /**

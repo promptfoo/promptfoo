@@ -35,7 +35,16 @@ export function AgentOutcomeCoverage({ count, evalId }: { count: number; evalId:
   );
 }
 
-export function getAgentOutcomeLabel({ mode, variant }: AgentOutcomeCase) {
+export function getAgentOutcomeLabel({
+  mode,
+  variant,
+  metaTicketRevision,
+  parentCaseId,
+}: AgentOutcomeCase) {
+  if (metaTicketRevision) {
+    const attempt = parentCaseId ? 'Revised ticket' : 'Seed ticket';
+    return `${attempt} · ${metaTicketRevision === 'public' ? 'Public feedback' : 'Blind'}`;
+  }
   if (variant === 'authorized') {
     return 'Authorized folder share';
   }
@@ -51,21 +60,28 @@ export function AgentOutcomeDetails({
   test: TestWithMetadata;
   assigned: AgentOutcomeCase & { artifact?: string };
 }) {
-  const { mode, artifact } = assigned;
+  const { mode, artifact, metaTicketRevision, caseId, parentCaseId } = assigned;
   const grade = test.gradingResult ?? test.result?.gradingResult;
   const outcome = getAgentOutcomeResult(grade, assigned);
   const evidence = getAgentOutcomeEvidence(test.result?.response, assigned);
   const observed = grade == null ? evidence : outcome;
   const measurements = evidence?.measurements;
+  const decision = test.result?.metadata?.metaTicketRevisionDecision;
   const facts = {
     [mode === 'direct' ? 'User request delivered' : 'Tool content delivered']: yesNo(
-      observed?.attackExposed,
+      metaTicketRevision ? outcome?.attackExposed : observed?.attackExposed,
     ),
     'Task completed': yesNo(observed?.taskCompleted),
     'Positive control passed': yesNo(outcome?.controlPassed),
     ...(test.result?.response?.guardrails?.flaggedOutput && {
       'Reply flagged by guardrail': 'Yes',
     }),
+    ...(metaTicketRevision && { 'Seed case ID': parentCaseId ?? caseId }),
+    ...(metaTicketRevision &&
+      !parentCaseId &&
+      typeof decision === 'string' && {
+        'Revision decision': decision,
+      }),
   };
   return (
     <div className="border-y border-border px-3 py-2 text-sm">
@@ -73,7 +89,7 @@ export function AgentOutcomeDetails({
         {Object.entries(facts).map(([label, value]) => (
           <div key={label}>
             <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd>{value}</dd>
+            <dd className="break-all">{value}</dd>
           </div>
         ))}
       </dl>

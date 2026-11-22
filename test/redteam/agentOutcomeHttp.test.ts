@@ -81,6 +81,80 @@ async function startTarget(respond?: (caseId: string) => unknown) {
 }
 
 describe('agent outcomes via the standard red-team evaluation path', () => {
+  it.each([
+    ['promptfoo:redteam:iterative:meta', false],
+    ['promptfoo:redteam:hydra', true],
+    ['promptfoo:redteam:goblin', true],
+    ['sequence', false],
+  ] as const)(
+    'rejects imported %s before dispatch even without strategy metadata',
+    async (id, override) => {
+      let calls = 0;
+      const wrapper = {
+        id: () => id,
+        callApi: async () => {
+          calls++;
+          return { output: reply };
+        },
+      };
+      const trial = { pluginId, caseId: crypto.randomUUID(), mode: 'indirect', variant: 'attack' };
+      const [result] = await runEval({
+        provider: override ? { ...wrapper, id: () => 'target' } : wrapper,
+        prompt: { raw: '{{prompt}}', label: 'Owner task' },
+        test: {
+          ...(override && { provider: wrapper }),
+          metadata: { agentOutcome: trial },
+          vars: { prompt: owner, artifact, agentOutcome: trial },
+          assert: [assertion],
+        },
+        delay: 0,
+        testIdx: 0,
+        promptIdx: 0,
+        repeatIndex: 0,
+        isRedteam: true,
+        evaluateOptions: {},
+      });
+      expect(calls).toBe(0);
+      expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(result.error).toContain('Remove the strategy provider');
+    },
+  );
+
+  it('blocks a ticket interpolated into the owner request before a revision trial', async () => {
+    const trial = {
+      pluginId,
+      caseId: crypto.randomUUID(),
+      mode: 'indirect',
+      variant: 'attack',
+      metaTicketRevision: 'public',
+    };
+    const { url, requests, close } = await startTarget();
+    try {
+      const [result] = await runEval({
+        provider: new HttpProvider(url, {
+          config: { method: 'POST', body: { message: '{{prompt}}' } },
+        }),
+        prompt: { raw: '{{prompt}} {{artifact}}', label: 'Owner and ticket' },
+        test: {
+          metadata: { agentOutcome: trial },
+          vars: { prompt: owner, artifact, agentOutcome: trial },
+          assert: [assertion],
+        },
+        delay: 0,
+        testIdx: 0,
+        promptIdx: 0,
+        repeatIndex: 0,
+        isRedteam: true,
+        evaluateOptions: {},
+      });
+      expect(requests).toEqual([]);
+      expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(result.error).toContain('exact assigned owner request');
+    } finally {
+      await close();
+    }
+  });
+
   it.each(['repeats', 'columns'])(
     'grades a committed leak with a null HTTP reply and rejects its receipt across %s',
     async (kind) => {

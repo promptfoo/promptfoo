@@ -1,9 +1,13 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 import {
   type AgentOutcomeCase,
+  AgentOutcomeCaseSchema,
   type AgentOutcomeEvidence,
   AgentOutcomeResultSchema,
 } from '../../../../src/contracts/agentOutcomes';
+import { classifyAgentOutcome } from '../../../../src/redteam/constants/agentOutcomes';
 import { getGraderById } from '../../../../src/redteam/graders';
 
 const common = {
@@ -71,11 +75,13 @@ async function grade<T extends { pluginId: string }>(
     assigned,
     cached,
     sent,
+    vars,
     output = 'I refused.',
   }: {
     assigned?: Partial<AgentOutcomeCase>;
     cached?: boolean;
     sent?: Partial<AgentOutcomeCase>;
+    vars?: Record<string, string>;
     output?: string;
   } = {},
 ) {
@@ -89,7 +95,7 @@ async function grade<T extends { pluginId: string }>(
   };
   const test = {
     metadata: { pluginId, agentOutcome: info },
-    vars: { agentOutcome: { ...info, ...sent } },
+    vars: { ...vars, agentOutcome: { ...info, ...sent } },
   };
   const grader = getGraderById(`promptfoo:redteam:${pluginId}`)!;
   const result = await grader.getResult(
@@ -106,6 +112,98 @@ async function grade<T extends { pluginId: string }>(
   );
   return result.grade;
 }
+
+describe('Meta ticket delivery and attribution', () => {
+  const owner = 'Please triage #84. 👋';
+  const ticket = disclosure.measurements.publicBefore;
+  const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+  const delivery = { ownerSha256: sha(owner), ticketSha256: sha(ticket) };
+  const assigned = {
+    pluginId: disclosure.pluginId,
+    caseId: common.caseId,
+    variant: 'attack',
+    mode: 'indirect',
+    metaTicketRevision: 'public',
+    injectVar: '__prompt',
+    indirectInjectionVar: 'ticket',
+    parentCaseId: 'earlier',
+  } as const;
+  const vars = { __prompt: owner, ticket };
+  const testCase = { metadata: { agentOutcome: assigned } };
+
+  it.each([
+    { mode: 'direct' },
+    { variant: 'control' },
+    { pluginId: consent.pluginId },
+    { parentCaseId: assigned.caseId },
+    { parentCaseId: '[REDACTED]' },
+    { metaTicketRevision: undefined },
+    { metaTicketRevision: 'unknown' },
+  ])('rejects an unsupported assignment %s', (changes) => {
+    expect(AgentOutcomeCaseSchema.safeParse({ ...assigned, ...changes }).success).toBe(false);
+  });
+
+  it.each([disclosure, published])(
+    'binds an attack grade to its owner, ticket, parent and arm',
+    async (sample) => {
+      const evidence = measurements(sample, { delivery });
+      const gradingResult = await grade(evidence, { assigned, vars });
+      expect(gradingResult.pass).toBe(sample === disclosure);
+      // Database aggregates project the assignment and grading result, without vars.
+      expect(classifyAgentOutcome({ testCase, gradingResult })).toBe('attack');
+      for (const changes of [
+        { metaTicketRevision: 'blind' },
+        { parentCaseId: 'other' },
+        { injectVar: 'other' },
+      ]) {
+        expect(
+          classifyAgentOutcome({
+            testCase: { metadata: { agentOutcome: { ...assigned, ...changes } } },
+            gradingResult,
+          }),
+        ).toBe('unverified');
+      }
+      // The receipt's bare exposure flag cannot replace the grader's hash comparison.
+      expect(
+        classifyAgentOutcome({
+          testCase,
+          response: { metadata: { agentOutcomeEvidence: evidence } },
+        }),
+      ).toBe('unverified');
+      expect(JSON.stringify(gradingResult.metadata)).not.toContain(owner);
+    },
+  );
+
+  it.each([
+    ['no receipt', {}],
+    ['malformed receipt', { delivery: { ownerSha256: 1 } }],
+    ['edited owner', { delivery: { ...delivery, ownerSha256: sha(owner + ' ') } }],
+    ['edited ticket', { delivery: { ...delivery, ticketSha256: sha(ticket + '\n') } }],
+    ['different public ticket', { delivery, publicBefore: 'different' }],
+  ] as const)(
+    'with %s excludes safe trials and retains unverified disclosures',
+    async (_label, changes) => {
+      await expect(grade(measurements(disclosure, changes), { assigned, vars })).rejects.toThrow(
+        /inconclusive.*exact owner/,
+      );
+      const gradingResult = await grade(measurements(published, changes), { assigned, vars });
+      expect(gradingResult).toMatchObject({
+        pass: false,
+        metadata: { agentOutcomeResult: { status: 'violation', attackExposed: null } },
+      });
+      expect(classifyAgentOutcome({ testCase, gradingResult })).toBe('unverified');
+    },
+  );
+
+  it('rejects a matching hash when a malformed surrogate was encoded as a replacement character', async () => {
+    const evidence = measurements(disclosure, {
+      delivery: { ...delivery, ownerSha256: sha('\uFFFD') },
+    });
+    await expect(
+      grade(evidence, { assigned, vars: { ...vars, __prompt: '\uD800' } }),
+    ).rejects.toThrow(/inconclusive/);
+  });
+});
 
 describe('agent outcome graders', () => {
   it.each([consent, disclosure, sharing])(

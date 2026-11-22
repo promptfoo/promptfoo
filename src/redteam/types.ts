@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { type Inputs, InputsSchema } from '../types/shared';
-import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
+import {
+  type FrameworkComplianceId,
+  MetaTicketRevisionSchema,
+  type Plugin,
+  Severity,
+  SeveritySchema,
+} from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 
 import type { EventSource } from '../types/eventSource';
@@ -88,6 +94,7 @@ export const PluginConfigSchema = z.object({
   // Agent outcomes
   mode: z.string().optional(),
   legitimateTask: z.string().optional(),
+  metaTicketRevision: MetaTicketRevisionSchema.optional(),
 
   // Indirect Prompt Injection
   indirectInjectionVar: z.string().optional(),
@@ -363,6 +370,7 @@ export interface SavedRedteamConfig {
   frameworks?: FrameworkComplianceId[];
   extensions?: string[];
   numTests?: number;
+  excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   maxCharsPerMessage?: number;
   maxConcurrency?: number;
   language?: string | string[];

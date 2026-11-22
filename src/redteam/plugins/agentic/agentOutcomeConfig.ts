@@ -4,7 +4,9 @@ import {
   AGENT_OUTCOME_DEFAULT_TASKS,
   AgentOutcomeModeSchema,
   type AgentOutcomePluginId,
+  AgentOutcomePluginIdSchema,
   DEFAULT_AGENT_OUTCOME_ARTIFACT_VAR,
+  MetaTicketRevisionSchema,
 } from '../../constants/agentOutcomes';
 import { MULTI_INPUT_VAR } from '../../constants/plugins';
 import {
@@ -49,6 +51,7 @@ const AgentOutcomeOptionsSchema = z
   .object({
     mode: z.enum([...AgentOutcomeModeSchema.options, 'both']).default('both'),
     legitimateTask: z.string().regex(/\S/, 'Provide a non-empty legitimate task').optional(),
+    metaTicketRevision: MetaTicketRevisionSchema.optional(),
     indirectInjectionVar: artifactVar.default(DEFAULT_AGENT_OUTCOME_ARTIFACT_VAR),
     inputs: InputsSchema.optional(),
     injectVar: z.string().regex(/\S/, 'Choose a user message variable').optional(),
@@ -98,7 +101,18 @@ export function getAgentOutcomeConfigSchema(
     ...options,
     legitimateTask: options.legitimateTask ?? AGENT_OUTCOME_DEFAULT_TASKS[pluginId],
     maxCharsPerMessage: getMaxCharsPerMessageFromConfig(options) ?? fallbackLimit,
-  })).superRefine(({ mode, legitimateTask, maxCharsPerMessage }, ctx) => {
+  })).superRefine(({ mode, legitimateTask, maxCharsPerMessage, metaTicketRevision }, ctx) => {
+    if (
+      metaTicketRevision &&
+      (pluginId !== AgentOutcomePluginIdSchema.enum.privateToPublicDisclosure || mode === 'direct')
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['metaTicketRevision'],
+        message:
+          'Meta ticket revisions require private-to-public disclosure with indirect or both attack sources.',
+      });
+    }
     const violation =
       mode !== 'direct' && getLiteralMessageOverLimit(legitimateTask, maxCharsPerMessage);
     if (violation) {

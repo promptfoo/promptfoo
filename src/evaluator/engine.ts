@@ -112,7 +112,8 @@ import {
 } from '../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../util/transform';
 import { compileDerivedMetricFormula } from './derivedMetricFormula';
-import { PromptSuggestionsRejectedError } from './errors';
+import { PromptSuggestionsRejectedError, ticketRevisionRetryError } from './errors';
+import { MetaTicketRevisions } from './metaTicketRevisions';
 import { getResultIndexKey } from './resultIndex';
 import { PROMPTFOO_METADATA_KEY, sanitizeResultForJsonlArtifact } from './resultProcessing';
 import {
@@ -1947,6 +1948,7 @@ interface EvalProcessingContext {
   concurrency: number;
   deferredGradingAbortSignal?: AbortSignal;
   derivedMetrics: PreparedDerivedMetrics;
+  metaTicketRevisions?: MetaTicketRevisions;
   numComplete: number;
   options: InternalEvaluateOptions;
   promptEvalCounts: number[];
@@ -2543,7 +2545,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       // the hook's mutations don't need to be applied first. If future changes add
       // namedScores tracking here, move afterEach above this call.
       this.trackCompletedRow(evalStep, row, context);
-      context.numComplete++;
 
       // Apply afterEach hook mutations before persisting. Pass a shallow copy
       // so in-place mutations don't corrupt the row on hook failure.
@@ -2584,7 +2585,19 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
       }
 
+      // A target or replay can supply metadata with the same name. Only the
+      // current scheduler can attest to a proposal decision for this attempt.
+      if (evalStep.test.metadata?.agentOutcome?.metaTicketRevision && row.metadata) {
+        delete row.metadata.metaTicketRevisionDecision;
+      }
+      const proposed =
+        context.metaTicketRevisions &&
+        (await context.metaTicketRevisions.decide(index, evalStep, row, rows.length === 1));
       await this.persistEvalRow(row);
+      context.numComplete++;
+      if (proposed && !this.store.hasResultPersistenceFailure(row)) {
+        context.runEvalOptionsLength++;
+      }
 
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
@@ -2767,6 +2780,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices,
     progressBarManager,
     prompts,
+    runEvalOptions,
     serialRunEvalOptions,
     shouldGroupGradingByProvider,
   }: {
@@ -2784,6 +2798,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices: Set<number>;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
+    runEvalOptions: RunEvalOptions[];
     serialRunEvalOptions: RunEvalOptions[];
     shouldGroupGradingByProvider: boolean;
   }): Promise<TEvaluation | undefined> {
@@ -2818,6 +2833,20 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         });
       }
       checkAbort();
+      const children = processingContext.metaTicketRevisions?.ready(
+        (index) => !this.store.hasResultPersistenceFailure(runEvalOptions[index]),
+      );
+      if (children?.length) {
+        for (const child of children) {
+          checkAbort();
+          // Record only children whose step actually started. A deadline during
+          // the seed phase must not manufacture timeouts for hypothetical retries.
+          const index = runEvalOptions.push(child) - 1;
+          await this.processEvalStepWithTimeout(child, index, {}, processingContext);
+          processedIndices.add(index);
+        }
+        checkAbort();
+      }
     } catch (err) {
       if (!combinedAbortSignal.aborted) {
         cleanupProgressAfterError(progressBarManager, ciProgressReporter, err);
@@ -3040,9 +3069,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       concurrentRunEvalOptions,
       processingContext.concurrency,
       async (evalStep) => {
+        // forEachOfLimit short-circuits on the first rejection. When cancelled
+        // during a proposal, drain in-flight grades before saving the eval.
+        const revisionSignal = processingContext.metaTicketRevisions?.signal;
+        if (revisionSignal?.aborted) {
+          return;
+        }
         checkAbort();
         const idx = evalStepIndexMap.get(evalStep)!;
-        await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+        try {
+          await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+        } catch (error) {
+          if (revisionSignal?.aborted) {
+            return;
+          }
+          throw error;
+        }
         processedIndices.add(idx);
         const now = Date.now();
         if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
@@ -3937,6 +3979,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite = { ...testSuite, prompts: recovery.hookPrompts };
     }
     testSuite = await runBeforeAllExtensions(testSuite);
+    if (cliState.retryMode) {
+      const retryError = ticketRevisionRetryError(this.store.config.redteam, testSuite.redteam);
+      if (retryError) {
+        throw new Error(retryError);
+      }
+    }
     const derivedMetrics = prepareDerivedMetrics(testSuite.derivedMetrics);
     if (
       !restorePromptColumns &&
@@ -3996,11 +4044,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
 
+    const revisions = new MetaTicketRevisions(runEvalOptions, combinedAbortSignal);
     const processingContext: EvalProcessingContext = {
       assertionTypes,
       concurrency,
       deferredGradingAbortSignal,
       derivedMetrics,
+      metaTicketRevisions: revisions.enabled ? revisions : undefined,
       numComplete: 0,
       options,
       promptEvalCounts: createPromptEvalCounts(prompts),
@@ -4033,7 +4083,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       progressBarManager = new ProgressBarManager(isWebUI);
     }
 
+    let previousTotal = runEvalOptions.length;
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
+      if (total > previousTotal) {
+        progressBarManager?.updateTotalCount(total - previousTotal);
+        ciProgressReporter?.updateTotalTests(total);
+        previousTotal = total;
+      }
       if (originalProgressCallback) {
         originalProgressCallback(completed, total, index, evalStep, metrics);
       }
@@ -4052,9 +4108,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         // CI progress reporter update
         ciProgressReporter.update(processingContext.numComplete);
       } else {
-        logger.debug(
-          `Eval #${index + 1} complete (${processingContext.numComplete} of ${runEvalOptions.length})`,
-        );
+        logger.debug(`Eval #${index + 1} complete (${processingContext.numComplete} of ${total})`);
       }
     };
 
@@ -4118,6 +4172,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       processedIndices,
       progressBarManager,
       prompts,
+      runEvalOptions,
       serialRunEvalOptions,
       shouldGroupGradingByProvider,
     });

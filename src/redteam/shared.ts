@@ -19,9 +19,15 @@ import { getRemoteHealthUrl } from './remoteGeneration';
 import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
+import type { InternalEvaluateOptions } from '../types/internal';
 import type { RedteamRunOptions } from './types';
 
-export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
+export async function doRedteamRun({
+  allowedMetaTicketRevisions,
+  ...options
+}: RedteamRunOptions & Pick<InternalEvaluateOptions, 'allowedMetaTicketRevisions'>): Promise<
+  Eval | undefined
+> {
   const isCliInvocation = isCliEventSource(options);
 
   if (options.verbose) {
@@ -158,6 +164,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
         abortSignal: options.abortSignal,
         progressCallback: options.progressCallback,
         eventSource: options.eventSource,
+        ...(allowedMetaTicketRevisions && { allowedMetaTicketRevisions }),
         ...(generatedDuringRun && generation.tokenUsage
           ? { generationEventId: generation.id, generationTokenUsage: generation.tokenUsage }
           : {}),

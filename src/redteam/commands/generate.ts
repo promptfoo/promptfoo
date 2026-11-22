@@ -227,6 +227,9 @@ async function getConfigHash(
     ...(options.language ? { language: options.language } : {}),
     ...(options.purpose ? { purpose: options.purpose } : {}),
     ...(options.injectVar ? { injectVar: options.injectVar } : {}),
+    ...(options.excludeTargetOutputFromAgenticAttackGeneration && {
+      excludeTargetOutputFromAgenticAttackGeneration: true,
+    }),
     ...(typeof options.provider === 'string' ? { provider: options.provider } : {}),
     ...(options.description ? { description: options.description } : {}),
     // An earlier non-strict output may contain only partial results.
@@ -636,7 +639,8 @@ async function doGenerateRedteamInternal(
       resolvedConfig?.evaluateOptions?.delay,
     sharing: redteamConfig?.sharing || options.sharing,
     excludeTargetOutputFromAgenticAttackGeneration:
-      redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
+      redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration ||
+      options.excludeTargetOutputFromAgenticAttackGeneration,
     ...(redteamConfig?.testGenerationInstructions
       ? { testGenerationInstructions: redteamConfig.testGenerationInstructions }
       : {}),
@@ -862,6 +866,9 @@ async function doGenerateRedteamInternal(
       strategies: strategyObjs || [],
       plugins: plugins || [],
       sharing: config.sharing,
+      ...(config.excludeTargetOutputFromAgenticAttackGeneration && {
+        excludeTargetOutputFromAgenticAttackGeneration: true,
+      }),
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
     const generationRequestCount = generationTokenUsage.numRequests ?? 0;

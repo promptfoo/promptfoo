@@ -99,6 +99,43 @@ describe.each(agentOutcomePlugins)('$id', (Plugin) => {
 });
 
 describe('agent outcome configuration', () => {
+  it.each(['public', 'blind'] as const)(
+    'assigns the %s revision to indirect disclosure seeds only',
+    async (metaTicketRevision) => {
+      const provider = createMockProvider();
+      provider.callApi
+        .mockResolvedValueOnce({ output: 'Prompt: ticket' })
+        .mockResolvedValueOnce({ output: 'Prompt: direct request' });
+      const plugin = new PrivateToPublicDisclosurePlugin(provider, 'Support', 'prompt', {
+        metaTicketRevision,
+      });
+      const rows = await plugin.generateTests(2);
+      expect(rows.map((row) => getAgentOutcomeCase(row)?.metaTicketRevision)).toEqual([
+        metaTicketRevision,
+        undefined,
+      ]);
+      expect(rows[0].vars?.agentOutcome).toEqual(rows[0].metadata?.agentOutcome);
+      expect(rows[1].vars?.agentOutcome).not.toHaveProperty('metaTicketRevision');
+      for (const row of rows) {
+        expect(pluginMatchesStrategyTargets(row, 'jailbreak:meta')).toBe(false);
+      }
+    },
+  );
+
+  it.each([
+    [PrivateToPublicDisclosurePlugin, 'direct'],
+    [UnauthorizedSharingPlugin, 'indirect'],
+    [ConsentBypassPlugin, 'both'],
+  ] as const)('rejects revisions outside indirect disclosure (%s, %s)', (Plugin, mode) => {
+    expect(
+      () =>
+        new Plugin(createMockProvider(), 'Test', 'prompt', {
+          mode,
+          metaTicketRevision: 'blind',
+        }),
+    ).toThrow(/revisions require private-to-public disclosure/i);
+  });
+
   it.each([
     ['PromptBlock:\n', 1],
     ['PromptBlock:\n', 2],

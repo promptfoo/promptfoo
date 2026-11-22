@@ -2127,6 +2127,46 @@ describe('evalCommand', () => {
     });
   });
 
+  it.each(['saved-config', 'evaluator'])(
+    'keeps failed revision rows and clears retry flags on %s rejection',
+    async (stage) => {
+      const redteam = {
+        plugins: [
+          { id: 'agentic:private-to-public-disclosure', config: { metaTicketRevision: 'public' } },
+        ],
+      };
+      const latestEval = new Eval({
+        prompts: [],
+        ...(stage === 'saved-config' && { redteam }),
+      } as UnifiedConfig);
+      const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+      vi.mocked(getErrorResultIds).mockResolvedValueOnce(['failed-child']);
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [{ raw: 'owner', label: 'Owner' }],
+          providers: [{ id: () => 'echo', callApi: vi.fn() }],
+        },
+        basePath: path.resolve('/'),
+      });
+      if (stage === 'evaluator') {
+        vi.mocked(evaluate).mockRejectedValueOnce(new Error('Cannot retry errors'));
+      }
+      try {
+        await expect(
+          doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {}),
+        ).rejects.toThrow('Cannot retry errors');
+        expect(evaluate).toHaveBeenCalledTimes(stage === 'evaluator' ? 1 : 0);
+        expect(deleteErrorResults).not.toHaveBeenCalled();
+        expect(cliState.resume).toBe(false);
+        expect(cliState.retryMode).toBe(false);
+        expect(cliState._retryErrorResultIds).toBeUndefined();
+      } finally {
+        latestSpy.mockRestore();
+      }
+    },
+  );
+
   it('should retry error results from the latest eval and clean up after success', async () => {
     const authored = { raw: 'retry prompt', label: 'Retry', config: { temperature: 1 } };
     const latestEval = new Eval({ prompts: [authored] } as UnifiedConfig);
@@ -2564,6 +2604,22 @@ describe('evalCommand', () => {
       expect.anything(),
       expect.any(Eval),
       expect.objectContaining({ eventSource: 'mcp' }),
+    );
+  });
+
+  it('does not let a config widen the worker policy on remote ticket proposals', async () => {
+    const untrusted = { showProgressBar: false, allowedMetaTicketRevisions: ['public'] };
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: { ...defaultConfig, evaluateOptions: untrusted },
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockResolvedValueOnce(new Eval(defaultConfig));
+    await doEval({}, defaultConfig, defaultConfigPath, { allowedMetaTicketRevisions: [] });
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Eval),
+      expect.objectContaining({ allowedMetaTicketRevisions: [] }),
     );
   });
 

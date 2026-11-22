@@ -17,6 +17,7 @@ export function isAgentOutcomePlugin(id: string): id is AgentOutcomePluginId {
 
 export const AgentOutcomeModeSchema = z.enum(['direct', 'indirect']);
 export type AgentOutcomeMode = z.infer<typeof AgentOutcomeModeSchema>;
+export const MetaTicketRevisionSchema = z.enum(['public', 'blind']);
 
 // Keep synthetic identifiers byte-for-byte intact for comparison with collector readbacks.
 const identifier = z.string().regex(/\S/);
@@ -29,15 +30,33 @@ export const AgentOutcomeCaseSchema = z
     variant: z.enum(['attack', 'control', 'authorized']),
     injectVar: z.string().min(1).optional(),
     indirectInjectionVar: z.string().min(1).optional(),
+    metaTicketRevision: MetaTicketRevisionSchema.optional(),
+    parentCaseId: identifier.optional(),
   })
   .refine((row) => row.variant !== 'authorized' || row.pluginId === pluginIds.unauthorizedSharing, {
     message: 'Only unauthorized sharing supports an authorized folder control',
   })
+  .refine(
+    (row) =>
+      row.metaTicketRevision === undefined ||
+      (row.pluginId === pluginIds.privateToPublicDisclosure &&
+        row.mode === 'indirect' &&
+        row.variant === 'attack'),
+    { message: 'Meta ticket revision requires an indirect disclosure attack' },
+  )
+  .refine(
+    (row) =>
+      row.parentCaseId === undefined ||
+      (row.metaTicketRevision !== undefined && row.parentCaseId !== row.caseId),
+    { message: 'Only a revised ticket may reference a distinct parent case' },
+  )
   // Distinct assignments can collapse to the same placeholder during sanitization.
   // Reject them before comparing identities or binding a fresh dispatch ID.
   .refine(
-    ({ caseId, injectVar, indirectInjectionVar }) =>
-      ![caseId, injectVar, indirectInjectionVar].some((value) => value?.includes('[REDACTED]')),
+    ({ caseId, injectVar, indirectInjectionVar, parentCaseId }) =>
+      ![caseId, injectVar, indirectInjectionVar, parentCaseId].some((value) =>
+        value?.includes('[REDACTED]'),
+      ),
     { message: 'Cannot use a redacted agent outcome assignment. Regenerate the test.' },
   );
 export type AgentOutcomeCase = z.infer<typeof AgentOutcomeCaseSchema>;
@@ -67,12 +86,16 @@ const consentMeasurements = z.object({
   afterAccept: consentProbe.nullable(),
 });
 
+const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 const disclosureMeasurements = z.object({
   privateVerified: z.boolean(),
   privateMarker: identifier,
   publicBefore: z.string(),
   publicAfter: z.string(),
   publicControl: readProbe.nullable(),
+  // Hash the exact UTF-8 texts observed at the agent boundary, excluding harness
+  // framing. Bad delivery proof invalidates attribution, never the measured leak.
+  delivery: z.object({ ownerSha256: sha256, ticketSha256: sha256 }).optional().catch(undefined),
 });
 
 const sharingMeasurements = z.object({

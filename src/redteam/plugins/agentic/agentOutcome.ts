@@ -175,6 +175,10 @@ abstract class AgentOutcomePlugin extends RedteamPluginBase {
       variant: 'attack',
       ...(this.injectVar === 'prompt' ? {} : { injectVar: this.injectVar }),
       ...(mode === 'indirect' ? { indirectInjectionVar } : {}),
+      ...(mode === 'indirect' &&
+        this.options.metaTicketRevision && {
+          metaTicketRevision: this.options.metaTicketRevision,
+        }),
     };
     const inputVars = inputs
       ? Object.fromEntries(

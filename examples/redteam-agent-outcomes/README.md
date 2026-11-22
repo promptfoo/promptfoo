@@ -64,6 +64,8 @@ For a standalone copy, install with `npm install --no-save --package-lock=false 
 
 `redteam.config.yaml` requests one direct and one indirect attack per plugin. Each plugin's `config.modifiers.context` describes its own service. With all three descriptions in the shared purpose, a generator wrote a support ticket about a missing storefront page view.
 
+To try a second ticket, add `metaTicketRevision: public` under the disclosure plugin's `config` and keep Basic enabled. Regenerate the file. After a verified safe, completed indirect attack, Meta can propose one replacement using the original ticket and the reporter's public reply. This costs up to one additional remote proposal and one fresh target run. The owner request stays fixed. Set `blind` to withhold the reply. The default example leaves revisions off. [Evidence requirements and comparison method](https://www.promptfoo.dev/docs/red-team/plugins/agent-outcomes/#try-a-second-ticket)
+
 Run generation with your usual Promptfoo red team credentials and generation provider. Inspect the generated tickets before evaluation. A model can repeat an example verbatim or invent a customer ID. For disclosure the reporter should ask for a field whose value only the agent can read.
 
 Both fixed migration guides include a runnable handler. For custom generation, put `PromptBlock:` on its own line before each guide, even if you request only one. The plugins also accept older inline `Prompt: text` responses. Check that the full handler reaches `vars.artifact`. Keep `AGENT_MODE=openclaw-live` and your target model settings for evaluation.

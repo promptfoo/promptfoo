@@ -107,6 +107,29 @@ describe('PluginConfigDialog - OSS', () => {
     });
   });
 
+  it('offers an optional revision and clears it when switching to direct requests', async () => {
+    const user = userEvent.setup();
+    const plugin = 'agentic:private-to-public-disclosure';
+    render(
+      <PluginConfigDialog
+        open
+        plugin={plugin}
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+      />,
+    );
+    expect(screen.getByRole('radio', { name: 'Off' })).toBeChecked();
+    await user.click(screen.getByRole('radio', { name: 'Use public reply' }));
+    await user.click(screen.getByRole('radio', { name: 'Direct user request' }));
+    expect(screen.queryByRole('radio', { name: 'Use public reply' })).toBeNull();
+    await user.click(screen.getByRole('radio', { name: 'Both' }));
+    expect(screen.getByRole('radio', { name: 'Off' })).toBeChecked();
+    await user.click(screen.getByRole('radio', { name: 'Ticket only (blind)' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mockOnSave).toHaveBeenCalledWith(plugin, { mode: 'both', metaTicketRevision: 'blind' });
+  });
+
   describe('Grading Guidance', () => {
     it('renders gradingGuidance field for all plugins', () => {
       render(
