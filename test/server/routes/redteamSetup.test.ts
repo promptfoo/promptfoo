@@ -284,6 +284,26 @@ describe('native red team setup', () => {
     expect(mockedDoRedteamRun.mock.calls[0][0]).not.toHaveProperty('userTurns');
   });
 
+  it('uses earlier user grants locally for edits and Run without forwarding them to Cloud', async () => {
+    const priorUserTurns = [messages[0].content, ...Array(25).fill('Keep that scope.')];
+    const recent = [{ role: 'user', content: 'Make it five tests.' }];
+    const edited = { ...config, redteam: { ...config.redteam, numTests: 5 } };
+    respond(edited);
+    const result = await ask({ config, messages: recent, priorUserTurns });
+    expect(result.body).toMatchObject({ config: edited, runnable: true, testableTargets: [0] });
+    expect(sent(0)).toEqual({ task: 'redteam-setup', config, messages: recent });
+    mockedDoRedteamRun.mockResolvedValue(undefined);
+    const run = await request(app)
+      .post('/api/redteam/run')
+      .send({
+        config: edited,
+        fromAgent: true,
+        userTurns: [...priorUserTurns, recent[0].content],
+      });
+    expect(run.status).toBe(200);
+    expect(mockedDoRedteamRun.mock.calls[0][0]).not.toHaveProperty('userTurns');
+  });
+
   it('refuses older clients before sending anything', async () => {
     const res = await ask({ version: 2 });
     expect(res.status).toBe(400);

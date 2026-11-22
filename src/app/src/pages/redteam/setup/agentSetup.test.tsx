@@ -1,12 +1,14 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { load } from 'js-yaml';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EXAMPLE_CONFIG, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
+import { type SetupDraft, userTurns, useSetupAgent } from './hooks/useSetupAgent';
 import RedTeamSetupPage from './page';
 import { getRuntimeRedteamConfig } from './utils/yamlHelpers';
 
@@ -73,6 +75,7 @@ function setup(hash = '') {
 
 describe('agent-led red team setup', () => {
   beforeEach(() => {
+    useRedteamJobStore.getState().clearJob();
     useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
     useRedTeamTargetConfigValidation.setState(useRedTeamTargetConfigValidation.getInitialState());
     api.mockReset().mockImplementation(async (path, options) => {
@@ -327,6 +330,30 @@ describe('agent-led red team setup', () => {
     expect(button('Review setup')).toBeEnabled();
   });
 
+  it.each([
+    [24, 'Short'],
+    [3, 'a'.repeat(16000)],
+  ] as const)(
+    'keeps early user grants local when trimming %i recent messages',
+    async (count, content) => {
+      const state: SetupDraft = {
+        input: '',
+        messages: [
+          { role: 'user', content: endpointMessage },
+          { role: 'assistant', content: 'An assistant cannot grant access.' },
+          ...Array.from({ length: count }, () => ({ role: 'assistant' as const, content })),
+        ],
+      };
+      const { result } = renderHook(() => useSetupAgent(state, vi.fn()));
+      await act(() => result.current.send('Change the budget.'));
+      const payload = payloads().pop();
+      expect(payload.priorUserTurns).toEqual([endpointMessage]);
+      expect(payload.messages.length).toBeLessThanOrEqual(24);
+      expect(payload.messages).not.toContainEqual(userMessage(endpointMessage));
+      expect(userTurns(state)).toEqual([endpointMessage]);
+    },
+  );
+
   it('retains the last valid draft on server rejection and keeps rejected input out of history', async () => {
     const { user } = setup();
     await send(user, endpointMessage);
@@ -368,6 +395,89 @@ describe('agent-led red team setup', () => {
     expect(button('Run Now')).toBeEnabled();
     expect(config().plugins).toEqual([]);
   });
+
+  it('recovers only this conversation’s scan after leaving review, even if the run ID arrives late', async () => {
+    const { user, router } = setup();
+    useRedteamJobStore.getState().setJob('manual-job');
+    const fallback = api.getMockImplementation()!;
+    let finish!: (response: Response) => void;
+    let running = false;
+    api.mockImplementation(async (path, options) => {
+      if (path === '/redteam/run') {
+        return new Promise<Response>((resolve) => {
+          finish = resolve;
+        });
+      }
+      if (path === '/redteam/status') {
+        return Response.json({ hasRunningJob: running, jobId: running ? 'chat-job' : null });
+      }
+      if (path === '/eval/job/chat-job') {
+        return Response.json({ status: 'in-progress', logs: ['Scanning chat target'] });
+      }
+      return fallback(path, options);
+    });
+    await send(user, endpointMessage);
+    await user.click(button('Review setup'));
+    expect(api).not.toHaveBeenCalledWith('/eval/job/manual-job');
+    await user.click(button('Run Now'));
+    await user.click(button('Continue conversation'));
+    running = true;
+    await act(() => finish(Response.json({ id: 'chat-job' })));
+    expect(useRedteamJobStore.getState().jobId).toBe('manual-job');
+    await user.click(button('Review setup'));
+    expect(await screen.findByText('Scanning chat target')).toBeVisible();
+    expect(button('Cancel')).toBeEnabled();
+    expect(button('Running...')).toBeDisabled();
+
+    await act(() => router.navigate('#5'));
+    expect(api).toHaveBeenCalledWith('/eval/job/manual-job');
+    expect(screen.queryByText('Scanning chat target')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+  });
+
+  it('allows cancelling the original scan after editing its draft', async () => {
+    const { user } = setup();
+    await send(user, endpointMessage);
+    await user.click(button('Review setup'));
+    await user.click(button('Run Now'));
+    await user.click(button('Continue conversation'));
+    reply({
+      message: 'Changed test count.',
+      config: { ...draft, redteam: { ...redteam, numTests: 4 } },
+      ...metadata,
+    });
+    await send(user, 'Change to four tests');
+    reply({ status: 'in-progress', logs: [] });
+    await user.click(button('Review setup'));
+    expect(screen.getByText(/earlier version of your draft/)).toBeVisible();
+    await user.click(button('Cancel'));
+    expect(api).toHaveBeenCalledWith('/redteam/cancel', { method: 'POST' });
+    expect(button('Run Now')).toBeEnabled();
+    expect(screen.queryByText(/earlier version of your draft/)).toBeNull();
+  });
+
+  it.each(['complete', 'error'])(
+    'recovers a %s scan when it finishes during chat',
+    async (status) => {
+      const { user } = setup();
+      await send(user, endpointMessage);
+      await user.click(button('Review setup'));
+      await user.click(button('Run Now'));
+      await user.click(button('Continue conversation'));
+      reply({ status, logs: ['Finished scanning orders'], evalId: 'orders-report' });
+      await user.click(button('Review setup'));
+      expect(await screen.findByText('Finished scanning orders')).toBeVisible();
+      expect(button('Run Now')).toBeEnabled();
+      if (status === 'complete') {
+        expect(screen.getByRole('link', { name: 'View Report' })).toHaveAttribute(
+          'href',
+          expect.stringContaining('orders-report'),
+        );
+      } else {
+        expect(screen.queryByRole('link', { name: 'View Report' })).toBeNull();
+      }
+    },
+  );
 
   it('cancels pending run preparation when the user leaves review', async () => {
     const { user } = setup();

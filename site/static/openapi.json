@@ -4752,7 +4752,7 @@
                   "userTurns": {
                     "type": "array",
                     "items": { "type": "string", "maxLength": 16000 },
-                    "maxItems": 24
+                    "maxItems": 256
                   },
                   "config": { "type": "object", "additionalProperties": {} },
                   "force": { "type": "boolean" },
@@ -4872,6 +4872,12 @@
                 "type": "object",
                 "properties": {
                   "version": { "type": "number", "enum": [3] },
+                  "priorUserTurns": {
+                    "type": "array",
+                    "items": { "type": "string", "maxLength": 16000 },
+                    "maxItems": 256,
+                    "description": "Earlier user messages used only for local destination and credential checks. Never forwarded to Cloud."
+                  },
                   "messages": {
                     "type": "array",
                     "items": {

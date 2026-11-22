@@ -147,7 +147,7 @@ export type TestCaseGenerationResponse = z.infer<typeof TestCaseGenerationRespon
 
 // POST /api/redteam/run
 
-const userTurnsSchema = z.array(z.string().max(16000)).max(24);
+const userTurnsSchema = z.array(z.string().max(16000)).max(256);
 
 export const RedteamRunRequestSchema = z.object({
   fromAgent: z.boolean().optional(),
@@ -212,6 +212,11 @@ export const RedteamSchemas = {
     Request: z.strictObject({
       // Require a client that discloses hosted processing of connection messages.
       version: z.literal(3),
+      priorUserTurns: userTurnsSchema
+        .optional()
+        .describe(
+          'Earlier user messages used only for local destination and credential checks. Never forwarded to Cloud.',
+        ),
       messages: z
         .array(
           z.strictObject({

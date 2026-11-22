@@ -45,7 +45,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router';
 import { customTargetOption, findPredefinedTarget } from './components/constants';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
-import Review from './components/Review';
+import Review, { type AgentJob } from './components/Review';
 import Setup from './components/Setup';
 import Strategies from './components/Strategies';
 import { isModelProviderId } from './components/Targets/providerCatalog';
@@ -142,6 +142,7 @@ export default function RedTeamSetupPage() {
   );
   const [startWithAgent] = useState(fresh);
   const [draft, setDraft] = useState<SetupDraft>(EMPTY_DRAFT);
+  const [agentJob, setAgentJob] = useState<AgentJob>();
   // Agent configs never pass through the single-target editor or browser storage.
   const reviewing = location.hash === '#agent-review';
   const agentOpen = reviewing || location.hash === '#agent' || (!location.hash && startWithAgent);
@@ -291,6 +292,7 @@ export default function RedTeamSetupPage() {
 
       setFullConfig(data.config);
       setDraft(EMPTY_DRAFT);
+      setAgentJob(undefined);
       setConfigName(data.name);
       setConfigDate(data.updatedAt);
       lastSavedConfig.current = JSON.stringify(data.config);
@@ -367,6 +369,7 @@ export default function RedTeamSetupPage() {
 
       setFullConfig(mappedConfig);
       setDraft(EMPTY_DRAFT);
+      setAgentJob(undefined);
       if (agentOpen) {
         updateHash(0);
       }
@@ -400,6 +403,7 @@ export default function RedTeamSetupPage() {
   const handleResetConfig = () => {
     resetConfig();
     setDraft(EMPTY_DRAFT);
+    setAgentJob(undefined);
     setConfigDate(null);
     setConfigName('');
     navigate('#agent', { replace: true });
@@ -476,6 +480,8 @@ export default function RedTeamSetupPage() {
           {reviewing ? (
             <div className="ph-no-capture mx-auto max-w-3xl">
               <Review
+                agentJob={agentJob}
+                setAgentJob={setAgentJob}
                 native={draft}
                 continueConversation={() => navigate('#agent', { state: location.state })}
               />
@@ -721,6 +727,7 @@ export default function RedTeamSetupPage() {
           {value === 5 && (
             <ErrorBoundary name="Review Page">
               <Review
+                agentJob={agentJob}
                 navigateToPlugins={() => updateHash(3)}
                 navigateToStrategies={() => updateHash(4)}
                 navigateToPurpose={() => updateHash(2)}

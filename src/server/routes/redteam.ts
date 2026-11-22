@@ -570,7 +570,7 @@ redteamRouter.post('/setup-plan', async (req, res) => {
     });
     return;
   }
-  const { version: _version, ...conversation } = input.data;
+  const { version: _version, priorUserTurns = [], ...conversation } = input.data;
   const { messages, config, verification } = conversation;
   const fields = [
     ...messages.map(({ content }) => content),
@@ -590,7 +590,9 @@ redteamRouter.post('/setup-plan', async (req, res) => {
   const disconnected = new AbortController();
   res.once('close', () => disconnected.abort());
   const signal = AbortSignal.any([timeout, disconnected.signal]);
-  const userTurns = messages.filter((m) => m.role === 'user').map((m) => m.content);
+  const userTurns = priorUserTurns.concat(
+    messages.filter((m) => m.role === 'user').map((m) => m.content),
+  );
   let feedback: { validationError: string; rejectedConfig?: Record<string, unknown> } | undefined;
   try {
     for (let attempt = 0; attempt < 3; attempt++) {

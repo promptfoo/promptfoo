@@ -47,24 +47,25 @@ export function credentialHeaders(target: unknown): string[] {
     .map(([name, value]) => name + ': ' + value);
 }
 
-// Keep the most recent conversation inside the hosted agent's input budget.
-// Test results travel separately so an old success cannot verify a new target.
-function history(messages: SetupDraft['messages']) {
+// Only the recent conversation goes to Cloud. Keep earlier user messages
+// locally so trimming history doesn't revoke an endpoint or credential grant.
+function history(draft: SetupDraft) {
   let remaining = 48000;
-  const turns = messages.filter((m) => m.role !== 'test').slice(-24);
-  for (let index = turns.length - 1; index >= 0; index--) {
-    remaining -= turns[index].content.length;
-    if (remaining < 0) {
-      return turns.slice(index + 1);
-    }
+  const turns = draft.messages.filter((m) => m.role !== 'test');
+  let start = turns.length;
+  while (start > 0 && turns.length - start < 24 && turns[start - 1].content.length <= remaining) {
+    start--;
+    remaining -= turns[start].content.length;
   }
-  return turns;
+  const earlier = turns
+    .slice(0, start)
+    .filter((m) => m.role === 'user')
+    .map((m) => m.content);
+  return { messages: turns.slice(start), priorUserTurns: earlier.length ? earlier : undefined };
 }
 
 export function userTurns(draft: SetupDraft) {
-  return history(draft.messages)
-    .filter((m) => m.role === 'user')
-    .map((m) => m.content);
+  return draft.messages.filter((m) => m.role === 'user').map((m) => m.content);
 }
 
 function verification(tested: Verification[] = []) {
@@ -134,7 +135,7 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
       : state;
     const payload = {
       version: 3,
-      messages: history(next.messages),
+      ...history(next),
       config: state.config,
       verification: verification(state.tested),
     };

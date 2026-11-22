@@ -70,7 +70,14 @@ function setupRunError({ target }: Config) {
   return missingEndpoint(target) ? 'Add a target URL before running.' : null;
 }
 
+export interface AgentJob {
+  id: string;
+  config: SetupDraft['config'];
+}
+
 interface ReviewProps {
+  agentJob?: AgentJob;
+  setAgentJob?: (job: AgentJob | undefined) => void;
   onBack?: () => void;
   native?: SetupDraft;
   continueConversation?: () => void;
@@ -175,6 +182,8 @@ function removeIntentEntry(
 
 export default function Review({
   onBack,
+  agentJob,
+  setAgentJob,
   continueConversation,
   native,
   navigateToPlugins,
@@ -310,77 +319,82 @@ export default function Review({
     setMaxConcurrency(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
   }, [config.maxConcurrency]);
 
-  // Track if recovery has been attempted to prevent duplicate runs
   const hasAttemptedRecovery = useRef(false);
 
-  // Recover job state on mount (e.g., after navigation)
-  // Wait for Zustand to hydrate from localStorage before checking savedJobId
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  // Chat jobs live with the conversation. Only the manual wizard recovers from
+  // browser storage and the server-wide status endpoint.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: recover once per mount, including late job IDs
   useEffect(() => {
-    if (native || !_hasHydrated || hasAttemptedRecovery.current) {
+    if (hasAttemptedRecovery.current || (native ? !agentJob : !_hasHydrated)) {
       return;
     }
     hasAttemptedRecovery.current = true;
 
     const recoverJob = async () => {
-      // Check what the server thinks is running
-      const { hasRunningJob, jobId: serverJobId } = await checkForRunningJob();
-
-      if (hasRunningJob && serverJobId) {
-        // Server has a running job - reconnect to it
-        try {
-          const jobResponse = await callApi(`/eval/job/${serverJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
-
-            if (job.status === 'in-progress') {
-              setIsRunning(true);
-              setJob(serverJobId);
-              startPolling(serverJobId);
-            } else if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
-              clearJob();
-            } else if (job.status === 'error') {
-              setLogs(job.logs || []);
-              showToast('Previous job failed. Check logs for details.', 'error');
-              clearJob();
-            }
-          } else {
-            // Server reported a running job but we couldn't fetch it
-            showToast('Could not reconnect to running job.', 'error');
-            clearJob();
-          }
-        } catch (error) {
-          console.error('Failed to recover job:', error);
-          showToast('Failed to reconnect to running job.', 'error');
-          clearJob();
+      const server = native ? null : await checkForRunningJob();
+      if (!mounted.current) {
+        return;
+      }
+      const serverJobId =
+        server?.hasRunningJob && server.jobId !== agentJob?.id ? server.jobId : null;
+      const id = native ? agentJob?.id : serverJobId || savedJobId;
+      if (!id) {
+        return;
+      }
+      try {
+        const response = await callApi(`/eval/job/${id}`);
+        const job = response.ok ? ((await response.json()) as Job) : null;
+        if (!mounted.current) {
+          return;
         }
-      } else if (savedJobId) {
-        // We have a saved job ID but server says nothing running
-        // Check if it completed while we were away
-        try {
-          const jobResponse = await callApi(`/eval/job/${savedJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
-
-            if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
+        if (job) {
+          setLogs(job.logs || []);
+          if (job.status === 'in-progress' && (native || serverJobId)) {
+            setIsRunning(true);
+            if (!native) {
+              setJob(id);
+            }
+            startPolling(id);
+            return;
+          }
+          if (job.status === 'complete' && job.evalId) {
+            setEvalId(job.evalId);
+            if (!native && !serverJobId) {
               showToast('Your evaluation completed!', 'success');
-            } else if (job.status === 'error') {
-              showToast('Previous job failed. Check logs for details.', 'error');
             }
+          } else if (job.status === 'error') {
+            showToast('Previous job failed. Check logs for details.', 'error');
           }
-        } catch {
-          // Job doesn't exist anymore (server restarted or cleaned up)
+        } else {
+          if (native || serverJobId) {
+            showToast('Could not reconnect to running job.', 'error');
+          }
+          if (native && response.status === 404) {
+            setAgentJob?.(undefined);
+          }
         }
+      } catch {
+        if (!mounted.current) {
+          return;
+        }
+        if (native || serverJobId) {
+          showToast('Failed to reconnect to running job.', 'error');
+        }
+      }
+      if (!native) {
         clearJob();
       }
     };
 
-    recoverJob();
-  }, [_hasHydrated]); // Run once after hydration completes
+    if (native) {
+      setIsPreparing(true);
+    }
+    recoverJob().finally(() => {
+      if (native && mounted.current) {
+        setIsPreparing(false);
+      }
+    });
+  }, [_hasHydrated, agentJob?.id]);
 
   const handleSaveYaml = () => {
     if (saveError) {
@@ -533,18 +547,26 @@ export default function Review({
       const interval = window.setInterval(async () => {
         try {
           const statusResponse = await callApi(`/eval/job/${jobId}`);
+          if (!mounted.current) {
+            return;
+          }
           if (!statusResponse.ok) {
             // Job not found - likely server restarted
             window.clearInterval(interval);
             pollIntervalRef.current = null;
             setIsRunning(false);
-            clearJob();
+            if (!native) {
+              clearJob();
+            }
             showToast('Job was interrupted. Please try again.', 'error');
             return;
           }
 
           const status = (await statusResponse.json()) as Job;
 
+          if (!mounted.current) {
+            return;
+          }
           if (status.logs) {
             setLogs(status.logs);
           }
@@ -553,7 +575,9 @@ export default function Review({
             window.clearInterval(interval);
             pollIntervalRef.current = null;
             setIsRunning(false);
-            clearJob();
+            if (!native) {
+              clearJob();
+            }
 
             if (status.status === 'complete' && status.result && status.evalId) {
               setEvalId(status.evalId);
@@ -583,7 +607,7 @@ export default function Review({
 
       pollIntervalRef.current = interval;
     },
-    [clearJob, recordEvent, showToast],
+    [clearJob, native, recordEvent, showToast],
   );
 
   const handleRunWithSettings = async () => {
@@ -729,13 +753,16 @@ export default function Review({
       if (response.ok === false || !id) {
         throw new Error(error || 'Could not start the scan.');
       }
-      if (!mounted.current) {
-        return;
+      // The scan has already started even if the user returned to chat during POST.
+      if (native) {
+        hasAttemptedRecovery.current = true;
+        setAgentJob?.({ id, config: native.config });
+      } else {
+        setJob(id);
       }
-
-      // Save job ID to persistent store and start polling
-      setJob(id);
-      startPolling(id);
+      if (mounted.current) {
+        startPolling(id);
+      }
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
@@ -759,7 +786,11 @@ export default function Review({
       }
 
       setIsRunning(false);
-      clearJob();
+      if (native) {
+        setAgentJob?.(undefined);
+      } else {
+        clearJob();
+      }
       showToast('Cancel request submitted', 'success');
     } catch (error) {
       console.error('Error cancelling job:', error);
@@ -1404,6 +1435,11 @@ export default function Review({
                   </AlertDescription>
                 </AlertContent>
               </Alert>
+            )}
+            {native && agentJob && !isEqual(agentJob.config, native.config) && (
+              <p role="status" className="mb-2 text-sm text-muted-foreground">
+                This scan used an earlier version of your draft.
+              </p>
             )}
             <div className="mb-4">
               <div className="flex flex-wrap items-center gap-3">
