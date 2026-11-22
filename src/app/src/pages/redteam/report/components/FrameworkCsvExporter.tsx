@@ -9,14 +9,14 @@ import {
   type FrameworkComplianceId,
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
-  riskCategorySeverityMap,
-  Severity,
 } from '@promptfoo/redteam/constants';
 import {
   type CategoryStats,
   categorizePlugins,
   expandPluginCollections,
+  getFrameworkPluginStats,
   getPluginDisplayName,
+  getPluginSeverity,
 } from './FrameworkComplianceUtils';
 
 interface CSVExporterProps {
@@ -59,9 +59,8 @@ const CSVExporter = ({
 
       // Add tested plugins
       testedPlugins.forEach((plugin) => {
-        const stats = categoryStats[plugin];
-        const pluginSeverity =
-          riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+        const stats = getFrameworkPluginStats(plugin, categoryStats);
+        const pluginSeverity = getPluginSeverity(plugin);
         const pluginName = getPluginDisplayName(plugin);
         const attacksSuccessful = stats.failCount;
         const asr = formatASRForDisplay(calculateAttackSuccessRate(stats.total, stats.failCount));
@@ -81,8 +80,7 @@ const CSVExporter = ({
 
       // Add untested plugins
       untested.forEach((plugin) => {
-        const pluginSeverity =
-          riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+        const pluginSeverity = getPluginSeverity(plugin);
         const pluginName = getPluginDisplayName(plugin);
 
         csvRows.push([

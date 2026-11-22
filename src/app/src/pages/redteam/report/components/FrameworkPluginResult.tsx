@@ -2,15 +2,20 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { formatASRForDisplay } from '@app/utils/redteam';
-import { riskCategorySeverityMap, Severity } from '@promptfoo/redteam/constants';
+import { Severity } from '@promptfoo/redteam/constants';
 import { CheckCircle, Info, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { getPluginDisplayName } from './FrameworkComplianceUtils';
+import { getPluginDisplayName, getPluginSeverity } from './FrameworkComplianceUtils';
 
 export interface FrameworkPluginResultProps {
   evalId: string;
   plugin: string;
-  getPluginASR: (plugin: string) => { asr: number; total: number; failCount: number };
+  getPluginASR: (plugin: string) => {
+    asr: number;
+    total: number;
+    failCount: number;
+    alias?: string;
+  };
   type: 'failed' | 'passed' | 'untested';
 }
 
@@ -31,27 +36,23 @@ export default function FrameworkPluginResult({
 }: FrameworkPluginResultProps) {
   const navigate = useNavigate();
 
-  const handlePluginClick = (pluginId: string) => {
-    const { asr } = getPluginASR(plugin);
+  const { asr, total, failCount, alias } = getPluginASR(plugin);
 
-    const filterParam = encodeURIComponent(
-      JSON.stringify([
-        {
-          type: 'plugin',
-          operator: 'equals',
-          value: pluginId,
-        },
-      ]),
-    );
-
+  const handlePluginClick = () => {
+    const ids = alias ? [plugin, alias] : [plugin];
+    const filters = ids.map((id) => ({
+      ...(id === 'harmful' ? { type: 'metadata', field: 'pluginId' } : { type: 'plugin' }),
+      operator: 'equals',
+      value: id,
+      ...(alias && { logicOperator: 'or' }),
+    }));
     const mode = asr === 0 ? 'passes' : 'failures';
-    navigate(`${EVAL_ROUTES.DETAIL(evalId)}?filter=${filterParam}&mode=${mode}`);
+    navigate(
+      `${EVAL_ROUTES.DETAIL(evalId)}?filter=${encodeURIComponent(JSON.stringify(filters))}&mode=${mode}`,
+    );
   };
 
-  const { asr, total, failCount } = getPluginASR(plugin);
-
-  const pluginSeverity =
-    riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+  const pluginSeverity = getPluginSeverity(plugin);
 
   return (
     <div
@@ -71,7 +72,7 @@ export default function FrameworkPluginResult({
       <div className="flex flex-1 items-center justify-between">
         <span
           className={cn('text-sm', type !== 'untested' && 'cursor-pointer hover:underline')}
-          onClick={() => type !== 'untested' && handlePluginClick(plugin)}
+          onClick={() => type !== 'untested' && handlePluginClick()}
         >
           {getPluginDisplayName(plugin)}
         </span>
