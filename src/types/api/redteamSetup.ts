@@ -65,35 +65,49 @@ export function isSetupReplyPath(path: string): boolean {
 }
 
 const replyPath = z.string().refine(isSetupReplyPath);
+
+// Only credential headers that the HTTP provider redacts. Never let a chat
+// request override routing, framing, cookies or Promptfoo's internal headers.
+export function isSetupAuthHeader(name: string): boolean {
+  return /^(?:authorization|(?:x-)?(?:api-key|auth-token|access-token)|apiKey|x-auth|x-portkey-api-key)$/i.test(
+    name,
+  );
+}
+
 export const SetupConnectionTest = {
-  Request: z.strictObject({
-    url: z
-      .url({ protocol: /^https?$/ })
-      .max(4096)
-      .refine((value) => {
-        if (!/^https?:\/\//i.test(value) || !URL.canParse(value)) {
-          return false;
-        }
-        const url = new URL(value);
-        return !url.username && !url.password && !url.hash && !/[\s\\{}]/.test(value);
+  Request: z
+    .strictObject({
+      url: z
+        .url({ protocol: /^https?$/ })
+        .max(4096)
+        .refine((value) => {
+          if (!/^https?:\/\//i.test(value) || !URL.canParse(value)) {
+            return false;
+          }
+          const url = new URL(value);
+          return !url.username && !url.password && !url.hash && !/[\s\\{}]/.test(value);
+        }),
+      body: z.record(z.string(), z.unknown()).refine((body) => {
+        const json = JSON.stringify(body);
+        return (
+          json.length <= 16000 &&
+          json.includes('{{prompt}}') &&
+          !/\{[{%#]|\$\{|file:\/\/|"\$ref":/i.test(
+            json.replace(/\{\{(?:prompt|sessionId)\}\}/g, ''),
+          )
+        );
       }),
-    body: z.record(z.string(), z.unknown()).refine((body) => {
-      const json = JSON.stringify(body);
-      return (
-        json.length <= 16000 &&
-        json.includes('{{prompt}}') &&
-        !/\{[{%#]|\$\{|file:\/\/|"\$ref":/i.test(json.replace(/\{\{(?:prompt|sessionId)\}\}/g, ''))
-      );
-    }),
-    authEnv: z.union([
-      z.literal(''),
-      z
-        .string()
-        .max(128)
-        .regex(/^[A-Z_][A-Z0-9_]*$/),
-    ]),
-    responsePath: z.union([z.literal(''), replyPath]).optional(),
-  }),
+      authEnv: z.union([
+        z.literal(''),
+        z
+          .string()
+          .max(128)
+          .regex(/^[A-Z_][A-Z0-9_]*$/),
+      ]),
+      authHeader: z.string().refine(isSetupAuthHeader).optional(),
+      responsePath: z.union([z.literal(''), replyPath]).optional(),
+    })
+    .refine(({ authHeader, authEnv }) => !authHeader || !!authEnv),
   Response: z.strictObject({
     success: z.boolean(),
     message: z.string().max(500),

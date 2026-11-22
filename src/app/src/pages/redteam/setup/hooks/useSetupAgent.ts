@@ -23,9 +23,13 @@ const QUESTIONS = {
   body: 'Where should I put the test prompt in your request? Tell me the field name, or share an example JSON body.',
   responsePath:
     'Where is the answer in the response? Give me a field like result.answer, paste an example, or choose plain text.',
+  authHeader: 'Which header carries your API key?',
   authEnv:
-    'Does the endpoint need a bearer token? Give me the name of an environment variable set where you run Promptfoo. Never paste the token itself.',
+    'How does your API handle authentication? For a bearer token, give the environment variable name. For an API key, tell me the header name. Never paste the secret.',
+  modelName: 'What model name should I send in the request? Use the exact name your API expects.',
 };
+const OPTIONAL_MODEL =
+  'I’ve left out the model name. Add one if needed, or test the connection now.';
 const CONNECT =
   'How do I reach your app? Describe your API in your own words, paste a cURL request, or give me a model ID. Share what you know and leave out secrets.';
 const DISCOVER =
@@ -75,6 +79,12 @@ function nextField(connection?: ConnectionDraft, discover = false): Field {
   if (!connection?.url) {
     return 'url';
   }
+  if (connection.authHeader === null) {
+    return 'authHeader';
+  }
+  if (connection.authHeader && connection.authEnv === undefined) {
+    return 'authEnv';
+  }
   if (!connection.body) {
     return 'body';
   }
@@ -84,28 +94,49 @@ function nextField(connection?: ConnectionDraft, discover = false): Field {
   return connection.responsePath === undefined ? 'responsePath' : 'authEnv';
 }
 
+function questionFor(field: Field, connection?: ConnectionDraft): string {
+  if (field === 'authEnv' && connection?.authHeader) {
+    return `Which environment variable holds your API key for ${connection.authHeader}? Give me its name, never the key itself.`;
+  }
+  return QUESTIONS[field];
+}
+
 function ask(draft: SetupDraft, step: Step, content: string): SetupDraft {
   return { ...draft, step, messages: [...draft.messages, { role: 'assistant', content }] };
 }
 
-function advance(draft: SetupDraft, config: Config): SetupDraft {
-  if (!draft.plan?.plugins.length && !(draft.discoverResponse && !targetFor(draft, config))) {
+function advance(draft: SetupDraft, config: Config, offerModel = false): SetupDraft {
+  const target = targetFor(draft, config);
+  // Finish clarifying a described API before switching to questions about the app.
+  const connecting =
+    !target &&
+    (draft.discoverResponse ||
+      draft.connection?.openai ||
+      draft.connection?.authHeader !== undefined);
+  if (!draft.plan?.plugins.length && !connecting) {
     const lastScopeMessage = draft.messages.filter((message) => message.scope).pop();
     const question =
       lastScopeMessage?.role === 'assistant'
         ? lastScopeMessage.content
-        : 'Describe what the app does and what you want to test, leaving out connection details.';
-    return ask(draft, 'scope', 'I’ve kept the connection details here. ' + question);
+        : 'What does your app do, and what should it never do?';
+    const intro = offerModel ? OPTIONAL_MODEL : 'I’ve kept the connection details here.';
+    return ask(draft, 'scope', intro + ' ' + question);
   }
   if (draft.interrupted) {
     const { field, input } = draft.interrupted;
-    return ask({ ...draft, input, interrupted: undefined }, field, QUESTIONS[field]);
+    return ask(
+      { ...draft, input, interrupted: undefined },
+      field,
+      questionFor(field, draft.connection),
+    );
   }
-  if (targetFor(draft, config)) {
+  if (target) {
     return ask(
       draft,
       'ready',
-      'Ready to review. You can still change the connection or ask me to adjust the tests.',
+      offerModel
+        ? OPTIONAL_MODEL
+        : 'Ready to review. You can still change the connection or ask me to adjust the tests.',
     );
   }
   const field = nextField(draft.connection, draft.discoverResponse);
@@ -122,7 +153,7 @@ function advance(draft: SetupDraft, config: Config): SetupDraft {
       'Look for an example JSON request in your API docs. Paste it without secrets and mark where the message goes with {{prompt}}. You can also try an example below, then test the connection.',
     );
   }
-  return ask(draft, field, QUESTIONS[field]);
+  return ask(draft, field, questionFor(field, draft.connection));
 }
 
 function selectedPlan({ plan, excluded }: SetupDraft) {
@@ -173,7 +204,13 @@ function partialConnection(connection?: ConnectionDraft): ProviderOptions | unde
   if (!connection?.url) {
     return undefined;
   }
-  const target = toTarget({ body: {}, responsePath: '', authEnv: '', ...connection });
+  const target = toTarget({
+    body: {},
+    responsePath: '',
+    ...connection,
+    authHeader: connection.authHeader ?? undefined,
+    authEnv: connection.authHeader === null ? '' : (connection.authEnv ?? ''),
+  });
   if (target && !connection.body) {
     delete target.config.body;
   }
@@ -207,14 +244,17 @@ const WHY: Record<Field, string> = {
   url: 'Promptfoo needs a destination to test. Nothing will be sent there until you test the connection or start a run.',
   body: 'Every test prompt will replace {{prompt}} in this JSON before it goes to your app.',
   responsePath: 'Promptfoo grades the reply. This tells it which part of your response to read.',
-  authEnv: 'Promptfoo reads the token at run time. Your setup will only contain the variable name.',
+  authHeader:
+    'I need to know where your API expects the key so I can send it in the correct header.',
+  authEnv:
+    'Promptfoo reads the key locally when you test the connection or run a scan. Your setup only stores the variable name.',
+  modelName:
+    'Some endpoints need a model name to route requests. If your API picks the model, leave this out.',
 };
 
-function localReply(draft: SetupDraft, config: Config, answer: string, field: Field): SetupDraft {
-  const messages: Message[] = [...draft.messages, { role: 'user', content: answer }];
-  const next = { ...draft, messages, input: '' };
+function localHelp(draft: SetupDraft, answer: string, field: Field) {
   if (/^why\??$/i.test(answer)) {
-    return ask(next, field, WHY[field] + ' ' + QUESTIONS[field]);
+    return WHY[field] + ' ' + questionFor(field, draft.connection);
   }
   if (
     draft.plan &&
@@ -223,7 +263,38 @@ function localReply(draft: SetupDraft, config: Config, answer: string, field: Fi
     )
   ) {
     const reasons = draft.plan.plugins.map(({ reason }) => reason).join(' ');
-    return ask(next, field, reasons + ' ' + QUESTIONS[field]);
+    return reasons + ' ' + questionFor(field, draft.connection);
+  }
+  if (
+    (field === 'authHeader' || field === 'authEnv') &&
+    /^(?:(?:i(?:['’]m| am) )?(?:not sure|unsure)|(?:i )?(?:don['’]?t|do not) know|no idea)(?: (?:which|what) (?:header|variable)(?: (?:it uses|to use))?)?[.!?]?$/i.test(
+      answer,
+    )
+  ) {
+    return field === 'authHeader'
+      ? 'Look for X-API-Key or Authorization in your API docs or a working request. Share the header name only. I won’t guess where to send your key.'
+      : 'Choose a name like APP_API_KEY and set the key under that name in the environment where Promptfoo runs. Enter just the variable name here.';
+  }
+}
+
+function chatFormatProposal(connection: ConnectionDraft) {
+  const destination = connection.url ? ' at ' + connection.url : '';
+  const request = Array.isArray(connection.body?.messages)
+    ? 'send a user message'
+    : 'use your request body';
+  const reply =
+    connection.responsePath === undefined
+      ? ''
+      : ' and read ' + (connection.responsePath || 'plain text');
+  return `I suggest OpenAI Chat Completions${destination}. I’d ${request}${reply}. You can change this before testing.`;
+}
+
+function localReply(draft: SetupDraft, config: Config, answer: string, field: Field): SetupDraft {
+  const messages: Message[] = [...draft.messages, { role: 'user', content: answer }];
+  const next = { ...draft, messages, input: '' };
+  const help = localHelp(draft, answer, field);
+  if (help) {
+    return ask(next, field, help);
   }
   if (
     field === 'url' &&
@@ -276,6 +347,9 @@ function localReply(draft: SetupDraft, config: Config, answer: string, field: Fi
           : 'Read the reply from ' + (connection.responsePath || 'plain text') + '.',
     };
   }
+  if (connection.openai && !previous.openai) {
+    messages.push({ role: 'assistant', content: chatFormatProposal(connection) });
+  }
   const updated = {
     ...next,
     connection,
@@ -292,14 +366,20 @@ function localReply(draft: SetupDraft, config: Config, answer: string, field: Fi
       'I’ve kept the connection details here. Check the app description below, remove any private details and send it to choose tests.',
     );
   }
-  return advance(updated, config);
+  const offerModel = Boolean(
+    connection.openai &&
+      connection.modelName === undefined &&
+      toTarget(connection) &&
+      !toTarget(previous),
+  );
+  return advance(updated, config, offerModel);
 }
 
 // Offer only a separate app description for explicit confirmation. All API
 // clauses remain local, including field names and environment references.
 function splitOpening(input: string): { description?: string; details: string } {
   const match = input.match(
-    /^(.+?)(?:\s+at\s+(?=https?:\/\/)|[.!?]\s+(?=(?:post|send|curl|https?:\/\/|the (?:api|endpoint|url))\b))/i,
+    /^(.+?)(?:\s+at\s+(?=https?:\/\/|localhost\b|127\.0\.0\.1\b|\[::1\])|[.!?]\s+(?=(?:post|send|curl|https?:\/\/|the (?:api|endpoint|url))\b))/i,
   );
   if (!match) {
     return { details: input };
@@ -470,7 +550,7 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
         ask({ ...draft, interrupted, input: canMoveSuggestion ? draft.input : '' }, field, prompt),
       );
     } else if (field !== 'scope') {
-      setDraft(ask(draft, field, QUESTIONS[field]));
+      setDraft(ask(draft, field, questionFor(field, draft.connection)));
     }
   }
   function chooseTestedPath(path: string) {
@@ -520,7 +600,8 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
           messages: [...draft.messages, { role: 'user', content: answer }],
         },
         field,
-        'Before testing the connection, I need one more detail. ' + QUESTIONS[field],
+        'Before testing the connection, I need one more detail. ' +
+          questionFor(field, draft.connection),
       ),
     );
   }

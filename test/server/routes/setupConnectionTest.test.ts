@@ -1,3 +1,5 @@
+import { createServer } from 'node:http';
+
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
@@ -81,6 +83,73 @@ describe('local chat connection test', () => {
     expect((await test({ responsePath: 'choices[0].message.content' })).body.success).toBe(true);
   });
 
+  it('explains auth and model errors without revealing the key or error body', async () => {
+    vi.stubEnv('PRIVATE_CHAT_TOKEN', 'private-value');
+    const chat = {
+      authEnv: 'PRIVATE_CHAT_TOKEN',
+      authHeader: 'X-API-Key',
+      body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
+    };
+    fetchTarget.mockResolvedValueOnce(new Response('private-value', { status: 401 }));
+    const auth = await test(chat);
+    expect(auth.body.message).toMatch(/401.*X-API-Key.*PRIVATE_CHAT_TOKEN/);
+    expect(auth.text).not.toContain('private-value');
+    fetchTarget.mockResolvedValueOnce(new Response('private-value', { status: 400 }));
+    const model = await test(chat);
+    expect(model.body.message).toMatch(/400.*model name/);
+    expect(model.text).not.toContain('private-value');
+  });
+
+  it('posts an authenticated Chat Completions message to a real local endpoint', async () => {
+    vi.stubEnv('LOCAL_CHAT_KEY', 'fixture-only');
+    vi.stubEnv('NO_PROXY', '127.0.0.1');
+    const transport = await vi.importActual<typeof import('../../../src/util/fetch/index')>(
+      '../../../src/util/fetch/index',
+    );
+    fetchTarget.mockImplementationOnce(transport.fetchWithProxy);
+    const received: unknown[] = [];
+    const server = createServer(async (req, res) => {
+      let body = '';
+      for await (const chunk of req) {
+        body += chunk;
+      }
+      received.push([
+        req.method,
+        req.url,
+        req.headers['x-api-key'],
+        req.headers.authorization,
+        JSON.parse(body),
+      ]);
+      res.end(JSON.stringify({ choices: [{ message: { content: 'private reply' } }] }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address() as import('node:net').AddressInfo;
+      const res = await test({
+        url: `http://127.0.0.1:${address.port}/chat`,
+        body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
+        responsePath: 'choices[0].message.content',
+        authEnv: 'LOCAL_CHAT_KEY',
+        authHeader: 'X-API-Key',
+      });
+      expect(received).toEqual([
+        [
+          'POST',
+          '/chat',
+          'fixture-only',
+          undefined,
+          { messages: [{ role: 'user', content: 'Hello' }] },
+        ],
+      ]);
+      expect(res.body).toEqual({
+        success: true,
+        message: 'HTTP 200. I read a non-empty reply at choices[0].message.content.',
+      });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it.each([
     ['Hello', '', true, 'non-empty text'],
     ['Hello', 'result.answer', false, 'plain text'],
@@ -152,6 +221,12 @@ describe('local chat connection test', () => {
     { body: { input: '{{prompt}}', more: { $ref: 'local.json' } } },
     { body: { input: 'Hello' } },
     { authEnv: 'Bearer secret' },
+    { authHeader: 'X-API-Key', authEnv: '' },
+    { authHeader: 'Host', authEnv: 'KEY' },
+    { authHeader: 'X-Api-Key\r\nHost: private.example', authEnv: 'KEY' },
+    { authHeader: 'Proxy-Authorization', authEnv: 'KEY' },
+    { authHeader: 'X-Forwarded-Host', authEnv: 'KEY' },
+    { authHeader: 'X-Promptfoo-Silent', authEnv: 'KEY' },
     { providerOptions: { id: 'exec:script.sh' } },
   ])('rejects invalid or executable input before contacting the target %j', async (data) => {
     expect((await test(data)).status).toBe(400);

@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useConnectionTest } from '../hooks/useConnectionTest';
 import { type Field, isField, type SetupDraft, useSetupAgent } from '../hooks/useSetupAgent';
-import SetupPlan from './SetupPlan';
+import SetupPlan, { ConnectionSummary } from './SetupPlan';
 import { getEstimatedProbes } from './strategies/utils';
 
 import type { Config } from '../types';
@@ -29,14 +29,18 @@ const OPENING = 'Describe your app and what could go wrong.';
 const EXAMPLES: Partial<Record<Field, string[]>> = {
   body: ['message', 'prompt'],
   responsePath: ['response', 'Plain text'],
+  authHeader: ['X-API-Key', 'Authorization: Bearer'],
   authEnv: ['No auth'],
+  modelName: ['Skip model name'],
 };
 const PLACEHOLDERS: Record<SetupDraft['step'], string> = {
   scope: 'Message the setup agent…',
   url: 'I POST to https://example.com/chat with a message field. Read result.text. No auth.',
   body: 'The prompt goes in the message field…',
   responsePath: 'The answer is in result.text…',
-  authEnv: 'No auth, or a bearer token from APP_TOKEN…',
+  authHeader: 'Header name, e.g. X-API-Key',
+  authEnv: 'Environment variable name, e.g. APP_API_KEY',
+  modelName: 'Model name your API expects…',
   ready: 'Ask for changes…',
 };
 
@@ -76,6 +80,10 @@ function Composer({
     }
   }, [draft.messages.length, draft.step, draft.demo, busy, error, testFailed, check.paths.length]);
   const PrivacyIcon = local ? LockKeyhole : Cloud;
+  const placeholder =
+    draft.step === 'scope' && agent.connected && !draft.plan
+      ? 'Describe what you want to test…'
+      : PLACEHOLDERS[draft.step];
   return (
     <form
       className="shrink-0"
@@ -106,7 +114,7 @@ function Composer({
           readOnly={busy}
           placeholder={
             started
-              ? PLACEHOLDERS[draft.step]
+              ? placeholder
               : 'My support bot looks up orders. Customers should only see their own…'
           }
           maxLength={local ? 16000 : 2000}
@@ -213,6 +221,12 @@ function LocalActions({
   const { pending, replacing, proposed } = agent;
   const busy = pending || check.testing;
   const idle = !busy && !draft.input.trim();
+  const examples =
+    step === 'modelName' && draft.connection?.modelName
+      ? ['Remove model name']
+      : step === 'authEnv' && draft.connection?.authHeader
+        ? undefined
+        : EXAMPLES[step];
   return (
     <div className="flex flex-wrap items-center gap-2">
       {((step === 'url' && !draft.deferred) || agent.connected) && (
@@ -230,9 +244,9 @@ function LocalActions({
           </Button>
         </div>
       )}
-      {EXAMPLES[step] && !(step === 'responsePath' && check.paths.length > 0) && (
+      {examples && !(step === 'responsePath' && check.paths.length > 0) && (
         <div className="flex flex-wrap gap-2">
-          {EXAMPLES[step].map((example) => (
+          {examples.map((example) => (
             <Button
               key={example}
               size="sm"
@@ -331,7 +345,8 @@ function SetupActions({
               className="mt-1.5 text-xs text-muted-foreground wrap-anywhere"
             >
               Sends one “Hello” to {check.destination}
-              {check.authEnv && ` using ${check.authEnv}`}
+              {check.authEnv &&
+                ` using ${check.authEnv} in ${check.authHeader === 'Authorization' ? 'Authorization (Bearer)' : check.authHeader}`}
             </p>
           </div>
         )}
@@ -488,6 +503,27 @@ function Conversation({
             <Button variant="outline" size="sm" onClick={agent.resume} disabled={!idle}>
               {draft.interrupted ? 'Back to connection' : 'Keep previous tests'}
             </Button>
+          )}
+          {step === 'scope' && !plan && agent.target && draft.connection?.openai && (
+            <>
+              {testResult && !check.paths.length && (
+                <p className="text-sm">
+                  To choose tests, tell me what the app does and what could go wrong.
+                </p>
+              )}
+              <fieldset
+                disabled={!idle}
+                aria-label="Proposed connection"
+                className="min-w-0 rounded-xl border border-border bg-card text-sm"
+              >
+                <ConnectionSummary
+                  target={agent.target}
+                  draft={draft}
+                  edit={agent.edit}
+                  status={check.available ? (check.status ?? 'untested') : undefined}
+                />
+              </fieldset>
+            </>
           )}
           {ready && proposed && (
             <SetupPlan

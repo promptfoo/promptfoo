@@ -14,12 +14,12 @@ const requestTest =
 const unavailable = 'Couldn’t finish the connection test. Check your local server before retrying.';
 
 // Only offer to test a request we can reproduce. Custom providers, transforms,
-// headers and other imported settings need the full manual provider tester.
+// extra headers and other imported settings need the full manual provider tester.
 function connectionFor(draft: SetupDraft, target?: ProviderOptions): SetupConnection | undefined {
   if (draft.connection) {
-    const { url, body, responsePath, authEnv } = draft.connection;
-    if (url && body && authEnv !== undefined) {
-      return { url, body, responsePath, authEnv };
+    const { url, body, responsePath, authEnv, authHeader } = draft.connection;
+    if (url && body && authEnv !== undefined && authHeader !== null) {
+      return { url, body, responsePath, authEnv, authHeader };
     }
     return undefined;
   }
@@ -36,11 +36,19 @@ function connectionFor(draft: SetupDraft, target?: ProviderOptions): SetupConnec
   if (typeof url !== 'string' || !body || responsePath === undefined) {
     return undefined;
   }
+  const [name, value] = Object.entries(headers ?? {}).find(([key]) => key !== 'Content-Type') ?? [];
+  const authHeader = name === 'Authorization' ? undefined : name;
   const authEnv =
-    typeof headers?.Authorization === 'string'
-      ? headers.Authorization.match(/^Bearer \{\{env\.([A-Z_][A-Z0-9_]*)\}\}$/)?.[1]
+    typeof value === 'string'
+      ? value.match(/^(?:Bearer )?\{\{env\.([A-Z_][A-Z0-9_]*)\}\}$/)?.[1]
       : '';
-  const parsed = SetupConnectionTest.Request.safeParse({ url, body, responsePath, authEnv });
+  const parsed = SetupConnectionTest.Request.safeParse({
+    url,
+    body,
+    responsePath,
+    authEnv,
+    authHeader,
+  });
   if (!parsed.success) {
     return undefined;
   }
@@ -154,6 +162,7 @@ export function useConnectionTest(
     available: !!connection,
     destination,
     authEnv: connection?.authEnv,
+    authHeader: connection?.authEnv ? (connection.authHeader ?? 'Authorization') : undefined,
     testing,
     status,
     paths: connection && isEqual(draft.tested?.target, target) ? (draft.tested?.paths ?? []) : [],

@@ -17,14 +17,19 @@ export function containsConnectionDetails(value: string): boolean {
 const maxBytes = 256 * 1024;
 const failure = (message: string) => ({ success: false, message });
 
-function httpError(status: number) {
+function httpError(status: number, connection: SetupConnection) {
   let hint = 'Check your endpoint and try again.';
   if (status >= 300 && status < 400) {
     hint = 'Your endpoint redirected the request. Use the final URL directly.';
   } else if (status === 401 || status === 403) {
-    hint = 'Check the bearer token variable and whether it has access to this endpoint.';
+    hint = connection.authEnv
+      ? `Check that ${connection.authHeader ?? 'Authorization'} is the right header and ${connection.authEnv} has access to this endpoint.`
+      : 'Does this endpoint need an API key or bearer token?';
   } else if (status === 400 || status === 422 || status === 415) {
-    hint = 'Check the JSON request body and the field your API expects.';
+    hint =
+      Array.isArray(connection.body.messages) && !connection.body.model
+        ? 'Check whether your API needs a model name. You can add it in chat and test again.'
+        : 'Check the JSON request body and the field your API expects.';
   } else if (status === 404 || status === 405) {
     hint = 'Check the URL and whether it accepts POST requests.';
   } else if (status === 429) {
@@ -141,7 +146,7 @@ export async function testSetupConnection(connection: SetupConnection, signal: A
       target.protocol !== 'https:' &&
       !['localhost', '127.0.0.1', '[::1]'].includes(target.hostname)
     ) {
-      return failure('Use HTTPS to send a bearer token outside localhost.');
+      return failure('Use HTTPS to send credentials outside localhost.');
     }
     token = getEnvOverrides('file')?.[authEnv] ?? process.env[authEnv];
     if (!token) {
@@ -149,7 +154,8 @@ export async function testSetupConnection(connection: SetupConnection, signal: A
         `Set ${authEnv} where Promptfoo runs, then restart Promptfoo and test again. No message was sent.`,
       );
     }
-    headers.Authorization = 'Bearer ' + token;
+    const header = connection.authHeader ?? 'Authorization';
+    headers[header] = header.toLowerCase() === 'authorization' ? 'Bearer ' + token : token;
   }
 
   // A single, uncached request. Do not evaluate templates, load providers, or invoke Cloud grading.
@@ -166,7 +172,7 @@ export async function testSetupConnection(connection: SetupConnection, signal: A
   });
   if (!response.ok) {
     await response.body?.cancel();
-    return httpError(response.status);
+    return httpError(response.status, connection);
   }
   const text = await readBoundedText(response, maxBytes + 1);
   if (Buffer.byteLength(text) > maxBytes) {

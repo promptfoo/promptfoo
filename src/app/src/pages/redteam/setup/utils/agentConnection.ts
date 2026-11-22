@@ -2,8 +2,13 @@ import {
   looksLikeCredentialValue,
   looksLikeRequestCredentialParameter,
 } from '@app/stores/evalConfig';
-import { isSetupReplyPath } from '@promptfoo/types/api/redteamSetup';
-import { readConnectionSlots } from './agentConnectionLanguage';
+import {
+  authHeaderName,
+  type Field,
+  readConnectionSlots,
+  replyField,
+  type Slots,
+} from './agentConnectionLanguage';
 
 import type { ProviderOptions } from '../types';
 
@@ -12,21 +17,25 @@ export interface ConnectionDraft {
   body?: Record<string, unknown>;
   responsePath?: string;
   authEnv?: string;
+  // null means the user requested a key but hasn't named the header.
+  authHeader?: string | null;
+  openai?: boolean;
+  modelName?: string;
   model?: string;
 }
-type Field = 'url' | 'body' | 'responsePath' | 'authEnv';
+const loopback = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:[/?#]|$)/i;
 
 const prompt = '{{prompt}}';
 const key = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const reserved = /^(?:__proto__|prototype|constructor)$/;
 const unsafe = /\{[{%#]|\$\{|file:\/\//i;
-const secretError = 'Leave out secrets. For bearer auth, give the environment variable name only.';
+const secretError = 'Leave out secrets. Give the environment variable name that holds your key.';
 const pathError =
   'Give the JSON field that holds the reply, like result.answer or choices[0].message.content, or say “plain text”.';
 const bodyError =
   'Give the input field name or paste a JSON object with {{prompt}} where the message goes.';
 const curlError =
-  'Use a POST cURL with a JSON body, or enter the URL alone. For other methods or custom headers, use manual setup.';
+  'Use a POST cURL with a JSON body, or enter the URL alone. For other methods or non-authentication headers, use manual setup.';
 
 function modelId(value: string): boolean {
   // Only text model providers. Never interpret file, executable or coding agent IDs.
@@ -36,6 +45,9 @@ function modelId(value: string): boolean {
 }
 
 function endpoint(value: string): string {
+  if (loopback.test(value)) {
+    value = 'http://' + value;
+  }
   if (looksLikeCredentialValue(value)) {
     throw new Error(secretError);
   }
@@ -156,9 +168,8 @@ function responsePath(answer: string): string {
     }
     return responsePath(path);
   }
-  const path = value.replace(/^(?:json|\$)\./, '');
-  // The HTTP provider evaluates transformResponse. Accept property reads only.
-  if (!isSetupReplyPath(path)) {
+  const path = replyField(value);
+  if (!path) {
     throw new Error(pathError);
   }
   return path;
@@ -175,9 +186,9 @@ function authEnv(value: string): string {
   const name = value
     .replace(/^(?:bearer(?: token (?:in|from))?\s+|env(?:ironment variable)?\s+)/i, '')
     .replace(/^(?:\$\{(\w+)\}|\{\{\s*env\.(\w+)\s*\}\}|\$(\w+))$/, '$1$2$3');
-  if (!/^[A-Z_][A-Z0-9_]*$/.test(name) || looksLikeCredentialValue(name)) {
+  if (!/^[A-Z_][A-Z0-9_]{0,127}$/.test(name) || looksLikeCredentialValue(name)) {
     throw new Error(
-      'Enter the bearer token’s environment variable name, like APP_TOKEN, or say “no auth”. Never paste the token.',
+      'Enter the environment variable name, like APP_TOKEN, or say “no auth”. Never paste the key.',
     );
   }
   return name;
@@ -189,7 +200,7 @@ function parseCurl(input: string): ConnectionDraft {
   const draft: ConnectionDraft = {};
   for (let i = 1; i < tokens.length; i++) {
     const token = unquote(tokens[i]);
-    if (/^https?:/i.test(token) && !draft.url) {
+    if ((/^https?:/i.test(token) || loopback.test(token)) && !draft.url) {
       draft.url = endpoint(token);
       continue;
     }
@@ -204,14 +215,18 @@ function parseCurl(input: string): ConnectionDraft {
         continue;
       }
       const auth = value.match(
-        /^authorization:\s*bearer\s+(\$\w+|\$\{\w+\}|\{\{\s*env\.\w+\s*\}\})$/i,
+        /^([\w-]+):\s*(bearer\s+)?(\$\w+|\$\{\w+\}|\{\{\s*env\.\w+\s*\}\})$/i,
       );
-      if (!auth || draft.authEnv) {
+      const name = auth && authHeaderName(auth[1]);
+      if (!auth || draft.authEnv || !name || (name === 'Authorization') !== Boolean(auth[2])) {
         throw new Error(
-          'Only JSON and bearer environment variable headers are supported here. Remove any secrets or use manual setup.',
+          'Use a single authentication header with an environment variable. Remove secrets or use manual setup.',
         );
       }
-      draft.authEnv = authEnv(auth[1]);
+      if (!auth[2]) {
+        draft.authHeader = name;
+      }
+      draft.authEnv = authEnv(auth[3]);
     } else {
       throw new Error(curlError);
     }
@@ -231,7 +246,17 @@ export function parseConnection(
   draft: ConnectionDraft,
   field: Field,
 ): ConnectionDraft {
-  const value = answer.trim();
+  const next = readConnection(answer.trim(), draft, field);
+  if (next.url && next.authEnv) {
+    const url = new URL(next.url);
+    if (url.protocol !== 'https:' && !loopback.test(url.hostname)) {
+      throw new Error('Use HTTPS to send credentials outside localhost. What is the secure URL?');
+    }
+  }
+  return next;
+}
+
+function readConnection(value: string, draft: ConnectionDraft, field: Field): ConnectionDraft {
   if (/^curl\s/i.test(value)) {
     return parseCurl(value);
   }
@@ -240,9 +265,22 @@ export function parseConnection(
       /^(?:actually[, ]+)?(?:use|switch to|try|the model is) (\S+?)(?: instead)?[.!]?$/i,
     )?.[1] ?? value;
   if (modelId(model)) {
+    const switchProvider = /^(?:actually[, ]+)?switch to /i.test(value);
+    if (field === 'modelName' || (draft.openai && !switchProvider)) {
+      const next = { ...draft };
+      updateModelName(next, { modelName: model });
+      return next;
+    }
     return { model };
   }
-  const slots = connectionSlots(value, field);
+  const slots = connectionSlots(
+    field === 'modelName' && model !== value && !model.includes('://') ? model : value,
+    field,
+  );
+  return applySlots(draft, slots);
+}
+
+function applySlots(draft: ConnectionDraft, slots: Slots): ConnectionDraft {
   const url = slots.url ? endpoint(slots.url) : draft.url;
   // Keep answers given before the URL, but never send a previous host's
   // credentials or request body to a different origin.
@@ -251,6 +289,11 @@ export function parseConnection(
   const next: ConnectionDraft = replacing ? {} : { ...draft };
   if (url) {
     next.url = url;
+  }
+  if (slots.openai && !next.openai) {
+    next.openai = true;
+    next.body = { messages: [{ role: 'user', content: prompt }] };
+    next.responsePath = 'choices[0].message.content';
   }
   for (const field of ['body', 'responsePath', 'authEnv'] as const) {
     const value = slots[field];
@@ -274,14 +317,76 @@ export function parseConnection(
       delete next[field];
     }
   }
+  updateAuthHeader(next, slots);
+  updateModelName(next, slots);
   return next;
 }
 
-function connectionSlots(value: string, field: Field): Partial<Record<Field, string | null>> {
+function updateAuthHeader(next: ConnectionDraft, slots: Slots) {
+  if (slots.authEnv !== undefined && next.authEnv === '') {
+    delete next.authHeader;
+    return;
+  }
+  const header = slots.authHeader;
+  if (header === undefined) {
+    return;
+  }
+  if (next.authEnv === '') {
+    delete next.authEnv;
+  }
+  const name = header && authHeaderName(header);
+  if (name === 'Authorization') {
+    if (next.authHeader !== undefined || slots.authEnv === undefined || next.openai) {
+      next.authHeader = 'Authorization';
+    }
+  } else if (header === null || name) {
+    next.authHeader = header;
+  } else {
+    throw new Error(
+      'Choose X-API-Key or Authorization: Bearer, or use manual setup for other headers. Never paste a key here.',
+    );
+  }
+}
+
+function updateModelName(next: ConnectionDraft, slots: Slots) {
+  if (slots.body?.startsWith('{') && next.openai) {
+    next.modelName = typeof next.body?.model === 'string' ? next.body.model : '';
+  }
+  const name = slots.modelName ?? next.modelName;
+  if (name === undefined) {
+    return;
+  }
+  if (
+    name &&
+    (!/^[a-z0-9][\w.:/-]{0,199}$/i.test(name) ||
+      name.includes('://') ||
+      /^sk-/i.test(name) ||
+      looksLikeCredentialValue(name))
+  ) {
+    throw new Error('Give the model name without credentials, URLs, or templates.');
+  }
+  next.modelName = name;
+  if (next.body) {
+    next.body = { ...next.body };
+    if (name) {
+      next.body.model = name;
+    } else {
+      delete next.body.model;
+    }
+  }
+}
+
+function connectionSlots(value: string, field: Field): Slots {
   // Keep standalone values intact, particularly JSON, expressions and URLs.
   // The prose reader must never turn a rejected expression into a valid field.
-  if (/^https?:\/\/\S+$/i.test(value)) {
+  if (/^https?:\/\/\S+$/i.test(value) || (loopback.test(value) && !/\s/.test(value))) {
     return { url: value };
+  }
+  if (
+    field === 'modelName' &&
+    /^(?:skip|none|remove|omit|no)(?: (?:the )?model(?: name)?)?[.!]?$/i.test(value)
+  ) {
+    return { modelName: '' };
   }
   if (/^(?:plain|raw) text$/i.test(value)) {
     return { responsePath: value };
@@ -290,6 +395,13 @@ function connectionSlots(value: string, field: Field): Partial<Record<Field, str
     return field === 'responsePath' ? { responsePath: value } : { body: value };
   }
   if (!/\s/.test(value)) {
+    const header = /^bearer$/i.test(value) ? 'Authorization' : authHeaderName(value);
+    if (header) {
+      return { authHeader: header };
+    }
+    if (/^openai-(?:compatible|style|like)$/i.test(value)) {
+      return { openai: true };
+    }
     if (/^(?:[A-Z][A-Z0-9_]+_(?:TOKEN|KEY)|\$[A-Z_][A-Z0-9_]*)$/.test(value)) {
       return { authEnv: value };
     }
@@ -307,13 +419,23 @@ export function toTarget(draft: ConnectionDraft): ProviderOptions | undefined {
     !draft.url ||
     !draft.body ||
     draft.responsePath === undefined ||
-    draft.authEnv === undefined
+    draft.authEnv === undefined ||
+    draft.authHeader === null
   ) {
     return undefined;
   }
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (draft.authEnv) {
-    headers.Authorization = 'Bearer {{env.' + authEnv(draft.authEnv) + '}}';
+    const header = authHeaderName(draft.authHeader || 'Authorization');
+    if (!header) {
+      return undefined;
+    }
+    const variable = '{{env.' + authEnv(draft.authEnv) + '}}';
+    if (header === 'Authorization') {
+      headers.Authorization = 'Bearer ' + variable;
+    } else {
+      headers[header] = variable;
+    }
   }
   return {
     id: 'http',
@@ -322,6 +444,8 @@ export function toTarget(draft: ConnectionDraft): ProviderOptions | undefined {
       url: draft.url,
       method: 'POST',
       headers,
+      // Fetch forwards custom headers across origins on redirects.
+      ...(draft.authEnv && !headers.Authorization && { redirect: 'error' as const }),
       body: draft.body,
       transformResponse: draft.responsePath
         ? 'json.' + responsePath('json.' + draft.responsePath)

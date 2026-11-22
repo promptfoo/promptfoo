@@ -4,9 +4,10 @@ import {
   looksLikeCredentialValue,
   looksLikeRequestCredentialParameter,
 } from '@app/stores/evalConfig';
+import { isSetupAuthHeader, isSetupReplyPath } from '@promptfoo/types/api/redteamSetup';
 
-type Field = 'url' | 'body' | 'responsePath' | 'authEnv';
-type Slots = Partial<Record<Field, string | null>>;
+export type Field = 'url' | 'body' | 'responsePath' | 'authEnv' | 'authHeader' | 'modelName';
+export type Slots = Partial<Record<Field, string | null>> & { openai?: boolean };
 type Token = { value: string; word: string; kind: 'word' | 'literal' | 'url' | 'json' };
 const words = (value: string) => new Set(value.split(' '));
 const requestVerbs = words(
@@ -17,9 +18,11 @@ const replyVerbs = words(
 );
 const requestNouns = words('request body input payload prompt question message query');
 const replyNouns = words('response reply answer output result');
-const authWords = words('auth authentication authorization bearer token credentials authenticated');
+const authWords = words(
+  'auth authentication authorization bearer token credentials authenticated header env environment variable',
+);
 const authContext = words(
-  'http api json no yes post auth authentication authorization bearer token required needed env environment variable from in using via provided stored named called set',
+  'http no yes post required needed via provided stored uses var need needs require requires expects custom put pass send : =',
 );
 const separators = words('. , ; ! ? and but then -> →');
 const locators = words('under at in from as named called key field property parameter into to use');
@@ -28,23 +31,60 @@ const scaffolding = words(
 );
 const filler = new Set([...scaffolding, ...locators, ...requestVerbs, ...replyVerbs]);
 const nouns = new Set([...requestNouns, ...replyNouns]);
-const authFiller = new Set([...authContext, ...scaffolding]);
+const authFiller = new Set([...authContext, ...authWords, ...scaffolding, ...locators]);
 const pathLike = /\b\w+(?:\[\d+\])?\.\w+\b/;
 const unknown = /\b(?:unsure|unknown|not sure|don['’]?t know|do not know|no idea)\b/i;
 const unsupported =
-  'I can set up POST requests with a JSON body and optional bearer auth. Use manual setup for other methods or headers.';
+  'I can set up JSON POST requests with bearer auth or an API key header. Use manual setup for other methods or headers.';
+const unsupportedHeader =
+  'This header needs manual setup. Chat supports common authentication headers such as X-API-Key and Authorization: Bearer.';
 const credentialError =
-  'Leave out secrets. For bearer auth, give the environment variable name only.';
+  'Leave out secrets. Give the environment variable name that holds your key.';
+
+export function authHeaderName(value: string): string | undefined {
+  if (!isSetupAuthHeader(value)) {
+    return undefined;
+  }
+  return value.toLowerCase() === 'authorization' ? 'Authorization' : value;
+}
+
+export function replyField(value: string): string | undefined {
+  // The HTTP provider evaluates transformResponse. Accept property reads only.
+  const path = value.replace(/^(?:json|\$)\./, '');
+  return isSetupReplyPath(path) ? path : undefined;
+}
+
+// Recognize bare addresses locally, but only infer HTTP for an exact loopback host.
+const address = /(?:^|[\s"'`])(?:localhost\b|\[::1\]|127\.0\.0\.1\b|[\w.-]+:\d+|[\w.-]+\.\w+\/)/i;
+const chatFormat =
+  /\b(?:openai[- ](?:compatible|style|like|format|chat)|(?:like|similar to|same as|format (?:as|to|of)) (?:the )?openai|chat completions?)\b/i;
+const skipModel =
+  /^(?:(?:please )?(?:skip|remove|omit|no|without)(?: the)? model(?: name)?|(?:a |the )?model(?: name)? (?:is )?(?:not (?:needed|required)|optional)|i (?:don['’]t know|am not sure of) (?:the )?model(?: name)?)[.!]?$/i;
+const modelAssignment =
+  /^(?:(?:actually|please)[, ]+)?(?:(?:use|add|set|change|switch to) )?(?:(?:a|the|my|our) )?model(?: name)?(?:[ :=]+(?:(?:is|to|named|called) )?["'`]?[^\s,"'`]+["'`]?[.!]?)$/i;
+const formatWords = words(
+  'similar format like compatible compatibility style same uses except needs matches follows based on',
+);
 
 // Free-form scope messages go to Cloud. A machine value or a clear field
 // assignment stays local, even if the connection is already complete.
 export function connectionIntent(input: string, ready: boolean): Field | undefined {
   if (
+    address.test(input) ||
     /\w+:\/\/|\bcurl\s|\b(?:openai|anthropic|ollama|google|file|exec|python|javascript):\S/i.test(
       input,
     )
   ) {
     return 'url';
+  }
+  if (
+    /\b(?:x-[\w-]*(?:key|token|auth)|api-key)\b/i.test(input) ||
+    /^authorization$/i.test(input.trim())
+  ) {
+    return 'authHeader';
+  }
+  if (chatFormat.test(input) || skipModel.test(input) || modelAssignment.test(input)) {
+    return 'modelName';
   }
   if (input.includes('{')) {
     return 'body';
@@ -53,7 +93,7 @@ export function connectionIntent(input: string, ready: boolean): Field | undefin
     /\b(?:authorization|api[-_ ]?key|password|token)\s*(?:[:=]|is\s+\S+)|\bno auth(?:entication)?\b/i.test(
       input,
     ) ||
-    /\b[A-Z][A-Z0-9_]+_(?:TOKEN|KEY)\b/.test(input)
+    /\b[A-Z][A-Z0-9_]+_(?:TOKEN|KEY)\b|\bsk-[\w-]{8}/.test(input)
   ) {
     return 'authEnv';
   }
@@ -63,6 +103,10 @@ export function connectionIntent(input: string, ready: boolean): Field | undefin
   if (/\bbearer\b/i.test(input) && !/\bbearer token[.!?]?$/i.test(input)) {
     return 'authEnv';
   }
+  return fieldIntent(input, ready);
+}
+
+function fieldIntent(input: string, ready: boolean): Field | undefined {
   const cues: string[] = input.toLowerCase().match(/\b[\w.]+\b/g) ?? [];
   const request = cues.some((word) => requestVerbs.has(word) || requestNouns.has(word));
   const reply = cues.some((word) => replyVerbs.has(word) || replyNouns.has(word));
@@ -121,7 +165,8 @@ function token(value: string, kind: Token['kind'] = 'word'): Token {
 
 function tokenize(text: string): Token[] {
   const tokens: Token[] = [];
-  const lexeme = /https?:\/\/[^\s<>"'`]+|\$\{\w+\}|\{\{[^}]*\}\}|[\w$][\w$’'\[\].-]*|->|[^\s]/gi;
+  const lexeme =
+    /https?:\/\/[^\s<>"'`]+|(?:localhost\b|\[::1\]|127\.0\.0\.1\b|[\w.@-]+:\d+|[\w.-]+\.\w+\/)[^\s<>"'`]*|\$\{\w+\}|\{\{[^}]*\}\}|[\w$][\w$’'\[\].-]*|->|[^\s]/gi;
   let match: RegExpExecArray | null;
   while ((match = lexeme.exec(text))) {
     const original = match[0];
@@ -137,7 +182,11 @@ function tokenize(text: string): Token[] {
         tokens.push(
           token(
             value,
-            /^https?:\/\//i.test(value) ? 'url' : value.startsWith('{') ? 'json' : 'literal',
+            /^https?:\/\//i.test(value) || address.test(value)
+              ? 'url'
+              : value.startsWith('{')
+                ? 'json'
+                : 'literal',
           ),
         );
         lexeme.lastIndex = end + 1;
@@ -145,7 +194,7 @@ function tokenize(text: string): Token[] {
       }
     }
     const value = original.length > 1 ? original.replace(/[.,;!]$/, '') : original;
-    tokens.push(token(value, /^https?:\/\//i.test(value) ? 'url' : 'word'));
+    tokens.push(token(value, /^https?:\/\//i.test(value) || address.test(value) ? 'url' : 'word'));
     if (original !== value) {
       tokens.push(token(original.slice(-1)));
     }
@@ -155,7 +204,12 @@ function tokenize(text: string): Token[] {
 
 function role(token: Token, previous?: Token): Field | undefined {
   const { word } = token;
-  if (authWords.has(word) || (word === 'key' && previous?.word === 'api')) {
+  if (
+    authWords.has(word) ||
+    isSetupAuthHeader(token.value) ||
+    /^(?:[A-Z][A-Z0-9_]*_(?:KEY|TOKEN|AUTH)|\$[A-Z_][A-Z0-9_]*)$/.test(token.value) ||
+    (word === 'key' && previous?.word === 'api')
+  ) {
     return 'authEnv';
   }
   if (requestVerbs.has(word) || requestNouns.has(word)) {
@@ -166,48 +220,99 @@ function role(token: Token, previous?: Token): Field | undefined {
   }
 }
 
-function authValue(tokens: Token[], text: string): string | null {
+function readAuth(tokens: Token[], slots: Slots, fallback: Field) {
+  const text = tokens.map((t) => t.word).join(' ');
+  // Keep the explicitly chosen header in “use X instead of Y”.
+  const headers = tokens.filter(
+    (t, i) =>
+      isSetupAuthHeader(t.value) &&
+      !(tokens[i - 2]?.word === 'instead' && tokens[i - 1]?.word === 'of'),
+  );
+  const alternatives = tokens.filter((t) => isSetupAuthHeader(t.value) && !headers.includes(t));
   const names = tokens.filter(
     ({ value }) =>
       /^(?:\$\{?\w+\}?|\{\{\s*env\.\w+\s*\}\}|[A-Z][A-Z0-9_]+)$/.test(value) &&
-      !authContext.has(value.toLowerCase()),
+      !authFiller.has(value.toLowerCase()) &&
+      !isSetupAuthHeader(value),
   );
-  // Reject unexplained values following bearer/token (including pasted secrets)
-  // even if another part of the sentence also names an environment variable.
-  const credential = tokens.findIndex((t) => t.word === 'bearer' || t.word === 'token');
+  if (headers.length > 1) {
+    throw new Error(
+      'Give one authentication header, for example X-API-Key or Authorization: Bearer.',
+    );
+  }
+  if (/\b(?:basic|cookie|oauth)\b/i.test(text) || names.length > 1) {
+    throw new Error(unsupported);
+  }
+  if (
+    tokens.some((t) => t.word === 'header') &&
+    tokens.some(
+      (t) =>
+        !isSetupAuthHeader(t.value) &&
+        (t.value.includes('-') ||
+          ['host', 'origin', 'connection', 'referer', 'cookie', 'forwarded'].includes(t.word)),
+    )
+  ) {
+    throw new Error(unsupportedHeader);
+  }
+  const credential = tokens.findIndex(
+    (t) => isSetupAuthHeader(t.value) || ['bearer', 'token', 'key', 'header'].includes(t.word),
+  );
   if (
     credential >= 0 &&
-    tokens.slice(credential + 1).some((t) => !names.includes(t) && !authFiller.has(t.word))
+    tokens
+      .slice(credential + 1)
+      .some(
+        (t) =>
+          !names.includes(t) &&
+          !headers.includes(t) &&
+          !alternatives.includes(t) &&
+          !authFiller.has(t.word),
+      )
   ) {
     throw new Error(credentialError);
   }
-  if (/\bauthorization\s*:/i.test(text) && !tokens.some((t) => t.word === 'bearer')) {
-    throw new Error(unsupported);
+  if (alternatives.length && !headers.length) {
+    slots.authHeader = null;
+    return;
   }
   if (unknown.test(text)) {
-    return null;
+    slots[fallback === 'authHeader' ? 'authHeader' : 'authEnv'] = null;
+    return;
   }
   if (
     /\b(?:none|public|no|without|(?:doesn['’]?t|does not) (?:need|require)|(?:not|isn['’]?t) (?:needed|required))\b/i.test(
       text,
     )
   ) {
-    if (names.length) {
-      return null;
+    if (names.length || headers.length || slots.authHeader !== undefined || slots.authEnv) {
+      throw new Error('Do you want to use an API key or no authentication?');
     }
-    return 'No auth';
+    slots.authEnv = 'No auth';
+    return;
   }
-  if (names.length > 1 || /\b(?:basic|cookie|oauth|api[- ]key)\b/i.test(text)) {
-    throw new Error(unsupported);
+  const bearer = tokens.some((t) => t.word === 'bearer');
+  const header = headers[0]?.value || (bearer ? 'Authorization' : undefined);
+  if (
+    (bearer && header?.toLowerCase() !== 'authorization') ||
+    slots.authEnv === 'No auth' ||
+    (header && slots.authHeader && header.toLowerCase() !== slots.authHeader.toLowerCase())
+  ) {
+    throw new Error('Which authentication header should I use? Give one header name.');
   }
-  return names[0]?.value ?? null;
+  if (header) {
+    slots.authHeader = header;
+  } else if (!slots.authHeader && /\b(?:header|api key|key)\b/i.test(text)) {
+    slots.authHeader = null;
+  }
+  if (names.length) {
+    slots.authEnv = names[0].value;
+  } else if (slots.authHeader === undefined) {
+    slots.authEnv = null;
+  }
 }
 
 function fieldValue(tokens: Token[], field: Field): string | null {
   const text = tokens.map((t) => t.word).join(' ');
-  if (field === 'authEnv') {
-    return authValue(tokens, text);
-  }
   if (unknown.test(text) || /\bor\b/i.test(text)) {
     return null;
   }
@@ -267,11 +372,22 @@ function readClause(tokens: Token[], slots: Slots, fallback: Field, continuation
       }
       return;
     }
+    if (chosen === 'authEnv' || chosen === 'authHeader') {
+      readAuth(part, slots, fallback);
+      return;
+    }
     if (chosen === 'body' && part.every((t) => filler.has(t.word))) {
       // "POST to URL" on its own doesn't change an earlier body.
       return;
     }
     const value = fieldValue(part, chosen);
+    if (
+      value === null &&
+      slots.openai &&
+      part.every((t) => filler.has(t.word) || nouns.has(t.word))
+    ) {
+      return; // "Same request and response format as OpenAI" uses the inferred fields.
+    }
     if (slots[chosen] != null && value && slots[chosen] !== value) {
       throw new Error('I found two different values for the same setting. Which one should I use?');
     }
@@ -303,26 +419,33 @@ function readClause(tokens: Token[], slots: Slots, fallback: Field, continuation
 
 function checkToken(value: string, next: Token | undefined) {
   if (
+    !isSetupAuthHeader(value) &&
+    (/^x-/i.test(value) ||
+      (next?.word === ':' &&
+        /^(?:host|origin|connection|forwarded|proxy-.+|content-.+|authorization|cookie)$/i.test(
+          value,
+        )))
+  ) {
+    throw new Error(unsupportedHeader);
+  }
+  if (
     looksLikeCredentialValue(value) ||
+    /^sk-/i.test(value) ||
+    (value === '@' && next?.kind === 'url') ||
     /^password$/i.test(value) ||
     ((['=', ':'].includes(next?.value ?? '') ||
       (next?.value === 'is' && value.toLowerCase() !== 'token')) &&
       looksLikeRequestCredentialParameter(value) &&
-      value.toLowerCase() !== 'authorization')
+      !isSetupAuthHeader(value))
   ) {
     throw new Error(credentialError);
   }
   const method = value.toUpperCase();
   if (
-    ['PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'COOKIE', 'COOKIES', 'OAUTH', 'X-API-KEY'].includes(
-      method,
-    ) ||
+    ['PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'COOKIE', 'COOKIES', 'OAUTH'].includes(method) ||
     (['GET', 'PUT'].includes(method) &&
       (value === method || next?.kind === 'url' || next?.value === 'request'))
   ) {
-    throw new Error(unsupported);
-  }
-  if (/^x-/i.test(value)) {
     throw new Error(unsupported);
   }
   if (next?.value === '(' && value.includes('.')) {
@@ -330,9 +453,52 @@ function checkToken(value: string, next: Token | undefined) {
   }
 }
 
+function extractModel(tokens: Token[], slots: Slots) {
+  const index = tokens.findIndex((t) => t.word === 'model');
+  if (index < 0) {
+    return;
+  }
+  const skip = ['skip', 'remove', 'omit', 'no', 'without'].includes(tokens[index - 1]?.word);
+  let end = index + 1;
+  while (
+    tokens[end] &&
+    ['name', 'is', 'named', 'called', 'to', ':', '='].includes(tokens[end].word)
+  ) {
+    end++;
+  }
+  if (skip) {
+    slots.modelName = '';
+  } else if (
+    tokens[end]?.word === 'not' &&
+    ['needed', 'required'].includes(tokens[end + 1]?.word)
+  ) {
+    slots.modelName = '';
+    end += 2;
+  } else if (tokens[end] && !separators.has(tokens[end].word) && !filler.has(tokens[end].word)) {
+    let name = tokens[end++].value;
+    while (tokens[end + 1] && [':', '/'].includes(tokens[end].word)) {
+      name += tokens[end++].value + tokens[end++].value;
+    }
+    slots.modelName = name;
+  }
+  tokens.splice(skip ? index - 1 : index, end - (skip ? index - 1 : index));
+}
+
 export function readConnectionSlots(input: string, fallback: Field): Slots {
+  if (skipModel.test(input)) {
+    return { modelName: '' };
+  }
+  // A bare remote host after POST is a missing protocol, not a dot-separated body field.
+  if (/\bpost(?: to)?\s+(?!127\.0\.0\.1\b)[\w.-]+\.\w+(?:[.,;!?]|\s|$)/i.test(input)) {
+    throw new Error('Include https:// or http:// before your endpoint address.');
+  }
   const tokens = tokenize(input);
   const slots: Slots = {};
+  extractModel(tokens, slots);
+  const prose = tokens.map((t) => t.word).join(' ');
+  if (chatFormat.test(prose) && !/\bresponses api\b/i.test(prose)) {
+    slots.openai = true;
+  }
   let clause: Token[] = [];
   let continuation = false;
   for (const [index, token] of tokens.entries()) {
@@ -341,6 +507,20 @@ export function readConnectionSlots(input: string, fallback: Field): Slots {
         throw new Error('Which endpoint should I use? Give me one URL at a time.');
       }
       slots.url = token.value;
+      continue;
+    }
+    const chatLabel =
+      token.word === 'chat' &&
+      (tokens[index - 1]?.word === 'openai' ||
+        /^completions?$/.test(tokens[index + 1]?.word ?? ''));
+    const completionLabel = /^completions?$/.test(token.word) && tokens[index - 1]?.word === 'chat';
+    if (
+      slots.openai &&
+      (formatWords.has(token.word) ||
+        chatLabel ||
+        completionLabel ||
+        /^openai(?:-|$)/.test(token.word))
+    ) {
       continue;
     }
     if (token.kind !== 'json') {

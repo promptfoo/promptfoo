@@ -30,6 +30,8 @@ const input = () =>
   screen.getByRole('textbox', { name: /Message the setup agent|Connection reply/i });
 const payloads = () => postCalls().map(([, options]) => JSON.parse(String(options?.body)));
 const userMessage = (content: string) => ({ role: 'user', content });
+const localChat =
+  'post to localhost:3555/chat, similar format to openai except needs to send a api key token in header';
 async function send(user: ReturnType<typeof userEvent.setup>, message: string) {
   await user.click(input());
   await user.paste(message);
@@ -160,6 +162,76 @@ describe('agent-led red team setup', () => {
     expect(config().target.config.transformResponse).toBe('json.result.text');
   });
 
+  it.each([
+    { opening: true, header: 'X-API-Key', description: localChat },
+    {
+      opening: false,
+      header: 'Authorization',
+      description: localChat.replace('localhost', 'http://localhost'),
+    },
+  ])(
+    'connects an OpenAI-style local API with $header from chat through review',
+    async ({ opening, header, description }) => {
+      const { user } = setup();
+      const scope = 'Customers can look up orders. Only test access to other customers’ orders.';
+      if (!opening) {
+        await send(user, scope);
+      }
+      await send(user, description);
+      const log = screen.getByRole('log');
+      expect(log).toHaveTextContent('OpenAI Chat Completions');
+      expect(log).toHaveTextContent('http://localhost:3555/chat');
+      expect(log).toHaveTextContent('Which header carries your API key?');
+      expect(screen.queryByRole('button', { name: 'Test connection' })).toBeNull();
+      const custom = header === 'X-API-Key';
+      if (custom) {
+        await send(user, header);
+      } else {
+        await user.click(button('Authorization: Bearer'));
+      }
+      expect(log).toHaveTextContent(/variable/i);
+      await send(user, 'LOCAL_CHAT_KEY');
+      expect(button('Test connection')).toHaveAccessibleDescription(
+        new RegExp('localhost:3555 using LOCAL_CHAT_KEY in ' + header),
+      );
+      expect(postCalls()).toHaveLength(opening ? 0 : 1);
+      const body = { messages: [{ role: 'user', content: '{{prompt}}' }] };
+      const path = 'choices[0].message.content';
+      const result = 'HTTP 200. I read a non-empty reply at ' + path + '.';
+      api.mockResolvedValueOnce(Response.json({ success: true, message: result }));
+      await user.click(button('Test connection'));
+      expect(postCalls().pop()?.[0]).toBe('/redteam/setup/connection-test');
+      expect(payloads().pop()).toMatchObject({
+        url: 'http://localhost:3555/chat',
+        body,
+        authEnv: 'LOCAL_CHAT_KEY',
+        responsePath: path,
+        ...(custom && { authHeader: header }),
+      });
+      expect(log).toHaveTextContent(result);
+      await send(user, opening ? scope : 'Use two tests per risk');
+      expect(postCalls().pop()?.[0]).toBe('/redteam/setup-plan');
+      expect(JSON.stringify(payloads().pop())).not.toMatch(
+        /localhost|LOCAL_CHAT_KEY|X-API-Key|choices\[0\]|HTTP 200/,
+      );
+      await user.click(button('Review setup'));
+      expect(screen.getByText('Connection test passed')).toBeVisible();
+      expect(load(generateOrderedYaml(config()))).toMatchObject({
+        targets: [
+          {
+            id: 'http',
+            config: {
+              url: 'http://localhost:3555/chat',
+              body,
+              transformResponse: 'json.' + path,
+              headers: { [header]: (custom ? '' : 'Bearer ') + '{{env.LOCAL_CHAT_KEY}}' },
+            },
+          },
+        ],
+      });
+    },
+  );
+
   it('discovers the reply field from one explicit test and requires the user to pick it', async () => {
     const { user } = setup();
     await send(user, 'Order bot');
@@ -255,43 +327,57 @@ describe('agent-led red team setup', () => {
     expect(screen.queryByText('Stale test')).toBeNull();
   });
 
-  it('tests a saved chat connection before planning and keeps the verified correction', async () => {
-    const target = {
-      id: 'http',
-      label: 'private.example',
-      config: {
-        url: 'https://private.example/chat',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer {{env.SAVED_TOKEN}}',
+  it.each(['Authorization', 'X-API-Key'])(
+    'tests a saved %s connection before planning and keeps the verified correction',
+    async (header) => {
+      const custom = header !== 'Authorization';
+      const target = {
+        id: 'http',
+        label: 'private.example',
+        config: {
+          url: 'https://private.example/chat',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            [header]: (custom ? '' : 'Bearer ') + '{{env.SAVED_TOKEN}}',
+          },
+          ...(custom && { redirect: 'error' as const }),
+          body: { input: '{{prompt}}' },
+          transformResponse: 'json.old',
         },
-        body: { input: '{{prompt}}' },
-        transformResponse: 'json.old',
-      },
-    };
-    useRedTeamConfig.getState().setFullConfig({ ...EXAMPLE_CONFIG, target });
-    const { user } = setup();
-    await user.click(button('Plan with agent'));
-    await send(user, 'Can I test the connection first?');
-    expect(button('Test connection')).toHaveAccessibleDescription(
-      /private.example using SAVED_TOKEN/,
-    );
-    api.mockResolvedValueOnce(
-      Response.json({ success: false, message: 'Which field holds the reply?', paths: ['answer'] }),
-    );
-    await user.click(button('Test connection'));
-    await user.click(button('Use answer'));
-    await send(user, 'An order bot. Customers should only see their own records.');
-    expect(screen.getByText('Test passed')).toBeVisible();
-    expect(postCalls().map(([path]) => path)).toEqual([
-      '/redteam/setup/connection-test',
-      '/redteam/setup-plan',
-    ]);
-    expect(JSON.stringify(payloads()[1])).not.toMatch(/private.example|SAVED_TOKEN|Use answer/);
-    await user.click(button('Review setup'));
-    expect(config().target.config.transformResponse).toBe('json.answer');
-  });
+      };
+      useRedTeamConfig.getState().setFullConfig({ ...EXAMPLE_CONFIG, target });
+      const { user } = setup();
+      await user.click(button('Plan with agent'));
+      await send(user, 'Can I test the connection first?');
+      expect(button('Test connection')).toHaveAccessibleDescription(
+        /private.example using SAVED_TOKEN/,
+      );
+      api.mockResolvedValueOnce(
+        Response.json({
+          success: false,
+          message: 'Which field holds the reply?',
+          paths: ['answer'],
+        }),
+      );
+      await user.click(button('Test connection'));
+      expect(payloads()[0]).toMatchObject({
+        authEnv: 'SAVED_TOKEN',
+        ...(custom && { authHeader: header }),
+      });
+      await user.click(button('Use answer'));
+      await send(user, 'An order bot. Customers should only see their own records.');
+      expect(screen.getByText('Test passed')).toBeVisible();
+      expect(postCalls().map(([path]) => path)).toEqual([
+        '/redteam/setup/connection-test',
+        '/redteam/setup-plan',
+      ]);
+      expect(JSON.stringify(payloads()[1])).not.toMatch(/private.example|SAVED_TOKEN|Use answer/);
+      await user.click(button('Review setup'));
+      expect(config().target.config.transformResponse).toBe('json.answer');
+      expect(config().target.config.headers).toEqual(target.config.headers);
+    },
+  );
 
   it('keeps unsupported target tests local and leaves the scan available', async () => {
     const { user } = setup();

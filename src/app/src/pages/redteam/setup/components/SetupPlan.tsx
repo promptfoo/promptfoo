@@ -34,31 +34,45 @@ export function ConnectionStatus({ status, review }: { status: Status; review?: 
   );
 }
 
-function ConnectionSummary({
-  config,
+export function ConnectionSummary({
+  target,
   draft,
   edit,
   status,
 }: {
-  config: Config;
+  target: Config['target'];
   draft: SetupDraft;
   edit: (field: Field) => void;
   status?: Status;
 }) {
   const { connection, demo } = draft;
   const rows: [Field, string, string][] = [
-    ['url', 'Target', connection?.url || targetDestination(config.target)],
+    ['url', 'Target', connection?.url || targetDestination(target)],
   ];
   if (connection?.body) {
-    rows.push(
-      ['body', 'Request', 'POST ' + JSON.stringify(connection.body)],
-      ['responsePath', 'Read reply', connection.responsePath || 'Plain text'],
-      [
+    rows.push(['body', 'Request', 'POST ' + JSON.stringify(connection.body)]);
+    if (connection.openai) {
+      rows.push(['modelName', 'Model', connection.modelName || 'Add model name']);
+    }
+    rows.push(['responsePath', 'Read reply', connection.responsePath || 'Plain text']);
+    if (connection.authHeader && connection.authEnv) {
+      rows.push(
+        [
+          'authHeader',
+          'Key header',
+          connection.authHeader === 'Authorization'
+            ? 'Authorization: Bearer'
+            : connection.authHeader,
+        ],
+        ['authEnv', 'Key variable', connection.authEnv],
+      );
+    } else {
+      rows.push([
         'authEnv',
         'Authorization',
         connection.authEnv ? 'Bearer token from ' + connection.authEnv : 'None',
-      ],
-    );
+      ]);
+    }
   }
   return (
     <section className="px-4 py-3 sm:px-5">
@@ -70,7 +84,11 @@ function ConnectionSummary({
         <button
           key={field}
           type="button"
-          aria-label={'Change ' + label.toLowerCase()}
+          aria-label={
+            field === 'modelName' && !connection?.modelName
+              ? 'Add model name'
+              : 'Change ' + label.toLowerCase()
+          }
           aria-describedby={'connection-' + field}
           onClick={() => edit(field)}
           className="group -mx-1 flex w-[calc(100%+0.5rem)] items-baseline gap-2 rounded px-1 py-1 text-left text-xs text-muted-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
@@ -78,7 +96,12 @@ function ConnectionSummary({
           <span className="w-20 shrink-0 sm:w-24">{label}</span>
           <span
             id={'connection-' + field}
-            className="min-w-0 flex-1 wrap-anywhere font-mono leading-5 text-foreground"
+            className={cn(
+              'min-w-0 flex-1 wrap-anywhere leading-5',
+              field === 'modelName' && !connection?.modelName
+                ? 'font-medium text-blue-700 dark:text-blue-300'
+                : 'font-mono text-foreground',
+            )}
           >
             {value}
           </span>
@@ -159,7 +182,7 @@ export default function SetupPlan({
       aria-label="Proposed setup"
       className="min-w-0 divide-y divide-border rounded-xl border border-border bg-card text-sm"
     >
-      <ConnectionSummary config={config} draft={draft} edit={edit} status={status} />
+      <ConnectionSummary target={config.target} draft={draft} edit={edit} status={status} />
       <section className="p-4 sm:px-5">
         <div className="flex flex-wrap items-baseline justify-between gap-x-2">
           <h3 className="font-semibold">Test plan</h3>

@@ -5139,6 +5139,7 @@
                       { "type": "string", "maxLength": 128, "pattern": "^[A-Z_][A-Z0-9_]*$" }
                     ]
                   },
+                  "authHeader": { "type": "string" },
                   "responsePath": {
                     "oneOf": [{ "type": "string", "enum": [""] }, { "type": "string" }]
                   }

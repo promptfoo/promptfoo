@@ -360,7 +360,7 @@ redteamRouter.post('/setup/connection-test', async (req, res) => {
   if (!input.success) {
     res
       .status(400)
-      .json({ error: 'Check the endpoint, JSON body, reply path and bearer variable name.' });
+      .json({ error: 'Check the endpoint, JSON body, reply path, auth header and variable name.' });
     return;
   }
   const timeout = AbortSignal.timeout(15_000);
