@@ -68,7 +68,7 @@ interface Reference {
   specifier: string;
 }
 
-const extensions = '{ts,tsx,mts,cts,js,jsx,mjs,cjs}';
+const extensions = '@(ts|tsx|mts|cts|js|jsx|mjs|cjs)';
 const ignored = [
   '**/node_modules/**',
   '**/dist/**',
@@ -434,6 +434,8 @@ function discoverFiles(
 ) {
   const files = new Set<string>();
   const declarationFiles = new Set<string>();
+  // Roots are literal paths. Glob can expand even escaped braces when parsing ignores.
+  const fileOptions = { cwd: repoRoot, dot: true, nodir: true, nobrace: true };
   const configuredIgnores = ignoredRoots
     .map((root) => escapeGlob(root))
     .flatMap((root) => [root, `${root}/**`]);
@@ -454,18 +456,14 @@ function discoverFiles(
         : []),
     ]) {
       for (const file of globSync(pattern, {
-        cwd: repoRoot,
-        dot: true,
-        nodir: true,
+        ...fileOptions,
         ignore: sourceIgnores(root),
       }).map(normalizePath)) {
         files.add(file);
       }
     }
-    for (const file of globSync(`${root}dist/**/*.d.{ts,mts,cts}`, {
-      cwd: repoRoot,
-      dot: true,
-      nodir: true,
+    for (const file of globSync(`${root}dist/**/*.d.@(ts|mts|cts)`, {
+      ...fileOptions,
       ignore: ['**/node_modules/**', ...configuredIgnores],
     }).map(normalizePath)) {
       if (manifestFor(file, manifests) !== manifest || isTestFile(file.slice(directory.length))) {
@@ -479,9 +477,7 @@ function discoverFiles(
   for (const root of configuredRoots) {
     const pattern = escapeGlob(root);
     for (const file of globSync([pattern, `${pattern}/**/*.${extensions}`], {
-      cwd: repoRoot,
-      dot: true,
-      nodir: true,
+      ...fileOptions,
       ignore: sourceIgnores(
         manifestFor(`${root}/`, manifests) === 'package.json'
           ? ''
