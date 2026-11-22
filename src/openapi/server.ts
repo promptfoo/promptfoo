@@ -1022,9 +1022,9 @@ export function createServerOpenApiRegistry() {
     path: '/api/redteam/setup-plan',
     operationId: 'draftRedteamSetupPlan',
     tags: ['Redteam'],
-    summary: 'Draft or refine a starter test plan with the hosted agent',
+    summary: 'Continue a red team setup conversation',
     description:
-      'Send an app description without credentials. Drafting does not contact the target or start a run.',
+      'Send the app and test scope conversation to get a clarifying question or a plan. Keep connection details local. This never contacts the target or starts a run.',
     request: { body: jsonBody(RedteamSchemas.SetupPlan.Request) },
     responses: {
       200: jsonResponse(RedteamSchemas.SetupPlan.Response),

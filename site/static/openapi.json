@@ -4855,8 +4855,8 @@
       "post": {
         "operationId": "draftRedteamSetupPlan",
         "tags": ["Redteam"],
-        "summary": "Draft or refine a starter test plan with the hosted agent",
-        "description": "Send an app description without credentials. Drafting does not contact the target or start a run.",
+        "summary": "Continue a red team setup conversation",
+        "description": "Send the app and test scope conversation to get a clarifying question or a plan. Keep connection details local. This never contacts the target or starts a run.",
         "requestBody": {
           "description": "JSON request body",
           "required": true,
@@ -4865,11 +4865,44 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": { "type": "string", "enum": ["user", "assistant"] },
+                        "content": { "type": "string", "minLength": 1, "maxLength": 2000 }
+                      },
+                      "required": ["role", "content"],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 24
+                  },
                   "previous": {
                     "type": "object",
                     "properties": {
                       "purpose": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                      "application": {
+                        "type": "object",
+                        "properties": {
+                          "redteamUser": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                          "accessToData": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                          "forbiddenData": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                          "accessToActions": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          },
+                          "forbiddenActions": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "numTests": { "type": "integer", "minimum": 1, "maximum": 20 },
                       "plugins": {
                         "type": "array",
                         "items": {
@@ -4892,6 +4925,7 @@
                                 "pii:direct",
                                 "rag-document-exfiltration",
                                 "rbac",
+                                "sql-injection",
                                 "system-prompt-override"
                               ]
                             },
@@ -4902,15 +4936,13 @@
                         },
                         "maxItems": 4
                       },
-                      "note": { "type": "string", "minLength": 1, "maxLength": 300 },
-                      "question": { "type": "string", "minLength": 1, "maxLength": 300 }
+                      "note": { "type": "string", "minLength": 1, "maxLength": 300 }
                     },
                     "required": ["purpose", "plugins"],
                     "additionalProperties": false
-                  },
-                  "refinement": { "type": "string", "minLength": 1, "maxLength": 1000 }
+                  }
                 },
-                "required": ["description"],
+                "required": ["messages"],
                 "additionalProperties": false
               }
             }
@@ -4922,46 +4954,90 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "purpose": { "type": "string", "minLength": 1, "maxLength": 1000 },
-                    "plugins": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string",
-                            "enum": [
-                              "bias:age",
-                              "bias:disability",
-                              "bias:gender",
-                              "bias:race",
-                              "bfla",
-                              "bola",
-                              "contracts",
-                              "excessive-agency",
-                              "hallucination",
-                              "hijacking",
-                              "overreliance",
-                              "pii:direct",
-                              "rag-document-exfiltration",
-                              "rbac",
-                              "system-prompt-override"
-                            ]
-                          },
-                          "reason": { "type": "string", "minLength": 1, "maxLength": 300 }
-                        },
-                        "required": ["id", "reason"],
-                        "additionalProperties": false
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "question": { "type": "string", "minLength": 1, "maxLength": 400 }
                       },
-                      "maxItems": 4
+                      "required": ["question"],
+                      "additionalProperties": false
                     },
-                    "note": { "type": "string", "minLength": 1, "maxLength": 300 },
-                    "question": { "type": "string", "minLength": 1, "maxLength": 300 }
-                  },
-                  "required": ["purpose", "plugins"],
-                  "additionalProperties": false
+                    {
+                      "type": "object",
+                      "properties": {
+                        "explanation": { "type": "string", "minLength": 1, "maxLength": 300 }
+                      },
+                      "required": ["explanation"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "purpose": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                        "application": {
+                          "type": "object",
+                          "properties": {
+                            "redteamUser": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                            "accessToData": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                            "forbiddenData": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            "accessToActions": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            "forbiddenActions": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "numTests": { "type": "integer", "minimum": 1, "maximum": 20 },
+                        "plugins": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "enum": [
+                                  "bias:age",
+                                  "bias:disability",
+                                  "bias:gender",
+                                  "bias:race",
+                                  "bfla",
+                                  "bola",
+                                  "contracts",
+                                  "excessive-agency",
+                                  "hallucination",
+                                  "hijacking",
+                                  "overreliance",
+                                  "pii:direct",
+                                  "rag-document-exfiltration",
+                                  "rbac",
+                                  "sql-injection",
+                                  "system-prompt-override"
+                                ]
+                              },
+                              "reason": { "type": "string", "minLength": 1, "maxLength": 300 }
+                            },
+                            "required": ["id", "reason"],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 4
+                        },
+                        "note": { "type": "string", "minLength": 1, "maxLength": 300 }
+                      },
+                      "required": ["purpose", "plugins"],
+                      "additionalProperties": false
+                    }
+                  ]
                 }
               }
             }

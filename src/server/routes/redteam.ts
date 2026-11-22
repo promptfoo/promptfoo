@@ -348,11 +348,13 @@ redteamRouter.get('/setup-plan', (_req, res) => {
 });
 
 // Catch common accidental pastes before sending free text to a hosted model.
-function containsSetupCredential(value: string): boolean {
+function containsConnectionDetails(value: string): boolean {
+  const endpoint =
+    /(?:https?|wss?|file):\/\/|\bcurl\s+-|\b(?:localhost|[\w.-]+\.internal):\d+|\{[{%#]|\$\{/i;
+  const credential =
+    /\bbearer\s+[\w.+/=-]{8,}|\b(?:api[-_ ]?key|password|(?:access[-_ ]?)?token|authorization)\b["']?\s*(?:[:=]\s*\S+|is\s+\S{12,})/i;
   return (
-    /\bbearer\s+[\w.+/=-]{8,}|\b(?:api[-_]?key|password|access[-_]?token|authorization)\b["']?\s*[:=]\s*\S+|https?:\/\/[^/\s]+@/i.test(
-      value,
-    ) || value.split(/[\s"':=]+/).some(looksLikeSecret)
+    endpoint.test(value) || credential.test(value) || value.split(/[\s"':=]+/).some(looksLikeSecret)
   );
 }
 
@@ -363,22 +365,23 @@ redteamRouter.post('/setup-plan', async (req, res) => {
   }
   const input = RedteamSchemas.SetupPlan.Request.safeParse(req.body);
   if (!input.success) {
-    res.status(400).json({ error: 'Check your description and try again.' });
+    res.status(400).json({
+      error: 'Check your message. The agent accepts up to 24 messages of 2,000 characters each.',
+    });
     return;
   }
-  const { description, refinement, previous } = input.data;
+  const { messages, previous } = input.data;
   const fields = [
-    description,
-    refinement,
+    ...messages.map(({ content }) => content),
     previous?.purpose,
-    previous?.question,
     previous?.note,
+    ...Object.values(previous?.application ?? {}),
     ...(previous?.plugins.map(({ reason }) => reason) ?? []),
   ];
-  if (fields.some((value) => value && containsSetupCredential(value))) {
+  if (fields.some((value) => value && containsConnectionDetails(value))) {
     res.status(400).json({
       error:
-        'Remove credentials before sending. You can enter them later when connecting your target.',
+        'Keep endpoints and credentials out of the app description. Add connection details locally when the agent asks how to reach your app.',
     });
     return;
   }

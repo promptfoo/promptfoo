@@ -8,7 +8,7 @@ import {
 import { BaseTokenUsageSchema } from '../shared';
 import { MessageResponseSchema } from './common';
 import { JsonProviderOptionsWithIdSchema } from './providers';
-import { RedteamSetupPlanSchema } from './redteamSetup';
+import { RedteamSetupPlanSchema, RedteamSetupReplySchema } from './redteamSetup';
 
 // POST /api/redteam/generate-test
 
@@ -135,11 +135,19 @@ export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
 export const RedteamSchemas = {
   SetupPlan: {
     Request: z.strictObject({
-      description: z.string().trim().min(1).max(2000),
+      messages: z
+        .array(
+          z.strictObject({
+            role: z.enum(['user', 'assistant']),
+            content: z.string().trim().min(1).max(2000),
+          }),
+        )
+        .min(1)
+        .max(24)
+        .refine((messages) => messages.at(-1)?.role === 'user'),
       previous: RedteamSetupPlanSchema.optional(),
-      refinement: z.string().trim().min(1).max(1000).optional(),
     }),
-    Response: RedteamSetupPlanSchema,
+    Response: RedteamSetupReplySchema,
   },
   GenerateTest: { Request: TestCaseGenerationSchema, Response: TestCaseGenerationResponseSchema },
   Run: { Request: RedteamRunRequestSchema, Response: RedteamRunResponseSchema },

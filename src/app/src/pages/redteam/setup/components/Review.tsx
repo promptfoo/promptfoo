@@ -43,6 +43,7 @@ import { Link } from 'react-router';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { riskName } from '../utils/plugins';
+import { missingEndpoint, targetDestination } from '../utils/targetDestination';
 import { generateOrderedYaml, getRuntimeRedteamConfig } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
@@ -55,28 +56,14 @@ import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
 import type { Config, ProviderOptions } from '../types';
 
-function targetDestination({ id, config }: ProviderOptions): string {
-  const url = config?.url || config?.apiBaseUrl || (/^https?:/i.test(id) ? id : undefined);
-  if (url) {
-    try {
-      return new URL(url).host;
-    } catch {
-      return 'Custom endpoint';
-    }
+// Recheck before running even when an incomplete draft is opened from a numbered deep link.
+function setupRunError({ target, plugins }: Config, guided: boolean): string | null {
+  if (missingEndpoint(target)) {
+    return guided
+      ? 'Continue the conversation to connect a target before running.'
+      : 'Add a target URL before running.';
   }
-  return /^[\w.:/-]+$/.test(id) ? id : 'Custom target';
-}
-
-// A user can return to Review with browser Back after clearing a required field.
-function guidedReviewError({ target, plugins }: Config): string | null {
-  if (
-    (target.id === 'http' || target.id === 'https') &&
-    !target.config?.request &&
-    (typeof target.config?.url !== 'string' || !target.config.url.trim())
-  ) {
-    return 'Edit the target to add its URL before running.';
-  }
-  if (!plugins.length) {
+  if (guided && !plugins.length) {
     return 'Adjust test settings to select at least one plugin before running.';
   }
   return null;
@@ -84,11 +71,11 @@ function guidedReviewError({ target, plugins }: Config): string | null {
 
 function AgentReview({
   config,
-  onEditTarget,
+  onContinue,
   children,
 }: {
   config: Config;
-  onEditTarget: () => void;
+  onContinue: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -98,8 +85,8 @@ function AgentReview({
           <p className="text-sm text-muted-foreground">Target</p>
           <p className="font-medium">{targetDestination(config.target)}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={onEditTarget}>
-          Edit target
+        <Button variant="outline" size="sm" onClick={onContinue}>
+          Continue conversation
         </Button>
       </div>
       <div>
@@ -129,7 +116,7 @@ function AgentReview({
 
 interface ReviewProps {
   onBack?: () => void;
-  navigateToTarget?: () => void;
+  continueConversation?: () => void;
   navigateToPlugins: () => void;
   navigateToStrategies: () => void;
   navigateToPurpose: () => void;
@@ -231,14 +218,16 @@ function removeIntentEntry(
 
 export default function Review({
   onBack,
-  navigateToTarget,
+  continueConversation,
   navigateToPlugins,
   navigateToStrategies,
   navigateToPurpose,
 }: ReviewProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const { targetConfigError } = useRedTeamTargetConfigValidation();
-  const reviewError = targetConfigError || (navigateToTarget && guidedReviewError(config));
+  const reviewError = targetConfigError || setupRunError(config, Boolean(continueConversation));
+  const incomplete = missingEndpoint(config.target);
+  const saveError = incomplete ? targetConfigError : reviewError;
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
@@ -426,8 +415,8 @@ export default function Review({
   }, [_hasHydrated]); // Run once after hydration completes
 
   const handleSaveYaml = () => {
-    if (reviewError) {
-      showToast(reviewError, 'error');
+    if (saveError) {
+      showToast(saveError, 'error');
       return;
     }
 
@@ -664,7 +653,7 @@ export default function Review({
     const { targetConfigError: latestTargetConfigError } =
       useRedTeamTargetConfigValidation.getState();
     const runTargetValidationError = getRunTargetValidationError(
-      latestTargetConfigError || (navigateToTarget ? guidedReviewError(latestConfig) : null),
+      latestTargetConfigError || setupRunError(latestConfig, Boolean(continueConversation)),
       confirmedTarget,
       latestConfig.target,
     );
@@ -788,7 +777,7 @@ export default function Review({
     };
   }, []);
 
-  const shortPurpose = !navigateToTarget && (config.purpose?.length ?? 0) < 100;
+  const shortPurpose = !continueConversation && (config.purpose?.length ?? 0) < 100;
 
   function renderDetails() {
     return (
@@ -800,7 +789,7 @@ export default function Review({
             placeholder="My Red Team Configuration"
             value={config.description}
             onChange={handleDescriptionChange}
-            autoFocus={!navigateToTarget}
+            autoFocus={!continueConversation}
           />
         </div>
 
@@ -823,11 +812,11 @@ export default function Review({
                       label === 'Custom Policy' && 'bg-primary text-primary-foreground',
                     )}
                   >
-                    {navigateToTarget ? riskName(label) : label}
+                    {continueConversation ? riskName(label) : label}
                     {count > 1 && ` (${count})`}
                     <button
                       type="button"
-                      aria-label={`Remove plugin ${navigateToTarget ? riskName(label) : label}`}
+                      aria-label={`Remove plugin ${continueConversation ? riskName(label) : label}`}
                       onClick={() => {
                         const newPlugins = config.plugins.filter((plugin) => {
                           const pluginLabel = getPluginSummary(plugin).label;
@@ -1297,20 +1286,29 @@ export default function Review({
   }
 
   return (
-    <PageWrapper title="Review & Run" onBack={onBack}>
+    <PageWrapper
+      title={continueConversation && incomplete ? 'Review draft' : 'Review & Run'}
+      onBack={onBack}
+    >
       <div>
-        {navigateToTarget ? (
-          <AgentReview config={config} onEditTarget={navigateToTarget}>
+        {continueConversation ? (
+          <AgentReview config={config} onContinue={continueConversation}>
             {renderDetails()}
           </AgentReview>
         ) : (
           renderDetails()
         )}
-        <Separator className={navigateToTarget ? 'my-4' : 'my-8'} />
-        {!navigateToTarget && <h2 className="mb-6 text-xl font-semibold">Run Your Scan</h2>}
+        <Separator className={continueConversation ? 'my-4' : 'my-8'} />
+        {!continueConversation && <h2 className="mb-6 text-xl font-semibold">Run Your Scan</h2>}
 
-        {navigateToTarget && reviewError && (
-          <p role="alert" className="mb-4 text-sm text-destructive">
+        {(continueConversation || incomplete) && reviewError && (
+          <p
+            role="alert"
+            className={cn(
+              'mb-4 text-sm',
+              incomplete && !targetConfigError ? 'text-muted-foreground' : 'text-destructive',
+            )}
+          >
             {reviewError}
           </p>
         )}
@@ -1320,11 +1318,13 @@ export default function Review({
           <div className="mb-8">
             <h3 className="mb-2 text-lg font-semibold">Save for the command line</h3>
             <p className="mb-4 text-muted-foreground">
-              Save the YAML file, then run this command from the same folder when you’re ready.
+              {incomplete
+                ? 'Save a YAML draft. Add a target before running it.'
+                : 'Save the YAML file, then run this command from the same folder when you’re ready.'}
             </p>
-            <Code>promptfoo redteam run</Code>
+            {!incomplete && <Code>promptfoo redteam run</Code>}
             <div className="mt-4 flex gap-3">
-              <Button onClick={handleSaveYaml} disabled={Boolean(reviewError)} className="gap-2">
+              <Button onClick={handleSaveYaml} disabled={Boolean(saveError)} className="gap-2">
                 <Save className="size-4" />
                 Save YAML
               </Button>

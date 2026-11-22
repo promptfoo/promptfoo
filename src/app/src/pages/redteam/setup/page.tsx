@@ -29,6 +29,7 @@ import { formatDataGridDate } from '@app/utils/date';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { loadYaml } from '@promptfoo/util/yamlLoad';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
+import isEqual from 'fast-deep-equal';
 import {
   Brain,
   ClipboardCheck,
@@ -46,7 +47,7 @@ import { customTargetOption, findPredefinedTarget } from './components/constants
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
 import Review from './components/Review';
-import Setup, { type SetupDraft } from './components/Setup';
+import Setup from './components/Setup';
 import Strategies from './components/Strategies';
 import { isModelProviderId } from './components/Targets/providerCatalog';
 import TargetConfiguration from './components/Targets/TargetConfiguration';
@@ -59,6 +60,7 @@ import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
+import type { SetupDraft } from './hooks/useSetupAgent';
 import type { Config } from './types';
 
 // Re-export for backward compatibility
@@ -106,7 +108,7 @@ const withStatefulTargetConfig = (
   return { ...target, config: { ...target.config, stateful: true } };
 };
 
-const EMPTY_DRAFT: SetupDraft = { description: '', refinement: '', demo: false };
+const EMPTY_DRAFT: SetupDraft = { messages: [], input: '', step: 'scope' };
 
 const TAB_CONFIG = [
   { value: '0', label: 'Target Type', icon: Crosshair },
@@ -122,6 +124,25 @@ const TAB_CONFIG = [
   },
   { value: '5', label: 'Review', icon: ClipboardCheck },
 ];
+
+function setupRoute(
+  location: ReturnType<typeof useLocation>,
+  fresh: boolean,
+  startWithAgent: boolean,
+) {
+  const guided = location.state?.fromAgent === true;
+  const agentOpen =
+    location.hash === '#agent' || (!location.hash && startWithAgent) || (guided && fresh);
+  const value = agentOpen
+    ? -1
+    : /^#[0-5]$/.test(location.hash)
+      ? Number(location.hash.slice(1))
+      : 0;
+  const compactReview = guided && value === 5;
+  const steps = guided && value <= 1 ? TAB_CONFIG.slice(0, 2) : TAB_CONFIG;
+
+  return { guided, agentOpen, value, compactReview, steps };
+}
 
 export default function RedTeamSetupPage() {
   usePageMeta({ title: 'Red team setup', description: 'Configure red team testing' });
@@ -141,17 +162,26 @@ export default function RedTeamSetupPage() {
     [config, targetConfigError],
   );
   const [startWithAgent] = useState(fresh);
-  const guided = location.state?.fromAgent === true;
-  const agentOpen =
-    location.hash === '#agent' || (!location.hash && startWithAgent) || (guided && fresh);
-  const value = agentOpen
-    ? -1
-    : /^#[0-5]$/.test(location.hash)
-      ? Number(location.hash.slice(1))
-      : 0;
-  const [draft, setDraft] = useState<SetupDraft>(EMPTY_DRAFT);
-  const steps = guided && value <= 1 ? TAB_CONFIG.slice(0, 2) : TAB_CONFIG;
-
+  const { guided, agentOpen, value, compactReview, steps } = setupRoute(
+    location,
+    fresh,
+    startWithAgent,
+  );
+  const [chat, setDraft] = useState<SetupDraft>(EMPTY_DRAFT);
+  // Never reapply a stale conversation over subsequent edits in the full editor.
+  const draft: SetupDraft =
+    chat.approved && !isEqual(chat.approved.config, config)
+      ? {
+          ...EMPTY_DRAFT,
+          messages: [
+            {
+              role: 'assistant',
+              content:
+                'You changed the setup in the editor. I’ll keep your current target. What should we test now?',
+            },
+          ],
+        }
+      : chat;
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -187,15 +217,19 @@ export default function RedTeamSetupPage() {
   };
 
   const openAgent = () => navigate('#agent', { state: { returnStep: value, fromAgent: guided } });
-  const applyPlan = (proposed: Config, demo: boolean) => {
+  const applyPlan = (proposed: Config, manual = false) => {
     if (targetConfigError) {
       toast.showToast('Fix the target configuration before applying a plan.', 'error');
       return;
     }
-    const next =
-      fresh && !demo ? { ...proposed, target: { ...proposed.target, label: 'My app' } } : proposed;
-    setFullConfig(next);
-    updateHash(demo ? 5 : !fresh && next.target.label ? 1 : 0, true);
+    setFullConfig(proposed);
+    if (draft.plan) {
+      setDraft({
+        ...draft,
+        approved: { config: useRedTeamConfig.getState().config, plan: draft.plan },
+      });
+    }
+    updateHash(manual ? 0 : 5, true);
   };
 
   const handleNext = () => updateHash(guided && value === 1 ? 5 : value + 1, guided);
@@ -492,7 +526,12 @@ export default function RedTeamSetupPage() {
             setDraft={setDraft}
             fresh={fresh}
             onApply={applyPlan}
-            onManual={() => updateHash(location.state?.returnStep ?? 0, guided && !fresh)}
+            onManual={() =>
+              updateHash(
+                location.state?.returnStep ?? (draft.approved ? 5 : 0),
+                !fresh && (guided || Boolean(draft.approved)),
+              )
+            }
             onLoad={() => {
               loadConfigs();
               setLoadDialogOpen(true);
@@ -510,7 +549,10 @@ export default function RedTeamSetupPage() {
         {/* Outer sidebar container */}
         <div
           data-testid="redteam-setup-sidebar"
-          className="hidden h-full flex-col border-r border-border bg-card md:flex"
+          className={cn(
+            'hidden h-full flex-col border-r border-border bg-card',
+            !compactReview && 'md:flex',
+          )}
           style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
         >
           {/* Inner sidebar (sticky) */}
@@ -552,7 +594,7 @@ export default function RedTeamSetupPage() {
             </div>
 
             <Button variant="outline" onClick={openAgent} className="mx-3 mt-3">
-              {draft.plan ? 'View agent plan' : 'Plan with agent'}
+              {draft.messages.length ? 'Return to chat' : 'Plan with agent'}
             </Button>
 
             {/* Tabs container */}
@@ -619,10 +661,18 @@ export default function RedTeamSetupPage() {
         </div>
 
         {/* Tab content */}
-        <div className="relative flex min-w-0 grow flex-col transition-[margin] duration-200">
+        <div
+          className={cn(
+            'relative flex min-w-0 grow flex-col transition-[margin] duration-200',
+            compactReview && 'mx-auto max-w-3xl',
+          )}
+        >
           <div
             data-testid="redteam-setup-mobile-actions"
-            className="border-b border-border bg-card p-4 md:hidden"
+            className={cn(
+              'border-b border-border bg-card px-4 py-2',
+              !compactReview && 'md:hidden',
+            )}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -661,15 +711,24 @@ export default function RedTeamSetupPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {steps.map((step) => (
-                    <DropdownMenuItem key={step.value} onClick={() => handleTabChange(step.value)}>
-                      {getTabLabel(step)}
-                    </DropdownMenuItem>
-                  ))}
+                  {compactReview ? (
+                    <DropdownMenuItem onClick={() => updateHash(0)}>Edit manually</DropdownMenuItem>
+                  ) : (
+                    steps.map((step) => (
+                      <DropdownMenuItem
+                        key={step.value}
+                        onClick={() => handleTabChange(step.value)}
+                      >
+                        {getTabLabel(step)}
+                      </DropdownMenuItem>
+                    ))
+                  )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={openAgent}>
-                    {draft.plan ? 'View agent plan' : 'Plan with agent'}
-                  </DropdownMenuItem>
+                  {!compactReview && (
+                    <DropdownMenuItem onClick={openAgent}>
+                      {draft.messages.length ? 'Return to chat' : 'Plan with agent'}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => setSaveDialogOpen(true)}>
                     <Save className="mr-2 size-4" />
                     Save Config
@@ -727,7 +786,7 @@ export default function RedTeamSetupPage() {
           {value === 5 && (
             <ErrorBoundary name="Review Page">
               <Review
-                navigateToTarget={guided ? () => updateHash(1, true) : undefined}
+                continueConversation={guided ? openAgent : undefined}
                 navigateToPlugins={() => updateHash(3)}
                 navigateToStrategies={() => updateHash(4)}
                 navigateToPurpose={() => updateHash(2)}

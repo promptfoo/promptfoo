@@ -1,420 +1,531 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Checkbox } from '@app/components/ui/checkbox';
-import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
-import { callApi } from '@app/utils/api';
-import { type RedteamSetupPlan, RedteamSetupPlanSchema } from '@promptfoo/types/api/redteamSetup';
-import isEqual from 'fast-deep-equal';
-import { ArrowRight, Loader2 } from 'lucide-react';
-import { EXAMPLE_CONFIG, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { cn } from '@app/lib/utils';
+import { ArrowRight, ArrowUp, Loader2, LockKeyhole } from 'lucide-react';
+import { type Field, isField, type SetupDraft, useSetupAgent } from '../hooks/useSetupAgent';
 import { riskName } from '../utils/plugins';
-import { applicationDefinitionToPurpose } from '../utils/purposeParser';
+import { targetDestination } from '../utils/targetDestination';
 import { getEstimatedProbes } from './strategies/utils';
 
 import type { Config } from '../types';
 
-const API_PATH = '/redteam/setup-plan';
 const DEMO_DESCRIPTION =
-  "A customer support agent for an electronics store. It can look up orders and update support tickets. It must never show another customer's records or change their tickets.";
-const UNAVAILABLE = 'Could not reach the setup agent. Try again or set up manually.';
-
-export interface SetupDraft {
-  description: string;
-  refinement: string;
-  demo: boolean;
-  plan?: RedteamSetupPlan;
-  excluded?: string[];
-}
+  "Test as a customer shopping at an electronics store. The support bot can look up my orders and update my tickets. It must never show or change another customer's records.";
+const OPENING = 'What does your app do, and what should it never do?';
+const EXAMPLES: Partial<Record<Field, string[]>> = {
+  body: ['{"message":"{{prompt}}"}', '{"prompt":"{{prompt}}"}'],
+  responsePath: ['response', 'Plain text'],
+  authEnv: ['No auth'],
+};
+const PLACEHOLDERS: Record<SetupDraft['step'], string> = {
+  scope: 'Describe the data it can see or actions it can take…',
+  url: 'http://localhost:3000/chat or ollama:chat:llama3',
+  body: '{"message":"{{prompt}}"}',
+  responsePath: 'result.answer',
+  authEnv: 'MY_APP_TOKEN or No auth',
+  ready: 'Ask to change the tests or test count…',
+};
 
 interface SetupProps {
   draft: SetupDraft;
   setDraft: (draft: SetupDraft) => void;
   fresh: boolean;
-  onApply: (config: Config, demo: boolean) => void;
+  onApply: (config: Config, manual?: boolean) => void;
   onManual: () => void;
   onLoad: () => void;
 }
 
-// Only risk IDs and plain purpose text from the validated plan enter the config.
-function buildConfig(config: Config, plan: RedteamSetupPlan, demo: boolean): Config {
-  const base = demo ? EXAMPLE_CONFIG : config;
-  const applicationDefinition = { ...base.applicationDefinition, purpose: plan.purpose };
-  return {
-    ...base,
-    applicationDefinition,
-    purpose: applicationDefinitionToPurpose(applicationDefinition),
-    plugins: plan.plugins.map(({ id }) => id),
-    strategies: ['basic'],
-    numTests: 3,
-  };
+function ConnectionSummary({
+  config,
+  draft,
+  edit,
+}: {
+  config: Config;
+  draft: SetupDraft;
+  edit: (field: Field) => void;
+}) {
+  const { connection, demo } = draft;
+  const target = config.target;
+  const rows: [Field, string, string][] = [
+    ['url', 'Target', connection?.url || targetDestination(target)],
+  ];
+  if (connection?.body) {
+    rows.push(
+      ['body', 'Request', 'POST ' + JSON.stringify(connection.body)],
+      ['responsePath', 'Read reply', connection.responsePath || 'Plain text'],
+      [
+        'authEnv',
+        'Authorization',
+        connection.authEnv ? 'Bearer token from ' + connection.authEnv : 'None',
+      ],
+    );
+  }
+  return (
+    <div className="rounded-md bg-muted/40 px-3 py-2">
+      {rows.map(([field, label, value]) => (
+        <div key={field} className="flex items-baseline justify-between gap-2 py-0.5">
+          <p className="min-w-0 break-words">
+            <span className="text-muted-foreground">{label} · </span>
+            <span className="font-mono text-xs">{value}</span>
+          </p>
+          <button
+            type="button"
+            className="shrink-0 text-xs text-primary underline-offset-4 hover:underline"
+            aria-label={'Change ' + label.toLowerCase()}
+            onClick={() => edit(field)}
+          >
+            Change
+          </button>
+        </div>
+      ))}
+      {connection?.model && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          This tests the model directly. To include your app’s instructions and tools, use its HTTP
+          endpoint.{' '}
+          {connection.model.startsWith('ollama:')
+            ? 'Start Ollama with this model before running.'
+            : 'Your model provider’s credentials must be available where Promptfoo runs.'}
+        </p>
+      )}
+      {demo && <p className="text-xs text-muted-foreground">Promptfoo demo app</p>}
+    </div>
+  );
 }
 
+const FACT_LABELS = {
+  redteamUser: 'Test as',
+  accessToData: 'Can read',
+  forbiddenData: 'Must keep private',
+  accessToActions: 'Can do',
+  forbiddenActions: 'Must not do',
+} as const;
+
 function PlanSummary({
-  plan,
+  edit,
+  draft,
+  setDraft,
   config,
-  toggleRisk,
-  pending,
-}: {
-  plan: RedteamSetupPlan;
+  plan,
+  disabled,
+}: Pick<SetupProps, 'draft' | 'setDraft'> & {
+  edit: (field: Field) => void;
   config: Config;
-  toggleRisk: (id: string) => void;
-  pending: boolean;
+  plan: NonNullable<SetupDraft['plan']>;
+  disabled: boolean;
 }) {
+  const excluded = draft.excluded ?? [];
+  const facts = Object.entries(FACT_LABELS).flatMap(([field, label]) => {
+    const value = config.applicationDefinition[field as keyof typeof FACT_LABELS];
+    return value ? [[label, value]] : [];
+  });
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <ul className="divide-y divide-border">
+    <fieldset
+      disabled={disabled}
+      className="mt-3 min-w-0 space-y-3 rounded-lg border border-border bg-card p-4 text-sm"
+    >
+      <ConnectionSummary config={config} draft={draft} edit={edit} />
+      <p className="break-words">{plan.purpose}</p>
+      {facts.length > 0 && (
+        <details>
+          <summary className="cursor-pointer text-muted-foreground">App details</summary>
+          <dl className="mt-2 space-y-2">
+            {facts.map(([label, value]) => (
+              <div key={label}>
+                <dt className="font-medium">{label}</dt>
+                <dd className="break-words text-muted-foreground">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
+      <ul className="space-y-3">
         {plan.plugins.map(({ id, reason }) => (
-          <li key={id} className="flex items-start gap-3 px-4 py-3">
-            {plan.plugins.length > 1 && (
-              <Checkbox
-                id={`risk-${id}`}
-                className="mt-0.5"
-                checked={config.plugins.includes(id)}
-                onCheckedChange={() => toggleRisk(id)}
-                disabled={pending}
-                aria-label={riskName(id)}
-                aria-describedby={`reason-${id}`}
-              />
-            )}
-            <label
-              htmlFor={plan.plugins.length > 1 ? `risk-${id}` : undefined}
-              className="min-w-0 space-y-1"
-            >
-              <span className="block text-sm font-medium">{riskName(id)}</span>
-              <span id={`reason-${id}`} className="block text-sm break-words text-muted-foreground">
+          <li key={id} className="flex items-start gap-2">
+            <Checkbox
+              id={'risk-' + id}
+              className="mt-0.5"
+              checked={config.plugins.includes(id)}
+              aria-label={riskName(id)}
+              aria-describedby={'reason-' + id}
+              onCheckedChange={() =>
+                setDraft({
+                  ...draft,
+                  excluded: excluded.includes(id)
+                    ? excluded.filter((value) => value !== id)
+                    : [...excluded, id],
+                })
+              }
+            />
+            <label htmlFor={'risk-' + id} className="min-w-0">
+              <span className="block font-medium">{riskName(id)}</span>
+              <span id={'reason-' + id} className="block break-words text-muted-foreground">
                 {reason}
               </span>
             </label>
           </li>
         ))}
       </ul>
-      {plan.note && (
-        <p className="border-t border-border px-4 py-3 text-sm break-words">
-          <strong>Coverage limits</strong> {plan.note}
-        </p>
-      )}
-      <p aria-live="polite" className="border-t border-border bg-muted/30 px-4 py-3 text-sm">
-        {config.plugins.length ? (
-          <>
-            About <strong>{getEstimatedProbes(config).toLocaleString()} requests</strong> to the
-            target when you run. Adjust the test count in Review.
-          </>
-        ) : (
-          'Select at least one risk to use this plan.'
-        )}
-      </p>
-    </div>
+      {plan.note && <p className="break-words">{plan.note}</p>}
+    </fieldset>
   );
 }
 
-function useAgent(
-  draft: SetupDraft,
-  setDraft: SetupProps['setDraft'],
-  selected?: RedteamSetupPlan,
-) {
-  const { description, refinement, plan } = draft;
-  const [error, setError] = useState('');
-  const [pending, setPending] = useState(false);
-  const [disabled, setDisabled] = useState(false);
-  const request = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    callApi(API_PATH, { signal: controller.signal })
-      .then((response) => response.json())
-      .then((data) => setDisabled(data.enabled === false))
-      .catch(() => {}); // A temporary status failure should not block a draft.
-    return () => {
-      controller.abort();
-      request.current?.abort();
-    };
-  }, []);
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (pending || !(plan ? refinement : description).trim()) {
-      return;
-    }
-    const controller = new AbortController();
-    request.current = controller;
-    setPending(true);
-    setError('');
-    try {
-      const response = await callApi(API_PATH, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          description: description.trim(),
-          ...(plan && {
-            previous: selected?.plugins.length ? selected : plan,
-            refinement: refinement.trim(),
-          }),
-        }),
-        signal: controller.signal,
-      });
-      const result = await response.json();
-      if (controller.signal.aborted) {
-        return;
-      }
-      if (!response.ok) {
-        setError(result.error || UNAVAILABLE);
-        return;
-      }
-      setDraft({
-        ...draft,
-        plan: RedteamSetupPlanSchema.parse(result),
-        refinement: '',
-        excluded: [],
-      });
-    } catch {
-      setError(UNAVAILABLE);
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return { pending, error, disabled, submit, clearError: () => setError('') };
-}
-
-function ApplyPlan({
-  fresh,
-  demo,
-  disabled,
-  onApply,
-}: {
-  fresh: boolean;
-  demo: boolean;
-  disabled: boolean;
-  onApply: () => void;
-}) {
-  const label = demo
-    ? 'Review demo setup'
-    : fresh
-      ? 'Use plan & connect app'
-      : 'Use plan with current target';
-  const hint = fresh
-    ? demo
-      ? 'Review before running against the Promptfoo demo app.'
-      : 'Next, connect your app. It may require its own credentials.'
-    : 'Using this plan replaces the current purpose, plugins, strategies and test count. Your target stays the same.';
-  return (
-    <div className="mt-4 space-y-2">
-      <p className="text-sm text-muted-foreground">{hint}</p>
-      <Button type="button" disabled={disabled} onClick={onApply}>
-        {label} <ArrowRight aria-hidden="true" />
-      </Button>
-    </div>
-  );
-}
-
-function AgentForm({
+function Composer({
   draft,
   setDraft,
   agent,
-  fresh,
-}: Pick<SetupProps, 'draft' | 'setDraft' | 'fresh'> & { agent: ReturnType<typeof useAgent> }) {
-  const { plan, refinement, description, demo } = draft;
-  const { pending, submit, error } = agent;
-  const input = useRef<HTMLTextAreaElement>(null);
-  const status = pending
-    ? 'Drafting your test plan…'
-    : demo && !plan && fresh
-      ? 'Using the Promptfoo demo app. You can edit the description before sending.'
-      : 'Drafting won’t contact your app or run any tests.';
-  const value = plan ? refinement : description;
+}: Pick<SetupProps, 'draft' | 'setDraft'> & { agent: ReturnType<typeof useSetupAgent> }) {
+  const local = isField(draft.step);
+  const { pending, error, send } = agent;
+  const reply = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!pending && draft.messages.length && draft.step !== 'ready') {
+      reply.current?.focus({ preventScroll: true });
+    }
+  }, [draft.messages.length, draft.step, pending]);
   return (
-    <form onSubmit={submit} className="my-5 space-y-3">
-      <Label htmlFor="setup-input" className="block break-words leading-normal">
-        {plan ? (
-          <>
-            {plan.question ||
-              (plan.plugins.length ? 'What would you change?' : 'What else should we test?')}{' '}
-            <span className="font-normal text-muted-foreground">(optional)</span>
-          </>
-        ) : (
-          'What does your app do, and what should it never do?'
-        )}
-      </Label>
-      <Textarea
-        id="setup-input"
-        ref={input}
-        rows={plan ? 2 : 4}
-        maxLength={plan ? 1000 : 2000}
-        disabled={pending}
-        placeholder={
-          plan
-            ? 'For example, what data can the app see or what actions can it take?'
-            : 'Our support bot can look up orders. It should never reveal another customer’s address.'
-        }
-        value={value}
-        onChange={(event) =>
-          setDraft({ ...draft, [plan ? 'refinement' : 'description']: event.target.value })
-        }
-        aria-describedby="setup-privacy"
-      />
-      <p id="setup-privacy" className="text-sm text-muted-foreground">
-        {plan
-          ? 'Refining sends your answers and this plan to Promptfoo Cloud.'
-          : 'Drafting sends this description to Promptfoo Cloud.'}{' '}
-        Leave out secrets and personal data.
-      </p>
+    <form
+      className="shrink-0 border-t border-border bg-background py-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        send(draft.input.trim());
+      }}
+    >
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="mb-2 text-sm text-destructive">
           {error}
         </p>
       )}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-end gap-2">
+        <Textarea
+          ref={reply}
+          aria-label={local ? 'Connection reply' : 'Message the setup agent'}
+          aria-describedby="setup-privacy"
+          rows={2}
+          className="min-h-14 resize-none"
+          value={draft.input}
+          onChange={(event) => setDraft({ ...draft, input: event.target.value })}
+          readOnly={pending}
+          placeholder={PLACEHOLDERS[draft.step]}
+          maxLength={local ? 16000 : 2000}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
+        />
         <Button
           type="submit"
-          variant={plan ? 'outline' : 'default'}
-          disabled={pending || !value.trim()}
+          disabled={pending || !draft.input.trim()}
+          className="shrink-0"
+          aria-label="Send reply"
         >
-          {pending && <Loader2 aria-hidden="true" className="animate-spin" />}
-          {plan ? 'Refine plan' : 'Draft test plan'}
-          {!plan && !pending && <ArrowRight aria-hidden="true" />}
+          <span className="hidden sm:inline">Send</span>
+          <ArrowUp aria-hidden="true" />
         </Button>
-        {!plan && fresh && (!description || demo) && (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pending}
-            onClick={() => {
-              setDraft({ ...draft, description: demo ? '' : DEMO_DESCRIPTION, demo: !demo });
-              input.current?.focus();
-            }}
-          >
-            {demo ? 'Use my own app' : 'Try the demo app'}
-          </Button>
-        )}
-        {plan && refinement.trim() && (
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={pending}
-            onClick={() => {
-              setDraft({ ...draft, refinement: '' });
-              agent.clearError();
-              input.current?.focus();
-            }}
-          >
-            Discard changes
-          </Button>
-        )}
       </div>
-      <p role="status" className="text-sm text-muted-foreground">
-        {status}
+      <p id="setup-privacy" className="mt-2 text-xs text-muted-foreground">
+        {local ? (
+          <>
+            <LockKeyhole className="mr-1 inline size-3" aria-hidden="true" />
+            Connection replies stay in this browser during setup. Never paste secrets.
+          </>
+        ) : (
+          'App and test messages go to Promptfoo Cloud. Leave out secrets and personal data.'
+        )}
       </p>
     </form>
   );
 }
 
-export default function Setup({ draft, setDraft, fresh, onApply, onManual, onLoad }: SetupProps) {
-  const { plan } = draft;
-  const { config } = useRedTeamConfig();
-  const demo = draft.demo && (fresh || isEqual(config.target, EXAMPLE_CONFIG.target));
-  const excluded = draft.excluded ?? [];
-  const selected = plan && {
-    ...plan,
-    plugins: plan.plugins.filter(({ id }) => !excluded.includes(id)),
-  };
-  const unsupported = plan?.plugins.length === 0;
-  const proposed = selected && !unsupported && buildConfig(config, selected, draft.demo && fresh);
-  const agent = useAgent(draft, setDraft, selected);
-  const { disabled, pending } = agent;
-  const title = useRef<HTMLHeadingElement>(null);
-  const manualLabel = fresh ? 'Set up manually' : 'Return to configuration';
+function ChatMessage({ message }: { message: SetupDraft['messages'][number] }) {
+  return message.role === 'user' ? (
+    <p className="ml-auto w-fit max-w-[90%] whitespace-pre-wrap break-words rounded-xl bg-muted px-3 py-2 text-sm">
+      <span className="sr-only">You. </span>
+      {message.content}
+    </p>
+  ) : (
+    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+      <span className="sr-only">Setup agent. </span>
+      {message.content}
+    </p>
+  );
+}
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Focus each new screen, including a revised plan.
+function LocalActions({
+  step,
+  draft,
+  agent,
+  fresh,
+  onApply,
+}: Pick<SetupProps, 'draft' | 'fresh' | 'onApply'> & {
+  step: Field;
+  agent: ReturnType<typeof useSetupAgent>;
+}) {
+  const { plan } = draft;
+  const { pending, replacing, proposed } = agent;
+  const idle = !pending && !draft.input.trim();
+  return (
+    <div className="space-y-2">
+      {((step === 'url' && !draft.deferred) || agent.connected) && (
+        <div>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!idle}
+            onClick={() =>
+              agent.connected ? agent.resume() : agent.send('I don’t have an endpoint yet')
+            }
+          >
+            {agent.connected ? 'Keep current connection' : 'I don’t have an endpoint yet'}
+          </Button>
+        </div>
+      )}
+      {EXAMPLES[step] && (
+        <div className="flex flex-wrap gap-2">
+          {EXAMPLES[step].map((example) => (
+            <Button
+              key={example}
+              size="sm"
+              variant="outline"
+              disabled={!idle}
+              onClick={() => agent.send(example)}
+            >
+              {example}
+            </Button>
+          ))}
+        </div>
+      )}
+      {plan && (
+        <Button
+          size="sm"
+          variant="link"
+          className="px-0"
+          disabled={pending}
+          onClick={() => agent.edit('scope')}
+        >
+          {agent.canMoveSuggestion ? 'Edit reply for Promptfoo Cloud' : 'Adjust tests'}
+        </Button>
+      )}
+      {replacing && !fresh && (
+        <p className="text-xs text-muted-foreground">
+          Continuing manually will use the new target and reset the previous app settings.
+        </p>
+      )}
+      {!fresh && proposed && !!proposed.plugins.length && (
+        <Button
+          size="sm"
+          variant="link"
+          className="ml-4 px-0"
+          disabled={pending}
+          onClick={() => onApply(proposed, true)}
+        >
+          Use tests in manual setup
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function ReviewAction({
+  agent,
+  draft,
+  fresh,
+  onApply,
+}: Pick<SetupProps, 'draft' | 'fresh' | 'onApply'> & { agent: ReturnType<typeof useSetupAgent> }) {
+  const { proposed, replacing, pending, ready } = agent;
+  const idle = !pending && !draft.input.trim();
+  const deferred = draft.deferred && draft.step === 'url';
+  const reviewButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    title.current?.focus();
-  }, [plan, disabled]);
+    if (ready) {
+      reviewButton.current?.focus({ preventScroll: true });
+    }
+  }, [ready]);
+  if (!proposed || (!ready && !deferred)) {
+    return null;
+  }
+  return (
+    <div className="shrink-0 border-t border-border py-2">
+      {!fresh && (replacing || !draft.approved) && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          {replacing
+            ? 'Reviewing replaces your target and starts fresh app settings.'
+            : 'Reviewing replaces your current test settings.'}{' '}
+          Saved configurations stay unchanged.
+        </p>
+      )}
+      <div className="flex items-center justify-between gap-2">
+        <p aria-live="polite" className="text-sm">
+          {proposed.plugins.length ? (
+            <>
+              <strong>~{getEstimatedProbes(proposed).toLocaleString()} requests</strong>
+              <span className="block text-xs text-muted-foreground">
+                {proposed.numTests} direct tests per risk
+              </span>
+            </>
+          ) : (
+            'Select at least one risk.'
+          )}
+        </p>
+        <Button
+          ref={reviewButton}
+          disabled={!idle || !proposed.plugins.length}
+          onClick={() => onApply(proposed)}
+        >
+          {agent.ready ? 'Review setup' : 'Review draft'} <ArrowRight aria-hidden="true" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export default function Setup({ draft, setDraft, fresh, onApply, onManual, onLoad }: SetupProps) {
+  const { messages, plan, step } = draft;
+  const agent = useSetupAgent(draft, setDraft);
+  const { pending, disabled, proposed, hasTarget } = agent;
+  const ready = agent.ready && plan && proposed;
+  const local = isField(step);
+  const lastTurn = useRef<HTMLDivElement>(null);
+
+  const manualLabel = fresh ? 'Set up manually' : 'Return to configuration';
+  const idle = !pending && !draft.input.trim();
+  const started = messages.length > 0;
+  const opening =
+    hasTarget && !started
+      ? 'I’ll keep your current target unless you change it. ' + OPENING
+      : OPENING;
+
+  useEffect(() => {
+    if (messages.length) {
+      lastTurn.current?.scrollIntoView({ block: 'start' });
+    }
+  }, [messages.length]);
 
   return (
-    <section className="ph-no-capture mx-auto w-full max-w-2xl px-4 py-8 sm:px-6 sm:py-12">
-      <p className="mb-2 text-sm font-medium text-primary">Red team setup</p>
-      <h1
-        ref={title}
-        tabIndex={-1}
-        className="text-2xl font-semibold tracking-tight outline-none sm:text-3xl"
-      >
-        {disabled
-          ? 'Agent setup is turned off'
-          : unsupported
-            ? 'No matching starter tests'
-            : plan
-              ? 'Your test plan'
-              : 'What should we test?'}
-      </h1>
-      {disabled ? (
-        <p className="mt-2 text-muted-foreground">
-          Remote generation is disabled. You can configure tests manually or import a configuration.
-        </p>
-      ) : (
-        <>
-          <p className="mb-6 mt-2 break-words text-muted-foreground">
-            {unsupported
-              ? plan.note
-              : (plan?.purpose ??
-                'Describe your app. The setup agent will suggest what to test and why. No model API key needed to draft a plan.')}
-          </p>
-          {unsupported && <Button onClick={onManual}>{manualLabel}</Button>}
-          {plan && proposed && (
-            <>
-              <PlanSummary
-                plan={plan}
-                config={proposed}
-                pending={pending}
-                toggleRisk={(id) =>
-                  setDraft({
-                    ...draft,
-                    excluded: excluded.includes(id)
-                      ? excluded.filter((value) => value !== id)
-                      : [...excluded, id],
-                  })
-                }
-              />
-              <ApplyPlan
-                fresh={fresh}
-                demo={demo}
-                disabled={pending || !proposed.plugins.length || Boolean(draft.refinement.trim())}
-                onApply={() => onApply(proposed, demo)}
-              />
-            </>
-          )}
-          <AgentForm draft={draft} setDraft={setDraft} fresh={fresh} agent={agent} />
-        </>
-      )}
-      <div className="mt-6 flex flex-wrap items-center gap-x-4 border-t border-border pt-3">
-        {(!unsupported || disabled) && (
+    <section className="ph-no-capture mx-auto flex h-full w-full max-w-3xl flex-col px-4 sm:px-6">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-border py-2">
+        <h1 className="text-base font-semibold">Red team setup</h1>
+        <div className="flex items-center gap-2">
           <Button
-            variant={disabled ? 'default' : 'link'}
-            className={disabled ? '' : 'px-0'}
-            onClick={onManual}
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              if (fresh && (local || ready) && proposed?.plugins.length) {
+                onApply(proposed, true);
+              } else {
+                onManual();
+              }
+            }}
           >
             {manualLabel}
           </Button>
-        )}
-        {!plan && (
-          <Button variant="link" className="px-0" onClick={onLoad}>
+          <Button size="sm" variant="ghost" onClick={onLoad}>
             Load or import config
           </Button>
-        )}
-        {plan && (
-          <Button
-            variant="link"
-            className="px-0"
-            disabled={pending}
-            onClick={() => {
-              setDraft({ ...draft, plan: undefined, refinement: '' });
-              agent.clearError();
-            }}
+        </div>
+      </header>
+      {disabled ? (
+        <div className="space-y-2 py-8">
+          <h2 className="text-2xl font-semibold">Agent setup is turned off</h2>
+          <p className="text-muted-foreground">
+            Remote generation is disabled. You can configure tests manually or import a
+            configuration.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div
+            className={cn(
+              'min-h-0 space-y-4 overflow-y-auto py-6',
+              started ? 'flex-1' : 'sm:pt-12',
+            )}
           >
-            Edit description
-          </Button>
-        )}
-      </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-primary">Setup agent</p>
+              <p className={started ? 'text-sm' : 'text-2xl font-semibold tracking-tight'}>
+                {opening}
+              </p>
+              {!started && (
+                <p className="text-sm text-muted-foreground">
+                  I’ll help you choose tests and connect your app here. No model API key needed for
+                  setup. Nothing runs until you say so.
+                </p>
+              )}
+            </div>
+            {!started && fresh && (!draft.input || draft.demo) && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  setDraft({
+                    ...draft,
+                    demo: !draft.demo,
+                    input: draft.demo ? '' : DEMO_DESCRIPTION,
+                  });
+                  agent.clearError();
+                }}
+              >
+                {draft.demo ? 'Use my own app' : 'Try the demo app'}
+              </Button>
+            )}
+            {draft.demo && !started && (
+              <p className="text-sm text-muted-foreground">
+                Using Promptfoo’s demo app. Send the description below to start.
+              </p>
+            )}
+            <div role="log" aria-label="Setup conversation" className="space-y-4">
+              {messages.map((message, index) => (
+                <div key={index} ref={index === messages.length - 1 ? lastTurn : undefined}>
+                  <ChatMessage message={message} />
+                </div>
+              ))}
+            </div>
+            {draft.previousPlan && (
+              <Button size="sm" variant="outline" disabled={!idle} onClick={agent.restorePlan}>
+                Keep previous tests
+              </Button>
+            )}
+            {local && (
+              <LocalActions
+                step={step}
+                draft={draft}
+                agent={agent}
+                fresh={fresh}
+                onApply={onApply}
+              />
+            )}
+            {step === 'scope' && !!plan?.plugins.length && (
+              <Button variant="outline" size="sm" onClick={agent.resume} disabled={!idle}>
+                {draft.interrupted ? 'Back to connection' : 'Keep previous tests'}
+              </Button>
+            )}
+            {ready && (
+              <PlanSummary
+                edit={agent.edit}
+                draft={draft}
+                setDraft={setDraft}
+                config={proposed}
+                plan={plan}
+                disabled={!idle}
+              />
+            )}
+            {pending && (
+              <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                Thinking…
+              </p>
+            )}
+          </div>
+          <ReviewAction agent={agent} draft={draft} fresh={fresh} onApply={onApply} />
+          <Composer draft={draft} setDraft={setDraft} agent={agent} />
+        </>
+      )}
     </section>
   );
 }
