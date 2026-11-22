@@ -1,4 +1,4 @@
-import EvalResult, { asEvaluateResult } from '../models/evalResult';
+import EvalResult, { asEvaluateResult, externalizeResultMetadata } from '../models/evalResult';
 
 import type { EvaluationStore } from '../evaluator/runtime';
 import type Eval from '../models/eval';
@@ -31,7 +31,11 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return this.evaluation.resultPersistenceFailed;
   }
 
-  appendResult(result: EvaluateResult): Promise<void> {
+  async appendResult(result: EvaluateResult): Promise<void> {
+    // Streamed JSONL artifacts reuse this row after the store appends it.
+    if (result.metadata?.audio?.data) {
+      result.metadata = await externalizeResultMetadata(result, this.id);
+    }
     return this.evaluation.addResult(result);
   }
 

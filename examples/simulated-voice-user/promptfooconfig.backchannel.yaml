@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Continue speaking after a brief backchannel
+prompts:
+  - |
+    Answer calls for a fictional cafe using only the facts below.
+    When asked for the menu, name every item slowly, with a short pause between items.
+    A brief acknowledgment such as "mm-hmm, go on" is permission to continue the menu,
+    not a new question. Resume the list if you pause; do not restart from the beginning.
+    A substantive new question or correction should interrupt the list.
+    No backend delegation is needed.
+    {{authoritativeFacts}}
+providers:
+  - id: promptfoo:simulated-voice-user
+    config:
+      durationMs: 40000
+      callerInterventions:
+        - atMs: 9000
+          text: Mm-hmm, go on.
+      target:
+        audio:
+          output:
+            voice: marin
+      caller:
+        audio:
+          output:
+            voice: cedar
+defaultTest: file://grading.yaml
+tests:
+  - description: Acknowledgment should not abandon the menu
+    vars:
+      authoritativeFacts: |
+        F1: The cafe closes at 4 pm on Saturdays.
+        F2: Decaf is available until 3 pm on Saturdays.
+        F3: The menu contains espresso, americano, latte, cappuccino, flat white, mocha,
+        hot chocolate, tea, iced coffee, cold brew, muffins, croissants, and banana bread.
+        No flavors, varieties, prices, or opening times are provided.
+      requiredGoals: |
+        G1: After the caller's "go on" acknowledgment, the caller hears the target continue the menu
+        and reach banana bread without being asked to repeat the request.
+      instructions: |
+        You are a cafe customer, not an assistant. Immediately ask for the entire menu.
+        Listen quietly. A scheduled recording will acknowledge the menu for you.
+        Do not ask another question, interrupt, or add another acknowledgment.
+        After hearing the last item, banana bread, thank them and say goodbye.
+        Never invent cafe facts. Do not delegate.
+    assert:
+      - type: javascript
+        metric: backchannel_heard
+        value: |
+          const heard = context.providerResponse.metadata?.voice?.participants?.target?.heard;
+          return typeof heard === 'string' && /\bgo on\b/i.test(heard);
+      - type: javascript
+        value: file://playout-health.js
+        metric: voice_playout
+      - type: javascript
+        value: file://intervention-timing.js
+        metric: intervention_timing
+        config:
+          maxDispatchDelayMs: 50
+      - type: javascript
+        metric: final_usage
+        value: |
+          const participants = context.providerResponse.metadata.voice.participants;
+          return Object.values(participants).every(p => p.finalUsageConfirmed && p.heard.trim());
