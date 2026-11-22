@@ -29,7 +29,11 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createPromptMetrics,
+} from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 import { createAccuracyFilter, createPassFailOptions } from '../factories/literalFixtures';
 
@@ -466,6 +470,46 @@ describe('evaluator', () => {
   });
 
   describe('summaryResults', () => {
+    it.each([1, 2])(
+      'counts distinct outcome tests and actual runs across columns with %d revisions',
+      async (children) => {
+        const evaluation = await Eval.create({ redteam: {} }, []);
+        // Both columns share index 0. Each revision has a distinct ticket and
+        // test index and runs in its own seed's column only.
+        for (let promptIdx = 0; promptIdx < 2; promptIdx++) {
+          await evaluation.addResult(createEvaluateResult({ promptIdx, testIdx: 0 }));
+          if (promptIdx < children) {
+            await evaluation.addResult(
+              createEvaluateResult({
+                promptIdx,
+                testIdx: promptIdx + 1,
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+              }),
+            );
+          }
+        }
+        await evaluation.addPrompts(
+          [0, 1].map((column) =>
+            createCompletedPrompt(String(column), {
+              metrics: createPromptMetrics({
+                testPassCount: 1,
+                testFailCount: Number(column < children),
+                namedScores: { attackExposed: 1 },
+              }),
+            }),
+          ),
+        );
+        for (const type of [undefined, 'redteam'] as const) {
+          const summary = (await getEvalSummaries(undefined, type)).find(
+            (e) => e.evalId === evaluation.id,
+          );
+          expect(summary?.numTests).toBe(1 + children);
+          expect(summary?.passRate).toBeCloseTo(200 / (2 + children));
+        }
+      },
+    );
+
     it('should return all evaluations', async () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();

@@ -1927,6 +1927,30 @@ export async function getEvalSummaries(
       ? await getAgentReportRates(results.map((result) => result.evalId))
       : undefined;
 
+  // A successful outcome seed records attackExposed. Each column can then
+  // have its own child test index, even if column totals happen to match.
+  // Limit the indexed count to multi-column outcome runs to keep ordinary
+  // summary reads independent of the size of the results table.
+  const outcomeIds = results
+    .filter(
+      ({ prompts }) =>
+        prompts &&
+        prompts.length > 1 &&
+        prompts.some((p) => p.metrics?.namedScores?.attackExposed !== undefined),
+    )
+    .map(({ evalId }) => evalId);
+  const distinctTests = new Map<string, number>();
+  if (outcomeIds.length) {
+    const counts = await db.all<{ eval_id: string; tests: number }>(sql`
+      SELECT eval_id, COUNT(DISTINCT test_idx) AS tests FROM eval_results
+      WHERE eval_id IN (SELECT value FROM json_each(${JSON.stringify(outcomeIds)}))
+      GROUP BY eval_id
+    `);
+    for (const { eval_id, tests } of counts) {
+      distinctTests.set(eval_id, tests);
+    }
+  }
+
   return results.map((result) => {
     const passCount =
       result.prompts?.reduce((memo, prompt) => {
@@ -1938,7 +1962,7 @@ export async function getEvalSummaries(
         return memo + (prompt.metrics?.testFailCount ?? 0);
       }, 0) ?? 0;
 
-    // All prompts should have the same number of test cases:
+    // Conditional trials and provider filters make column lengths unequal.
     const testCounts = result.prompts?.map((p) => {
       return (
         (p.metrics?.testPassCount ?? 0) +
@@ -1947,11 +1971,8 @@ export async function getEvalSummaries(
       );
     }) ?? [0];
 
-    // Derive the number of tests from the first prompt.
-    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
-
-    // Test count * prompt count
-    const testRunCount = testCount * (result.prompts?.length ?? 0);
+    const testCount = distinctTests.get(result.evalId) ?? testCounts[0] ?? 0;
+    const testRunCount = testCounts.reduce((sum, count) => sum + count, 0);
     const rateFromPromptMetrics =
       type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined;
 
