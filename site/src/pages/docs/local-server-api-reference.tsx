@@ -23,8 +23,9 @@ export default function LocalServerApiReference() {
           </summary>
           <p>
             This quickstart uses the built-in <code>echo</code> provider and keeps the result on
-            your machine. Use a Bash-compatible shell with Node.js 22.22 or later, curl 7.82 or
-            later, and jq. No API key is required.
+            your machine. Use a Bash-compatible shell with a{' '}
+            <a href="/docs/installation#nodejs-runtime-support">supported Node.js version</a>, curl
+            7.82 or later, and jq. No API key is required.
           </p>
           <p>
             <strong>1. Start the server.</strong> Run this in one terminal and leave it running.
