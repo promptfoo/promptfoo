@@ -44,6 +44,7 @@ import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
+import { remoteTestRefOptions } from '../remoteTestData';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
   isRemoteTestsReference,
@@ -265,8 +266,10 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
     });
   }
 
-  // Dereference JSON
-  const config = (await $RefParser.dereference(rawConfig)) as unknown as UnifiedConfig;
+  const config = (await $RefParser.dereference(
+    rawConfig,
+    remoteTestRefOptions(),
+  )) as unknown as UnifiedConfig;
 
   // Restore functions and tools parameters
   if (Array.isArray(config.providers)) {
@@ -733,6 +736,10 @@ async function prepareCombinedConfig(
       };
     }
     const source = test as TestCase;
+    const remote = source.metadata?.__promptfoo;
+    const remoteVars = new Set(
+      remote?.remote === true ? (remote.remoteVars ?? Object.keys(source.vars ?? {})) : [],
+    );
     // Keep grader IDs unchanged so references can reuse configured providers.
     return {
       ...source,
@@ -742,7 +749,12 @@ async function prepareCombinedConfig(
             ? resolveConfigPath(basePath, source.vars)
             : Array.isArray(source.vars)
               ? source.vars.map((value) => resolveConfigPath(basePath, value))
-              : resolveNestedFileReferences(basePath, source.vars),
+              : Object.fromEntries(
+                  Object.entries(source.vars).map(([name, value]) => [
+                    name,
+                    remoteVars.has(name) ? value : resolveNestedFileReferences(basePath, value),
+                  ]),
+                ),
       }),
       ...(typeof source.provider === 'string' &&
         source.provider.startsWith('file://') && {

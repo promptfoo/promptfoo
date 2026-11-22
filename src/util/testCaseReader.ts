@@ -12,7 +12,7 @@ import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
-import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
+import { fetchRemoteTestCases, getRemoteTestCaseSource } from '../integrations/remoteTestCases';
 import logger from '../logger';
 import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
@@ -22,6 +22,7 @@ import { isApiProvider } from '../types/providers';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { remoteTestRefOptions } from './remoteTestData';
 import { renderEnvOnlyInObject } from './render';
 import { getExcelWorkbookPath, parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
@@ -54,7 +55,12 @@ function preserveRemoteTests(tests: TestCase[]): TestCase[] {
       ...test,
       metadata: {
         ...test.metadata,
-        __promptfoo: { ...test.metadata?.__promptfoo, remote: true },
+        __promptfoo: {
+          ...test.metadata?.__promptfoo,
+          remote: true,
+          remoteVars:
+            typeof test.vars === 'object' && test.vars !== null ? Object.keys(test.vars) : [],
+        },
       },
     };
   });
@@ -118,11 +124,12 @@ export async function readStandaloneTestsFile(
   varsPath = renderEnvOnlyInObject(varsPath);
   const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
 
-  if (varsPath.startsWith('huggingface://datasets/')) {
+  const remoteSource = getRemoteTestCaseSource(varsPath);
+  if (remoteSource) {
     telemetry.record('feature_used', {
-      feature: 'huggingface dataset',
+      feature: remoteSource,
     });
-    return preserveRemoteTests(await fetchHuggingFaceDataset(varsPath));
+    return preserveRemoteTests(await fetchRemoteTestCases(varsPath, remoteSource));
   }
 
   if (varsPath.startsWith('az://')) {
@@ -501,22 +508,17 @@ async function readTestWithEnv(
   // Bare vars-file references and providers in imported rows use the tests file's directory.
   sourceBasePath = basePath,
 ): Promise<TestCase> {
-  if (typeof test === 'object' && isRemoteTestCase(test)) {
-    return test as TestCase;
-  }
-  let testCase: TestCase;
   let effectiveBasePath = sourceBasePath;
-
   if (typeof test === 'string') {
     const testFilePath = path.resolve(sourceBasePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
-    const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
-    testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
-  } else {
-    testCase = await loadTestWithVars(test, sourceBasePath);
+    test = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
   }
-
+  if (isRemoteTestCase(test)) {
+    return test as TestCase;
+  }
+  const testCase = await loadTestWithVars(test, effectiveBasePath);
   const providerId =
     typeof testCase.provider === 'string' ? testCase.provider : testCase.provider?.id;
   // Provider construction is deferred until after parsing. Keep the source directory
@@ -590,7 +592,7 @@ function validateTestCase(testCase: TestCase): void {
     !testCase.options &&
     !testCase.metadata &&
     !testCase.provider &&
-    !testCase.providerOutput &&
+    testCase.providerOutput === undefined &&
     !isDescriptionOnly &&
     typeof testCase.threshold !== 'number'
   ) {
@@ -628,11 +630,12 @@ async function loadTestsFromGlobWithEnv(
   loadProviders = true,
 ): Promise<TestCase[]> {
   loadTestsGlob = renderEnvOnlyInObject(loadTestsGlob);
-  if (loadTestsGlob.startsWith('huggingface://datasets/')) {
+  const remoteSource = getRemoteTestCaseSource(loadTestsGlob);
+  if (remoteSource) {
     telemetry.record('feature_used', {
-      feature: 'huggingface dataset',
+      feature: remoteSource,
     });
-    return preserveRemoteTests(await fetchHuggingFaceDataset(loadTestsGlob));
+    return preserveRemoteTests(await fetchRemoteTestCases(loadTestsGlob, remoteSource));
   }
 
   if (loadTestsGlob.startsWith('file://')) {
@@ -668,7 +671,7 @@ async function loadTestsFromGlobWithEnv(
 
   const _deref = async (testCases: TestCase[], file: string) => {
     logger.debug(`Dereferencing test file: ${file}`);
-    return (await $RefParser.dereference(testCases)) as TestCase[];
+    return (await $RefParser.dereference(testCases, remoteTestRefOptions())) as TestCase[];
   };
 
   const ret: TestCase[] = [];

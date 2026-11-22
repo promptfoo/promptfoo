@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Check stored Langfuse outputs
+prompts:
+  - '{{input}}'
+# Stored trace outputs bypass this response provider.
+providers:
+  - echo
+defaultTest:
+  assert:
+    - type: javascript
+      value: >-
+        output != null &&
+        (typeof output === 'string' ? output.length > 0 : Object.keys(output).length > 0)
+tests: langfuse://traces?limit=10

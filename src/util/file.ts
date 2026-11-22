@@ -18,6 +18,7 @@ import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
+import { preserveRemoteFields } from './remoteTestData';
 import { renderVarsInObject } from './render';
 import { loadYaml } from './yamlLoad';
 
@@ -325,35 +326,15 @@ export function maybeLoadConfigFromExternalFile(
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }
   if (typeof config === 'object' && config !== null) {
-    const result: Record<string, any> = {};
-    for (const key of Object.keys(config)) {
-      // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
-      // and current key is 'value', switch to assertion context
+    const load = preserveRemoteFields(config, (key, value) => {
       const isAssertionValue =
-        key === 'value' &&
-        'type' in config &&
-        typeof config.type === 'string' &&
-        (config.type === 'python' || config.type === 'javascript');
-
-      // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
-      // This preserves file:// glob patterns for test case expansion
-      const isVarsField = key === 'vars';
-
-      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
-
-      if (key === '__proto__') {
-        Object.defineProperty(result, key, {
-          value,
-          enumerable: true,
-          configurable: true,
-          writable: true,
-        });
-      } else {
-        result[key] = value;
-      }
-    }
-    return result;
+        key === 'value' && (config.type === 'python' || config.type === 'javascript');
+      // Keep file:// globs in vars for test case expansion.
+      const childContext = isAssertionValue ? 'assertion' : key === 'vars' ? 'vars' : context;
+      return maybeLoadConfigFromExternalFile(value, childContext);
+    });
+    // Object.fromEntries preserves a literal __proto__ key as data.
+    return Object.fromEntries(Object.keys(config).map((key) => [key, load(key, config[key])]));
   }
   return maybeLoadFromExternalFile(config, context);
 }

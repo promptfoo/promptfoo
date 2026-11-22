@@ -6,7 +6,7 @@ import deepEqual from 'fast-deep-equal';
 import safeStringify from 'fast-safe-stringify';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider';
 
-import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
+import type { EvalRuntimeOptions, TestCase, UnifiedConfig } from '../types';
 
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
@@ -848,10 +848,11 @@ export function sanitizeConfigForOutput(
     ),
   ];
   const sourceTests = collectTests(safe);
-  for (const [index, test] of collectTests(sanitized).entries()) {
-    if (!test || typeof test !== 'object') {
+  for (const [index, entry] of collectTests(sanitized).entries()) {
+    if (!entry || typeof entry !== 'object') {
       continue;
     }
+    const test = entry as TestCase;
     const sourceTest = sourceTests[index];
     const sourceMetadata =
       sourceTest && typeof sourceTest === 'object' && 'metadata' in sourceTest
@@ -871,13 +872,25 @@ export function sanitizeConfigForOutput(
         __promptfoo: { ...test.metadata?.__promptfoo, providerBasePath },
       };
     }
-    if (stripVars && 'vars' in test) {
+    if (stripVars) {
       delete test.vars;
+      if (test.metadata?.__promptfoo) {
+        delete test.metadata.__promptfoo.remoteVars;
+      }
     }
+    const providerOutputRedacted =
+      test.metadata?.__promptfoo?.providerOutputRedacted === true ||
+      (stripOutput && test.providerOutput !== undefined);
     if (stripMetadata && 'metadata' in test) {
       // Remote-row safety and local replay origins are operational metadata.
       if (test.metadata?.__promptfoo?.remote === true) {
-        test.metadata = { __promptfoo: { remote: true } };
+        const remoteVars = test.metadata.__promptfoo.remoteVars;
+        test.metadata = {
+          __promptfoo: {
+            remote: true,
+            ...(!stripVars && Array.isArray(remoteVars) ? { remoteVars: [...remoteVars] } : {}),
+          },
+        };
       } else if (typeof test.metadata?.__promptfoo?.providerBasePath === 'string') {
         test.metadata = {
           __promptfoo: { providerBasePath: test.metadata.__promptfoo.providerBasePath },
@@ -888,6 +901,12 @@ export function sanitizeConfigForOutput(
     }
     if (stripOutput && 'providerOutput' in test) {
       delete test.providerOutput;
+    }
+    if (providerOutputRedacted) {
+      test.metadata = {
+        ...test.metadata,
+        __promptfoo: { ...test.metadata?.__promptfoo, providerOutputRedacted: true },
+      };
     }
   }
   const provider = safe.tracing?.provider;
@@ -1430,6 +1449,11 @@ function sanitizePlainObject(
           ? sanitizeUrl(sanitizedValue)
           : sanitizedValue;
     }
+  }
+  // If a name changed, the list can no longer identify the imported keys. Keep all vars literal.
+  const origin = sanitized.__promptfoo;
+  if (origin?.remote === true && !deepEqual(obj.__promptfoo?.remoteVars, origin.remoteVars)) {
+    delete origin.remoteVars;
   }
   return sanitized;
 }

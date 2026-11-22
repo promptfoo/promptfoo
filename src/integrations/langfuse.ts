@@ -65,6 +65,10 @@ function getLangfuseState(): LangfuseClientState {
   return state;
 }
 
+export function getLangfuseClient(): Promise<LangfuseClient> {
+  return getLangfuseState().client;
+}
+
 export async function getPrompt(
   id: string,
   vars: Record<string, VarValue>,

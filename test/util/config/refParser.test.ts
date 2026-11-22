@@ -1,13 +1,18 @@
 import dns from 'node:dns/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import http, { createServer } from 'node:http';
 import https from 'node:https';
 import { syncBuiltinESMExports } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import type { LookupAddress } from 'node:dns';
 import type { AddressInfo, LookupFunction, Socket } from 'node:net';
 
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { dereferenceConfig } from '../../../src/util/config/load';
+import { readTest, readTests } from '../../../src/util/testCaseReader';
 
 import type { UnifiedConfig } from '../../../src/types/index';
 
@@ -17,6 +22,102 @@ afterEach(() => {
 });
 
 describe('dereferenceConfig local references', () => {
+  it('excludes imported reference-shaped data from resolution and dereferencing', async () => {
+    const literal = { $ref: 'literal://retained-marker' };
+    const config = {
+      definitions: { local: 'resolved' },
+      prompts: [{ $ref: '#/definitions/local' }],
+      providers: ['echo'],
+      tests: [
+        {
+          vars: { 'raw/%41~': literal, local: { $ref: '#/definitions/local' } },
+          providerOutput: literal,
+          metadata: {
+            __promptfoo: { remote: true, remoteVars: ['raw/%41~'] },
+            imported: literal,
+          },
+        },
+      ],
+    } as unknown as UnifiedConfig;
+    const loaded = await dereferenceConfig(config);
+    expect(loaded.prompts).toEqual(['resolved']);
+    expect(loaded.tests).toEqual([
+      {
+        vars: { 'raw/%41~': literal, local: 'resolved' },
+        providerOutput: literal,
+        metadata: {
+          __promptfoo: { remote: true, remoteVars: ['raw/%41~'] },
+          imported: literal,
+        },
+      },
+    ]);
+  });
+
+  it('keeps a remote variable named $ref as data', async () => {
+    const test = {
+      metadata: { __promptfoo: { remote: true, remoteVars: ['$ref'] } },
+      vars: { $ref: 'literal://imported' },
+    };
+    const config = { tests: [test] } as unknown as UnifiedConfig;
+    expect((await dereferenceConfig(config)).tests).toEqual([test]);
+  });
+
+  it('ignores imported references in unselected parts of external documents', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pf-refs-'));
+    onTestFinished(() => rm(dir, { recursive: true, force: true }));
+    const file = join(dir, 'source.json');
+    await writeFile(
+      file,
+      JSON.stringify({
+        prompt: 'chosen',
+        tests: [
+          {
+            metadata: { __promptfoo: { remote: true } },
+            vars: { input: { $ref: 'missing.json' } },
+          },
+        ],
+      }),
+    );
+    const config = {
+      prompts: [{ $ref: pathToFileURL(file).href + '#/prompt' }],
+      definitions: { local: 'local input' },
+      tests: [{ vars: { input: { $ref: '#/definitions/local' } } }],
+    } as unknown as UnifiedConfig;
+    const loaded = await dereferenceConfig(config);
+    expect(loaded.prompts).toEqual(['chosen']);
+    expect(loaded.tests).toEqual([{ vars: { input: 'local input' } }]);
+  });
+
+  it.each(['yaml', 'json', 'jsonl'])('preserves imported data in saved %s tests', async (ext) => {
+    const dir = await mkdtemp(join(tmpdir(), 'pf-replay-'));
+    onTestFinished(() => rm(dir, { recursive: true, force: true }));
+    const file = join(dir, 'cases.' + ext);
+    const imported = { ref: { $ref: 'literal://example' }, file: 'file://fixture.txt' };
+    const test = {
+      metadata: { __promptfoo: { remote: true, remoteVars: ['input'] }, imported },
+      providerOutput: imported,
+      description: 'file://fixture.txt',
+      vars: { input: imported, local: 'local value', alias: { $ref: '#/0/vars/local' } },
+    };
+    await writeFile(join(dir, 'fixture.txt'), 'local value');
+    await writeFile(file, JSON.stringify(ext === 'jsonl' ? test : [test]));
+    expect(await readTests([file], dir)).toEqual([
+      { ...test, vars: { input: imported, local: 'local value', alias: 'local value' } },
+    ]);
+  });
+
+  it('keeps imported data literal when reading one saved test', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pf-replay-'));
+    onTestFinished(() => rm(dir, { recursive: true, force: true }));
+    const test = {
+      metadata: { __promptfoo: { remote: true } },
+      vars: { input: 'file://missing.txt' },
+      providerOutput: 'file://missing.txt',
+    };
+    await writeFile(join(dir, 'case.yaml'), JSON.stringify(test));
+    expect(await readTest('case.yaml', dir)).toEqual(test);
+  });
+
   it('resolves an own property without reading inherited properties', async () => {
     const definitions = Object.assign(Object.create({ inherited: 'inherited prompt' }), {
       own: 'own prompt',

@@ -1894,7 +1894,7 @@ describe('suite environment loading', () => {
           description: 'Row #1',
           vars: 'missing-vars.yaml',
           provider: 'file://missing-provider.js',
-          metadata: { __promptfoo: { remote: true } },
+          metadata: { __promptfoo: { remote: true, remoteVars: [] } },
         },
       ]);
       expect(readAzureBlobText).toHaveBeenCalledTimes(1);
