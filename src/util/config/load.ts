@@ -354,7 +354,11 @@ type LoadedConfig = UnifiedConfig & {
 
 // Bind references to each rendered target so combining files and filtering providers
 // can't associate a key with the wrong target. Only the executable provider needs its value.
-const httpHeaderReferences = new WeakMap<ProviderOptions, Record<string, string>>();
+const httpHeaderReferences = new WeakMap<
+  ProviderOptions,
+  { headers: Record<string, string>; sourceEnv?: Record<string, unknown> }
+>();
+const headerEnvReference = /env(?:\.(\w+)|\[['"](\w+)['"]\])/;
 
 function rememberHttpHeaderReferences(source: LoadedConfig, rendered: LoadedConfig) {
   const originals = source.targets ?? source.providers;
@@ -369,9 +373,51 @@ function rememberHttpHeaderReferences(source: LoadedConfig, rendered: LoadedConf
     }
     const references = getSafeHeaderTemplates(original.config?.headers ?? {});
     if (Object.keys(references).length) {
-      httpHeaderReferences.set(provider, references);
+      httpHeaderReferences.set(provider, { headers: references, sourceEnv: source.env });
     }
   });
+}
+
+// A merged config has one suite env. Preserve shadowed bindings on their original
+// target without copying resolved process credentials into the saved config.
+function scopeMergedHeaderReferences(
+  provider: ProviderOptions,
+  fileEnv: Record<string, unknown> | undefined,
+  mergedEnv: Record<string, unknown>,
+) {
+  const references = httpHeaderReferences.get(provider);
+  if (!references) {
+    return;
+  }
+  for (const [header, template] of Object.entries(references.headers)) {
+    const match = template.match(headerEnvReference);
+    if (!match) {
+      continue;
+    }
+    const name = match[1] ?? match[2];
+    if (fileEnv?.[name] === mergedEnv[name]) {
+      continue;
+    }
+    const source = references.sourceEnv?.[name];
+    const alias =
+      typeof source === 'string' &&
+      source.match(/^\{\{\s*env(?:\.(\w+)|\[['"](\w+)['"]\])\s*\}\}$/);
+    if (alias) {
+      const backing = alias[1] ?? alias[2];
+      if (!Object.hasOwn(mergedEnv, backing) && !Object.hasOwn(provider.env ?? {}, backing)) {
+        references.headers[header] = template.replace(headerEnvReference, 'env.' + backing);
+        continue;
+      }
+    } else if (source != null && !String(source).includes('{{') && source === fileEnv?.[name]) {
+      // Keep the independently rendered literal, as before reference restoration.
+      // Export sanitization redacts credential headers. Never inline a resolved env template.
+      delete references.headers[header];
+      continue;
+    }
+    throw new ConfigResolutionError(
+      `Cannot preserve the HTTP header binding for ${name} across merged configs. Use distinct environment variable names for each target.`,
+    );
+  }
 }
 
 function restoreHttpHeaderReferences<T>(provider: T): T {
@@ -382,7 +428,10 @@ function restoreHttpHeaderReferences<T>(provider: T): T {
   return references
     ? {
         ...provider,
-        config: { ...provider.config, headers: { ...provider.config?.headers, ...references } },
+        config: {
+          ...provider.config,
+          headers: { ...provider.config?.headers, ...references.headers },
+        },
       }
     : provider;
 }
@@ -651,6 +700,9 @@ async function prepareCombinedConfig(
       }
     } else if (Array.isArray(config.providers)) {
       config.providers.forEach((provider) => {
+        if (configs.length > 1 && isProviderOptions(provider)) {
+          scopeMergedHeaderReferences(provider, config.env, combinedEnv);
+        }
         const key = providerDedupeKey(provider, functionIds);
         if (!seenProviders.has(key)) {
           providers.push(provider);

@@ -226,6 +226,81 @@ describe('suite environment loading', () => {
     },
   );
 
+  it('preserves each HTTP target’s credential when saved configs merge overlapping env names', async () => {
+    const files = ['first', 'second'].map((name) =>
+      writeConfig(name, {
+        env: { OPENAI_API_KEY: name + '-private-key' },
+        providers: [
+          {
+            id: 'http',
+            config: {
+              url: 'https://' + name + '.example/chat',
+              body: { message: '{{prompt}}' },
+              headers: { Authorization: 'Bearer {{env.OPENAI_API_KEY}}' },
+            },
+          },
+        ],
+      }),
+    );
+    const initial = await resolveConfigs({ config: files }, {});
+    const saved = JSON.parse(JSON.stringify(initial.config));
+    const replay = await resolveConfigs({}, saved);
+    const reloaded = await resolveConfigs({ config: [writeConfig('merged', saved)] }, {});
+    for (const result of [initial, replay, reloaded]) {
+      expect(result.testSuite.providers.map((p) => p.config?.headers.Authorization)).toEqual([
+        'Bearer first-private-key',
+        'Bearer second-private-key',
+      ]);
+      expect(result.selectedProviderConfigs).toEqual(result.config.providers);
+      expect(JSON.stringify(sanitizeConfigForOutput(result.config))).not.toContain('private-key');
+    }
+  });
+
+  it('preserves a shadowed HTTP header alias without saving the resolved process key', async () => {
+    const first = writeConfig('first', {
+      env: { APP_TOKEN: '{{env.OPENAI_API_KEY}}' },
+      providers: [
+        {
+          id: 'http',
+          config: {
+            url: 'https://first.example/chat',
+            body: { message: '{{prompt}}' },
+            headers: { 'X-Custom': '{{env["APP_TOKEN"]}}' },
+          },
+        },
+      ],
+    });
+    const second = writeConfig('second', { env: { APP_TOKEN: 'other-key' } });
+    const result = await resolveConfigs({ config: [first, second] }, {});
+    expect(JSON.stringify(result.config)).not.toContain('process-key');
+    const restore = mockProcessEnv({ OPENAI_API_KEY: 'rotated-key' });
+    try {
+      const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(result.config)));
+      expect(replay.testSuite.providers[0].config?.headers['X-Custom']).toBe('rotated-key');
+    } finally {
+      restore();
+    }
+  });
+
+  it('refuses to rebind an ambient HTTP credential to another file’s env override', async () => {
+    const first = writeConfig('first', {
+      providers: [
+        {
+          id: 'http',
+          config: {
+            url: 'https://first.example/chat',
+            body: { message: '{{prompt}}' },
+            headers: { Authorization: 'Bearer {{env.OPENAI_API_KEY}}' },
+          },
+        },
+      ],
+    });
+    const second = writeConfig('second', { env: { OPENAI_API_KEY: 'other-key' } });
+    await expect(resolveConfigs({ config: [first, second] }, {})).rejects.toThrow(
+      'Use distinct environment variable names for each target',
+    );
+  });
+
   it('applies published tracing defaults to executable and saved file configurations', async () => {
     const input = { enabled: true, otlp: { http: {}, grpc: {} }, storage: {} };
     const configPath = writeConfig('tracing-defaults', {
