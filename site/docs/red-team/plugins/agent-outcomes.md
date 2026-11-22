@@ -120,11 +120,11 @@ Generation writes four seed attacks. During evaluation a seed can trigger **one*
 
 This experimental task uses Meta's attack model without chat history or shared learning. The **revision request** omits the private assistant response, owner request, measurements and grade. Remote **seed generation** still uses your configured task and purpose. Public replies can contain sensitive text, including quotes from the owner. Use synthetic data throughout.
 
-The proposal requires a remote generation service that supports `meta-ticket-revision`, over verified HTTPS or direct loopback HTTP. For a private CA, set `PROMPTFOO_CA_CERT_PATH`. Disabling remote generation prevents revisions. Excluding target output from agentic attack generation stops public revisions. Proposal tokens are separate from the target rows' usage totals.
+The proposal requires a remote generation service that supports `meta-ticket-revision`, over verified HTTPS or direct loopback HTTP. For a private CA, set `PROMPTFOO_CA_CERT_PATH`. Disabling remote generation prevents remote proposals. Excluding target output from agentic attack generation stops public revisions. Proposal tokens are separate from the target rows' usage totals. Model fallbacks on the generation service can add charges.
 
 **Harness requirements**
 
-- Start a fresh trial with the same owner request, the replacement ticket and a new private marker. Keep case metadata out of the agent's instructions. Disable target retries and shared sessions.
+- Start a fresh trial with the same owner request, the replacement ticket and a new private marker. Promptfoo checks the case ID. Your harness is responsible for resetting service state and rotating the marker. Keep case metadata out of the agent's instructions. Disable any retries or shared sessions inside the harness.
 - For **each** seed and revision, return `measurements.delivery.ownerSha256` and `measurements.delivery.ticketSha256`. Hash the exact UTF-8 user message and ticket text delivered to the agent, respectively, as lowercase hex SHA-256. Observe what reached the agent before it acted. Simply hashing your input config cannot establish delivery.
 - `publicBefore` must match the assigned ticket exactly. For a revision, `publicAfter` on the seed must start with that ticket and include a nonempty appended reply. The proposer accepts up to 4,096 characters in each field. A changed owner, wrong ticket or missing delivery proof rules out a pass. A measured leak with unverified delivery remains a finding outside the attack success rate.
 
@@ -132,7 +132,9 @@ The proposal requires a remote generation service that supports `meta-ticket-rev
 
 Each attempt has its own grade and case ID. A revision carries the seed's ID in `agentOutcome.parentCaseId`. A decision of `proposed` on the seed means the proposer returned a usable ticket. Verify that a child row exists, especially after interruption. A rejected proposal leaves the seed grade intact and adds no target attempt. In the report, expand the attack to see the feedback setting and seed ID.
 
-Run a fresh scan to compare arms. Cloud eval-only jobs, resumed seeds, shared sessions, per-step hooks, variable transforms and comparison assertions do not produce revisions. Retry-errors is unsupported for these scans. Keep the grade when exporting results. Without it the report cannot verify delivery for these attempts.
+Run a fresh scan to compare arms. Cloud eval-only jobs, resumed seeds, shared sessions, per-step hooks, custom variable transforms and comparison assertions do not produce revisions. Retry-errors is unsupported for these scans. Keep the grade when exporting results. Without it the report cannot verify delivery for these attempts.
+
+For matched seeds in the CLI, generate once in public mode. Copy the generated YAML to a second file in the same directory. In the copy, change each `metaTicketRevision: public` setting to `blind`, including the plugin config and the generated assignments. Leave the owner and ticket texts identical. Run `redteam eval -c <file> --no-cache` on each file. Generating the files independently can change the seeds.
 
 The report's attack success rate counts eligible **attempts**. For a public-versus-blind comparison, use identical seed tickets and owner tasks in both runs, randomly order the runs, and reset the target between attempts. Group each seed with its child. Compare how many initially safe, eligible seeds led to a confirmed leak on revision. Also report seeds with any confirmed leak within budget, task completion, missing revisions and inconclusive results in each arm. Show the counts and denominators. An extra success on a second try alone cannot tell you whether feedback helped.
 
