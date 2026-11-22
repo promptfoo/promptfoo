@@ -1,9 +1,10 @@
 import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString, getProviderEnvString } from '../../envars';
+import { getEnvString, getMergedEnvOverrides, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
 import { setGenAIResponseAttributes } from '../../tracing/genaiTracer';
+import { createAzureCredential } from '../../util/azureCredentials';
 import { rateLimitTimingFromHeaders } from '../../util/fetch';
 import {
   extractRateLimitErrorCode,
@@ -21,12 +22,15 @@ import {
 } from '../../util/index';
 import { sleepWithAbort } from '../../util/time';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { getCredentialCacheNamespace } from '../credentialCache';
 import { FunctionCallbackHandler, loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
+import { getOpaqueCredentialCacheNamespace } from '../opaqueCredentialCache';
 import { hasUnpricedAzureResponsesToolUsage } from '../openai/billing';
 import { applyGpt6RequestRules, getGpt6ResponsesReasoning, getGpt6Variant } from '../openai/gpt6';
 import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { getResponsesOutputText } from '../responses/stream';
+import { createEnvironmentScopedState } from '../scopedState';
 import {
   buildChatSpanContext,
   emitTurnMarkerSpan,
@@ -68,6 +72,13 @@ type ResponseFunctionCallItem = Extract<
 >;
 type EffectiveFoundryConfig = AzureAssistantOptions & Record<string, any>;
 type FunctionToolCallbacks = AzureAssistantOptions['functionToolCallbacks'];
+interface FoundryClientState {
+  projectClient?: Promise<FoundryProjectClient>;
+  agentPromise?: Promise<FoundryAgent>;
+  resolvedAgent?: FoundryAgent;
+  cacheNamespace?: string;
+}
+
 const MAX_REQUEST_TIMEOUT_MS = 2_147_483_647;
 // Match the scheduler's default maximum wait without retrying before a longer server hint.
 const MAX_RETRY_DELAY_MS = 60_000;
@@ -286,39 +297,29 @@ function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
 }
 
 export class AzureFoundryAgentProvider extends AzureGenericProvider {
-  assistantConfig: AzureAssistantOptions;
+  assistantConfig: NonNullable<AzureAssistantProviderOptions['config']>;
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;
-  private projectClient?: Promise<FoundryProjectClient>;
-  private projectUrl: string;
   readonly #servicePrincipal?: {
     tenantId: string;
     clientId: string;
     clientSecret: string;
     authorityHost?: string;
   };
-  private agentPromise?: Promise<FoundryAgent>;
-  private resolvedAgent: FoundryAgent | null = null;
+  private readonly getClientState = createEnvironmentScopedState<FoundryClientState>(() => ({
+    cacheNamespace: this.selectResponseCacheNamespace(),
+  }));
   private warnedUnsupportedFields = new Set<string>();
 
   override async initialize(): Promise<void> {
-    // The project client owns its Azure credential.
+    // Foundry initializes its scoped Azure credential in initializeClient().
   }
 
   constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
     super(deploymentName, options);
     this.assistantConfig = options.config || {};
-    this.projectUrl =
-      options.config?.projectUrl ||
-      (getProviderEnvString(options.env, 'AZURE_AI_PROJECT_URL') ??
-        getEnvString('AZURE_AI_PROJECT_URL') ??
-        '');
-
-    if (!this.projectUrl) {
-      throw new Error(
-        'Azure AI Project URL must be provided via projectUrl option or AZURE_AI_PROJECT_URL environment variable',
-      );
-    }
+    // Validate at construction while resolving ambient endpoints in each invocation.
+    this.getProjectUrl();
 
     const { azureTenantId, azureClientId, azureClientSecret, azureAuthorityHost } =
       this.assistantConfig;
@@ -349,18 +350,76 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
+  private getResponseCacheNamespace(): string | undefined {
+    return this.getClientState().cacheNamespace;
+  }
+
+  private selectResponseCacheNamespace(): string | undefined {
+    const env = getMergedEnvOverrides(this.env);
+    const names = [
+      'AZURE_CLIENT_ID',
+      'AZURE_CLIENT_SECRET',
+      'AZURE_TENANT_ID',
+      'AZURE_FEDERATED_TOKEN_FILE',
+      'AZURE_CLIENT_CERTIFICATE_PATH',
+      'AZURE_CLIENT_CERTIFICATE_PASSWORD',
+      'AZURE_CLIENT_SEND_CERTIFICATE_CHAIN',
+      'AZURE_AUTHORITY_HOST',
+      'AZURE_USERNAME',
+      'AZURE_PASSWORD',
+    ];
+    const config = [
+      this.config.azureClientId,
+      this.config.azureTenantId,
+      this.config.azureAuthorityHost,
+    ];
+    if (
+      config.every((value) => value === undefined) &&
+      names.every((key) => env[key] === undefined)
+    ) {
+      return undefined;
+    }
+    const value = (key: string) => env[key] ?? getEnvString(key);
+    const files = ['AZURE_FEDERATED_TOKEN_FILE', 'AZURE_CLIENT_CERTIFICATE_PATH']
+      .map(value)
+      .filter((file): file is string => Boolean(file));
+    // Isolate rotated credentials without retaining them or a reusable secret fingerprint.
+    return getOpaqueCredentialCacheNamespace(
+      JSON.stringify([
+        process.env.AZURE_TOKEN_CREDENTIALS,
+        config,
+        names.map(value),
+        getCredentialCacheNamespace([], files),
+      ]),
+    );
+  }
+
+  private getProjectUrl(): string {
+    const projectUrl =
+      this.assistantConfig.projectUrl ||
+      (getProviderEnvString(this.env, 'AZURE_AI_PROJECT_URL') ??
+        getEnvString('AZURE_AI_PROJECT_URL'));
+    if (!projectUrl) {
+      throw new Error(
+        'Azure AI Project URL must be provided via projectUrl option or AZURE_AI_PROJECT_URL environment variable',
+      );
+    }
+    return projectUrl;
+  }
+
   private initializeClient(): Promise<FoundryProjectClient> {
-    this.projectClient ??= this.createProjectClient().catch((error) => {
-      this.projectClient = undefined;
+    const state = this.getClientState();
+    state.projectClient ??= this.createProjectClient().catch((error) => {
+      state.projectClient = undefined;
       throw error;
     });
-    return this.projectClient;
+    return state.projectClient;
   }
 
   private async createProjectClient(): Promise<FoundryProjectClient> {
     try {
       const { FoundryProjectClient } = await import('./foundryProjectClient');
-      const { ClientSecretCredential, DefaultAzureCredential } = await import('@azure/identity');
+      const { ClientSecretCredential } = await import('@azure/identity');
       const principal = this.#servicePrincipal;
       const selector = process.env.AZURE_TOKEN_CREDENTIALS?.trim().toLowerCase();
       if (principal && selector && !['prod', 'environmentcredential'].includes(selector)) {
@@ -377,8 +436,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
               authorityHost: principal.authorityHost,
             },
           )
-        : new DefaultAzureCredential();
-      const projectClient = new FoundryProjectClient(this.projectUrl, credential);
+        : await createAzureCredential(this.config, this.env);
+      const projectClient = new FoundryProjectClient(this.getProjectUrl(), credential);
       logger.debug('Azure AI Project client initialized successfully');
       return projectClient;
     } catch (error) {
@@ -389,16 +448,17 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private resolveAgent(client: FoundryProjectClient): Promise<FoundryAgent> {
-    this.agentPromise ??= this.lookupAgent(client)
+    const state = this.getClientState();
+    state.agentPromise ??= this.lookupAgent(client)
       .then((agent) => {
-        this.resolvedAgent = agent;
+        state.resolvedAgent = agent;
         return agent;
       })
       .catch((error) => {
-        this.agentPromise = undefined;
+        state.agentPromise = undefined;
         throw error;
       });
-    return this.agentPromise;
+    return state.agentPromise;
   }
 
   private async lookupAgent(client: FoundryProjectClient): Promise<FoundryAgent> {
@@ -420,7 +480,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
 
     throw new Error(
-      `Azure Foundry agent '${this.deploymentName}' was not found by name or legacy ID in project '${this.projectUrl}'. Foundry resolves agents by name. Update the provider to use azure:foundry-agent:<agent-name>, or keep using the legacy ID format and ensure the agent still exists in this project.`,
+      `Azure Foundry agent '${this.deploymentName}' was not found by name or legacy ID in project '${this.getProjectUrl()}'. Foundry resolves agents by name. Update the provider to use azure:foundry-agent:<agent-name>, or keep using the legacy ID format and ensure the agent still exists in this project.`,
     );
   }
 
@@ -1077,8 +1137,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       {
         ...spanContext,
         operationName: 'invoke_agent',
-        agentName: this.resolvedAgent?.name ?? this.deploymentName,
-        agentId: this.resolvedAgent?.id,
+        agentName: this.getClientState().resolvedAgent?.name ?? this.deploymentName,
+        agentId: this.getClientState().resolvedAgent?.id,
       },
       (span) => this.callApiInternal(prompt, span, context, callApiOptions),
       extractProviderResponseAttributes,
@@ -1103,8 +1163,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       return { error: configError };
     }
     const maxToolIterations = resolveMaxToolIterations(effectiveConfig.maxToolIterations);
-    const projectScope = hashFoundryAgentCacheValue(this.projectUrl);
-    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${projectScope}:${hashFoundryRequest(body, effectiveConfig)}`;
+    const projectScope = hashFoundryAgentCacheValue(this.getProjectUrl());
+    const cacheNamespace = this.getResponseCacheNamespace();
+    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${cacheNamespace ? `${cacheNamespace}:` : ''}${projectScope}:${hashFoundryRequest(body, effectiveConfig)}`;
 
     // Client-side tool behavior is absent from the serialized request body.
     // Callback closures cannot be safely represented in a persistent cache key.

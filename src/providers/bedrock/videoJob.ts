@@ -2,6 +2,7 @@ import { storeBlob } from '../../blobs';
 import logger from '../../logger';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import { sleep, sleepWithAbort } from '../../util/time';
+import { getScopedBedrockTokenOptions } from './util';
 import type {
   BedrockRuntimeClient,
   GetAsyncInvokeCommandOutput,
@@ -13,7 +14,10 @@ import type { BlobRef } from '../../blobs';
 import type { CallApiContextParams } from '../../types/providers';
 import type { AwsBedrockGenericProvider } from './base';
 
-type VideoProvider = Pick<AwsBedrockGenericProvider, 'getCredentials' | 'getRegion' | 'modelName'>;
+type VideoProvider = Pick<
+  AwsBedrockGenericProvider,
+  'getIamCredentialOptions' | 'getRegion' | 'modelName'
+>;
 type CompletedInvocation = {
   invocationArn: string;
   status: 'Completed';
@@ -42,11 +46,15 @@ function awaitVideoOperation<T>(operation: Promise<T>, signal?: AbortSignal): Pr
   );
 }
 
-async function clientConfig(provider: VideoProvider, signal?: AbortSignal) {
+async function clientConfig(
+  provider: VideoProvider,
+  service: 'S3' | 'Bedrock Runtime',
+  signal?: AbortSignal,
+) {
   signal?.throwIfAborted();
-  const credentials = await awaitVideoOperation(provider.getCredentials(), signal);
+  const options = await awaitVideoOperation(provider.getIamCredentialOptions(service), signal);
   signal?.throwIfAborted();
-  return { region: provider.getRegion(), ...(credentials ? { credentials } : {}) };
+  return { region: provider.getRegion(), ...options };
 }
 
 // Reuse one client for submission and polling; release it on every exit.
@@ -74,7 +82,10 @@ export async function runBedrockVideoJob(
   try {
     const { BedrockRuntimeClient, StartAsyncInvokeCommand, GetAsyncInvokeCommand } =
       await awaitVideoOperation(import('@aws-sdk/client-bedrock-runtime'), signal);
-    client = new BedrockRuntimeClient(await clientConfig(provider, signal));
+    client = new BedrockRuntimeClient({
+      ...getScopedBedrockTokenOptions(),
+      ...(await clientConfig(provider, 'Bedrock Runtime', signal)),
+    });
     const started = await awaitVideoOperation(
       client.send(
         new StartAsyncInvokeCommand({
@@ -171,7 +182,7 @@ export async function storeBedrockVideo(
       import('@aws-sdk/client-s3'),
       signal,
     );
-    client = new S3Client(await clientConfig(provider, signal));
+    client = new S3Client(await clientConfig(provider, 'S3', signal));
     logger.debug(`[${label}] Downloading video from S3`, { bucket, key });
     const response = await awaitVideoOperation(
       client.send(new GetObjectCommand({ Bucket: bucket, Key: key }), { abortSignal: signal }),

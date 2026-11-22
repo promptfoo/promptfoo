@@ -123,6 +123,29 @@ describe('SageMakerCompletionProvider', () => {
       });
     });
 
+    it.each([
+      { accessKeyId: 'fixture-id', secretAccessKey: 'fixture-secret' },
+      { profile: 'fixture-profile' },
+    ])('bypasses shared entries for a configured identity and its reused client', async (auth) => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { modelType: 'custom', ...auth },
+      });
+      const send = vi
+        .fn()
+        .mockResolvedValue({ Body: new TextEncoder().encode(JSON.stringify('fresh')) });
+      vi.spyOn(provider, 'getSageMakerRuntimeInstance').mockResolvedValue({ send } as never);
+      mockCacheGet.mockResolvedValue(JSON.stringify({ output: 'other principal' }));
+      expect(await provider.callApi('input')).toMatchObject({ output: 'fresh' });
+      Object.assign(provider.config, {
+        accessKeyId: undefined,
+        secretAccessKey: undefined,
+        profile: undefined,
+      });
+      expect(await provider.callApi('input')).toMatchObject({ output: 'fresh' });
+      expect(mockCacheGet).not.toHaveBeenCalled();
+      expect(mockCacheSet).not.toHaveBeenCalled();
+    });
+
     it('keeps outputs separate for different stop sequences and replays matching requests', async () => {
       mockSend.mockImplementation(async ({ Body }) => ({
         Body: new TextEncoder().encode(
