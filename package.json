@@ -47,7 +47,7 @@
     "!dist/**/*.tsbuildinfo"
   ],
   "engines": {
-    "node": ">=22.22.0"
+    "node": "^22.22.2 || ^24.15.0 || >=26"
   },
   "bin": {
     "promptfoo": "dist/src/entrypoint.js",
@@ -124,9 +124,6 @@
     "uri-js": "npm:uri-js-replace",
     "whatwg-url": "17.3.0",
     "esbuild": "0.28.2",
-    "jsdom": {
-      "@asamuzakjp/css-color": "6.0.7"
-    },
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-is": "^19.3.0",
