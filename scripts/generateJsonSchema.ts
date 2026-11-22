@@ -1,8 +1,20 @@
 import { z } from 'zod';
-import { UnifiedConfigSchema } from '../src/types';
+import { AssertionSetSchema, TestCaseSchema, UnifiedConfigSchema } from '../src/types';
 import { CONFIG_PROVIDER_INPUT_KEYS } from '../src/types/configAliases';
 import { TRANSFORM_KEYS } from '../src/util/transform';
 import { StringOrFunctionSchema } from '../src/validators/shared';
+
+const assertionArraySchemas = new Set<object>([
+  TestCaseSchema.shape.assert.unwrap(),
+  AssertionSetSchema.shape.assert,
+]);
+
+const jsonReferenceSchema: z.core.JSONSchema.JSONSchema = {
+  type: 'object',
+  required: ['$ref'],
+  properties: { $ref: { type: 'string' } },
+  additionalProperties: false,
+};
 
 const transformSchemaKeys: Set<string> = new Set(TRANSFORM_KEYS);
 
@@ -43,6 +55,14 @@ const schemaContent = z.toJSONSchema(UnifiedConfigSchema, {
     // transforms in the Zod schema, but keep generated JSON Schema string-only for editor/Ajv use.
     if (zodSchema === StringOrFunctionSchema) {
       rewriteNodeToStringSchema(jsonSchema as Record<string, unknown>);
+    }
+    const items = jsonSchema.items;
+    if (
+      assertionArraySchemas.has(zodSchema) &&
+      typeof items === 'object' &&
+      !Array.isArray(items)
+    ) {
+      jsonSchema.items = { anyOf: [...(items.anyOf ?? [items]), jsonReferenceSchema] };
     }
   },
 });
