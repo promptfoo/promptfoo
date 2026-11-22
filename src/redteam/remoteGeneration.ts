@@ -1,8 +1,8 @@
 import { context, propagation } from '@opentelemetry/api';
 import cliState from '../cliState';
-import { type EnvVarKey, getEnvBool, getEnvString } from '../envars';
+import { type EnvVarKey, getEnvBool, getEnvOverrides, getEnvString, parseEnvBool } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
-import { CloudConfig } from '../globalConfig/cloud';
+import { CloudConfig, cloudConfig } from '../globalConfig/cloud';
 import { hasCodexDefaultCredentials } from '../providers/openai/codexDefaults';
 import { remoteGenerationContextPayload as buildRemoteGenerationContextPayload } from './remoteGenerationContext';
 
@@ -44,6 +44,72 @@ function resolveRemoteEndpoint(envName: EnvVarKey, path: string): string {
  */
 export function getRemoteGenerationUrl(): string {
   return resolveRemoteEndpoint('PROMPTFOO_REMOTE_GENERATION_URL', '/api/v1/task');
+}
+
+function isWorkerTaskEndpoint(endpoint: string, server: URL) {
+  const url = new URL(endpoint);
+  // Accept only the canonical worker URL or the server's signed IPv4 alias.
+  // Ignore its process token because the worker must authenticate as the user.
+  url.searchParams.delete('__promptfoo_internal_task_token');
+  if (url.hostname === '127.0.0.1') {
+    url.hostname = 'localhost';
+  }
+  return url.href === `${server.origin}/api/v1/task`;
+}
+
+/** A worker must keep its JWT and team bound to its own server's exact origin. */
+export function getTicketRevisionUrl(worker: boolean): string {
+  const file = getEnvOverrides('file');
+  for (const key of [
+    'PROMPTFOO_DISABLE_REMOTE_GENERATION',
+    'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
+  ] as const) {
+    if (parseEnvBool(process.env[key]) || parseEnvBool(file?.[key]) || getEnvBool(key)) {
+      throw new Error('Remote ticket proposals are disabled.');
+    }
+  }
+  if (
+    getEnvString('PROMPTFOO_CA_CERT_PATH') !==
+    (file?.PROMPTFOO_CA_CERT_PATH ?? process.env.PROMPTFOO_CA_CERT_PATH)
+  ) {
+    throw new Error('Configure the trusted certificate in the process environment.');
+  }
+  if (!worker) {
+    // The suite (including imported tests) cannot redirect public replies.
+    const endpoint =
+      file?.PROMPTFOO_REMOTE_GENERATION_URL ?? process.env.PROMPTFOO_REMOTE_GENERATION_URL;
+    if (getEnvString('PROMPTFOO_REMOTE_GENERATION_URL') !== endpoint) {
+      throw new Error('Configure the remote ticket endpoint in the process environment.');
+    }
+    return getRemoteGenerationUrl();
+  }
+  // A signed loopback URL may use a different origin. It authenticates the process
+  // without identifying the job team. The canonical route instead requires the
+  // worker's bearer token and sends the scoped team header through fetchWithProxy.
+  const host = new URL(cloudConfig.getApiHost());
+  // A custom operator endpoint can represent a data residency requirement.
+  // Do not silently fall back to the server's usual inference route.
+  for (const endpoint of [
+    process.env.PROMPTFOO_REMOTE_GENERATION_URL,
+    file?.PROMPTFOO_REMOTE_GENERATION_URL,
+  ]) {
+    if (endpoint && !isWorkerTaskEndpoint(endpoint, host)) {
+      throw new Error('Worker ticket revisions require the local task endpoint.');
+    }
+  }
+  const organizationId = cloudConfig.getCurrentOrganizationId();
+  if (
+    host.protocol !== 'http:' ||
+    host.hostname !== 'localhost' ||
+    host.href !== `${host.origin}/` ||
+    !organizationId ||
+    !cloudConfig.getCurrentTeamId(organizationId) ||
+    !cloudConfig.getApiKey() ||
+    cloudConfig.getAuthHeaderName().toLowerCase() !== 'authorization'
+  ) {
+    throw new Error('A scoped worker credential is required for ticket proposals.');
+  }
+  return `${host.origin}/api/v1/task`;
 }
 
 /**

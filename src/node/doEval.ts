@@ -12,7 +12,7 @@ import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { clearCjsModuleCache } from '../esm';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
-import { EvalRunError } from '../evaluator/errors';
+import { EvalRunError, ticketRevisionRetryError } from '../evaluator/errors';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -572,6 +572,12 @@ async function doEvalWithEnv(
       );
     }
     if (resumeEval) {
+      if (retryErrorResultIds) {
+        const retryError = ticketRevisionRetryError(resumeEval.config.redteam, testSuite.redteam);
+        if (retryError) {
+          return failEvalRun(retryError, isCliInvocation);
+        }
+      }
       cliState.resume = true;
       if (retryErrorResultIds) {
         cliState.retryMode = true;
@@ -994,19 +1000,20 @@ async function doEvalWithEnv(
           logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
             error: cleanupError,
           });
-        } finally {
-          // Clear the stored error result IDs
-          delete cliState._retryErrorResultIds;
-          // Clear retry mode flags
-          cliState.retryMode = false;
         }
       }
     } finally {
+      // A beforeAll hook or evaluator preflight can reject a retry after
+      // state was set. Never carry those flags into the next hosted run.
+      if (retryErrorResultIds) {
+        delete cliState._retryErrorResultIds;
+        cliState.retryMode = false;
+      }
+      if (resumeEval) {
+        cliState.resume = false;
+      }
       cleanupHandler(); // Always cleanup, even if evaluate() throws
     }
-
-    // Clear resume flag after run completes
-    cliState.resume = false;
 
     // If paused, print minimal guidance and skip the rest of the reporting
     if (paused && cmdObj.write !== false) {
