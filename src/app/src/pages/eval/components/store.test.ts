@@ -1137,6 +1137,75 @@ describe('useTableStore', () => {
   });
 
   describe('fetchEvalData', () => {
+    it('commits a foreground page before refreshing it and keeps that page if the refresh fails', async () => {
+      let finishPage!: (response: Response) => void;
+      vi.mocked(callApi)
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              finishPage = resolve;
+            }),
+        )
+        .mockResolvedValueOnce({ ok: false } as Response);
+
+      const store = useTableStore.getState();
+      const page = store.fetchEvalData('eval', { pageIndex: 1 });
+      const refresh = store.fetchEvalData('eval', { pageIndex: 1, skipLoadingState: true });
+      expect(callApi).toHaveBeenCalledTimes(1);
+      expect(useTableStore.getState().isFetching).toBe(true);
+      finishPage({
+        ok: true,
+        json: async () => ({
+          table: {
+            head: { prompts: [], vars: [] },
+            body: [{ vars: ['page 2'], outputs: [], test: {} }],
+          },
+          totalCount: 120,
+          filteredCount: 120,
+        }),
+      } as Response);
+      await Promise.all([page, refresh]);
+
+      expect(callApi).toHaveBeenCalledTimes(2);
+      expect(useTableStore.getState().table?.body[0].vars).toEqual(['page 2']);
+      expect(useTableStore.getState().isFetching).toBe(false);
+    });
+
+    it('does not let a delayed background refresh overwrite a newly selected page', async () => {
+      const response = (marker: string) =>
+        ({
+          ok: true,
+          json: async () => ({
+            table: {
+              head: { prompts: [], vars: [] },
+              body: [{ vars: [marker], outputs: [], test: {} }],
+            },
+            totalCount: 120,
+            filteredCount: 120,
+          }),
+        }) as Response;
+      let finishRefresh!: (response: Response) => void;
+      vi.mocked(callApi)
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              finishRefresh = resolve;
+            }),
+        )
+        .mockResolvedValueOnce(response('page 3'));
+
+      const refresh = useTableStore
+        .getState()
+        .fetchEvalData('eval', { pageIndex: 1, skipLoadingState: true });
+      await useTableStore.getState().fetchEvalData('eval', { pageIndex: 2 });
+      finishRefresh(response('page 2'));
+      await refresh;
+
+      expect(useTableStore.getState().table?.body[0].vars).toEqual(['page 3']);
+      expect(useTableStore.getState().activeEvalQuery?.options.pageIndex).toBe(2);
+      expect(useTableStore.getState().isFetching).toBe(false);
+    });
+
     it('should properly handle filters with special characters in their values when building the API request URL', async () => {
       const evalId = 'test-eval-id';
       const filterValue = 'test value with !@#$%^&*()_+=-`~[]\{}|;\':",./<>? special characters';

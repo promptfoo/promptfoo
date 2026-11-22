@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 
 import dedent from 'dedent';
-import { globSync } from 'glob';
+import { globSync } from 'glob/raw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../src/esm';
 import { processPrompts, readPrompts } from '../../src/prompts/index';
@@ -14,8 +14,8 @@ vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock('glob', async () => {
-  const actual = await vi.importActual<typeof import('glob')>('glob');
+vi.mock('glob/raw', async () => {
+  const actual = await vi.importActual<typeof import('glob/raw')>('glob/raw');
   return {
     ...actual,
     globSync: vi.fn().mockImplementation(actual.globSync),

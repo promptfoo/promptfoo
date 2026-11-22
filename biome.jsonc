@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.5/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -148,6 +148,7 @@
           "level": "error",
           "options": {
             "paths": {
+              "glob": "Use glob/raw so glob uses the installed minimatch security fixes.",
               "node-fetch": "Use fetchWithProxy() (do not import node-fetch directly).",
               "undici": {
                 "importNames": ["fetch", "default"],

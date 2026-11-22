@@ -145,7 +145,7 @@ vi.mock('../../src/util/fileReference', async () => {
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
-vi.mock('glob', () => {
+vi.mock('glob/raw', () => {
   const globSync = vi.fn().mockImplementation((pattern) => {
     if (pattern.includes('test/fixtures/test_file.txt')) {
       return [pattern];

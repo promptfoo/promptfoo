@@ -227,6 +227,8 @@ describe('eval provider configuration round trips', () => {
         expect(useStore.getState().config.providers).toEqual([initialProvider]);
         const saveButton = screen.getByRole('button', { name: 'Save Changes' });
         expect(saveButton).toBeDisabled();
+        // Return focus to the editor so the disabled button's blur cannot close its tooltip.
+        await user.click(editor);
         await user.hover(saveButton.parentElement!);
         expect(await screen.findByRole('tooltip')).toHaveTextContent('Agent Alias ID is required');
         expect(getCallApiMock().mock.calls.filter(([path]) => path === '/eval/job')).toHaveLength(
