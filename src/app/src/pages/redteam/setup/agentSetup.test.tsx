@@ -614,6 +614,45 @@ describe('agent-led red team setup', () => {
     expect(config().plugins).toEqual(['bola']);
   });
 
+  it('edits the connection from the plan without losing a one-test budget or silently sending a request', async () => {
+    const { user } = setup();
+    api.mockResolvedValueOnce(
+      Response.json({
+        purpose: plan.purpose,
+        plugins: plan.plugins,
+        numTests: 1,
+        note: 'Only order access is in scope.',
+      }),
+    );
+    await send(user, 'Check order access once');
+    await send(
+      user,
+      'POST to https://shop.example/chat. Send message and read result.answer. No auth.',
+    );
+    expect(screen.getByText('1 direct test per risk')).toBeVisible();
+    expect(screen.getByText('Only order access is in scope.')).toBeVisible();
+    expect(screen.queryByText('App details')).toBeNull();
+    await user.click(button('Change request'));
+    await send(user, 'question');
+    expect(button('Change request')).toHaveAccessibleDescription('POST {"question":"{{prompt}}"}');
+    await user.click(button('Change read reply'));
+    await send(user, 'Plain text');
+    expect(button('Change read reply')).toHaveAccessibleDescription('Plain text');
+    await user.click(button('Change authorization'));
+    await send(user, 'SHOP_TOKEN');
+    expect(button('Change authorization')).toHaveAccessibleDescription(
+      'Bearer token from SHOP_TOKEN',
+    );
+    await user.click(button('Change target'));
+    await send(user, 'openai:gpt-4o-mini');
+    expect(screen.getByText(/Your model provider’s credentials/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Test connection' })).toBeNull();
+    await user.click(button('Review setup'));
+    expect(config().numTests).toBe(1);
+    expect(config().target).toEqual({ id: 'openai:gpt-4o-mini', config: {} });
+    expect(postCalls()).toHaveLength(1);
+  });
+
   it('explains unsupported requests and offers a way back to the last usable plan', async () => {
     const { user } = setup();
     await user.click(button('Try the demo app'));
