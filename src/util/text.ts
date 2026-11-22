@@ -1,17 +1,17 @@
 /**
  * Truncates a string to a maximum length, adding an ellipsis (...) if truncated.
  * @param str The string to truncate
- * @param maxLen The maximum length of the resulting string, including the ellipsis
+ * @param maxLen The maximum length in UTF-16 code units, including the ellipsis
  * @returns The truncated string, with ellipsis if necessary
  */
 export function ellipsize(str: string, maxLen: number): string {
   if (str.length > maxLen) {
-    if (maxLen < 3) {
-      // Not enough room for the ellipsis; hard-truncate so the result still
-      // respects maxLen instead of slicing with a negative index.
-      return str.slice(0, Math.max(0, maxLen));
-    }
-    return str.slice(0, maxLen - 3) + '...';
+    const suffix = maxLen < 3 ? '' : '...';
+    const end = Math.max(0, Math.trunc(maxLen - suffix.length));
+    // Back up when the cutoff falls inside a surrogate pair.
+    const codePoint = str.codePointAt(end - 1) ?? 0;
+    const safeEnd = codePoint > 0xffff ? end - 1 : end;
+    return str.slice(0, safeEnd) + suffix;
   }
   return str;
 }
