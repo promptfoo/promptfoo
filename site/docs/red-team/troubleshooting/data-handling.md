@@ -10,9 +10,9 @@ This page explains what data leaves your machine during red team testing and how
 
 ## Data Flow Overview
 
-The [setup agent](/docs/red-team/quickstart/#initialize-the-project) sends the conversation about your app and tests, plus the current plan, to Promptfoo Cloud by default. This applies even if you have a model API key. Leave secrets and private records out of those messages. The chat handles target connection replies locally, including the URL, request body, response field and bearer token variable name. Those replies stay out of later planning requests. Drafting never contacts your target. Use manual setup to skip the agent.
+The [setup agent](/docs/red-team/quickstart/#initialize-the-project) sends the conversation about your app and tests, plus the current plan, to Promptfoo Cloud by default. This applies even if you have a model API key. Leave secrets and private records out of those messages. The chat handles target connection replies locally, including the URL, request body, response field, auth header and environment variable name. Those replies stay out of later planning requests. Drafting never contacts your target. Use manual setup to skip the agent.
 
-In chat, **Test connection** sends one “Hello” from your local server to the endpoint you chose, using your request body and any configured bearer token. It checks the reply locally and may suggest field names. It doesn't forward the response to Promptfoo Cloud for analysis or include it in later planning messages. The **manual editor's** provider test can send the target configuration, request headers and response to Cloud.
+In chat, **Test connection** sends one “Hello” from your local server to the endpoint you chose. The server reads any API key from the named variable and sends it in the selected header. The test checks the reply locally and may suggest field names. It doesn't forward the response to Promptfoo Cloud for analysis or include it in later planning messages. The **manual editor's** provider test can send the target configuration, request headers and response to Cloud.
 
 Running a scan involves three operations.
 

@@ -88,7 +88,17 @@ Describe your API in plain English. The chat picks up the details you give it an
 
 If you haven't specified the reply field, or the field you gave is missing, pick one from the response, such as **Use result.answer**. The test checks that the field contains text. It doesn't grade the answer. You can also tell the chat “Actually, the reply is in result.answer” and test again.
 
-For bearer auth, give the chat the variable name, for example “Bearer token from SUPPORT_BOT_TOKEN”. Set the variable where Promptfoo runs. Never paste the token itself. The chat test requires HTTPS for bearer tokens outside localhost. For other auth methods, custom headers or non-POST requests, use manual setup.
+For an API that uses the OpenAI Chat Completions format, you can start with a message like this.
+
+> POST to localhost:3555/chat. It works like OpenAI and needs an API key in a header.
+
+The chat proposes sending a user message in `messages` and reading `choices[0].message.content`. It keeps your URL. If your API needs a model name, add it before testing.
+
+1. Choose **X-API-Key** to send the key directly or **Authorization: Bearer** for a bearer token. You can also name a supported header such as `api-key` or `X-Auth-Token`.
+2. Give the environment variable name, for example `SUPPORT_BOT_TOKEN`. Set it where Promptfoo runs. Never paste the key itself.
+3. Select **Test connection**. Check the result in chat before you run the scan. The test requires HTTPS for credentials outside localhost.
+
+For other auth methods, extra headers or non-POST requests, use manual setup.
 
 If you don't have a target yet, select **I don’t have an endpoint yet** and **Review draft**. You can save YAML, but you’ll need to add a target before running.
 
