@@ -3,6 +3,7 @@ import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { expect, it } from 'vitest';
 import type { FSWatcher } from 'chokidar';
@@ -19,10 +20,26 @@ it('watches literal template directories using the Nunjucks watcher dependency',
     // Nunjucks passes literal search directories to chokidar, not glob patterns.
     watcher = requireFromNunjucks('chokidar').watch([directory]) as FSWatcher;
     await once(watcher, 'ready');
-    const changed = once(watcher, 'change', { signal: AbortSignal.timeout(5000) });
-    await appendFile(template, '!');
 
-    expect(path.resolve((await changed)[0])).toBe(template);
+    // Chokidar finishes its initial scan before macOS necessarily starts delivering events.
+    // Observe a directory addition before making the single template edit under test.
+    const signal = AbortSignal.timeout(5000);
+    const directoryAdded = once(watcher, 'addDir', { signal });
+    for (;;) {
+      const [event] = await Promise.all([
+        Promise.race([directoryAdded, delay(25)]),
+        mkdtemp(path.join(directory, 'ready-')),
+      ]);
+      if (event) {
+        break;
+      }
+    }
+
+    const [changed] = await Promise.all([
+      once(watcher, 'change', { signal }),
+      appendFile(template, '!'),
+    ]);
+    expect(path.resolve(changed[0])).toBe(template);
   } finally {
     await watcher?.close();
     await rm(directory, { recursive: true, force: true });
