@@ -1022,7 +1022,7 @@ export function createServerOpenApiRegistry() {
     path: '/api/redteam/setup/connection-test',
     operationId: 'testRedteamSetupConnection',
     tags: ['Redteam'],
-    summary: 'Send one Hello to a JSON POST endpoint from the local server',
+    summary: 'Test a supported HTTP target with one Hello from the local server',
     description:
       'Tests the configured reply path, or suggests fields if it is missing. Requires a local caller. Does not send the reply to Cloud or start a scan.',
     request: { body: jsonBody(RedteamSchemas.SetupConnectionTest.Request) },
@@ -1040,7 +1040,7 @@ export function createServerOpenApiRegistry() {
     tags: ['Redteam'],
     summary: 'Continue a red team setup conversation',
     description:
-      'Send the setup conversation, draft and optional verification feedback to the configured generation service. Never send keys or private records. The agent proposes changes and cannot contact the target or start a scan.',
+      'Send the conversation, native Promptfoo config and optional test feedback to the configured generation service. Validate proposals locally and return validation errors for repair. Never send keys or private records. Drafting cannot contact the target or start a scan.',
     request: { body: jsonBody(RedteamSchemas.SetupPlan.Request) },
     responses: {
       200: jsonResponse(RedteamSchemas.SetupPlan.Response),

@@ -4748,6 +4748,12 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "fromAgent": { "type": "boolean" },
+                  "userTurns": {
+                    "type": "array",
+                    "items": { "type": "string", "maxLength": 16000 },
+                    "maxItems": 24
+                  },
                   "config": { "type": "object", "additionalProperties": {} },
                   "force": { "type": "boolean" },
                   "verbose": { "type": "boolean" },
@@ -4856,7 +4862,7 @@
         "operationId": "draftRedteamSetupPlan",
         "tags": ["Redteam"],
         "summary": "Continue a red team setup conversation",
-        "description": "Send the setup conversation, draft and optional verification feedback to the configured generation service. Never send keys or private records. The agent proposes changes and cannot contact the target or start a scan.",
+        "description": "Send the conversation, native Promptfoo config and optional test feedback to the configured generation service. Validate proposals locally and return validation errors for repair. Never send keys or private records. Drafting cannot contact the target or start a scan.",
         "requestBody": {
           "description": "JSON request body",
           "required": true,
@@ -4865,7 +4871,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "version": { "type": "number", "enum": [2] },
+                  "version": { "type": "number", "enum": [3] },
                   "messages": {
                     "type": "array",
                     "items": {
@@ -4880,81 +4886,7 @@
                     "minItems": 1,
                     "maxItems": 24
                   },
-                  "previous": {
-                    "type": "object",
-                    "properties": {
-                      "purpose": { "type": "string", "minLength": 1, "maxLength": 1000 },
-                      "application": {
-                        "type": "object",
-                        "properties": {
-                          "redteamUser": { "type": "string", "minLength": 1, "maxLength": 1000 },
-                          "accessToData": { "type": "string", "minLength": 1, "maxLength": 1000 },
-                          "forbiddenData": { "type": "string", "minLength": 1, "maxLength": 1000 },
-                          "accessToActions": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 1000
-                          },
-                          "forbiddenActions": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 1000
-                          }
-                        },
-                        "additionalProperties": false
-                      },
-                      "numTests": { "type": "integer", "minimum": 1, "maximum": 20 },
-                      "plugins": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string",
-                              "enum": [
-                                "bias:age",
-                                "bias:disability",
-                                "bias:gender",
-                                "bias:race",
-                                "bfla",
-                                "bola",
-                                "contracts",
-                                "excessive-agency",
-                                "hallucination",
-                                "hijacking",
-                                "overreliance",
-                                "pii:direct",
-                                "rag-document-exfiltration",
-                                "rbac",
-                                "sql-injection",
-                                "system-prompt-override"
-                              ]
-                            },
-                            "reason": { "type": "string", "minLength": 1, "maxLength": 300 }
-                          },
-                          "required": ["id", "reason"],
-                          "additionalProperties": false
-                        },
-                        "maxItems": 4
-                      },
-                      "note": { "type": "string", "minLength": 1, "maxLength": 300 }
-                    },
-                    "required": ["purpose", "plugins"],
-                    "additionalProperties": false
-                  },
-                  "connection": {
-                    "type": "object",
-                    "properties": {
-                      "url": { "type": "string", "minLength": 1, "maxLength": 4096 },
-                      "body": { "type": "object", "additionalProperties": {} },
-                      "authEnv": { "type": "string", "maxLength": 128 },
-                      "authHeader": { "type": "string", "minLength": 1, "maxLength": 128 },
-                      "responsePath": { "type": "string", "maxLength": 200 },
-                      "model": { "type": "string", "minLength": 1, "maxLength": 200 }
-                    },
-                    "additionalProperties": false
-                  },
-                  "hasTarget": { "type": "boolean" },
+                  "config": { "type": "object", "additionalProperties": {} },
                   "verification": {
                     "type": "object",
                     "properties": {
@@ -4969,12 +4901,12 @@
                           ]
                         },
                         "maxItems": 4
-                      }
+                      },
+                      "targetIndex": { "type": "integer", "minimum": 0 }
                     },
                     "required": ["success", "message"],
                     "additionalProperties": false
-                  },
-                  "validationError": { "type": "string", "maxLength": 500 }
+                  }
                 },
                 "required": ["version", "messages"],
                 "additionalProperties": false
@@ -4990,87 +4922,16 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "message": { "type": "string", "minLength": 1, "maxLength": 2000 },
-                    "plan": {
-                      "type": "object",
-                      "properties": {
-                        "purpose": { "type": "string", "minLength": 1, "maxLength": 1000 },
-                        "application": {
-                          "type": "object",
-                          "properties": {
-                            "redteamUser": { "type": "string", "minLength": 1, "maxLength": 1000 },
-                            "accessToData": { "type": "string", "minLength": 1, "maxLength": 1000 },
-                            "forbiddenData": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 1000
-                            },
-                            "accessToActions": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 1000
-                            },
-                            "forbiddenActions": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 1000
-                            }
-                          },
-                          "additionalProperties": false
-                        },
-                        "numTests": { "type": "integer", "minimum": 1, "maximum": 20 },
-                        "plugins": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "id": {
-                                "type": "string",
-                                "enum": [
-                                  "bias:age",
-                                  "bias:disability",
-                                  "bias:gender",
-                                  "bias:race",
-                                  "bfla",
-                                  "bola",
-                                  "contracts",
-                                  "excessive-agency",
-                                  "hallucination",
-                                  "hijacking",
-                                  "overreliance",
-                                  "pii:direct",
-                                  "rag-document-exfiltration",
-                                  "rbac",
-                                  "sql-injection",
-                                  "system-prompt-override"
-                                ]
-                              },
-                              "reason": { "type": "string", "minLength": 1, "maxLength": 300 }
-                            },
-                            "required": ["id", "reason"],
-                            "additionalProperties": false
-                          },
-                          "maxItems": 4
-                        },
-                        "note": { "type": "string", "minLength": 1, "maxLength": 300 }
-                      },
-                      "required": ["purpose", "plugins"],
-                      "additionalProperties": false
-                    },
-                    "connection": {
-                      "type": "object",
-                      "properties": {
-                        "url": { "type": "string", "minLength": 1, "maxLength": 4096 },
-                        "body": { "type": "object", "additionalProperties": {} },
-                        "authEnv": { "type": "string", "maxLength": 128 },
-                        "authHeader": { "type": "string", "minLength": 1, "maxLength": 128 },
-                        "responsePath": { "type": "string", "maxLength": 200 },
-                        "model": { "type": "string", "minLength": 1, "maxLength": 200 }
-                      },
-                      "additionalProperties": false
+                    "message": { "type": "string", "minLength": 1, "maxLength": 4000 },
+                    "config": { "type": "object", "additionalProperties": {} },
+                    "runnable": { "type": "boolean" },
+                    "runIssue": { "type": "string" },
+                    "testableTargets": {
+                      "type": "array",
+                      "items": { "type": "integer", "minimum": 0 }
                     }
                   },
-                  "required": ["message"],
+                  "required": ["message", "runnable", "testableTargets"],
                   "additionalProperties": false
                 }
               }
@@ -5155,7 +5016,7 @@
       "post": {
         "operationId": "testRedteamSetupConnection",
         "tags": ["Redteam"],
-        "summary": "Send one Hello to a JSON POST endpoint from the local server",
+        "summary": "Test a supported HTTP target with one Hello from the local server",
         "description": "Tests the configured reply path, or suggests fields if it is missing. Requires a local caller. Does not send the reply to Cloud or start a scan.",
         "requestBody": {
           "description": "JSON request body",
@@ -5165,20 +5026,43 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "url": { "type": "string", "maxLength": 4096, "format": "uri" },
-                  "body": { "type": "object", "additionalProperties": {} },
-                  "authEnv": {
+                  "id": {
                     "oneOf": [
-                      { "type": "string", "enum": [""] },
-                      { "type": "string", "maxLength": 128, "pattern": "^[A-Z_][A-Z0-9_]*$" }
+                      { "type": "string", "enum": ["http"] },
+                      { "type": "string", "enum": ["https"] },
+                      { "type": "string" }
                     ]
                   },
-                  "authHeader": { "type": "string" },
-                  "responsePath": {
-                    "oneOf": [{ "type": "string", "enum": [""] }, { "type": "string" }]
+                  "label": { "type": "string" },
+                  "config": {
+                    "type": "object",
+                    "properties": {
+                      "url": { "type": "string" },
+                      "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH"] },
+                      "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+                      "body": {
+                        "oneOf": [
+                          { "type": "object", "additionalProperties": {} },
+                          { "type": "array", "items": {} },
+                          { "type": "string" }
+                        ]
+                      },
+                      "queryParams": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" }
+                      },
+                      "transformResponse": { "type": "string" },
+                      "responseParser": { "type": "string" },
+                      "redirect": { "type": "string", "enum": ["error"] },
+                      "maxRetries": { "type": "integer", "minimum": 0 },
+                      "stateful": { "type": "boolean" },
+                      "sessionSource": { "type": "string", "enum": ["client"] }
+                    },
+                    "required": ["method"],
+                    "additionalProperties": false
                   }
                 },
-                "required": ["url", "body", "authEnv"],
+                "required": ["id", "config"],
                 "additionalProperties": false
               }
             }

@@ -1,86 +1,38 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
-import { type SetupConnection, SetupConnectionTest } from '@promptfoo/types/api/redteamSetup';
-import isEqual from 'fast-deep-equal';
-import { toTarget } from '../utils/agentConnection';
-import { EXAMPLE_CONFIG } from './useRedTeamConfig';
-
-import type { ProviderOptions } from '../types';
-import type { SetupDraft, useSetupAgent } from './useSetupAgent';
+import { SetupConnectionTest } from '@promptfoo/types/api/redteamSetup';
+import { credentialHeaders, type SetupDraft, targets, type useSetupAgent } from './useSetupAgent';
 
 const unavailable = 'Couldn’t finish the connection test. Check your local server before retrying.';
-
-// Only offer to test a request we can reproduce. Custom providers, transforms,
-// extra headers and other imported settings need the full manual provider tester.
-function connectionFor(draft: SetupDraft, target?: ProviderOptions): SetupConnection | undefined {
-  if (draft.connection) {
-    const parsed = SetupConnectionTest.Request.safeParse(draft.connection);
-    return parsed.success ? parsed.data : undefined;
-  }
-  if (!target || target.id !== 'http') {
-    return undefined;
-  }
-  const { url, body, transformResponse, headers } = target.config;
-  const responsePath =
-    transformResponse === 'text'
-      ? ''
-      : typeof transformResponse === 'string' && transformResponse.startsWith('json.')
-        ? transformResponse.slice(5)
-        : undefined;
-  if (typeof url !== 'string' || !body || responsePath === undefined) {
-    return undefined;
-  }
-  const [name, value] = Object.entries(headers ?? {}).find(([key]) => key !== 'Content-Type') ?? [];
-  const authHeader = name === 'Authorization' ? undefined : name;
-  const authEnv =
-    typeof value === 'string'
-      ? value.match(/^(?:Bearer )?\{\{env\.([A-Z_][A-Z0-9_]*)\}\}$/)?.[1]
-      : '';
-  const parsed = SetupConnectionTest.Request.safeParse({
-    url,
-    body,
-    responsePath,
-    authEnv,
-    authHeader,
-  });
-  if (!parsed.success) {
-    return undefined;
-  }
-  return isEqual(target, EXAMPLE_CONFIG.target) || isEqual(target, toTarget(parsed.data))
-    ? parsed.data
-    : undefined;
-}
-
-export function connectionStatus(
-  draft: SetupDraft,
-  target?: ProviderOptions,
-): 'success' | 'error' | undefined {
-  if (
-    draft.tested &&
-    isEqual(draft.tested.target, target) &&
-    isEqual(draft.tested.connection, draft.connection)
-  ) {
-    return draft.tested.result.success ? 'success' : 'error';
-  }
-  return undefined;
-}
 
 export function useConnectionTest(
   draft: SetupDraft,
   setDraft: (draft: SetupDraft) => void,
   agent: ReturnType<typeof useSetupAgent>,
 ) {
-  const { target } = agent;
-  const connection = connectionFor(draft, target);
-  const destination = connection ? new URL(connection.url).host : '';
   const [testing, setTesting] = useState(false);
+  const [index, select] = useState(0);
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
-  const status = connectionStatus(draft, target);
+
+  // Only the local server can grant permission to test a specific native target.
+  const choices = targets(draft.config).flatMap((target, i) => {
+    if (!draft.testableTargets?.includes(i)) {
+      return [];
+    }
+    const parsed = SetupConnectionTest.Request.safeParse(target);
+    if (!parsed.success) {
+      return [];
+    }
+    const url = parsed.data.config.url ?? parsed.data.id;
+    return [{ index: i, target: parsed.data, url }];
+  });
+  const selected = choices.find((choice) => choice.index === index) ?? choices[0];
+  const headers = credentialHeaders(selected?.target);
 
   async function test() {
-    if (!connection || request.current || agent.pending || draft.input.trim()) {
+    if (!selected || request.current || agent.pending || draft.input.trim()) {
       return;
     }
     const controller = new AbortController();
@@ -95,7 +47,7 @@ export function useConnectionTest(
       const response = await callApi('/redteam/setup/connection-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(connection),
+        body: JSON.stringify(selected.target),
         signal: controller.signal,
       });
       if (response.ok) {
@@ -114,20 +66,18 @@ export function useConnectionTest(
     const { success, message } = result;
     const updated: SetupDraft = {
       ...draft,
-      tested: { target, connection: draft.connection, result },
-      messages: [...draft.messages, { role: 'test', content: message, success }],
+      tested: [
+        ...(draft.tested ?? []).filter((item) => item.targetIndex !== selected.index),
+        { ...result, targetIndex: selected.index },
+      ],
+      messages: [
+        ...draft.messages,
+        { role: 'test', content: message, success, destination: selected.url },
+      ],
     };
     setDraft(updated);
     await agent.feedback(updated);
   }
 
-  return {
-    available: !!connection,
-    destination,
-    authEnv: connection?.authEnv,
-    authHeader: connection?.authEnv ? (connection.authHeader ?? 'Authorization') : undefined,
-    testing,
-    status,
-    test,
-  };
+  return { choices, selected, select, headers, testing, test };
 }

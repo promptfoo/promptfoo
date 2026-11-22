@@ -1,19 +1,76 @@
 import { z } from 'zod';
+import {
+  HttpProviderConfigFieldsSchema,
+  HttpProviderConfigInputSchema,
+} from '../../contracts/providerConfig/http';
 import { ALL_PLUGINS, ALL_STRATEGIES, type Plugin, type Strategy } from '../../redteam/constants';
 import {
   ConversationMessageSchema,
   PluginConfigSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
+import { ProviderOptionsSchema } from '../../validators/providers';
+import {
+  RedteamConfigSchema,
+  RedteamPluginSchema,
+  RedteamStrategySchema,
+} from '../../validators/redteam';
+import { CONFIG_PROVIDER_INPUT_ERROR, hasValidConfigProviders } from '../configAliases';
+import { UnifiedConfigSchema } from '../index';
 import { BaseTokenUsageSchema } from '../shared';
 import { MessageResponseSchema } from './common';
 import { JsonProviderOptionsWithIdSchema } from './providers';
 import {
-  RedteamSetupPlanSchema,
+  HostedSetupReplySchema,
   RedteamSetupReplySchema,
-  SetupConnectionDraftSchema,
+  SetupConfigSchema,
   SetupConnectionTest,
 } from './redteamSetup';
+
+// Runtime parsers strip unknown keys. Report typos to the agent instead of
+// showing an option in Review that Promptfoo will silently ignore.
+const [pluginId, pluginOptions] = RedteamPluginSchema.options;
+const [strategyId, strategyOptions] = RedteamStrategySchema.options;
+const partialConfig = z.object(UnifiedConfigSchema.in.shape).partial();
+const setupInput = z.strictObject({
+  ...partialConfig.shape,
+  redteam: RedteamConfigSchema.in
+    .strict()
+    .extend({
+      plugins: z.array(z.union([pluginId, pluginOptions.strict()])).optional(),
+      strategies: z.array(z.union([strategyId, strategyOptions.strict()])).optional(),
+    })
+    .optional(),
+});
+
+// Validate native drafts without constructing a provider or loading external files.
+export function httpTargetValidationIssue(target: unknown): string | undefined {
+  const value = typeof target === 'string' ? { id: target } : target;
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('id' in value) ||
+    typeof value.id !== 'string' ||
+    !/^https?(?::\/\/|$)/.test(value.id)
+  ) {
+    return;
+  }
+  const config = 'config' in value ? value.config : {};
+  const fields = HttpProviderConfigFieldsSchema.safeParse(config);
+  if (!fields.success) {
+    const issue = fields.error.issues[0];
+    const field = issue.code === 'unrecognized_keys' ? issue.keys[0] : issue.path[0];
+    return typeof field === 'string' && /^[a-z_][\w-]{0,63}$/i.test(field)
+      ? 'Invalid HTTP target option config.' + field + '.'
+      : 'Unknown or invalid HTTP target config option.';
+  }
+  if (!HttpProviderConfigInputSchema.safeParse(config).success) {
+    return 'An HTTP target needs a body, raw request, multipart upload, or explicit GET method.';
+  }
+  if (!fields.data.request && !fields.data.url && !value.id.includes('://')) {
+    return 'The HTTP target needs a URL.';
+  }
+}
 
 // POST /api/redteam/generate-test
 
@@ -90,7 +147,11 @@ export type TestCaseGenerationResponse = z.infer<typeof TestCaseGenerationRespon
 
 // POST /api/redteam/run
 
+const userTurnsSchema = z.array(z.string().max(16000)).max(24);
+
 export const RedteamRunRequestSchema = z.object({
+  fromAgent: z.boolean().optional(),
+  userTurns: userTurnsSchema.optional(),
   config: z.record(z.string(), z.unknown()),
   force: z.boolean().optional(),
   verbose: z.boolean().optional(),
@@ -140,9 +201,17 @@ export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
 export const RedteamSchemas = {
   SetupConnectionTest,
   SetupPlan: {
+    HostedReply: HostedSetupReplySchema,
+    Input: setupInput,
+    Draft: partialConfig.refine((data) => hasValidConfigProviders(data, true), {
+      message: CONFIG_PROVIDER_INPUT_ERROR,
+    }),
+    Complete: UnifiedConfigSchema,
+    Provider: ProviderOptionsSchema.strict().extend({ id: z.string().min(1) }),
+    ProviderMap: z.record(z.string(), ProviderOptionsSchema.strict()),
     Request: z.strictObject({
       // Require a client that discloses hosted processing of connection messages.
-      version: z.literal(2),
+      version: z.literal(3),
       messages: z
         .array(
           z.strictObject({
@@ -153,11 +222,10 @@ export const RedteamSchemas = {
         .min(1)
         .max(24)
         .refine((messages) => messages.reduce((n, m) => n + m.content.length, 0) <= 48000),
-      previous: RedteamSetupPlanSchema.optional(),
-      connection: SetupConnectionDraftSchema.optional(),
-      hasTarget: z.boolean().optional(),
-      verification: SetupConnectionTest.Response.optional(),
-      validationError: z.string().max(500).optional(),
+      config: SetupConfigSchema.optional(),
+      verification: SetupConnectionTest.Response.extend({
+        targetIndex: z.int().nonnegative().optional(),
+      }).optional(),
     }),
     Response: RedteamSetupReplySchema,
   },

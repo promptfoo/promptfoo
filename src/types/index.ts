@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ProviderEnvOverridesSchema } from '../contracts/env';
+import { type EnvOverrides, ProviderEnvOverridesSchema } from '../contracts/env';
 import {
   BaseTokenUsageSchema,
   type NormalizedTokenUsage,
@@ -32,7 +32,6 @@ export {
   isCliEventSource,
 } from './eventSource';
 
-import type { EnvOverrides } from '../contracts/env';
 import type { Prompt, PromptFunction } from '../contracts/prompts';
 import type {
   PluginConfig,

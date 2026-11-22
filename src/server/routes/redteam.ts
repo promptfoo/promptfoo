@@ -2,7 +2,13 @@ import { Router } from 'express';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { containsSetupSecret, testSetupConnection } from '../../node/redteamSetupConnection';
+import {
+  containsSetupSecret,
+  localReviewField,
+  sessionTransform,
+  targetExecutionIssue,
+  testSetupConnection,
+} from '../../node/redteamSetupConnection';
 import {
   DATASET_EXEMPT_PLUGINS,
   isMultiTurnStrategy,
@@ -17,10 +23,10 @@ import {
   neverGenerateRemote,
 } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
-import { Strategies } from '../../redteam/strategies/index';
+import { Strategies, validateStrategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
-import { RedteamSchemas } from '../../types/api/redteam';
+import { httpTargetValidationIssue, RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { isLocalHost } from '../middleware/csrfProtection';
 import { evalJobService } from '../services/evalJobService';
@@ -250,6 +256,18 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
+  if (bodyResult.data.fromAgent) {
+    const { config, userTurns = [] } = bodyResult.data;
+    const check = await assessSetup(config, userTurns);
+    if (!check.runnable) {
+      res.status(400).json({
+        error:
+          check.runIssue || 'The setup failed validation. Return to chat to correct the draft.',
+      });
+      return;
+    }
+  }
+
   // If there's a current job running, abort it
   if (currentJobId) {
     if (currentAbortController) {
@@ -344,6 +362,159 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   res.json(RedteamSchemas.Cancel.Response.parse({ message: 'Job cancelled' }));
 });
 
+type Config = Record<string, unknown>;
+type Assessment = {
+  runnable: boolean;
+  testableTargets: number[];
+  runIssue?: string;
+  validationError?: string;
+};
+
+function targets(config?: Config): unknown[] {
+  const list = config?.targets ?? config?.providers;
+  return Array.isArray(list) ? list : list === undefined ? [] : [list];
+}
+
+function invalid(message: string): Assessment {
+  return { runnable: false, testableTargets: [], validationError: message.slice(0, 2000) };
+}
+
+function issue(error: z.ZodError) {
+  return error.issues
+    .slice(0, 5)
+    .map((i) => {
+      const detail =
+        i.code === 'invalid_union'
+          ? i.errors
+              .flat()
+              .slice(0, 4)
+              .map((e) => e.message.slice(0, 160))
+              .join(' or ')
+          : i.message;
+      return i.path.join('.') + ': ' + detail;
+    })
+    .join('\n');
+}
+
+const schema = RedteamSchemas.SetupPlan;
+
+async function assessSetup(
+  config: Config | undefined,
+  userTurns: string[],
+  previous?: Config,
+): Promise<Assessment> {
+  if (!config) {
+    return { runnable: false, testableTargets: [] };
+  }
+  const input = schema.Input.safeParse(config);
+  if (!input.success) {
+    return invalid(issue(input.error));
+  }
+  const list = targets(config);
+  const parsed =
+    list.length && config.redteam
+      ? schema.Complete.safeParse(config)
+      : schema.Draft.safeParse(config);
+  if (!parsed.success) {
+    return invalid(issue(parsed.error));
+  }
+  const redteam = parsed.data.redteam;
+  if (redteam) {
+    // Use the same validators as generation. Do not call plugin actions, load
+    // file-based strategies, or replace the authored config with parsed defaults.
+    for (const plugin of redteam.plugins ?? []) {
+      const { id, config: settings } =
+        typeof plugin === 'string' ? { id: plugin, config: undefined } : plugin;
+      try {
+        Plugins.find((entry) => entry.key === id)?.validate?.(settings ?? {});
+      } catch (err) {
+        return invalid(
+          'redteam.plugins (' +
+            id +
+            '): ' +
+            (err instanceof Error ? err.message : 'Invalid plugin settings'),
+        );
+      }
+    }
+    try {
+      await validateStrategies(
+        (redteam.strategies ?? []).map((s) => (typeof s === 'string' ? { id: s } : s)),
+      );
+    } catch (err) {
+      return invalid(
+        'redteam.strategies: ' + (err instanceof Error ? err.message : 'Invalid strategy settings'),
+      );
+    }
+    if (!redteam.plugins?.length) {
+      return invalid(
+        'redteam.plugins is empty. Choose plugins or omit redteam until the scope is clear. An empty list would run the default suite.',
+      );
+    }
+  }
+
+  const prior = targets(previous);
+  const testableTargets: number[] = [];
+  let runIssue: string | undefined;
+  for (const [index, target] of list.entries()) {
+    const path = (config.targets ? 'targets.' : 'providers.') + index;
+    if (target && typeof target === 'object') {
+      const keys = Object.keys(target);
+      const isMap = keys.length && keys.every((key) => !Object.hasOwn(schema.Provider.shape, key));
+      const parsed = (isMap ? schema.ProviderMap : schema.Provider).safeParse(target);
+      if (!parsed.success) {
+        return invalid(path + ': ' + issue(parsed.error));
+      }
+    }
+    const httpError = httpTargetValidationIssue(target);
+    if (httpError) {
+      return invalid(path + ': ' + httpError);
+    }
+    const restriction = targetExecutionIssue(target, userTurns, prior[index]);
+    if (restriction?.repairable) {
+      return invalid(path + ': ' + restriction.message);
+    }
+    if (restriction) {
+      runIssue ??= path + ': ' + restriction.message;
+    } else if (RedteamSchemas.SetupConnectionTest.Request.safeParse(target).success) {
+      testableTargets.push(index);
+    }
+  }
+  const defaultTest = parsed.data.defaultTest;
+  if (
+    testableTargets.some((i) => /\{\{\s*sessionId\s*\}\}/.test(JSON.stringify(list[i]))) &&
+    !(
+      typeof defaultTest === 'object' &&
+      (defaultTest.options?.transformVars || defaultTest.vars?.sessionId)
+    )
+  ) {
+    return invalid(
+      'To create the sessionId used by this HTTP target, set defaultTest.options.transformVars to ' +
+        JSON.stringify(sessionTransform) +
+        '.',
+    );
+  }
+  if (!list.length || !redteam) {
+    runIssue ??= list.length
+      ? 'The draft still needs a red team test plan.'
+      : 'The draft still needs a target.';
+  } else {
+    if (
+      !config.prompts ||
+      (typeof config.prompts === 'object' && !Object.keys(config.prompts).length)
+    ) {
+      return invalid('Provide at least one prompt template, typically ["{{prompt}}"].');
+    }
+    const field = localReviewField(config);
+    if (field) {
+      runIssue ??=
+        'Review ' +
+        field +
+        ' locally before running. It can access files, credentials, code or another service.';
+    }
+  }
+  return { runnable: !runIssue, testableTargets, runIssue };
+}
+
 redteamRouter.get('/setup-plan', (_req, res) => {
   res.json({ enabled: !neverGenerateRemote() });
 });
@@ -360,7 +531,7 @@ redteamRouter.post('/setup/connection-test', async (req, res) => {
   if (!input.success) {
     res
       .status(400)
-      .json({ error: 'Check the endpoint, JSON body, reply path, auth header and variable name.' });
+      .json({ error: 'Check the endpoint, request, reply path, headers and variable names.' });
     return;
   }
   const timeout = AbortSignal.timeout(15_000);
@@ -393,29 +564,19 @@ redteamRouter.post('/setup-plan', async (req, res) => {
   if (!input.success) {
     res.status(400).json({
       error:
-        req.body?.version === 2
-          ? 'Check your draft and message size. The agent accepts up to 24 messages totaling 48,000 characters.'
+        req.body?.version === 3
+          ? 'Check your draft and message size. The agent accepts up to 128,000 characters of config and 48,000 characters of conversation.'
           : 'Reload setup to use the hosted agent. The new chat shares API descriptions with Promptfoo Cloud.',
     });
     return;
   }
   const { version: _version, ...conversation } = input.data;
-  const { messages, previous, connection, verification, validationError } = conversation;
+  const { messages, config, verification } = conversation;
   const fields = [
     ...messages.map(({ content }) => content),
-    previous?.purpose,
-    previous?.note,
-    ...Object.values(previous?.application ?? {}),
-    ...(previous?.plugins.map(({ reason }) => reason) ?? []),
-    connection?.url,
-    connection?.authEnv,
-    connection?.authHeader,
-    connection?.model,
-    connection?.responsePath,
-    JSON.stringify(connection?.body),
+    JSON.stringify(config),
     verification?.message,
     ...(verification?.paths ?? []),
-    validationError,
   ];
   if (fields.some((value) => value && containsSetupSecret(value))) {
     res.status(400).json({
@@ -425,38 +586,69 @@ redteamRouter.post('/setup-plan', async (req, res) => {
     return;
   }
 
-  const timeout = AbortSignal.timeout(45_000);
+  const timeout = AbortSignal.timeout(60_000);
   const disconnected = new AbortController();
   res.once('close', () => disconnected.abort());
+  const signal = AbortSignal.any([timeout, disconnected.signal]);
+  const userTurns = messages.filter((m) => m.role === 'user').map((m) => m.content);
+  let feedback: { validationError: string; rejectedConfig?: Record<string, unknown> } | undefined;
   try {
-    const response = await fetchWithProxy(getRemoteGenerationUrl(), {
-      method: 'POST',
-      headers: getRemoteGenerationHeaders(),
-      body: JSON.stringify({ task: 'redteam-setup', ...conversation }),
-      signal: AbortSignal.any([timeout, disconnected.signal]),
-      redirect: 'error',
-    });
-    if (
-      response.status === 400 &&
-      (await response.json()).message === 'Unknown task: redteam-setup'
-    ) {
-      res
-        .status(502)
-        .json({ error: 'This server does not support agent setup yet. Continue manually.' });
-      return;
-    }
-    if (response.status === 429) {
-      res
-        .status(429)
-        .json({ error: 'The setup agent is busy. Try again shortly or continue manually.' });
-      return;
-    }
-    if (response.ok) {
-      const plan = RedteamSchemas.SetupPlan.Response.safeParse(await response.json());
-      if (plan.success) {
-        res.json(plan.data);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const response = await fetchWithProxy(getRemoteGenerationUrl(), {
+        method: 'POST',
+        headers: getRemoteGenerationHeaders(),
+        body: JSON.stringify({ task: 'redteam-setup', ...conversation, ...feedback }),
+        signal,
+        redirect: 'error',
+      });
+      if (
+        response.status === 400 &&
+        (await response.json()).message === 'Unknown task: redteam-setup'
+      ) {
+        res
+          .status(502)
+          .json({ error: 'This server does not support agent setup yet. Continue manually.' });
         return;
       }
+      if (response.status === 429) {
+        res
+          .status(429)
+          .json({ error: 'The setup agent is busy. Try again shortly or continue manually.' });
+        return;
+      }
+      if (!response.ok) {
+        break;
+      }
+      const reply = schema.HostedReply.safeParse(await response.json());
+      if (!reply.success) {
+        break;
+      }
+      if (
+        containsSetupSecret(reply.data.message) ||
+        (reply.data.config && containsSetupSecret(JSON.stringify(reply.data.config)))
+      ) {
+        feedback = {
+          validationError: 'Remove literal credentials. Use only environment variable references.',
+        };
+        continue;
+      }
+      const { validationError, ...status } = await assessSetup(
+        reply.data.config ?? config,
+        userTurns,
+        config,
+      );
+      if (!validationError) {
+        res.json(schema.Response.parse({ ...reply.data, ...status }));
+        return;
+      }
+      feedback = { validationError, rejectedConfig: reply.data.config };
+    }
+    if (feedback) {
+      res.status(502).json({
+        error:
+          'The agent couldn’t validate its changes. Your draft is unchanged. Try again or clarify the request.',
+      });
+      return;
     }
   } catch {
     if (disconnected.signal.aborted) {

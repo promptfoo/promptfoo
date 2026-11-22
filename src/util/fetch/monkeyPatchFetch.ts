@@ -216,10 +216,12 @@ export async function monkeyPatchFetch(
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
   const urlString = getRequestUrlString(url);
   const callerHeaders = getEffectiveHeaders(url, options?.headers);
-  const isSilent = new Headers(callerHeaders).get('x-promptfoo-silent') === 'true';
+  const isSilent =
+    options?.suppressLogging || new Headers(callerHeaders).get('x-promptfoo-silent') === 'true';
   const logEnabled = !NO_LOG_URLS.some((logUrl) => matchesNoLogUrl(urlString, logUrl)) && !isSilent;
 
   const {
+    suppressLogging: _suppressLogging,
     restrictCloudAuthRedirects: restrictRedirects,
     ...opts
   }: FetchOptions & {

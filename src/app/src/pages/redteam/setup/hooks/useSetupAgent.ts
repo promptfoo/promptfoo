@@ -1,97 +1,50 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
-import {
-  type RedteamSetupPlan,
-  RedteamSetupReplySchema,
-  type SetupConnectionDraft,
-} from '@promptfoo/types/api/redteamSetup';
-import isEqual from 'fast-deep-equal';
-import { bindConnection, toTarget } from '../utils/agentConnection';
-import { applicationDefinitionToPurpose } from '../utils/purposeParser';
-import { missingEndpoint } from '../utils/targetDestination';
-import { EXAMPLE_CONFIG, useRedTeamConfig } from './useRedTeamConfig';
-
-import type { Config, ProviderOptions } from '../types';
+import { isPlainObject } from '@app/utils/isPlainObject';
+import { headerVariable, RedteamSetupReplySchema } from '@promptfoo/types/api/redteamSetup';
 
 const API_PATH = '/redteam/setup-plan';
 const UNAVAILABLE =
   'Could not reach the setup agent. Try sending a message again or set up manually.';
+export type NativeConfig = Record<string, unknown>;
+interface Verification {
+  success: boolean;
+  message: string;
+  paths?: string[];
+  targetIndex: number;
+}
+
 export interface SetupDraft {
   messages: (
     | { role: 'user' | 'assistant'; content: string }
-    | { role: 'test'; content: string; success: boolean }
+    | { role: 'test'; content: string; success: boolean; destination: string }
   )[];
   input: string;
   demo?: boolean;
-  tested?: {
-    target?: ProviderOptions;
-    connection?: SetupConnectionDraft;
-    result: { success: boolean; message: string; paths?: string[] };
-  };
-  plan?: RedteamSetupPlan;
-  connection?: SetupConnectionDraft;
-  excluded?: string[];
-  approved?: { config: Config; plan: RedteamSetupPlan };
-  notice?: string;
+  config?: NativeConfig;
+  runnable?: boolean;
+  runIssue?: string;
+  testableTargets?: number[];
+  tested?: Verification[];
 }
 
-function existingTarget(config: Config): ProviderOptions | undefined {
-  const target = config.target;
-  if (!target?.id || missingEndpoint(target)) {
-    return undefined;
+export function targets(config?: NativeConfig): unknown[] {
+  const list = config?.targets ?? config?.providers;
+  return Array.isArray(list) ? list : list ? [list] : [];
+}
+
+export function credentialHeaders(target: unknown): string[] {
+  if (
+    !isPlainObject(target) ||
+    !isPlainObject(target.config) ||
+    !isPlainObject(target.config.headers)
+  ) {
+    return [];
   }
-  return target;
-}
-
-function targetFor(draft: SetupDraft, config: Config) {
-  if (draft.connection) {
-    return toTarget(draft.connection);
-  }
-  return draft.demo ? EXAMPLE_CONFIG.target : existingTarget(config);
-}
-
-function selectedPlan({ plan, excluded }: SetupDraft) {
-  return plan && { ...plan, plugins: plan.plugins.filter(({ id }) => !excluded?.includes(id)) };
-}
-
-// Only locally validated connection settings can replace the configured target.
-function buildConfig(config: Config, plan: RedteamSetupPlan, draft: SetupDraft): Config {
-  const target = targetFor(draft, config) ??
-    (draft.connection && toTarget(draft.connection, { partial: true })) ?? {
-      id: 'http',
-      config: { url: '' },
-    };
-  const replacing = target && !isEqual(target, config.target);
-  // Prompts, examples, extensions and other target-specific settings can contain
-  // private data. Never carry them to a replacement target.
-  const base = draft.demo
-    ? EXAMPLE_CONFIG
-    : replacing
-      ? useRedTeamConfig.getInitialState().config
-      : config;
-  const retained = { ...base.applicationDefinition };
-  for (const field of Object.keys(draft.approved?.plan.application || {})) {
-    delete retained[field as keyof typeof retained];
-  }
-  const applicationDefinition = {
-    ...retained,
-    ...plan.application,
-    ...(draft.demo && {
-      redteamUser: EXAMPLE_CONFIG.applicationDefinition.redteamUser,
-      forbiddenData: 'Other customers’ records, including Jane Smith’s (jane.smith@example.com).',
-    }),
-    purpose: plan.purpose,
-  };
-  return {
-    ...base,
-    target,
-    applicationDefinition,
-    purpose: applicationDefinitionToPurpose(applicationDefinition),
-    plugins: plan.plugins.map(({ id }) => id),
-    strategies: ['basic'],
-    numTests: plan.numTests ?? 3,
-  };
+  return Object.entries(target.config.headers)
+    .filter(([, value]) => typeof value === 'string' && headerVariable(value))
+    .map(([name, value]) => name + ': ' + value);
 }
 
 // Keep the most recent conversation inside the hosted agent's input budget.
@@ -108,46 +61,47 @@ function history(messages: SetupDraft['messages']) {
   return turns;
 }
 
-function verification(draft: SetupDraft) {
-  const result = draft.tested?.result;
-  if (!result || draft.connection) {
-    return result;
+export function userTurns(draft: SetupDraft) {
+  return history(draft.messages)
+    .filter((m) => m.role === 'user')
+    .map((m) => m.content);
+}
+
+function verification(tested: Verification[] = []) {
+  const latest = tested[tested.length - 1];
+  if (tested.length < 2) {
+    return latest;
   }
-  // A saved target was never shared in chat. Keep its field names and errors local.
-  return {
-    success: result.success,
-    message: result.success ? 'Connection test passed.' : 'Connection test failed.',
-  };
+  // Earlier tests still apply to unchanged targets. Include their status so the
+  // agent can distinguish verified peers from targets that haven't been tried.
+  const others = tested
+    .slice(-9, -1)
+    .map((result) => `target[${result.targetIndex}] ${result.success ? 'passed' : 'failed'}`);
+  const status = ' Other current connection tests (zero-based indices): ' + others.join(', ') + '.';
+  return { ...latest, message: latest.message.slice(0, 500 - status.length) + status };
 }
 
 function applyReply(state: SetupDraft, data: unknown): SetupDraft {
-  const reply = RedteamSetupReplySchema.safeParse(data);
-  if (!reply.success) {
-    throw new Error('Reply does not match the setup schema.');
-  }
-  const { message, plan, connection: proposed } = reply.data;
-  const userTurns = state.messages.filter((m) => m.role === 'user').map((m) => m.content);
-  if (state.messages[state.messages.length - 1]?.role === 'test') {
-    // A test result doesn't grant fresh permission to change credentials or hosts.
-    userTurns.push('');
-  }
-  const connection = proposed
-    ? bindConnection(proposed, state.connection, userTurns)
-    : state.connection;
+  const { message, config, runnable, runIssue, testableTargets } =
+    RedteamSetupReplySchema.parse(data);
+  const previous = targets(state.config);
+  const next = targets(config ?? state.config);
   return {
     ...state,
     input: '',
     messages: [...state.messages, { role: 'assistant', content: message }],
-    connection,
-    tested: isEqual(connection, state.connection) ? state.tested : undefined,
-    demo: state.demo && !connection,
-    plan: plan ?? state.plan,
-    excluded: plan ? undefined : state.excluded,
+    config: config ?? state.config,
+    runnable,
+    runIssue,
+    testableTargets,
+    tested: state.tested?.filter(
+      ({ targetIndex: i }) =>
+        testableTargets.includes(i) && JSON.stringify(previous[i]) === JSON.stringify(next[i]),
+    ),
   };
 }
 
 export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) => void) {
-  const { config } = useRedTeamConfig();
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const [disabled, setDisabled] = useState(false);
@@ -178,40 +132,28 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
     const next: SetupDraft = answer
       ? { ...state, messages: [...state.messages, { role: 'user', content: answer }] }
       : state;
-    const previous = selectedPlan(state);
     const payload = {
-      version: 2,
+      version: 3,
       messages: history(next.messages),
-      previous: previous?.plugins.length ? previous : undefined,
-      connection: state.connection,
-      hasTarget: Boolean(!state.connection && targetFor(state, config)),
-      verification: verification(state),
+      config: state.config,
+      verification: verification(state.tested),
     };
-    let validationError: string | undefined;
     try {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const response = await callApi(API_PATH, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...payload, validationError }),
-          signal: controller.signal,
-        });
-        const result = await response.json();
-        if (controller.signal.aborted) {
-          return;
-        }
-        if (!response.ok) {
-          setError(result.error || UNAVAILABLE);
-          return;
-        }
-        try {
-          setDraft(applyReply(next, result));
-          return;
-        } catch (err) {
-          validationError = err instanceof Error ? err.message.slice(0, 500) : 'Invalid setup.';
-        }
+      const response = await callApi(API_PATH, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      const result = await response.json();
+      if (controller.signal.aborted) {
+        return;
       }
-      setError('Couldn’t verify the proposed changes. Your draft is unchanged. ' + validationError);
+      if (!response.ok) {
+        setError(result.error || UNAVAILABLE);
+        return;
+      }
+      setDraft(applyReply(next, result));
     } catch {
       if (!controller.signal.aborted) {
         setError(UNAVAILABLE);
@@ -221,9 +163,6 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
       setPending(false);
     }
   }
-  const selected = selectedPlan(draft);
-  const proposed = selected && buildConfig(config, selected, draft);
-  const target = targetFor(draft, config);
   return {
     pending,
     disabled,
@@ -231,10 +170,5 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
     send: (answer: string) => respond(draft, answer),
     feedback: (state: SetupDraft) => respond(state),
     clearError: () => setError(''),
-    proposed,
-    target,
-    ready: Boolean(target && proposed),
-    replacing: proposed && !isEqual(proposed.target, config.target),
-    hasTarget: Boolean(existingTarget(config)),
   };
 }

@@ -239,7 +239,9 @@ export async function fetchWithProxy(
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
   };
-  const logEnabled = new Headers(finalOptions.headers).get('x-promptfoo-silent') !== 'true';
+  const logEnabled =
+    !options.suppressLogging &&
+    new Headers(finalOptions.headers).get('x-promptfoo-silent') !== 'true';
 
   if (typeof url === 'string') {
     try {

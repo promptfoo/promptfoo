@@ -28,6 +28,9 @@ export interface FetchOptions extends RequestInit {
    */
   skipCloudAuthInjection?: boolean;
 
+  /** Suppress request logging without sending a header to the destination. */
+  suppressLogging?: boolean;
+
   /**
    * Internal request-scoped marker: preserve custom Cloud auth protection across
    * asynchronous preparation and retries, even if the saved session changes.

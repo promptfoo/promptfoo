@@ -1,19 +1,12 @@
 import { useEffect, useRef } from 'react';
 
 import { Button } from '@app/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@app/components/ui/dropdown-menu';
 import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
 import {
   ArrowRight,
   ArrowUp,
   BotMessageSquare,
-  ChevronDown,
   CircleAlert,
   CircleCheck,
   Cloud,
@@ -23,20 +16,25 @@ import {
   PlugZap,
 } from 'lucide-react';
 import { useConnectionTest } from '../hooks/useConnectionTest';
+import { EXAMPLE_CONFIG } from '../hooks/useRedTeamConfig';
 import { type SetupDraft, useSetupAgent } from '../hooks/useSetupAgent';
-import SetupPlan, { ConnectionSummary } from './SetupPlan';
-import { getEstimatedProbes } from './strategies/utils';
-
-import type { Config } from '../types';
+import { getRuntimeRedteamConfig } from '../utils/yamlHelpers';
+import SetupPlan from './SetupPlan';
 
 const DEMO_DESCRIPTION =
-  "Test as a customer shopping at an electronics store. The support bot can look up my orders and update my tickets. It must never show or change another customer's records.";
+  "Test the demo support bot at https://customer-service-chatbot-example.promptfoo.app as john.doe@example.com. It can look up my orders and update my tickets. It must never reveal or change another customer's records. Start with a small scan.";
 const OPENING = 'Describe your app and what could go wrong.';
+// Seed the public connection, prompt and session ID, never editor state.
+function demoConfig() {
+  const { targets, prompts, defaultTest } = getRuntimeRedteamConfig(EXAMPLE_CONFIG);
+  return { targets, prompts, defaultTest };
+}
+
 interface SetupProps {
   draft: SetupDraft;
   setDraft: (draft: SetupDraft) => void;
   fresh: boolean;
-  onApply: (config: Config, manual?: boolean) => void;
+  onReview: () => void;
   onManual: () => void;
   onLoad: () => void;
 }
@@ -199,11 +197,22 @@ function ChatMessage({
         )}
         {test ? (
           <span>
-            <strong className="block text-xs">Connection test</strong>
+            <strong className="block text-xs">
+              Connection test {message.role === 'test' && '· ' + message.destination}
+            </strong>
             {content}
           </span>
         ) : (
-          content
+          // Format field names without rendering links, images, or HTML from the model.
+          content.split(/(`[^`\n]+`)/g).map((part, i) =>
+            i % 2 ? (
+              <code key={i} className="rounded bg-muted px-1 py-0.5 text-[0.9em]">
+                {part.slice(1, -1)}
+              </code>
+            ) : (
+              part
+            ),
+          )
         )}
       </p>
     </div>
@@ -214,87 +223,73 @@ function SetupActions({
   agent,
   check,
   draft,
-  fresh,
-  onApply,
-}: Pick<SetupProps, 'draft' | 'fresh' | 'onApply'> & { agent: Agent; check: ConnectionTest }) {
-  const { proposed, replacing, pending, ready } = agent;
-  const busy = pending || check.testing;
-  const idle = !busy && !draft.input.trim();
-  // A partially configured API isn't runnable. Never promote it to a
-  // connected target just because we have its URL.
-  const canReview = proposed && (ready || !draft.connection);
-  if (!canReview && !check.available) {
+  onReview,
+}: Pick<SetupProps, 'draft' | 'onReview'> & { agent: Agent; check: ConnectionTest }) {
+  const idle = !agent.pending && !check.testing && !draft.input.trim();
+  if (!draft.config) {
     return null;
   }
   return (
     <div className="shrink-0 border-t border-border pt-3 pb-2">
-      {canReview && !fresh && (replacing || !draft.approved) && (
-        <p className="mb-2 text-xs text-muted-foreground">
-          {replacing
-            ? 'Reviewing replaces your target and starts fresh app settings.'
-            : 'Reviewing replaces your current test settings.'}{' '}
-          Saved configurations stay unchanged.
+      {check.choices.length > 1 && (
+        <label className="mb-2 flex min-w-0 items-center gap-2 text-sm">
+          <span className="shrink-0 text-muted-foreground">Test target</span>
+          <select
+            className="min-w-0 rounded border border-border bg-card p-1"
+            disabled={!idle}
+            value={check.selected?.index}
+            onChange={(e) => check.select(Number(e.target.value))}
+          >
+            {check.choices.map((choice) => (
+              <option key={choice.index} value={choice.index}>
+                {choice.index + 1}. {choice.target.label && choice.target.label + ' · '}
+                {choice.url}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <div className="flex items-start justify-between gap-2">
+        {check.selected && (
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-lg px-2 sm:px-4"
+            aria-describedby="connection-test-disclosure"
+            disabled={!idle}
+            onClick={check.test}
+          >
+            {check.testing ? (
+              <Loader2 aria-hidden="true" className="animate-spin" />
+            ) : (
+              <PlugZap aria-hidden="true" />
+            )}
+            Test connection
+          </Button>
+        )}
+        <Button
+          className="ml-auto rounded-lg px-2 sm:px-4"
+          variant={draft.runnable ? 'default' : 'outline'}
+          disabled={!idle}
+          onClick={onReview}
+        >
+          {draft.runnable ? 'Review setup' : 'Review draft'} <ArrowRight aria-hidden="true" />
+        </Button>
+      </div>
+      {check.selected && (
+        <p
+          id="connection-test-disclosure"
+          className="mt-1.5 max-h-[12dvh] overflow-auto text-xs text-muted-foreground wrap-anywhere"
+        >
+          Sends one “Hello” via {check.selected.target.config.method} to {check.selected.url}
+          {check.headers.length > 0 && ' using ' + check.headers.join(', ')}
         </p>
       )}
-      <div className="flex items-start justify-between gap-3">
-        {check.available && (
-          <div className="min-w-0">
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-lg px-2 sm:px-4"
-              aria-describedby="connection-test-disclosure"
-              disabled={!idle}
-              onClick={() => check.test()}
-            >
-              {check.testing ? (
-                <Loader2 aria-hidden="true" className="animate-spin" />
-              ) : (
-                <PlugZap aria-hidden="true" />
-              )}
-              Test connection
-            </Button>
-            <p
-              id="connection-test-disclosure"
-              className="mt-1.5 text-xs text-muted-foreground wrap-anywhere"
-            >
-              Sends one “Hello” to {check.destination}
-              {check.authEnv &&
-                ` using ${check.authEnv} in ${check.authHeader === 'Authorization' ? 'Authorization (Bearer)' : check.authHeader}`}
-            </p>
-          </div>
-        )}
-        {canReview && (
-          <div className="ml-auto shrink-0 text-right">
-            <Button
-              className="rounded-lg px-2 sm:px-4"
-              disabled={!idle || !proposed.plugins.length}
-              onClick={() => onApply(proposed)}
-              aria-describedby="scan-estimate"
-            >
-              {ready ? 'Review setup' : 'Review draft'} <ArrowRight aria-hidden="true" />
-            </Button>
-            <p
-              id="scan-estimate"
-              aria-live="polite"
-              className="mt-1.5 text-xs text-muted-foreground"
-            >
-              {proposed.plugins.length ? (
-                <>
-                  Scan · <span>~{getEstimatedProbes(proposed).toLocaleString()} requests</span>
-                </>
-              ) : (
-                'Select at least one risk.'
-              )}
-            </p>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
 
-function Introduction({ hasTarget }: { hasTarget: boolean }) {
+function Introduction({ fresh }: { fresh: boolean }) {
   return (
     <div className="pb-5 sm:pb-6">
       <div className="mb-4 flex items-center gap-2">
@@ -303,10 +298,9 @@ function Introduction({ hasTarget }: { hasTarget: boolean }) {
       </div>
       <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">What are we testing?</h2>
       <p className="mt-2 text-base text-muted-foreground">
-        {OPENING}{' '}
-        {hasTarget
-          ? 'I’ll suggest tests and keep your current target unless you change it.'
-          : 'I’ll help you connect it and draft tests for review.'}
+        {OPENING} I’ll help you connect it and draft tests for review.
+        {!fresh &&
+          ' This chat starts a separate draft. Your manual configuration stays private and unchanged.'}
       </p>
     </div>
   );
@@ -314,32 +308,17 @@ function Introduction({ hasTarget }: { hasTarget: boolean }) {
 
 function Conversation({
   draft,
-  setDraft,
   agent,
   check,
-}: Pick<SetupProps, 'draft' | 'setDraft'> & {
+}: Pick<SetupProps, 'draft'> & {
   agent: Agent;
   check: ConnectionTest;
 }) {
   const { messages } = draft;
-  const { pending, proposed, ready } = agent;
-  const idle = !pending && !check.testing && !draft.input.trim();
+  const { pending } = agent;
   const lastTurn = useRef<HTMLDivElement>(null);
   const progress = useRef<HTMLParagraphElement>(null);
-  const status = check.available ? (check.status ?? 'untested') : undefined;
-  const summary = proposed ? (
-    <SetupPlan
-      draft={draft}
-      setDraft={setDraft}
-      config={proposed}
-      disabled={!idle}
-      status={status}
-    />
-  ) : agent.target || draft.connection ? (
-    <div className="rounded-xl border border-border bg-card text-sm">
-      <ConnectionSummary target={agent.target} draft={draft} status={status} />
-    </div>
-  ) : null;
+  const summary = draft.config && <SetupPlan draft={draft} />;
 
   // Keep the verified result and the agent's interpretation together.
   const last = messages.length - (messages[messages.length - 2]?.role === 'test' ? 2 : 1);
@@ -378,7 +357,7 @@ function Conversation({
       ) : (
         summary && (
           <div className="mt-3 sm:pl-10">
-            {ready || check.available ? (
+            {draft.runnable || check.selected ? (
               summary
             ) : (
               <details>
@@ -395,63 +374,10 @@ function Conversation({
   );
 }
 
-// Exiting a chat must not silently replace an existing configuration.
-function ManualSetup({
-  fresh,
-  proposed,
-  replacing,
-  onApply,
-  onManual,
-}: Pick<SetupProps, 'fresh' | 'onApply' | 'onManual'> & Pick<Agent, 'proposed' | 'replacing'>) {
-  if (!fresh && proposed?.plugins.length) {
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button size="sm" variant="ghost">
-            Manual setup <ChevronDown aria-hidden="true" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-72">
-          <DropdownMenuItem onSelect={onManual}>Return to configuration</DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => onApply(proposed, true)}
-            className="flex flex-col items-start gap-1"
-            aria-label="Use tests in manual setup"
-            aria-describedby="manual-draft-warning"
-          >
-            Use tests in manual setup
-            <span id="manual-draft-warning" className="text-xs text-muted-foreground">
-              {replacing
-                ? 'Replaces the current target and resets its app settings.'
-                : 'Replaces the current test settings.'}{' '}
-              Saved configurations stay unchanged.
-            </span>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  }
-  return (
-    <Button
-      size="sm"
-      variant="ghost"
-      onClick={() => {
-        if (fresh && proposed?.plugins.length) {
-          onApply(proposed, true);
-        } else {
-          onManual();
-        }
-      }}
-    >
-      {fresh ? 'Set up manually' : 'Return to configuration'}
-    </Button>
-  );
-}
-
-export default function Setup({ draft, setDraft, fresh, onApply, onManual, onLoad }: SetupProps) {
+export default function Setup({ draft, setDraft, fresh, onReview, onManual, onLoad }: SetupProps) {
   const agent = useSetupAgent(draft, setDraft);
   const check = useConnectionTest(draft, setDraft, agent);
-  const { disabled, hasTarget, pending } = agent;
+  const { disabled, pending } = agent;
   const started = draft.messages.length > 0 || pending || check.testing;
 
   return (
@@ -459,13 +385,9 @@ export default function Setup({ draft, setDraft, fresh, onApply, onManual, onLoa
       <header className="flex shrink-0 items-center justify-between gap-1 border-b border-border py-2">
         <h1 className="text-sm font-semibold sm:text-base">Red team setup</h1>
         <div className="flex items-center gap-1">
-          <ManualSetup
-            fresh={fresh}
-            proposed={!disabled && !pending && !check.testing ? agent.proposed : undefined}
-            replacing={agent.replacing}
-            onApply={onApply}
-            onManual={onManual}
-          />
+          <Button size="sm" variant="ghost" onClick={onManual}>
+            {fresh ? 'Set up manually' : 'Return to configuration'}
+          </Button>
           <Button
             size="sm"
             variant="ghost"
@@ -495,25 +417,14 @@ export default function Setup({ draft, setDraft, fresh, onApply, onManual, onLoa
           )}
         >
           {started ? (
-            <Conversation draft={draft} setDraft={setDraft} agent={agent} check={check} />
+            <Conversation draft={draft} agent={agent} check={check} />
           ) : (
             <div className="mt-auto">
-              {draft.notice && (
-                <p role="status" className="mb-5 text-sm text-muted-foreground">
-                  {draft.notice}
-                </p>
-              )}
-              <Introduction hasTarget={hasTarget} />
+              <Introduction fresh={fresh} />
             </div>
           )}
           {draft.messages.length > 0 && (
-            <SetupActions
-              agent={agent}
-              check={check}
-              draft={draft}
-              fresh={fresh}
-              onApply={onApply}
-            />
+            <SetupActions agent={agent} check={check} draft={draft} onReview={onReview} />
           )}
           <Composer
             draft={draft}
@@ -524,7 +435,7 @@ export default function Setup({ draft, setDraft, fresh, onApply, onManual, onLoa
           />
           {!started && (
             <div className="mt-5 mb-auto flex flex-wrap items-center gap-x-3 gap-y-2">
-              {fresh && (!draft.input || draft.demo) && (
+              {(!draft.input || draft.demo) && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -533,6 +444,7 @@ export default function Setup({ draft, setDraft, fresh, onApply, onManual, onLoa
                     setDraft({
                       ...draft,
                       demo: !draft.demo,
+                      config: draft.demo ? undefined : demoConfig(),
                       input: draft.demo ? '' : DEMO_DESCRIPTION,
                     });
                     agent.clearError();

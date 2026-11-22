@@ -38,12 +38,12 @@ import {
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import isEqual from 'fast-deep-equal';
+import { dump } from 'js-yaml';
 import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
 import { Link } from 'react-router';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
-import { riskName } from '../utils/plugins';
-import { missingEndpoint, targetDestination } from '../utils/targetDestination';
+import { type SetupDraft, userTurns } from '../hooks/useSetupAgent';
 import { generateOrderedYaml, getRuntimeRedteamConfig } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
@@ -51,80 +51,32 @@ import EstimationsDisplay from './EstimationsDisplay';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
-import { ConnectionStatus } from './SetupPlan';
+import SetupPlan from './SetupPlan';
 import type { PluginConfig, Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
 import type { Config, ProviderOptions } from '../types';
 
-// Recheck before running even when an incomplete draft is opened from a numbered deep link.
-function setupRunError({ target, plugins }: Config, guided: boolean): string | null {
-  if (missingEndpoint(target)) {
-    return guided
-      ? 'Continue the conversation to connect a target before running.'
-      : 'Add a target URL before running.';
-  }
-  if (guided && !plugins.length) {
-    return 'Adjust test settings to select at least one plugin before running.';
-  }
-  return null;
+function missingEndpoint({ id, config }: ProviderOptions): boolean {
+  return (
+    (id === 'http' || id === 'https') &&
+    !config?.request &&
+    (typeof config?.url !== 'string' || !config.url.trim())
+  );
 }
 
-function AgentReview({
-  config,
-  connectionStatus,
-  onContinue,
-  children,
-}: {
-  config: Config;
-  connectionStatus?: ReviewProps['connectionStatus'];
-  onContinue: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-4 ph-no-capture">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-4">
-        <div className="min-w-0 break-words">
-          <p className="text-sm text-muted-foreground">Target</p>
-          <p className="font-medium">{targetDestination(config.target)}</p>
-          {connectionStatus && <ConnectionStatus status={connectionStatus} review />}
-        </div>
-        <Button variant="outline" size="sm" onClick={onContinue}>
-          Continue conversation
-        </Button>
-      </div>
-      <div>
-        <h2 className="font-semibold">Test plan</h2>
-        <p className="mt-1 text-sm">
-          {config.plugins.map((p) => riskName(typeof p === 'string' ? p : p.id)).join(' · ') ||
-            'No risks selected'}
-        </p>
-        {config.strategies.length === 1 && config.strategies[0] === 'basic' && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            This first pass tests direct prompts. Add strategies to try more ways to bypass
-            safeguards.
-          </p>
-        )}
-      </div>
-      <Collapsible>
-        <CollapsibleTrigger asChild>
-          <Button variant="outline" size="sm">
-            Adjust test settings <ChevronDown aria-hidden="true" />
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="pt-4">{children}</CollapsibleContent>
-      </Collapsible>
-    </div>
-  );
+// Recheck before running even when an incomplete draft is opened from a numbered deep link.
+function setupRunError({ target }: Config) {
+  return missingEndpoint(target) ? 'Add a target URL before running.' : null;
 }
 
 interface ReviewProps {
   onBack?: () => void;
+  native?: SetupDraft;
   continueConversation?: () => void;
-  connectionStatus?: 'success' | 'error';
-  navigateToPlugins: () => void;
-  navigateToStrategies: () => void;
-  navigateToPurpose: () => void;
+  navigateToPlugins?: () => void;
+  navigateToStrategies?: () => void;
+  navigateToPurpose?: () => void;
 }
 
 interface PolicyPlugin {
@@ -224,15 +176,19 @@ function removeIntentEntry(
 export default function Review({
   onBack,
   continueConversation,
-  connectionStatus,
+  native,
   navigateToPlugins,
   navigateToStrategies,
   navigateToPurpose,
 }: ReviewProps) {
   const { config, updateConfig } = useRedTeamConfig();
-  const { targetConfigError } = useRedTeamTargetConfigValidation();
-  const reviewError = targetConfigError || setupRunError(config, Boolean(continueConversation));
-  const incomplete = missingEndpoint(config.target);
+  const validation = useRedTeamTargetConfigValidation();
+  const targetConfigError = native ? null : validation.targetConfigError;
+  const reviewError = native
+    ? native.runIssue ||
+      (native.config && native.runnable ? null : 'This draft is only available for inspection.')
+    : targetConfigError || setupRunError(config);
+  const incomplete = native ? Boolean(reviewError) : missingEndpoint(config.target);
   const saveError = incomplete ? targetConfigError : reviewError;
   const { recordEvent } = useTelemetry();
   const {
@@ -242,9 +198,15 @@ export default function Review({
   const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
   const pollIntervalRef = useRef<number | null>(null);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
-  const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
+  const yamlContent = useMemo(
+    () =>
+      native ? dump(native.config, { noRefs: true, lineWidth: -1 }) : generateOrderedYaml(config),
+    [config, native],
+  );
+  const mounted = useRef(true);
 
   const [isRunning, setIsRunning] = React.useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const { showToast } = useToast();
@@ -355,7 +317,7 @@ export default function Review({
   // Wait for Zustand to hydrate from localStorage before checking savedJobId
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    if (!_hasHydrated || hasAttemptedRecovery.current) {
+    if (native || !_hasHydrated || hasAttemptedRecovery.current) {
       return;
     }
     hasAttemptedRecovery.current = true;
@@ -430,9 +392,12 @@ export default function Review({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'promptfooconfig.yaml';
+    link.download = native && incomplete ? 'promptfoo-draft.yaml' : 'promptfooconfig.yaml';
     link.click();
     URL.revokeObjectURL(url);
+    if (native) {
+      return;
+    }
     recordEvent('feature_used', {
       feature: 'redteam_config_download',
       numPlugins: config.plugins.length,
@@ -519,10 +484,11 @@ export default function Review({
   const isRunNowDisabled = useMemo(() => {
     return (
       isRunning ||
+      isPreparing ||
       Boolean(reviewError) ||
       ['blocked', 'disabled', 'unknown'].includes(apiHealthStatus)
     );
-  }, [isRunning, apiHealthStatus, reviewError]);
+  }, [isRunning, isPreparing, apiHealthStatus, reviewError]);
 
   const runNowTooltipMessage = useMemo((): string | undefined => {
     if (isRunning) {
@@ -621,17 +587,34 @@ export default function Review({
   );
 
   const handleRunWithSettings = async () => {
+    if (!mounted.current || isPreparing) {
+      return;
+    }
+    setIsPreparing(true);
+    try {
+      await startRun();
+    } finally {
+      setIsPreparing(false);
+    }
+  };
+
+  const startRun = async () => {
     if (reviewError) {
       confirmedRunTargetRef.current = null;
       showToast(reviewError, 'error');
       return;
     }
-    const confirmedTarget =
-      confirmedRunTargetRef.current ?? structuredClone(useRedTeamConfig.getState().config.target);
+    const confirmedTarget = native
+      ? null
+      : (confirmedRunTargetRef.current ??
+        structuredClone(useRedTeamConfig.getState().config.target));
     confirmedRunTargetRef.current = confirmedTarget;
 
     // Check email verification first
     const emailResult = await checkEmailStatus();
+    if (!mounted.current) {
+      return;
+    }
 
     if (!emailResult.canProceed) {
       if (emailResult.needsEmail) {
@@ -654,15 +637,21 @@ export default function Review({
     }
 
     const { hasRunningJob } = await checkForRunningJob();
+    // Leaving review cancels authorization while email/status checks are pending.
+    if (!mounted.current) {
+      return;
+    }
 
     const { config: latestConfig } = useRedTeamConfig.getState();
     const { targetConfigError: latestTargetConfigError } =
       useRedTeamTargetConfigValidation.getState();
-    const runTargetValidationError = getRunTargetValidationError(
-      latestTargetConfigError || setupRunError(latestConfig, Boolean(continueConversation)),
-      confirmedTarget,
-      latestConfig.target,
-    );
+    const runTargetValidationError =
+      confirmedTarget &&
+      getRunTargetValidationError(
+        latestTargetConfigError || setupRunError(latestConfig),
+        confirmedTarget,
+        latestConfig.target,
+      );
     if (runTargetValidationError) {
       confirmedRunTargetRef.current = null;
       showToast(runTargetValidationError, 'error');
@@ -681,14 +670,17 @@ export default function Review({
       pollIntervalRef.current = null;
     }
 
-    recordEvent('feature_used', {
-      feature: 'redteam_config_run',
-      numPlugins: latestConfig.plugins.length,
-      numStrategies: latestConfig.strategies.length,
-      targetType: latestConfig.target.id,
-    });
+    const metrics = native
+      ? {}
+      : {
+          numPlugins: latestConfig.plugins.length,
+          numStrategies: latestConfig.strategies.length,
+          targetType: latestConfig.target.id,
+        };
+    recordEvent('feature_used', { feature: 'redteam_config_run', ...metrics });
 
     if (
+      !native &&
       latestConfig.target.id === 'http' &&
       latestConfig.target.config?.url?.includes('promptfoo.app')
     ) {
@@ -702,9 +694,7 @@ export default function Review({
       type: 'redteam',
       step: 'webui_evaluation_started',
       source: 'webui',
-      numPlugins: latestConfig.plugins.length,
-      numStrategies: latestConfig.strategies.length,
-      targetType: latestConfig.target.id,
+      ...metrics,
     });
 
     setIsRunning(true);
@@ -717,16 +707,31 @@ export default function Review({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          config: getRuntimeRedteamConfig(latestConfig),
-          force: forceRegeneration,
-          verbose: latestConfig.target.config?.verbose,
-          maxConcurrency,
-          delay: latestConfig.target.config?.delay,
-        }),
+        body: JSON.stringify(
+          native
+            ? {
+                fromAgent: true,
+                config: native.config,
+                userTurns: userTurns(native),
+                force: true,
+              }
+            : {
+                config: getRuntimeRedteamConfig(latestConfig),
+                force: forceRegeneration,
+                verbose: latestConfig.target.config?.verbose,
+                maxConcurrency,
+                delay: latestConfig.target.config?.delay,
+              },
+        ),
       });
 
-      const { id } = await response.json();
+      const { id, error } = await response.json();
+      if (response.ok === false || !id) {
+        throw new Error(error || 'Could not start the scan.');
+      }
+      if (!mounted.current) {
+        return;
+      }
 
       // Save job ID to persistent store and start polling
       setJob(id);
@@ -776,14 +781,16 @@ export default function Review({
   };
 
   useEffect(() => {
+    mounted.current = true;
     return () => {
+      mounted.current = false;
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
       }
     };
   }, []);
 
-  const shortPurpose = !continueConversation && (config.purpose?.length ?? 0) < 100;
+  const shortPurpose = (config.purpose?.length ?? 0) < 100;
 
   function renderDetails() {
     return (
@@ -795,7 +802,7 @@ export default function Review({
             placeholder="My Red Team Configuration"
             value={config.description}
             onChange={handleDescriptionChange}
-            autoFocus={!continueConversation}
+            autoFocus
           />
         </div>
 
@@ -818,11 +825,11 @@ export default function Review({
                       label === 'Custom Policy' && 'bg-primary text-primary-foreground',
                     )}
                   >
-                    {continueConversation ? riskName(label) : label}
+                    {label}
                     {count > 1 && ` (${count})`}
                     <button
                       type="button"
-                      aria-label={`Remove plugin ${continueConversation ? riskName(label) : label}`}
+                      aria-label={`Remove plugin ${label}`}
                       onClick={() => {
                         const newPlugins = config.plugins.filter((plugin) => {
                           const pluginLabel = getPluginSummary(plugin).label;
@@ -1291,27 +1298,47 @@ export default function Review({
     );
   }
 
+  const download = (
+    <Button
+      variant={native ? 'outline' : 'default'}
+      onClick={handleSaveYaml}
+      disabled={Boolean(saveError)}
+      className="gap-2"
+    >
+      <Save className="size-4" /> Save YAML
+    </Button>
+  );
+
   return (
     <PageWrapper
       title={continueConversation && incomplete ? 'Review draft' : 'Review & Run'}
       onBack={onBack}
     >
       <div>
-        {continueConversation ? (
-          <AgentReview
-            config={config}
-            onContinue={continueConversation}
-            connectionStatus={connectionStatus}
-          >
-            {renderDetails()}
-          </AgentReview>
+        {native ? (
+          <div className="space-y-4">
+            <Button variant="outline" size="sm" onClick={continueConversation}>
+              Continue conversation
+            </Button>
+            <SetupPlan draft={native} review />
+            {reviewError && (
+              <Alert variant="warning">
+                <AlertContent>
+                  <AlertDescription>
+                    <strong>For inspection only.</strong> {reviewError} Check the YAML before using
+                    it outside this browser.
+                  </AlertDescription>
+                </AlertContent>
+              </Alert>
+            )}
+          </div>
         ) : (
           renderDetails()
         )}
         <Separator className={continueConversation ? 'my-4' : 'my-8'} />
         {!continueConversation && <h2 className="mb-6 text-xl font-semibold">Run Your Scan</h2>}
 
-        {(continueConversation || incomplete) && reviewError && (
+        {!native && incomplete && reviewError && (
           <p
             role="alert"
             className={cn(
@@ -1322,42 +1349,49 @@ export default function Review({
             {reviewError}
           </p>
         )}
-        <EstimationsDisplay config={config} />
+        {!native && <EstimationsDisplay config={config} />}
 
-        <Card className="p-6">
-          <div className="mb-8">
-            <h3 className="mb-2 text-lg font-semibold">Save for the command line</h3>
-            <p className="mb-4 text-muted-foreground">
-              {incomplete
-                ? 'Save a YAML draft. Add a target before running it.'
-                : 'Save the YAML file, then run this command from the same folder when you’re ready.'}
-            </p>
-            {!incomplete && <Code>promptfoo redteam run</Code>}
-            <div className="mt-4 flex gap-3">
-              <Button onClick={handleSaveYaml} disabled={Boolean(saveError)} className="gap-2">
-                <Save className="size-4" />
-                Save YAML
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleOpenYamlDialog}
-                disabled={Boolean(targetConfigError)}
-                className="gap-2"
-              >
-                <Eye className="size-4" />
-                View YAML
-              </Button>
-            </div>
-          </div>
-
-          <Separator className="my-6" />
-
+        <Card className={native ? 'p-4 sm:p-5' : 'p-6'}>
+          {native ? (
+            <details className="mb-3 rounded-md border border-border">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">View YAML</summary>
+              <pre className="max-h-[50dvh] overflow-auto border-t border-border bg-muted p-3 text-xs">
+                {yamlContent}
+              </pre>
+            </details>
+          ) : (
+            <>
+              <div className="mb-8">
+                <h3 className="mb-2 text-lg font-semibold">Save for the command line</h3>
+                <p className="mb-4 text-muted-foreground">
+                  {incomplete
+                    ? 'Save a YAML draft. Add a target before running it.'
+                    : 'Save the YAML file, then run this command from the same folder when you’re ready.'}
+                </p>
+                {!incomplete && <Code>promptfoo redteam run</Code>}
+                <div className="mt-4 flex gap-3">
+                  {download}
+                  <Button
+                    variant="outline"
+                    onClick={handleOpenYamlDialog}
+                    disabled={Boolean(targetConfigError)}
+                    className="gap-2"
+                  >
+                    <Eye className="size-4" /> View YAML
+                  </Button>
+                </div>
+              </div>
+              <Separator className="my-6" />
+              <h3 className="mb-2 text-lg font-semibold">Run in the browser</h3>
+            </>
+          )}
           <div>
-            <h3 className="mb-2 text-lg font-semibold">Run in the browser</h3>
-            <p className="mb-4 text-muted-foreground">
-              Running sends test requests to your target and may send its responses to Promptfoo
-              Cloud for grading. Only test systems you have permission to scan.
-            </p>
+            {(!native || !reviewError) && (
+              <p className={cn('mb-4 text-muted-foreground', native && 'text-sm')}>
+                Running sends test requests to your targets and may send their responses to
+                Promptfoo Cloud for grading. Only test systems you have permission to scan.
+              </p>
+            )}
             {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
               <Alert variant="warning" className="mb-4">
                 <AlertContent>
@@ -1372,7 +1406,7 @@ export default function Review({
               </Alert>
             )}
             <div className="mb-4">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span>
@@ -1384,13 +1418,18 @@ export default function Review({
                         disabled={isRunNowDisabled}
                         className="gap-2"
                       >
-                        {isRunning ? <Spinner className="size-4" /> : <Play className="size-4" />}
+                        {isRunning || isPreparing ? (
+                          <Spinner className="size-4" />
+                        ) : (
+                          <Play className="size-4" />
+                        )}
                         {isRunning ? 'Running...' : 'Run Now'}
                       </Button>
                     </span>
                   </TooltipTrigger>
                   {runNowTooltipMessage && <TooltipContent>{runNowTooltipMessage}</TooltipContent>}
                 </Tooltip>
+                {native && download}
                 {isRunning && (
                   <Button variant="destructive" onClick={handleCancel} className="gap-2">
                     <X className="size-4" />
@@ -1415,6 +1454,20 @@ export default function Review({
                 )}
               </div>
             </div>
+            {native && (
+              <p className="mb-2 text-xs text-muted-foreground">
+                Save the YAML to keep this draft after you leave setup.
+              </p>
+            )}
+            {native && !incomplete && (
+              <details className="text-sm text-muted-foreground">
+                <summary className="cursor-pointer">Run from the command line</summary>
+                <p className="my-2">
+                  Save the YAML file and run this command from the same folder.
+                </p>
+                <Code>promptfoo redteam run</Code>
+              </details>
+            )}
             {logs.length > 0 && <LogViewer logs={logs} />}
           </div>
         </Card>
