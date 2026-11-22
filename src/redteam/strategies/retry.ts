@@ -5,6 +5,7 @@ import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { makeRequest } from '../../util/cloud';
 import invariant from '../../util/invariant';
+import { getAgentOutcomeCase, isAgentOutcomePlugin } from '../constants/agentOutcomes';
 import { AGENTIC_STRATEGIES, MULTI_TURN_STRATEGIES } from '../constants/strategies';
 
 import type { ProviderResponse, TestCase, TestCaseWithPlugin } from '../../types/index';
@@ -29,6 +30,11 @@ function transformResult(
   evalId: string,
 ): TestCase | null {
   try {
+    // Local and cloud history can index an assigned outcome under a stale plugin ID.
+    // Replaying it could replace the owner task and reuse evidence from an earlier trial.
+    if (isAgentOutcomePlugin(testCase.metadata?.pluginId) || getAgentOutcomeCase(testCase)) {
+      return null;
+    }
     const { strategyConfig: _strategyConfig, ...restMetadata } = testCase.metadata || {};
     const strategyId = testCase.metadata?.strategyId;
 

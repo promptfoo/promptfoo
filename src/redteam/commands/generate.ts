@@ -215,12 +215,22 @@ function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): st
 
 async function getConfigHash(
   configPath: string,
-  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+  options: Partial<RedteamCliGenerateOptions>,
 ): Promise<string> {
   const content = await fs.readFile(configPath, 'utf8');
   const filters = {
     ...(options.filterProviders ? { filterProviders: options.filterProviders } : {}),
     ...(options.filterTargets ? { filterTargets: options.filterTargets } : {}),
+    ...(options.plugins?.length ? { plugins: options.plugins } : {}),
+    ...(options.strategies ? { strategies: options.strategies } : {}),
+    ...(options.numTests === undefined ? {} : { numTests: options.numTests }),
+    ...(options.language ? { language: options.language } : {}),
+    ...(options.purpose ? { purpose: options.purpose } : {}),
+    ...(options.injectVar ? { injectVar: options.injectVar } : {}),
+    ...(typeof options.provider === 'string' ? { provider: options.provider } : {}),
+    ...(options.description ? { description: options.description } : {}),
+    // An earlier non-strict output may contain only partial results.
+    ...(options.strict ? { strict: true } : {}),
   };
   const hashInput =
     Object.keys(filters).length > 0
@@ -288,7 +298,13 @@ export async function doGenerateRedteam(
     logger.info('Cache is disabled');
   }
 
-  return withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+  const result = await withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+  if (result === null && options.strict) {
+    throw new Error(
+      'Strict generation produced no final test cases. Any existing output is unchanged.',
+    );
+  }
+  return result;
 }
 
 async function doGenerateRedteamInternal(
@@ -334,6 +350,7 @@ async function doGenerateRedteamInternal(
   if (
     !options.force &&
     !options.configFromCloud &&
+    (!options.write || options.output) &&
     !outputPath.endsWith('.burp') &&
     (await pathExists(outputPath)) &&
     configPath &&
@@ -345,7 +362,8 @@ async function doGenerateRedteamInternal(
     const storedHash = redteamContent.metadata?.configHash;
     const currentHash = await getConfigHash(configPath, options);
 
-    if (storedHash === currentHash) {
+    const hasTests = Array.isArray(redteamContent.tests) && redteamContent.tests.length > 0;
+    if (storedHash === currentHash && (!options.strict || hasTests)) {
       logger.warn(
         'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
       );
@@ -507,7 +525,8 @@ async function doGenerateRedteamInternal(
       const pluginConfig = {
         id: plugin.id,
         numTests: plugin.numTests || options.numTests || redteamConfig?.numTests,
-        ...(plugin.config && { config: plugin.config }),
+        // Resolving policy text below must leave the original override intact for hashing.
+        ...(plugin.config && { config: { ...plugin.config } }),
       };
       return pluginConfig;
     });
@@ -1138,11 +1157,7 @@ export function redteamGenerateCommand(
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
-    .option(
-      '--strict',
-      'Fail if any plugins fail to generate test cases. By default, warnings are logged but generation continues.',
-      false,
-    )
+    .option('--strict', 'Fail if any plugin fails or no final test cases are generated.', false)
     .action(async (opts: Partial<RedteamCliGenerateOptions>): Promise<void> => {
       // Handle cloud config with target
       if (opts.config && isUuid(opts.config)) {

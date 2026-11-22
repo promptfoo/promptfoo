@@ -1,5 +1,5 @@
-import { isProviderOptions, type TestCaseWithPlugin } from '../../types/index';
-import { STRATEGY_EXEMPT_PLUGINS } from '../constants';
+import { isProviderOptions, type TestCase } from '../../types/index';
+import { getAgentOutcomeCase, pluginIdMatchesTargets, STRATEGY_EXEMPT_PLUGINS } from '../constants';
 
 import type { RedteamStrategyObject } from '../types';
 
@@ -12,12 +12,13 @@ import type { RedteamStrategyObject } from '../types';
  * - Matches against target plugins through direct ID match or category prefixes
  */
 export function pluginMatchesStrategyTargets(
-  testCase: TestCaseWithPlugin,
+  testCase: TestCase,
   strategyId: string,
   targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
 ): boolean {
   const pluginId = testCase.metadata?.pluginId;
-  if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as any)) {
+  // Imported trials can omit the duplicate plugin ID or carry an obsolete one.
+  if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId) || getAgentOutcomeCase(testCase)) {
     return false;
   }
   if (isProviderOptions(testCase.provider) && testCase.provider?.id === 'sequence') {
@@ -33,15 +34,5 @@ export function pluginMatchesStrategyTargets(
     return false;
   }
 
-  if (!targetPlugins || targetPlugins.length === 0) {
-    return true; // If no targets specified, strategy applies to all plugins
-  }
-
-  return targetPlugins.some(
-    (target) =>
-      // Direct match
-      target === pluginId ||
-      // Category match (e.g. 'harmful' matches 'harmful:hate')
-      (pluginId || '').startsWith(`${target}:`),
-  );
+  return pluginIdMatchesTargets(pluginId, targetPlugins);
 }

@@ -34,6 +34,10 @@ Check that Pat cannot read today's build before the turn. Create a private build
 
 Select each plugin explicitly in red team setup or in YAML, including the consent plugin when using `coding-agent:all`. Use the `basic` strategy to preserve the source of each instruction.
 
+Meta, Hydra and Goblin skip these plugins in both modes. They rewrite the user message and can lose the service receipt for an individual attempt. In an indirect trial, the owner's request must stay fixed and only the tool content should change. In a mixed scan, the strategies still apply to eligible plugins.
+
+Basic stays enabled unless you disable it explicitly. Six basic attacks with Meta selected still give **zero Meta attempts**. Report Meta's attack success as **N/A**. If you generate and evaluate separately, use `redteam generate --force --strict` with a fresh output path, check the exit status and verify each requested strategy has matching rows before running the eval. An unsuccessful generation leaves an older output file untouched.
+
 The request transform sends the message and ticket body as strings, even when they contain JSON, and the case metadata as an object. In Cloud, use an address reachable by your runner.
 
 ```yaml title="promptfooconfig.yaml"

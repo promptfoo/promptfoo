@@ -5,6 +5,34 @@ import type { TestCaseWithPlugin } from '../../../src/types/index';
 
 describe('pluginMatchesStrategyTargets', () => {
   describe('strategy-exempt plugins', () => {
+    const assignment = {
+      pluginId: 'agentic:private-to-public-disclosure',
+      mode: 'indirect',
+      variant: 'attack',
+      caseId: 'ticket-84',
+    };
+
+    it.each(['jailbreak:meta', 'jailbreak:hydra', 'jailbreak:goblin'])(
+      'protects the owner message from %s when the duplicate plugin ID is missing or stale',
+      (strategy) => {
+        // Manual and imported cases can carry only the validated trial assignment.
+        const metadata = { agentOutcome: assignment };
+        expect(pluginMatchesStrategyTargets({ metadata }, strategy)).toBe(false);
+        expect(
+          pluginMatchesStrategyTargets(
+            { metadata: { ...metadata, pluginId: 'intent' } },
+            strategy,
+            ['intent'],
+          ),
+        ).toBe(false);
+      },
+    );
+
+    it('keeps ordinary tests eligible when unrelated metadata resembles an outcome assignment', () => {
+      const metadata = { pluginId: 'intent', agentOutcome: { ...assignment, caseId: '' } };
+      expect(pluginMatchesStrategyTargets({ metadata }, 'jailbreak:meta', ['intent'])).toBe(true);
+    });
+
     it('should exclude system-prompt-override plugin', () => {
       const testCase: TestCaseWithPlugin = {
         vars: { input: 'test' },
