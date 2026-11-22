@@ -2,9 +2,26 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
 import { EXAMPLE_CONFIG } from '../hooks/useRedTeamConfig';
-import SetupPlan from './SetupPlan';
+import SetupPlan, { ConnectionSummary } from './SetupPlan';
 
 import type { SetupDraft } from '../hooks/useSetupAgent';
+
+it.each([
+  ['https://bot.example/chat?key=private', {}, 'bot.example'],
+  ['openai:chat:gpt-4o', { apiBaseUrl: 'https://proxy.example/private/' }, 'proxy.example'],
+  ['http', { url: '{{env.PRIVATE_URL}}' }, 'Custom endpoint'],
+  ['http', { request: 'POST /private HTTP/1.1' }, 'http'],
+  ['https', { url: '  ' }, 'Not connected'],
+])(
+  'summarizes a saved %s target without disclosing private request details',
+  (id, config, label) => {
+    const { container } = render(
+      <ConnectionSummary target={{ id, config }} draft={{ messages: [], input: '' }} />,
+    );
+    expect(screen.getByText(label)).toBeVisible();
+    expect(container.textContent).not.toMatch(/private/i);
+  },
+);
 
 it('locks edits while a reply is pending and updates the same card when the connection result changes', async () => {
   const user = userEvent.setup();
