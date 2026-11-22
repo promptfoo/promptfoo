@@ -64,37 +64,37 @@ Install a [supported Node.js version](/docs/installation#nodejs-runtime-support)
   </TabItem>
 </Tabs>
 
-The command opens red team setup in your browser. For a new scan, start with the setup agent. If you already have a draft, you can keep editing it.
+The command opens red team setup in your browser. Start a new scan in chat or choose **Set up manually**. To work with an existing configuration, select **Load or import config**.
 
 ### Provide application details
 
-Start with your app, your endpoint or a question. A hosted agent drafts the configuration as you talk. You can correct it or switch topics at any time. **Messages and draft API details go to Promptfoo Cloud.** Use variable names for keys and leave out private records. Choose manual setup if you don’t want to share that information.
+Start with your app, your endpoint or a question. The agent asks follow-up questions and drafts a Promptfoo configuration as you talk. **Your messages and the full draft go to Promptfoo Cloud.** Use environment variable names for keys and leave out private records.
 
 > Our bot looks up orders and issues refunds. Customers should only see their own orders. Only managers can approve refunds. Test each of those twice.
 
-The agent suggests tests based on your answers. You can ask why it chose a test, correct its assumptions, or change the count. By default it proposes three direct tests per risk for up to four risks.
+You can ask why the agent chose a test or change the plan. For example, ask for a multi-turn attack in two languages or compare staging with a second target. Your installed version of Promptfoo validates each draft and asks the agent to fix configuration errors.
 
 To try it without your own app, select **Try the demo app** and send the suggested message. You can test the connection or go straight to **Review setup**. The scan starts only when you select **Run Now**.
 
-You can also select **Set up manually**, load a saved configuration, or import YAML.
-
 ### Configure the target
 
-Describe your API or paste a POST cURL example with the credentials removed. You can start with an incomplete description.
+Describe your API or paste a cURL example with credentials and private data removed. Start with what you know.
 
 > Our support bot listens at localhost:3555/chat. It works like OpenAI, but needs a key in a header.
 
-The agent can infer a request format, ask which header to use and draft the connection. Check the proposed URL and fields. You can answer in your own words.
+Tell the agent which headers your app expects. If it needs more than one key, name the variable for each header.
 
-> The header is X-Secret-Key. Read it from SUPPORT_BOT_TOKEN. Leave out the model name.
+> Use X-Secret-Key from SUPPORT_BOT_TOKEN and X-Client-Token from CLIENT_TOKEN. Leave out the model name.
 
-Set the variable where Promptfoo runs. Never paste the key. For bearer authentication, ask for an Authorization header with a bearer token. For a custom header, Promptfoo sends the key directly. Authenticated connections need HTTPS outside localhost.
+Set those variables where Promptfoo runs. Never paste their values. To send credentials from chat, use HTTPS or a loopback address like localhost and set `redirect: error` to keep keys at the intended destination.
 
-1. Select **Test connection** to send one “Hello” from your local server to the displayed endpoint. Sending a chat message never contacts the target. Only test systems you have permission to contact.
+1. Check the URL, method and headers. If you have multiple targets, choose one. Select **Test connection** to send one “Hello” from your local server. This makes a real request, so choose a system you have permission to test.
 2. Check the result in the conversation. Promptfoo checks for a nonempty reply and reports the status and possible reply fields to the agent. If a setting needs to change, the agent can propose a correction. Check the change and select **Test connection** again to verify it.
 3. Select **Review setup** to see the configuration before saving YAML or running the scan. [Learn what data leaves your machine](/docs/red-team/troubleshooting/data-handling/).
 
-The chat supports JSON POST with one credential header. Use manual setup for other methods or multiple headers. To test a **model directly**, give its ID, such as `ollama:chat:llama3` or `openai:gpt-4o-mini`. Direct model targets skip your app’s instructions and tools. The connection test in chat works on HTTP targets.
+**Test connection** appears for HTTP requests Promptfoo can reproduce safely, including JSON requests with multiple headers. Typing in chat never sends a request to your target.
+
+To scan a **model directly**, give its ID, such as `ollama:chat:llama3` or `openai:gpt-4o-mini`. This skips your app’s instructions and tools.
 
 If you don’t have a target yet, you can draft the tests and select **Review draft** to save the plan. You’ll need a target before you run it.
 
@@ -110,9 +110,11 @@ For manual setup, choose individual plugins or start with the **Default** preset
 
 ### Review and save
 
-Check where requests will go, which risks are selected, and the estimated request count. Select **Continue conversation** to revise the setup. The full editor offers more plugins and strategies, including multi-turn attacks.
+Check each destination and its credential headers. Target count, languages and attack strategies can all increase the number of requests. Select **View YAML** for the full configuration or **Continue conversation** to revise it.
 
-**Save YAML** downloads `promptfooconfig.yaml` without starting a scan. To run it from the browser, select **Run Now**. Promptfoo may ask you to verify your email before the first scan.
+**Save YAML** downloads a runnable configuration as `promptfooconfig.yaml`. To start the scan in your browser, select **Run Now**. Promptfoo may ask you to verify your email first.
+
+When the draft is incomplete or needs local review, **Run Now** is disabled. For example, a target can include a custom JavaScript transform that chat won’t execute. **Save YAML** preserves those settings in `promptfoo-draft.yaml`. Inspect the file and finish configuring it before running it locally.
 
 :::info
 For manual setup in the terminal, run the following command.

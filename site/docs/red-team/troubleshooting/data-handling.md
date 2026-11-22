@@ -10,11 +10,13 @@ This page explains what data leaves your machine during red team testing and how
 
 ## Data Flow Overview
 
-The [setup agent](/docs/red-team/quickstart/#initialize-the-project) sends your conversation, the proposed test plan and the connection you describe to Promptfoo Cloud by default. This includes URLs, example requests, header names and environment variable names. It also sends validation feedback so the agent can correct its proposals. This applies even if you have a model API key. **Never paste keys, passwords or private records.** Promptfoo catches some accidental pastes, but cannot recognize every secret. Use manual setup to skip the hosted conversation.
+The [setup agent](/docs/red-team/quickstart/#initialize-the-project) sends your conversation and the **full configuration drafted in chat** to Promptfoo Cloud, even if you have a model API key. That can include prompts, URLs, request examples, static header values and environment variable names. Your local server validates the draft and can send the rejected configuration and validation errors back to the agent for correction. It doesn’t automatically include a saved manual configuration.
 
-**Test connection** sends one “Hello” from your local server to the endpoint you approve. Promptfoo reads the key locally and sends it to your target. For a connection discussed in chat, the agent receives the check status and suggested reply field names. Promptfoo keeps the actual reply text and resolved key out of that feedback. If you use a saved target without sharing its details in chat, the agent sees only whether its test passed. The **manual editor’s** provider test can send the target configuration, request headers and response to Cloud.
+**Never paste credentials or private records into chat.** Promptfoo checks for common secret formats, but can’t catch every secret. Give the agent the names of environment variables. To skip the hosted conversation, choose manual setup.
 
-Drafting never contacts your target. Only **Run Now** starts the scan, which can send target replies for grading as described below.
+Drafting never contacts your target. **Test connection** sends one “Hello” from your local server to the selected HTTP target, with the headers shown in the draft. Promptfoo resolves credential variables locally, refuses redirects and sends the agent a summary of the result. The summary can include HTTP status, missing variable names and candidate reply field names. It excludes the returned text and resolved credentials.
+
+The manual editor’s provider test can send the target configuration, request headers and response to Cloud. **Run Now** starts the scan and may send target replies for grading.
 
 Running a scan involves three operations.
 
@@ -35,7 +37,6 @@ Without an `OPENAI_API_KEY` or a custom provider, red team plugins can use hoste
 - Application purpose (from your config's `purpose` field)
 - Plugin configuration and settings
 - Complete document contents and the requested goal when using `promptfoo redteam poison` — this command always uses hosted generation, even when your own API key is configured
-- Red team target/provider setup details, including request examples, target URLs, and auth headers entered into setup or test forms
 - Your email (for usage tracking)
 
 **For grading:**
@@ -50,7 +51,7 @@ Without an `OPENAI_API_KEY` or a custom provider, red team plugins can use hoste
 - Model weights or training data
 - Files from your filesystem (unless explicitly configured in prompts)
 
-Credentials, authorization headers, provider config fields, and request examples **are** sent if you paste them into red team target/provider setup or test forms, sharing, Cloud sync, or other Cloud-backed features. Don't enter real secrets into those flows. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full hosted-feature list.
+Cloud-backed features such as setup, sharing and Cloud sync can transmit credentials and private request examples you paste into them. Don't enter real secrets into those flows. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full hosted-feature list.
 
 ## With Your Own API Key
 
