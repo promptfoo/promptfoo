@@ -22,6 +22,7 @@ import { MessageResponseSchema } from './common';
 import { JsonProviderOptionsWithIdSchema } from './providers';
 import {
   HostedSetupReplySchema,
+  localKeysSchema,
   RedteamSetupReplySchema,
   SetupConfigSchema,
   SetupConnectionTest,
@@ -151,6 +152,7 @@ const userTurnsSchema = z.array(z.string().max(16000)).max(256);
 
 export const RedteamRunRequestSchema = z.object({
   fromAgent: z.boolean().optional(),
+  localKeys: localKeysSchema.optional(),
   userTurns: userTurnsSchema.optional(),
   config: z.record(z.string(), z.unknown()),
   force: z.boolean().optional(),
@@ -199,7 +201,10 @@ export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
 
 /** Grouped schemas for server-side validation. */
 export const RedteamSchemas = {
-  SetupConnectionTest,
+  SetupConnectionTest: {
+    ...SetupConnectionTest,
+    Payload: SetupConnectionTest.Request.safeExtend({ localKeys: localKeysSchema.optional() }),
+  },
   SetupPlan: {
     HostedReply: HostedSetupReplySchema,
     Input: setupInput,

@@ -12,7 +12,7 @@ This page explains what data leaves your machine during red team testing and how
 
 The [setup agent](/docs/red-team/quickstart/#initialize-the-project) sends your conversation and the **full configuration drafted in chat** to Promptfoo Cloud, even if you have a model API key. That can include prompts, URLs, request examples, static header values and environment variable names. Your local server validates the draft and can send the rejected configuration and validation errors back to the agent for correction. It doesn’t automatically include a saved manual configuration.
 
-**Never paste credentials or private records into chat.** Promptfoo checks for common secret formats, but can’t catch every secret. Give the agent the names of environment variables. To skip the hosted conversation, choose manual setup.
+**Use variable names for private keys and keep private records out of chat.** For a demo value such as `the key is "demo-value"`, the browser sends a temporary reference to Cloud. It supplies the value to the local server when you test or run. Downloading YAML includes the value in the header. Chat cannot recognize every secret in free text. To skip the hosted conversation, choose manual setup.
 
 Drafting never contacts your target. **Test connection** sends one “Hello” from your local server to the selected HTTP target, with the headers shown in the draft. Promptfoo resolves credential variables locally, refuses redirects and sends the agent a summary of the result. The summary can include HTTP status, missing variable names and candidate reply field names. It excludes the returned text and resolved credentials.
 

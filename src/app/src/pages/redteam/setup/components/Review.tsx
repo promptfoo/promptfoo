@@ -43,7 +43,8 @@ import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } fro
 import { Link } from 'react-router';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
-import { type SetupDraft, userTurns } from '../hooks/useSetupAgent';
+import { type SetupDraft, targets, userTurns } from '../hooks/useSetupAgent';
+import { displayKeys, exportWithKeys, keysForTargets } from '../utils/chatCredentials';
 import { generateOrderedYaml, getRuntimeRedteamConfig } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
@@ -198,6 +199,12 @@ export default function Review({
       (native.config && native.runnable ? null : 'This draft is only available for inspection.')
     : targetConfigError || setupRunError(config);
   const incomplete = native ? Boolean(reviewError) : missingEndpoint(config.target);
+  const localKeys =
+    native &&
+    keysForTargets(
+      targets(native.config).filter((_, i) => native.testableTargets?.includes(i)),
+      native.localKeys,
+    );
   const saveError = incomplete ? targetConfigError : reviewError;
   const { recordEvent } = useTelemetry();
   const {
@@ -402,7 +409,14 @@ export default function Review({
       return;
     }
 
-    const blob = new Blob([yamlContent], { type: 'text/yaml' });
+    const yaml =
+      localKeys && native?.config
+        ? dump(exportWithKeys(native.config, localKeys, native.testableTargets ?? []), {
+            noRefs: true,
+            lineWidth: -1,
+          })
+        : yamlContent;
+    const blob = new Blob([yaml], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -736,6 +750,7 @@ export default function Review({
             ? {
                 fromAgent: true,
                 config: native.config,
+                localKeys,
                 userTurns: userTurns(native),
                 force: true,
               }
@@ -1387,7 +1402,7 @@ export default function Review({
             <details className="mb-3 rounded-md border border-border">
               <summary className="cursor-pointer px-3 py-2 text-sm font-medium">View YAML</summary>
               <pre className="max-h-[50dvh] overflow-auto border-t border-border bg-muted p-3 text-xs">
-                {yamlContent}
+                {displayKeys(yamlContent)}
               </pre>
             </details>
           ) : (
@@ -1492,7 +1507,9 @@ export default function Review({
             </div>
             {native && (
               <p className="mb-2 text-xs text-muted-foreground">
-                Save the YAML to keep this draft after you leave setup.
+                {localKeys
+                  ? 'Downloaded YAML includes the key values you provided.'
+                  : 'Save the YAML to keep this draft after you leave setup.'}
               </p>
             )}
             {native && !incomplete && (

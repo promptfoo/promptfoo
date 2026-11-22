@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import { isPlainObject } from '@app/utils/isPlainObject';
-import { headerVariable, RedteamSetupReplySchema } from '@promptfoo/types/api/redteamSetup';
+import {
+  headerVariable,
+  localKeysSchema,
+  RedteamSetupReplySchema,
+} from '@promptfoo/types/api/redteamSetup';
+import { captureKeys, displayKeys } from '../utils/chatCredentials';
 
 const API_PATH = '/redteam/setup-plan';
 const UNAVAILABLE =
@@ -16,6 +21,7 @@ interface Verification {
 }
 
 export interface SetupDraft {
+  localKeys?: Record<string, string>;
   messages: (
     | { role: 'user' | 'assistant'; content: string }
     | { role: 'test'; content: string; success: boolean; destination: string }
@@ -44,7 +50,7 @@ export function credentialHeaders(target: unknown): string[] {
   }
   return Object.entries(target.config.headers)
     .filter(([, value]) => typeof value === 'string' && headerVariable(value))
-    .map(([name, value]) => name + ': ' + value);
+    .map(([name, value]) => displayKeys(name + ': ' + value));
 }
 
 // Only the recent conversation goes to Cloud. Keep earlier user messages
@@ -126,12 +132,21 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
     if (pending || request.current) {
       return;
     }
+    const captured = answer && captureKeys(answer, state.localKeys);
+    if (captured && !localKeysSchema.safeParse(captured.keys).success) {
+      setError('This value cannot be used in an HTTP header. Check it and try again.');
+      return;
+    }
     const controller = new AbortController();
     request.current = controller;
     setPending(true);
     setError('');
-    const next: SetupDraft = answer
-      ? { ...state, messages: [...state.messages, { role: 'user', content: answer }] }
+    const next: SetupDraft = captured
+      ? {
+          ...state,
+          localKeys: captured.keys,
+          messages: [...state.messages, { role: 'user', content: captured.content }],
+        }
       : state;
     const payload = {
       version: 3,

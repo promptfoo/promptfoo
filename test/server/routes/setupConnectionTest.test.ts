@@ -37,6 +37,30 @@ describe('local chat connection test', () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
+  it('keeps literal header values scoped to the local test request and masks echoes', async () => {
+    const name = 'PROMPTFOO_CHAT_KEY_' + 'A'.repeat(32);
+    const config = { ...target, headers: { 'X-Boner-42': '{{env.' + name + '}}' } };
+    const received: string[] = [];
+    fetchTarget.mockImplementation(async (_, options) => {
+      const value = new Headers(options?.headers).get('x-boner-42')!;
+      received.push(value);
+      return Response.json({ [value]: 'private', text: 'hello' });
+    });
+    const probe = (keys?: Record<string, string>) =>
+      request(app).post(path).send({ id: 'http', config, localKeys: keys });
+    const results = await Promise.all([
+      probe({ [name]: 'foobar' }),
+      probe({ [name]: 'different' }),
+    ]);
+    expect(received.sort()).toEqual(['different', 'foobar']);
+    expect(results.every((r) => !/different|foobar/.test(r.text))).toBe(true);
+    expect((await probe()).body.success).toBe(false);
+    expect((await probe({ PATH: 'override' })).status).toBe(400);
+    expect((await probe({ [name]: '{{env.SECRET}}' })).status).toBe(400);
+    expect(fetchTarget).toHaveBeenCalledTimes(2);
+    expect(process.env[name]).toBeUndefined();
+  });
+
   it('sends one Hello with the requested auth, no redirects, retries, Cloud auth or grading', async () => {
     vi.stubEnv('PRIVATE_CHAT_TOKEN', 'secret_value');
     fetchTarget.mockResolvedValue(

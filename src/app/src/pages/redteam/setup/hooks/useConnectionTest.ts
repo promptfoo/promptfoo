@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import { SetupConnectionTest } from '@promptfoo/types/api/redteamSetup';
+import { keysForTargets } from '../utils/chatCredentials';
 import { credentialHeaders, type SetupDraft, targets, type useSetupAgent } from './useSetupAgent';
 
 const unavailable = 'Couldn’t finish the connection test. Check your local server before retrying.';
@@ -47,7 +48,10 @@ export function useConnectionTest(
       const response = await callApi('/redteam/setup/connection-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(selected.target),
+        body: JSON.stringify({
+          ...selected.target,
+          localKeys: keysForTargets([selected.target], draft.localKeys),
+        }),
         signal: controller.signal,
       });
       if (response.ok) {

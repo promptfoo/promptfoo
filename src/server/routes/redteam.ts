@@ -256,10 +256,15 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
+  const { localKeys } = bodyResult.data;
+  if (localKeys && (!bodyResult.data.fromAgent || !localCaller(req))) {
+    res.status(403).json({ error: 'Pasted keys require a local setup chat.' });
+    return;
+  }
   if (bodyResult.data.fromAgent) {
     const { config, userTurns = [] } = bodyResult.data;
     const check = await assessSetup(config, userTurns);
-    if (!check.runnable) {
+    if (!check.runnable || !hasLocalKeys(config, localKeys)) {
       res.status(400).json({
         error:
           check.runIssue || 'The setup failed validation. Return to chat to correct the draft.',
@@ -291,7 +296,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   cliState.webUI = true;
 
   // Run redteam in background
-  doRedteamRun({
+  const runOptions = {
     liveRedteamConfig: localConfig,
     force,
     verbose,
@@ -303,7 +308,9 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       }
     },
     abortSignal: currentAbortController.signal,
-  })
+  };
+  cliState
+    .withSetupKeys(localKeys, () => doRedteamRun(runOptions))
     .then(async (evalResult) => {
       const summary = evalResult ? await evalResult.toEvaluateSummary() : null;
       if (currentJobId === id) {
@@ -521,13 +528,23 @@ redteamRouter.get('/setup-plan', (_req, res) => {
 
 // Keep this off /:taskId, even on older servers. Connection details must never
 // fall through to the Cloud task proxy. Only local users can send server credentials.
-redteamRouter.post('/setup/connection-test', async (req, res) => {
+function localCaller(req: Request) {
   const caller = req.socket.remoteAddress?.replace(/^::ffff:/, '');
-  if (!isLocalHost(req.hostname) || (caller !== '127.0.0.1' && caller !== '::1')) {
+  return isLocalHost(req.hostname) && (caller === '127.0.0.1' || caller === '::1');
+}
+
+function hasLocalKeys(config: unknown, keys?: Record<string, string>) {
+  return (JSON.stringify(config).match(/PROMPTFOO_CHAT_KEY_[A-F0-9]{32}/g) ?? []).every(
+    (name) => keys && Object.hasOwn(keys, name),
+  );
+}
+
+redteamRouter.post('/setup/connection-test', async (req, res) => {
+  if (!localCaller(req)) {
     res.status(403).json({ error: 'Open Promptfoo on localhost to test a connection from chat.' });
     return;
   }
-  const input = RedteamSchemas.SetupConnectionTest.Request.safeParse(req.body);
+  const input = RedteamSchemas.SetupConnectionTest.Payload.safeParse(req.body);
   if (!input.success) {
     res
       .status(400)
@@ -538,9 +555,16 @@ redteamRouter.post('/setup/connection-test', async (req, res) => {
   const disconnected = new AbortController();
   res.once('close', () => disconnected.abort());
   try {
-    const result = await testSetupConnection(
-      input.data,
-      AbortSignal.any([timeout, disconnected.signal]),
+    const { localKeys, ...target } = input.data;
+    if (!hasLocalKeys(target, localKeys)) {
+      res.json({
+        success: false,
+        message: 'This draft’s key is missing. Provide it again to test.',
+      });
+      return;
+    }
+    const result = await cliState.withSetupKeys(localKeys, () =>
+      testSetupConnection(target, AbortSignal.any([timeout, disconnected.signal])),
     );
     res.json(RedteamSchemas.SetupConnectionTest.Response.parse(result));
   } catch {

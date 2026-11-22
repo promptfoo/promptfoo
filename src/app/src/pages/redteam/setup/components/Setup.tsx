@@ -18,6 +18,7 @@ import {
 import { useConnectionTest } from '../hooks/useConnectionTest';
 import { EXAMPLE_CONFIG } from '../hooks/useRedTeamConfig';
 import { type SetupDraft, useSetupAgent } from '../hooks/useSetupAgent';
+import { displayKeys } from '../utils/chatCredentials';
 import { getRuntimeRedteamConfig } from '../utils/yamlHelpers';
 import SetupPlan from './SetupPlan';
 
@@ -133,7 +134,7 @@ function Composer({
       >
         <Cloud aria-hidden="true" className="mt-px size-3.5 shrink-0" />
         Promptfoo Cloud sees this chat, the draft (including URLs and variable names) and test
-        status. Keys are read locally. Never paste them.
+        status. Use environment variables for private keys. Chat can miss secrets in free text.
       </p>
     </form>
   );
@@ -154,7 +155,8 @@ function ChatMessage({
   message: SetupDraft['messages'][number];
   grouped?: boolean;
 }) {
-  const { content, role } = message;
+  const { role } = message;
+  const content = displayKeys(message.content);
   const test = role === 'test' ? (message.success ? 'success' : 'error') : undefined;
   if (role === 'user') {
     return (

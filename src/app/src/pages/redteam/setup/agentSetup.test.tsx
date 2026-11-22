@@ -96,6 +96,38 @@ describe('agent-led red team setup', () => {
     });
   });
 
+  it('uses a supplied literal in a custom header without sending its value to the planner', async () => {
+    const { user } = setup();
+    reply({ message: 'Which header?', ...incomplete });
+    await send(user, localChat);
+    api.mockImplementationOnce(async (_path, options) => {
+      const body = JSON.parse(String(options?.body));
+      const ref = body.messages
+        .at(-1)
+        .content.match(/\{\{env\.PROMPTFOO_CHAT_KEY_[A-F0-9]+\}\}/)[0];
+      return Response.json({
+        message: 'Ready to test.',
+        ...metadata,
+        config: {
+          redteam,
+          targets: [{ ...target, config: { ...target.config, headers: { 'X-Boner-42': ref } } }],
+        },
+      });
+    });
+    await send(user, 'X-Boner-42. the key is "foobar"');
+    expect(document.body.textContent).not.toMatch(/foobar|PROMPTFOO_CHAT_KEY/);
+    reply({ success: true, message: 'HTTP 200' });
+    reply({ message: 'Verified', ...metadata });
+    await user.click(button('Test connection'));
+    await screen.findByText('Verified');
+    expect(Object.values(payloads()[2].localKeys)).toEqual(['foobar']);
+    expect(
+      JSON.stringify(postCalls().filter(([url]) => url === '/redteam/setup-plan')),
+    ).not.toContain('foobar');
+    await user.click(button('Review setup'));
+    expect(screen.getByText(/Downloaded YAML includes the key/)).toBeVisible();
+  });
+
   it('follows natural questions about a custom header without sharing or overwriting saved work', async () => {
     const saved = {
       ...EXAMPLE_CONFIG,

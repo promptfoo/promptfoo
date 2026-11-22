@@ -1,5 +1,7 @@
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
+import { getEnvOverrides } from '../../../src/envars';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
 import { createApp } from '../../../src/server/server';
@@ -304,6 +306,35 @@ describe('native red team setup', () => {
     expect(mockedDoRedteamRun.mock.calls[0][0]).not.toHaveProperty('userTurns');
   });
 
+  it('passes a pasted credential only to the approved run and never writes it into the config', async () => {
+    const name = 'PROMPTFOO_CHAT_KEY_' + 'B'.repeat(32);
+    const ref = '{{env.' + name + '}}';
+    const proposed = {
+      ...config,
+      targets: [{ ...target, config: { ...target.config, headers: { 'X-Boner-42': ref } } }],
+    };
+    const userTurns = ['POST to localhost:3555/chat', 'X-Boner-42. the key is "' + ref + '"'];
+    const body = { fromAgent: true, userTurns, config: proposed, localKeys: { [name]: 'foobar' } };
+    const run = (overrides = {}) =>
+      request(app)
+        .post('/api/redteam/run')
+        .send({ ...body, ...overrides });
+    expect((await run({ localKeys: undefined })).status).toBe(400);
+    expect((await run({ userTurns: ['POST to localhost:3555/chat'] })).status).toBe(400);
+    expect((await run({ fromAgent: false })).status).toBe(403);
+    let resolved: string | undefined;
+    mockedDoRedteamRun.mockImplementationOnce(async () => {
+      await Promise.resolve();
+      resolved = cliState.withEnvFileOverrides({}, () => getEnvOverrides('file')?.[name]);
+      return undefined;
+    });
+    expect((await run()).status).toBe(200);
+    expect(resolved).toBe('foobar');
+    expect(JSON.stringify(mockedDoRedteamRun.mock.calls)).not.toContain('foobar');
+    expect(getEnvOverrides('file')?.[name]).toBeUndefined();
+    expect(process.env[name]).toBeUndefined();
+  });
+
   it('refuses older clients before sending anything', async () => {
     const res = await ask({ version: 2 });
     expect(res.status).toBe(400);
@@ -336,6 +367,7 @@ describe('native red team setup', () => {
     },
     { messages: [{ role: 'user', content: 'Use http://localhost:9999/chat?api%5Fkey=secret' }] },
     { messages: [{ role: 'user', content: 'Authorization: Bearer literal' }] },
+    { messages: [{ role: 'user', content: 'X-Boner-42. the key is "foobar"' }] },
     { messages, config: { defaultTest: { vars: { password: 'private' } } } },
     { messages, validationError: 'password: leaked' },
     { messages, verification: { success: false, message: 'Authorization: Bearer hidden' } },

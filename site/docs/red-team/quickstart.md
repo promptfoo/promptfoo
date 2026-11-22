@@ -86,7 +86,7 @@ Tell the agent which headers your app expects. If it needs more than one key, na
 
 > Use X-Secret-Key from SUPPORT_BOT_TOKEN and X-Client-Token from CLIENT_TOKEN. Leave out the model name.
 
-Set those variables where Promptfoo runs. Never paste their values. To send credentials from chat, use HTTPS or a loopback address like localhost and set `redirect: error` to keep keys at the intended destination.
+Set those variables where Promptfoo runs. For a demo, you can also say `the key is "demo-value"`. Chat masks the value and uses it for the selected header without environment setup. Downloaded YAML includes that literal value. To send credentials from chat, use HTTPS or a loopback address like localhost and set `redirect: error` to keep keys at the intended destination.
 
 1. Check the URL, method and headers. If you have multiple targets, choose one. Select **Test connection** to send one “Hello” from your local server. This makes a real request, so choose a system you have permission to test.
 2. Check the result in the conversation. Promptfoo checks for a nonempty reply and reports the status and possible reply fields to the agent. If a setting needs to change, the agent can propose a correction. Check the change and select **Test connection** again to verify it.

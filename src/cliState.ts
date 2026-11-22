@@ -77,6 +77,8 @@ interface CliState {
   readonly envScope?: object;
   /** File values act as process defaults beneath each nested suite environment. */
   withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T;
+  /** Temporary header values for this scan, including nested generation and evaluation scopes. */
+  withSetupKeys<T>(keys: Record<string, string> | undefined, fn: () => T): T;
   /** Replaces the outer env for this call and its async work; undefined masks config env. */
   withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T;
   withRequestTracingConfig<T>(
@@ -88,6 +90,7 @@ interface CliState {
 
 type ConfigState = Pick<CliState, 'config' | 'selectedProviderConfigs'>;
 const configContext = new AsyncLocalStorage<ConfigState>();
+const setupKeys = new AsyncLocalStorage<Record<string, string>>();
 const globalConfigState: ConfigState = {};
 
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
@@ -186,6 +189,9 @@ const state: CliState = {
   withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T {
     return envContext.run({ scope: {}, env: undefined, envFileOverrides: env }, fn);
   },
+  withSetupKeys(keys, fn) {
+    return keys ? setupKeys.run(keys, fn) : fn();
+  },
   withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T {
     return envContext.run({ scope: {}, env, envFileOverrides: state.envFileOverrides }, fn);
   },
@@ -208,6 +214,12 @@ const state: CliState = {
   },
 };
 
-setEnvOverridesProvider((layer) => (layer === 'file' ? state.envFileOverrides : state.env));
+setEnvOverridesProvider((layer) => {
+  if (layer !== 'file') {
+    return state.env;
+  }
+  const keys = setupKeys.getStore();
+  return keys ? { ...state.envFileOverrides, ...keys } : state.envFileOverrides;
+});
 
 export default state;

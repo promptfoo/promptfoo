@@ -36,6 +36,18 @@ export function headerVariable(value: string): string | undefined {
   )?.[1];
 }
 
+// Session-only references cannot override process settings or caller-named variables.
+export const localKeyPrefix = 'PROMPTFOO_CHAT_KEY_';
+const localKeyName = /^PROMPTFOO_CHAT_KEY_[A-F0-9]{32}$/;
+export const localKeysSchema = z.record(
+  z.string().regex(localKeyName),
+  z
+    .string()
+    .min(1)
+    .max(16000)
+    .refine((v) => !unsafe.test(v) && !/[^\x20-\x7e]/.test(v)),
+);
+
 function safeHeader(name: string, value: string) {
   const normalized = name.toLowerCase().replace(/_/g, '-');
   if (

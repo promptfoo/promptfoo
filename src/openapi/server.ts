@@ -1025,7 +1025,7 @@ export function createServerOpenApiRegistry() {
     summary: 'Test a supported HTTP target with one Hello from the local server',
     description:
       'Tests the configured reply path, or suggests fields if it is missing. Requires a local caller. Does not send the reply to Cloud or start a scan.',
-    request: { body: jsonBody(RedteamSchemas.SetupConnectionTest.Request) },
+    request: { body: jsonBody(RedteamSchemas.SetupConnectionTest.Payload) },
     responses: {
       200: jsonResponse(RedteamSchemas.SetupConnectionTest.Response),
       400: jsonResponse(ErrorResponseSchema, 'Invalid connection'),

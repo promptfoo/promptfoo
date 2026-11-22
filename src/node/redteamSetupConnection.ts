@@ -27,6 +27,14 @@ export function containsSetupSecret(input: string): boolean {
     return true;
   }
   const reference = (s: string) => /^[A-Z_][A-Z0-9_]*$/.test(s);
+  // Older clients can send quoted literals without first replacing them locally.
+  for (const [, , raw] of value.matchAll(
+    /\b(?:key|token|password|secret)\s+is\s+(["'`])([^"'\n`]+)\1/gi,
+  )) {
+    if (!reference(raw)) {
+      return true;
+    }
+  }
   for (const [url] of value.matchAll(/https?:\/\/[^\s"'<>]+/gi)) {
     if (URL.canParse(url)) {
       for (const [name, credential] of new URL(url).searchParams) {

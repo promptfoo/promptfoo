@@ -4749,6 +4749,10 @@
                 "type": "object",
                 "properties": {
                   "fromAgent": { "type": "boolean" },
+                  "localKeys": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 16000 }
+                  },
                   "userTurns": {
                     "type": "array",
                     "items": { "type": "string", "maxLength": 16000 },
@@ -5066,6 +5070,10 @@
                     },
                     "required": ["method"],
                     "additionalProperties": false
+                  },
+                  "localKeys": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 16000 }
                   }
                 },
                 "required": ["id", "config"],
