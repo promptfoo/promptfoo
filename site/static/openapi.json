@@ -4172,6 +4172,7 @@
                           "multilingual": { "type": "boolean" },
                           "mode": { "type": "string" },
                           "legitimateTask": { "type": "string" },
+                          "metaTicketRevision": { "type": "string", "enum": ["public", "blind"] },
                           "indirectInjectionVar": { "type": "string" },
                           "intendedResults": { "type": "array", "items": { "type": "string" } },
                           "intent": {
