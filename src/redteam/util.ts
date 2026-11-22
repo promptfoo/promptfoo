@@ -122,9 +122,10 @@ export function getAgentOutcomePrompt(
 }
 
 /** Independent trials must never reuse measurements from concurrent requests or earlier runs. */
-export function needsFreshTargetResponse(test: AtomicTestCase): boolean {
+export function getAgentOutcomeDispatchPolicy(test: AtomicTestCase) {
   const trial = test.metadata?.agentOutcome;
-  return Boolean(trial && AgentOutcomeCaseSchema.safeParse(trial).success);
+  const assigned = trial ? AgentOutcomeCaseSchema.safeParse(trial).data : undefined;
+  return assigned && { singleAttempt: Boolean(assigned.metaTicketRevision) };
 }
 
 /**

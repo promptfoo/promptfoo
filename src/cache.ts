@@ -737,7 +737,7 @@ async function fetchAndReadBody(
   logEnabled: boolean,
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
-  const retryBudget = Math.max(0, maxRetries ?? getFetchRetryContextMaxRetries() ?? 2);
+  const retryBudget = Math.max(0, getFetchRetryContextMaxRetries(maxRetries) ?? 2);
   const body = options.body ?? (url instanceof Request ? url.body : null);
   const singleUseBody = body !== null && typeof body === 'object' && Symbol.asyncIterator in body;
   const maxBodyRetries = isIdempotent && !singleUseBody ? Math.min(2, retryBudget) : 0;

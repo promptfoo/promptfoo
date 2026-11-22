@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
-import { withFetchRetryContext } from '../util/fetch/retryContext';
+import { requiresSingleAttempt, withFetchRetryContext } from '../util/fetch/retryContext';
 import { sanitizeProviderIdForLog } from '../util/provider';
 import {
   getProviderCallExecutionContext,
@@ -57,7 +57,7 @@ export class RateLimitRegistry extends EventEmitter {
     callFn: (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => Promise<T>,
     options?: RateLimitExecuteOptions<T>,
   ): Promise<T> {
-    const providerMaxRetries = getProviderMaxRetries(provider);
+    const providerMaxRetries = requiresSingleAttempt() ? 0 : getProviderMaxRetries(provider);
 
     // Even when the scheduler is disabled, propagate the retry context so
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default

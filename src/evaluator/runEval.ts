@@ -12,7 +12,11 @@ import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers
 import { providerRegistry } from '../providers/providerRegistry';
 import { maybeWrapMcpProviderForRedteam } from '../redteam/mcpTargetProvider';
 import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLength';
-import { getAgentOutcomePrompt, getSessionId, needsFreshTargetResponse } from '../redteam/util';
+import {
+  getAgentOutcomeDispatchPolicy,
+  getAgentOutcomePrompt,
+  getSessionId,
+} from '../redteam/util';
 import { createProviderRateLimitOptions, sleepWithAbort } from '../scheduler';
 import {
   withProviderCallExecutionContext,
@@ -38,6 +42,7 @@ import {
 import { type ApiProvider, isApiProvider } from '../types/providers';
 import { isAbortError } from '../util/fetch/errors';
 import { isCallerAbortError } from '../util/fetch/requestSignal';
+import { withSingleAttempt } from '../util/fetch/retryContext';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProviderIdentifier, sanitizeProviderIdForLog } from '../util/provider';
@@ -533,8 +538,10 @@ async function callProviderForRunEval({
         traceContext,
         vars,
       };
-      response = await withCacheEnabled(needsFreshTargetResponse(test) ? false : undefined, () =>
-        callActiveProvider(request),
+      const policy = getAgentOutcomeDispatchPolicy(test);
+      const dispatch = () => callActiveProvider(request);
+      response = await withCacheEnabled(policy ? false : undefined, () =>
+        policy?.singleAttempt ? withSingleAttempt(dispatch) : dispatch(),
       );
     }
 

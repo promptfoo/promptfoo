@@ -1,4 +1,5 @@
 import * as fsPromises from 'node:fs/promises';
+import { BlockList, isIP } from 'node:net';
 import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
@@ -26,7 +27,7 @@ import {
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './requestSignal';
 import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
-import { getFetchRetryContextMaxRetries } from './retryContext';
+import { getFetchRetryContextMaxRetries, requiresSingleAttempt } from './retryContext';
 
 import type { FetchOptions } from './types';
 
@@ -212,6 +213,21 @@ function getFetchUrlString(url: RequestInfo): string | undefined {
   return undefined;
 }
 
+function isLoopbackHostname(hostname: string) {
+  if (hostname === 'localhost') {
+    return true;
+  }
+  const address = hostname.replace(/^\[|\]$/g, '');
+  const family = isIP(address);
+  if (!family) {
+    return false;
+  }
+  const loopback = new BlockList();
+  loopback.addSubnet('127.0.0.0', 8, 'ipv4');
+  loopback.addAddress('::1', 'ipv6');
+  return loopback.check(address, family === 4 ? 'ipv4' : 'ipv6');
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -233,9 +249,10 @@ export async function fetchWithProxy(
     : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
-  const { getAuthHeaders, ...requestOptions } = options;
+  const { getAuthHeaders, requireSecureTransport, ...requestOptions } = options;
   const finalOptions: FetchOptions & { dispatcher?: Dispatcher } = {
     ...requestOptions,
+    ...(requiresSingleAttempt() && { disableTransientRetries: true, redirect: 'error' }),
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
   };
@@ -286,11 +303,14 @@ export async function fetchWithProxy(
 
   // Keep caller-owned dispatchers (e.g. mTLS) outside the managed pool.
   if (finalOptions.dispatcher) {
+    if (requireSecureTransport) {
+      throw new Error('Verified transport requires the managed dispatcher.');
+    }
     return fetchWithTransientRetries(finalUrl, finalOptions, getAuthHeaders, logEnabled);
   }
 
   const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+    rejectUnauthorized: requireSecureTransport || !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
   };
 
   // Support custom CA certificates
@@ -310,6 +330,16 @@ export async function fetchWithProxy(
     }
   }
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
+  if (requireSecureTransport) {
+    const { protocol, hostname } = new URL(finalUrlString);
+    if (
+      protocol !== 'https:' &&
+      !(protocol === 'http:' && !proxyUrl && isLoopbackHostname(hostname))
+    ) {
+      throw new Error('Verified transport requires HTTPS or direct HTTP loopback.');
+    }
+    finalOptions.redirect = 'error';
+  }
 
   if (proxyUrl && logEnabled) {
     logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
@@ -326,10 +356,26 @@ export async function fetchWithProxy(
 
 async function fetchWithTransientRetries(
   url: RequestInfo,
-  options: FetchOptions,
+  options: FetchOptions & { dispatcher?: Dispatcher },
   getAuthHeaders: FetchOptions['getAuthHeaders'],
   logEnabled: boolean,
 ): Promise<Response> {
+  // Node fetch can redispatch on 421 without consulting either retry budget.
+  // Limit this fetch's dispatcher, never the shared pool or another caller.
+  if (requiresSingleAttempt() && options.dispatcher) {
+    const dispatcher = options.dispatcher;
+    let sent = false;
+    const dispatch: Dispatcher['dispatch'] = (request, handler) => {
+      if (sent) {
+        throw new Error('Target request replay blocked.');
+      }
+      sent = true;
+      return dispatcher.dispatch(request, handler);
+    };
+    options.dispatcher = new Proxy(dispatcher, {
+      get: (target, key) => (key === 'dispatch' ? dispatch : Reflect.get(target, key, target)),
+    });
+  }
   // Transient error retry logic (502/503/504/524 with matching status text).
   // When a provider sets maxRetries: 0 and the caller did not pass an explicit
   // disableTransientRetries, honor the provider intent via the retry context.
@@ -797,8 +843,7 @@ export async function fetchWithRetries(
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<Response> {
   options = preserveCloudAuthRedirects(url, options);
-  const contextMaxRetries = getFetchRetryContextMaxRetries();
-  maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
+  maxRetries = Math.max(0, getFetchRetryContextMaxRetries(maxRetries) ?? 4);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
