@@ -2585,6 +2585,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
+      ...(this.config.redirect && { redirect: this.config.redirect }),
       ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(method !== 'GET' &&
         multipartBody && {
@@ -2841,6 +2842,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
+      ...(this.config.redirect && { redirect: this.config.redirect }),
       ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(bodyContent && { body: bodyContent }),
     };

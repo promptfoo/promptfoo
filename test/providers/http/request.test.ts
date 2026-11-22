@@ -256,6 +256,19 @@ describe('constructor validation', () => {
 });
 
 describe('content type handling', () => {
+  it('passes the redirect policy to fetch for API key headers', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        ...createJsonPostOptions().config,
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'fixture' },
+        redirect: 'error',
+      },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createSuccessJsonResponse());
+    await provider.callApi('test');
+    expect(vi.mocked(fetchWithCache).mock.calls.at(-1)?.[1]).toMatchObject({ redirect: 'error' });
+  });
+
   it('should handle JSON content type with object body', async () => {
     const provider = new HttpProvider('http://test.com', createJsonPostOptions());
 
@@ -1994,7 +2007,7 @@ describe('HttpProvider - Abort Signal Handling', () => {
     );
   });
 
-  it('should pass abortSignal to fetchWithCache in raw request mode', async () => {
+  it('should pass abortSignal and the redirect policy to fetchWithCache in raw request mode', async () => {
     const rawRequest = dedent`
       POST /api HTTP/1.1
       Host: example.com
@@ -2006,6 +2019,7 @@ describe('HttpProvider - Abort Signal Handling', () => {
     const provider = new HttpProvider('http://example.com', {
       config: {
         request: rawRequest,
+        redirect: 'error',
       },
     });
 
@@ -2022,7 +2036,7 @@ describe('HttpProvider - Abort Signal Handling', () => {
 
     expect(fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ signal: abortController.signal }),
+      expect.objectContaining({ signal: abortController.signal, redirect: 'error' }),
       expect.any(Number),
       expect.any(String),
       undefined,
