@@ -99,7 +99,7 @@ vi.mock('../../src/util/fetch/index.ts', async () => {
   };
 });
 
-vi.mock('glob', () => ({
+vi.mock('glob/raw', () => ({
   globSync: vi.fn(),
 }));
 
