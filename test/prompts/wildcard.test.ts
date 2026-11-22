@@ -40,10 +40,12 @@ vi.mock('fs', () => ({
     }
     return '';
   }),
-  statSync: vi.fn(() => ({
-    size: 1000,
-    isDirectory: () => false,
-  })),
+  statSync: vi.fn((filePath: string) => {
+    if (filePath.includes('*')) {
+      throw new Error('File does not exist');
+    }
+    return { size: 1000, isDirectory: () => false };
+  }),
   writeFileSync: vi.fn(),
 }));
 

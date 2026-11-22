@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -67,6 +67,32 @@ describe('prompt file configuration', () => {
       'Named prompt: two.md',
     ]);
     expect(new Set(prompts.map(generateIdFromPrompt)).size).toBe(2);
+  });
+
+  it.each([
+    ['file://draft-{1..100}.md', ['Literal filename']],
+    ['file://draft-*.md', ['Literal filename', 'Numbered filename']],
+  ] as const)('reads existing prompt filenames literally for %s', async (reference, expected) => {
+    await Promise.all([
+      writeFile(path.join(directory, 'draft-{1..100}.md'), 'Literal filename'),
+      writeFile(path.join(directory, 'draft-1.md'), 'Numbered filename'),
+    ]);
+
+    const prompts = await readPrompts(reference, directory);
+    expect(prompts.map((prompt) => prompt.raw).sort()).toEqual(expected);
+  });
+
+  it('reads an existing prompt in a literal base directory', async () => {
+    const base = path.join(directory, 'batch-{1..100}');
+    const sibling = path.join(directory, 'batch-1');
+    await Promise.all([mkdir(base), mkdir(sibling)]);
+    await Promise.all([
+      writeFile(path.join(base, 'prompt.md'), 'Inside base'),
+      writeFile(path.join(sibling, 'prompt.md'), 'Inside sibling'),
+    ]);
+
+    const prompts = await readPrompts('file://prompt.md', base);
+    expect(prompts.map((prompt) => prompt.raw)).toEqual(['Inside base']);
   });
 
   it('rejects a prompt glob with too many extended groups in one path component', async () => {
