@@ -51,7 +51,7 @@
     "dedent": "^1.7.2",
     "docusaurus-plugin-image-zoom": "^3.0.1",
     "gray-matter": "^4.0.3",
-    "jsdom": "^29.0.0",
+    "jsdom": "^31.0.0",
     "lucide-react": "^1.0.0",
     "monaco-editor": "0.57.0",
     "motion": "^12.34.3",
@@ -83,7 +83,7 @@
     ]
   },
   "engines": {
-    "node": ">=22.22.0"
+    "node": "^22.22.2 || ^24.15.0 || >=26"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

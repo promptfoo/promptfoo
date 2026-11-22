@@ -46,7 +46,7 @@ npx promptfoo eval
 Before starting, make sure you have:
 
 - Python 3.10-3.12 tested
-- Node.js `>=22.22.0` (Node.js 24 LTS recommended)
+- A [supported Node.js version](/docs/installation#nodejs-runtime-support)
 - OpenAI API access (for GPT-5-mini and other OpenAI models)
 - An OpenAI API key
 
@@ -80,7 +80,7 @@ And check npm (Node package manager):
 npm -v
 ```
 
-You should see Node.js `v22.22.0` or newer. Node.js 24 LTS is recommended for security and performance.
+Check that `node -v` reports a supported version.
 
 **Why do we need these?**
 

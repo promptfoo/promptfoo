@@ -65,7 +65,7 @@ vi.mock('../../src/util/fetch/index', async () => {
   };
 });
 
-vi.mock('glob', () => ({
+vi.mock('glob/raw', () => ({
   globSync: vi.fn(),
 }));
 
