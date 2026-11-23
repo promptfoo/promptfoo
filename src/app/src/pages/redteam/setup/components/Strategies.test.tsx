@@ -193,36 +193,54 @@ describe('Strategies', () => {
       }
     });
 
-    it('repairs a layer and clears its plugin filter without changing the other labelled layer', async () => {
-      const user = userEvent.setup();
-      const first = { id: 'layer', config: { label: 'A', plugins: ['intent'], steps: ['base64'] } };
-      const second = {
-        id: 'layer',
-        config: { label: 'B', plugins: ['pii:direct'], steps: ['best-of-n', 'rot13'] },
-      };
-      vi.mocked(useRedTeamConfig, { partial: true, deep: true }).mockReturnValue({
-        config: { strategies: [first, second], plugins: ['intent', 'pii:direct'], numTests: 5 },
-        updateConfig: mockUpdateConfig,
-      });
-      vi.mocked(useApiHealth, { partial: true }).mockReturnValue({
-        data: { status: 'disabled', message: '' },
-      });
-      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+    it.each([false, true])(
+      'repairs a category-filtered layer without changing other strategies (choose All plugins: %s)',
+      async (chooseAll) => {
+        const user = userEvent.setup();
+        const first = {
+          id: 'layer',
+          config: { label: 'A', plugins: ['intent'], steps: ['base64'] },
+        };
+        const second = {
+          id: 'layer',
+          config: { label: 'B', plugins: ['pii'], steps: ['best-of-n', 'rot13'] },
+        };
+        const retry = { id: 'retry', config: { numTests: 2 } };
+        vi.mocked(useRedTeamConfig, { partial: true, deep: true }).mockReturnValue({
+          config: {
+            strategies: [first, second, retry],
+            plugins: ['intent', 'pii:direct'],
+            numTests: 5,
+          },
+          updateConfig: mockUpdateConfig,
+        });
+        vi.mocked(useApiHealth, { partial: true }).mockReturnValue({
+          data: { status: 'disabled', message: '' },
+        });
+        renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
-      await user.click(screen.getByText('Show Advanced Strategies'));
-      await user.click(screen.getByRole('button', { name: /Configure .*Layer/i }));
-      const save = screen.getByRole('button', { name: 'Save' });
-      expect(save).toBeDisabled();
-      expect(screen.getByText(/unavailable strategy "best-of-n"/)).toBeInTheDocument();
-      await user.click(screen.getAllByLabelText('delete step')[0]);
-      await user.click(screen.getByRole('button', { name: 'All plugins' }));
-      await user.click(save);
-      expect(mockUpdateConfig).toHaveBeenCalledWith('strategies', [
-        first,
-        { id: 'layer', config: { label: 'B', steps: ['rot13'] } },
-      ]);
-    });
+        expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+        await user.click(screen.getByText('Show Advanced Strategies'));
+        await user.click(screen.getByRole('button', { name: /Configure .*Layer/i }));
+        const save = screen.getByRole('button', { name: 'Save' });
+        expect(save).toBeDisabled();
+        expect(screen.getByText(/unavailable strategy "best-of-n"/)).toBeInTheDocument();
+        expect(screen.getByText('pii')).toBeInTheDocument();
+        await user.click(screen.getAllByLabelText('delete step')[0]);
+        if (chooseAll) {
+          await user.click(screen.getByRole('button', { name: 'All plugins' }));
+        }
+        await user.click(save);
+        expect(mockUpdateConfig).toHaveBeenCalledWith('strategies', [
+          first,
+          {
+            id: 'layer',
+            config: { label: 'B', steps: ['rot13'], ...(chooseAll ? {} : { plugins: ['pii'] }) },
+          },
+          retry,
+        ]);
+      },
+    );
   });
 
   describe('Telemetry', () => {

@@ -1062,6 +1062,34 @@ describe('StrategyConfigDialog', () => {
       });
     });
 
+    it('round-trips mixed plugin selectors and lets the user remove just one', async () => {
+      const user = userEvent.setup();
+      const plugins = ['intent', 'toxicity', 'hijacking'];
+      const props = {
+        strategy: 'layer',
+        config: { steps: ['rot13'], plugins },
+        selectedPlugins: ['intent', 'harmful:hate'],
+        onClose: mockOnClose,
+        onSave: mockOnSave,
+        strategyData: null,
+      };
+      const { rerender } = renderWithProviders(<StrategyConfigDialog {...props} open />);
+      for (const selector of plugins) {
+        expect(screen.getByText(selector)).toBeInTheDocument();
+      }
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(mockOnSave).toHaveBeenLastCalledWith('layer', props.config);
+
+      rerender(<StrategyConfigDialog {...props} open={false} />);
+      rerender(<StrategyConfigDialog {...props} config={mockOnSave.mock.lastCall?.[1]} open />);
+      await user.click(screen.getByRole('button', { name: 'Remove toxicity' }));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(mockOnSave).toHaveBeenLastCalledWith('layer', {
+        steps: ['rot13'],
+        plugins: ['intent', 'hijacking'],
+      });
+    });
+
     it('should disable save button when no steps are configured', () => {
       renderWithProviders(
         <StrategyConfigDialog

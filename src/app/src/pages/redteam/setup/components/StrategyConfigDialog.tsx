@@ -231,20 +231,16 @@ export default function StrategyConfigDialog({
       // Keep steps as-is (can be strings or objects with {id, config})
       setSteps(Array.isArray(nextConfig.steps) ? nextConfig.steps : []);
 
-      // Filter layerPlugins to only include plugins that are in availablePlugins
-      const configPlugins = nextConfig.plugins || [];
-      const filteredPlugins =
-        selectedPlugins.length > 0
-          ? configPlugins.filter((p: string) => selectedPlugins.includes(p))
-          : configPlugins;
-      setLayerPlugins(filteredPlugins);
-      setPluginTargeting(filteredPlugins.length > 0 ? 'specific' : 'all');
+      // Imported selectors can target categories or plugins outside the current selection.
+      const plugins = nextConfig.plugins ?? [];
+      setLayerPlugins(plugins);
+      setPluginTargeting(plugins.length > 0 ? 'specific' : 'all');
     } else {
       setSteps([]);
       setLayerPlugins([]);
     }
     setNewStep('');
-  }, [open, strategy, config, selectedPlugins]);
+  }, [open, strategy, config]);
 
   const handlePluginTargetingChange = (newTargeting: 'all' | 'specific') => {
     setPluginTargeting(newTargeting);
@@ -1017,6 +1013,7 @@ export default function StrategyConfigDialog({
                   {plugin}
                   <button
                     type="button"
+                    aria-label={`Remove ${plugin}`}
                     onClick={() => handleRemovePlugin(plugin)}
                     className="rounded-full p-0.5 hover:bg-muted"
                   >
