@@ -3,6 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import cliState from '../../src/cliState';
 import { ResultFailureReason } from '../../src/types/index';
 import {
+  compileAssertionSchema,
   convertSlashCommentsToHash,
   extractFirstJsonObject,
   extractJsonObjects,
@@ -77,6 +78,43 @@ describe('json utilities', () => {
       expect(cliState.withEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: 'false' }, () => getAjv())).toBe(
         strict,
       );
+    });
+
+    it('isolates raw assertion compiler warnings from provider diagnostics', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const field = 'file.json?api_key=opaque';
+        const validate = compileAssertionSchema({
+          type: 'object',
+          properties: { [field]: { pattern: '^ok$' } },
+        });
+        expect(validate({ [field]: 'ok' })).toBe(true);
+        expect(validate({ [field]: 'wrong' })).toBe(false);
+        expect(warn).not.toHaveBeenCalled();
+        getAjv().compile({ pattern: '^public$' });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('missing type "string"'));
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it.each([
+      { properties: { password: { type: 'string', pattern: '[opaque' } } },
+      { $ref: 'https://example.test/missing?token=opaque' },
+      { type: 'string', format: 'https://example.test/?token=opaque' },
+      {
+        properties: { 'https://example.test/?token=opaque': { type: 'string', format: 'unknown' } },
+      },
+    ])('strips credentials from compiler errors and stacks', (schema) => {
+      let error: unknown;
+      try {
+        compileAssertionSchema(schema);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).stack).not.toContain('opaque');
+      expect(JSON.stringify(error)).not.toContain('opaque');
     });
 
     it('should reuse the same instance on subsequent calls', () => {

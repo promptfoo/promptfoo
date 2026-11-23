@@ -10,7 +10,9 @@ import { safeJsonStringify } from '../util/json';
 import {
   isSecretField,
   mapTestProviderRefs,
+  projectAssertionSchemas,
   REDACTED,
+  SchemaDiagnostics,
   sanitizeObject,
   stripProviderPromptSelectors,
   stripTestProviderPromptSelectors,
@@ -22,6 +24,7 @@ import type {
   AtomicTestCase,
   EnvOverrides,
   EvaluateResult,
+  EvaluateTable,
   Prompt,
   ProviderOptions,
   ProviderResponse,
@@ -230,10 +233,11 @@ export function projectTestCase(
     : projectedTestCase;
 }
 
-/** Map only grading assertion providers and component results. */
-function mapGradingResultProviderRefs<T>(
+/** Project grading assertions and nested component assertions without changing live grades. */
+function mapGradingAssertions<T>(
   gradingResult: T,
-  mapProvider: (provider: unknown) => unknown,
+  mapAssertion: (assertion: unknown) => unknown,
+  diagnostics?: SchemaDiagnostics,
 ): T {
   const visited = new WeakMap<object, Record<string, unknown>>();
   const project = (value: unknown): unknown => {
@@ -248,21 +252,85 @@ function mapGradingResultProviderRefs<T>(
     const projected = { ...result };
     visited.set(result, projected);
     if (result.assertion) {
-      projected.assertion = mapTestProviderRefs(result.assertion, mapProvider);
+      projected.assertion = mapAssertion(result.assertion);
+      const metadata = asRecord(result.metadata);
+      if (diagnostics && metadata?.renderedAssertionValue != null) {
+        const rendered = {
+          type: asRecord(result.assertion)?.type,
+          value: metadata.renderedAssertionValue,
+        };
+        projected.metadata = {
+          ...metadata,
+          renderedAssertionValue: projectAssertionSchemas(rendered, rendered, diagnostics).value,
+        };
+      }
     }
     if (Array.isArray(result.componentResults)) {
       projected.componentResults = result.componentResults.map(project);
+    }
+    if (diagnostics && typeof result.reason === 'string') {
+      projected.reason = diagnostics.sanitize(result.reason);
     }
     return projected;
   };
   return project(gradingResult) as T;
 }
 
-/** Project assertion providers only, preserving grading details and unrelated metadata. */
 export function projectGradingResult<T>(gradingResult: T, stripPromptText: boolean): T {
   return stripPromptText
-    ? mapGradingResultProviderRefs(gradingResult, stripProviderPromptSelectors)
+    ? mapGradingAssertions(gradingResult, stripTestProviderPromptSelectors)
     : gradingResult;
+}
+
+/** Project schema copies together so nested and aggregate diagnostics use the same masks. */
+export function projectResultSchemas<T extends object>(
+  result: T,
+  diagnostics = new SchemaDiagnostics(),
+): T {
+  const row = { ...result } as Record<string, unknown>;
+  const test = asRecord(row.testCase);
+  if (Array.isArray(test?.assert)) {
+    row.testCase = {
+      ...test,
+      assert: projectAssertionSchemas(test.assert, test.assert, diagnostics),
+    };
+  }
+  if (row.gradingResult) {
+    row.gradingResult = mapGradingAssertions(
+      row.gradingResult,
+      (assertion) => projectAssertionSchemas(assertion, assertion, diagnostics),
+      diagnostics,
+    );
+  }
+  if (typeof row.error === 'string') {
+    row.error = diagnostics.sanitize(row.error);
+  }
+  return row as T;
+}
+
+export function projectLegacyTableSchemas(table: EvaluateTable): EvaluateTable {
+  if (!Array.isArray(table?.body)) {
+    return table;
+  }
+  return {
+    ...table,
+    body: table.body.map((row) => {
+      const diagnostics = new SchemaDiagnostics();
+      const test = projectResultSchemas({ testCase: row.test }, diagnostics).testCase;
+      const outputs = row.outputs?.map((cell) => {
+        if (!cell) {
+          return cell;
+        }
+        const output = projectResultSchemas(cell, diagnostics);
+        // Older table cells can display the diagnostic in place of a missing response.
+        if (cell.text && (cell.text === cell.error || cell.text === cell.gradingResult?.reason)) {
+          output.text = diagnostics.sanitize(cell.text);
+        }
+        return output;
+      });
+      return { ...row, test, outputs };
+    }),
+  };
 }
 
 // Removes circular references from the provider object and ensures consistent format
@@ -365,9 +433,11 @@ export function serializeResultProviderRefs<T extends object>(result: T): T {
     };
   }
   if (record.gradingResult) {
-    projected.gradingResult = mapGradingResultProviderRefs(record.gradingResult, serializeProvider);
+    projected.gradingResult = mapGradingAssertions(record.gradingResult, (assertion) =>
+      mapTestProviderRefs(assertion, serializeProvider),
+    );
   }
-  return projected as T;
+  return projectResultSchemas(projected) as T;
 }
 
 /**
@@ -424,6 +494,14 @@ export function sanitizeForDbWithSecrets<T>(obj: T): T {
     // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
     maxDepth: Number.POSITIVE_INFINITY,
   }) as T;
+}
+
+export function sanitizeResultTestCase(testCase: AtomicTestCase): AtomicTestCase {
+  const sanitized = sanitizeForDbWithSecrets(testCase);
+  if (Array.isArray(sanitized?.assert)) {
+    sanitized.assert = projectAssertionSchemas(sanitized.assert, testCase.assert);
+  }
+  return sanitized;
 }
 
 // Headers that may carry credentials, session state, or PII / org-level identifiers
@@ -925,10 +1003,11 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
 
   return {
     ...result,
+    ...(typeof artifactResult.error === 'string' && { error: artifactResult.error }),
     ...(artifactResult.testCase
       ? {
           testCase: projectTestCase(
-            sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase),
+            sanitizeResultTestCase(artifactResult.testCase as AtomicTestCase),
             {
               stripMetadata: shouldStripMetadata,
               stripVars: shouldStripTestVars,

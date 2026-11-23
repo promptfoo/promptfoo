@@ -10,12 +10,14 @@ import {
   projectOutputMetadata,
   projectPrompt,
   projectProviderResponse,
+  projectResultSchemas,
   projectTestCase,
   redactSensitiveResultFieldsForDb,
   sanitizeForDb,
   sanitizeForDbWithSecrets,
   sanitizeGradingResultForDb,
   sanitizeProvider,
+  sanitizeResultTestCase,
   serializeResultProviderRefs,
   surfaceRepeatMetadata,
   surfaceTraceMetadata,
@@ -90,7 +92,7 @@ export default class EvalResult {
     const args = {
       id: crypto.randomUUID(),
       evalId,
-      testCase: sanitizeForDbWithSecrets(testCase),
+      testCase: sanitizeResultTestCase(testCase),
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
       prompt: sanitizeForDbWithSecrets(prompt),
@@ -158,7 +160,7 @@ export default class EvalResult {
         } = result;
         const sanitizedResult = {
           ...rest,
-          testCase: sanitizeForDbWithSecrets(result.testCase),
+          testCase: sanitizeResultTestCase(result.testCase),
           prompt: sanitizeForDbWithSecrets(result.prompt),
           ...redactSensitiveResultFieldsForDb({
             response: sanitizeForDb(result.response),
@@ -397,7 +399,7 @@ export default class EvalResult {
     } = serializeResultProviderRefs(this);
     const persistedValues = {
       ...rest,
-      error: this.error ?? null,
+      error: rest.error ?? null,
       gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
       metadata: persistTraceMetadata(
         persistRepeatMetadata(this.metadata, this.repeatIndex, this.repeatGroupId),
@@ -436,7 +438,12 @@ export default class EvalResult {
 
     const prompt = projectPrompt(this.prompt, shouldStripPromptText);
 
-    const testCase = projectTestCase(this.testCase, {
+    const row = projectResultSchemas({
+      error: this.error,
+      testCase: this.testCase,
+      gradingResult: this.gradingResult,
+    });
+    const testCase = projectTestCase(row.testCase, {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
       stripOutput: shouldStripResponseOutput,
@@ -461,10 +468,10 @@ export default class EvalResult {
         incurredCost: this.response.incurredCost,
       }),
       description: this.description || undefined,
-      error: this.error || undefined,
+      error: row.error || undefined,
       gradingResult: shouldStripGradingResult
         ? null
-        : projectGradingResult(this.gradingResult, shouldStripPromptText),
+        : projectGradingResult(row.gradingResult, shouldStripPromptText),
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,

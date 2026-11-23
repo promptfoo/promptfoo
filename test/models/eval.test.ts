@@ -1620,6 +1620,77 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    function schemaRow() {
+      const value = {
+        type: 'object',
+        properties: { password: { type: 'string', pattern: '^opaque$' } },
+      };
+      const assertion = { type: 'is-json' as const, value };
+      const reason = 'data/password must match pattern "^opaque$"';
+      return createEvaluateResult({
+        testCase: { assert: [assertion] },
+        gradingResult: { assertion, reason, score: 0, pass: false },
+        error: reason,
+        score: 0,
+        success: false,
+        response: { output: 'ordinary response' },
+      });
+    }
+
+    it.each(['single', 'batch'])(
+      'projects schema copies during %s writes, updates and exports',
+      async (mode) => {
+        const evaluation = await EvalFactory.create({ numResults: 0 });
+        const row = schemaRow();
+        const saved =
+          mode === 'single'
+            ? await EvalResult.createFromEvaluateResult(evaluation.id, row)
+            : (await EvalResult.createManyFromEvaluateResult([row], evaluation.id))[0];
+        expect(JSON.stringify(saved)).not.toContain('opaque');
+        Object.assign(saved, {
+          error: row.error,
+          gradingResult: row.gradingResult,
+          testCase: row.testCase,
+        });
+        expect(JSON.stringify(saved.toEvaluateResult())).not.toContain('opaque');
+        await saved.save();
+        const [stored] = await (await getDb())
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.id, saved.id));
+        expect(JSON.stringify(stored)).not.toContain('opaque');
+        const file = await (await Eval.findById(evaluation.id))!.toResultsFile();
+        expect(JSON.stringify(file.results)).not.toContain('opaque');
+        expect(file.results.results[0]).toMatchObject({
+          score: 0,
+          success: false,
+          response: { output: 'ordinary response' },
+        });
+        expect(row.error).toContain('opaque');
+      },
+    );
+
+    it('projects legacy summaries and table diagnostics without mutating stored rows', async () => {
+      const stored = await EvalFactory.createOldResult();
+      const evaluation = (await Eval.findById(stored.id))!;
+      const row = schemaRow();
+      const old = evaluation.oldResults!;
+      Object.assign(old.results[0], row);
+      const tableRow = old.table.body[0];
+      tableRow.test = row.testCase;
+      Object.assign(tableRow.outputs[0], {
+        error: row.error,
+        text: row.error,
+        gradingResult: row.gradingResult,
+      });
+      const table = await evaluation.getTable();
+      const file = await evaluation.toResultsFile();
+      expect(JSON.stringify([table, file.results])).not.toContain('opaque');
+      expect(table.body[0].outputs[0].text).toContain('must match pattern');
+      expect(tableRow.outputs[0].text).toContain('opaque');
+      expect(file.results.results[0].response?.output).toBe('ordinary response');
+    });
+
     it('preserves saved assertion schema definitions without exposing config credentials', async () => {
       const schema = {
         type: 'object',

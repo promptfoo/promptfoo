@@ -1275,6 +1275,23 @@ describe('createShareableUrl', () => {
         providers: [{ id: 'echo', config: { apiKey: 'private-provider-key' } }],
         tests: [{ assert: [{ type: 'is-json', value: schema }] }],
       };
+      const assertion = { type: 'is-json', value: schema };
+      const reason = 'data/password must match pattern "^private-password$"';
+      const row = {
+        id: 'row',
+        testCase: { assert: [assertion] },
+        error: reason,
+        gradingResult: {
+          assertion,
+          reason,
+          score: 0,
+          pass: false,
+          metadata: { renderedAssertionValue: JSON.stringify(schema) },
+        },
+      };
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [row];
+      });
       const original = structuredClone(mockEval.config);
       mockFetch
         .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
@@ -1293,6 +1310,9 @@ describe('createShareableUrl', () => {
       });
       expect(JSON.stringify(request.config)).not.toContain('private-');
       expect(request.config.providers[0].config.apiKey).toBe('[REDACTED]');
+      expect(mockFetch.mock.calls[1][1].body).not.toContain('private-');
+      expect(mockFetch.mock.calls[1][1].body).toContain('must match pattern');
+      expect(row.error).toContain('private-password');
       expect(mockEval.config).toEqual(original);
     });
 
