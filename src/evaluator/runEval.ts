@@ -536,17 +536,19 @@ async function callProviderForRunEval({
     providerFailed = true;
     throw error;
   } finally {
-    if (providerInvoked && isExternalTraceProvider(testSuite?.tracing?.provider)) {
+    if (isExternalTraceProvider(testSuite?.tracing?.provider)) {
       let collected = false;
       try {
-        collected = await collectExternalTraceAfterProviderCall({
-          abortSignal,
-          providerFailed,
-          response,
-          test,
-          testSuite,
-          traceContext,
-        });
+        if (providerInvoked) {
+          collected = await collectExternalTraceAfterProviderCall({
+            abortSignal,
+            providerFailed,
+            response,
+            test,
+            testSuite,
+            traceContext,
+          });
+        }
       } catch (error) {
         // Trace collection must not discard a target response that completed
         // before CLI pause. Real caller/deadline cancellation still propagates.
@@ -1138,7 +1140,9 @@ async function gradeRunEvalResponse({
     // Local spans alone would make missing external evidence look like an empty trace.
     applyGradingError(
       ret,
-      'Required external trace is unavailable. Check the trace provider and retry without caching.',
+      test.providerOutput
+        ? 'Required external trace is unavailable. Remove providerOutput and retry without caching.'
+        : 'Required external trace is unavailable. Check the trace provider and retry without caching.',
     );
     return;
   }

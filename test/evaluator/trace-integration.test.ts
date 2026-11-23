@@ -938,13 +938,42 @@ describe('evaluator trace integration', () => {
       const provider = createMockProvider();
       const options = createRunOptions(provider);
       options.test.providerOutput = 'Precomputed output';
+      options.test.assert = [
+        { type: 'equals', value: 'Precomputed output' },
+        { type: 'trace-error-spans', weight: 0 },
+      ];
 
       const [result] = await runEval(options);
 
+      expect(result.success).toBe(true);
       expect(result.response?.output).toBe('Precomputed output');
       expect(provider.callApi).not.toHaveBeenCalled();
       expect(mockFetchTraceContext).not.toHaveBeenCalled();
     });
+
+    it.each([undefined, 0.5])(
+      'reports missing required evidence for precomputed output with threshold %s',
+      async (threshold) => {
+        const provider = createMockProvider();
+        const options = createRunOptions(provider);
+        options.test.providerOutput = 'ok';
+        options.test.threshold = threshold;
+        options.test.assert = [{ type: 'equals', value: 'ok' }, { type: 'trace-error-spans' }];
+
+        const [result] = await runEval(options);
+
+        expect(result.success).toBe(false);
+        expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(result.score).toBe(0);
+        expect(result.error).toContain(
+          'Required external trace is unavailable. Remove providerOutput',
+        );
+        expect(result.response?.output).toBe('ok');
+        expect(result.response?.error).toBeUndefined();
+        expect(provider.callApi).not.toHaveBeenCalled();
+        expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      },
+    );
 
     it('skips external trace collection after an evaluation is canceled', async () => {
       const controller = new AbortController();
