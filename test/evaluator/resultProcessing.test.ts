@@ -105,21 +105,24 @@ describe('model-independent result processing', () => {
     },
   );
 
-  it.each(['#Bearer opaque %FF', '#token%3Dopaque%FF'])(
-    'withholds undecodable named fragments in declarations, references and diagnostics (%s)',
-    (fragment) => {
-      const value = { $defs: { field: { $id: fragment, const: 'opaque' } }, $ref: fragment };
-      const row = {
-        testCase: { assert: [{ type: 'is-json', value }] },
-        error: `can't resolve reference ${fragment} from id #`,
-      };
-      const safe = projectResultSchemas(row);
-      expect(JSON.stringify(safe)).not.toContain('opaque');
-      expect(safe.testCase.assert[0].value.$ref).toBe('[REDACTED]');
-      expect(safe.testCase.assert[0].value.$defs.field.$id).toBe('[REDACTED]');
-      expect(projectResultSchemas(safe)).toEqual(safe);
-    },
-  );
+  it.each([
+    '#Bearer opaque %FF',
+    '#token%3Dopaque%FF',
+    'token%3Dopaque%FF#vars',
+    'doc?token%3Dopaque%FF',
+    'https://example.test/token%3Dopaque%FF#/$defs/value',
+  ])('withholds undecodable URIs in declarations, references and diagnostics (%s)', (uri) => {
+    const value = { $defs: { field: { $id: uri, const: 'opaque' } }, $ref: uri };
+    const row = {
+      testCase: { assert: [{ type: 'is-json', value }] },
+      error: `can't resolve reference ${uri} from id #`,
+    };
+    const safe = projectResultSchemas(row);
+    expect(JSON.stringify(safe)).not.toContain('opaque');
+    expect(safe.testCase.assert[0].value.$ref).toBe('[REDACTED]');
+    expect(safe.testCase.assert[0].value.$defs.field.$id).toBe('[REDACTED]');
+    expect(projectResultSchemas(safe)).toEqual(safe);
+  });
 
   it.each(['[REDACTED]', '#/examples/bad%zz', '#/examples/0##', '#/examples/1'])(
     'protects indirect credentials after losing a public reference (%s)',

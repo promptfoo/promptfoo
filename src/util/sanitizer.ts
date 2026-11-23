@@ -818,13 +818,33 @@ function credentialSchemaName(literal: string, keyword?: string, env = false): b
 }
 
 const SCHEMA_URL_TAIL = /\/[a-z][a-z0-9+.-]*:\/\//i;
+const UNPAIRED_SURROGATE = /\p{Surrogate}/u;
+
+// AJV accepts octets that are not UTF-8. A failed decode can conceal a
+// credential behind escaped delimiters. Literal keys can also contain bare %.
+function validSchemaEncoding(text: string, literal = false): boolean {
+  if (UNPAIRED_SURROGATE.test(text)) {
+    return false;
+  }
+  if (text.includes('%')) {
+    try {
+      decodeURIComponent(literal ? text.replace(/%(?![\da-f]{2})/gi, '%25') : text);
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
 
 function splitSchemaUri(uri: string): [string, string] {
   const hash = uri.indexOf('#');
-  if (hash === -1) {
-    return [uri, ''];
+  const path = hash < 0 ? uri : uri.slice(0, hash);
+  let fragment = hash < 0 ? '' : uri.slice(hash);
+  const pointer = /^#(?:\/|%2f)/i.test(fragment);
+  // localSchemaPointer validates pointer tokens after escaping literal URL keys.
+  if (!validSchemaEncoding(pointer ? path : uri)) {
+    return ['', REDACTED];
   }
-  let fragment = uri.slice(hash);
   // AJV strips an extra trailing delimiter from pointers and named anchors.
   // Normalize both lookup and output, except inside a literal URL key.
   const suffix = fragment.search(/#\/?$/);
@@ -833,10 +853,10 @@ function splitSchemaUri(uri: string): [string, string] {
   }
   // AJV decodes unreserved characters in named anchors. JSON Pointer
   // tokens use their own escaping and must only be decoded once.
-  if (fragment.includes('%') && !/^#(?:\/|%2f)/i.test(fragment)) {
+  if (!pointer && fragment.includes('%')) {
     fragment = schemaResourceId(fragment, '');
   }
-  return [uri.slice(0, hash), fragment];
+  return [path, fragment];
 }
 
 // Only a whole # or #/ fragment names the resource itself. A trailing
@@ -848,21 +868,12 @@ function splitResourceUri(uri: string): [string, string] {
 
 // Resolve only in-memory IDs, with the same URI rules as validation (including URNs).
 let schemaResolver: Ajv['opts']['uriResolver'] | undefined;
-const UNPAIRED_SURROGATE = /\p{Surrogate}/u;
 function schemaResourceId(path: string, base: string): string {
-  if (UNPAIRED_SURROGATE.test(path)) {
-    return REDACTED;
-  }
   if (!path) {
     return base;
   }
   schemaResolver ??= new Ajv({ meta: false }).opts.uriResolver;
   try {
-    // The URI resolver accepts non-UTF-8 octets and can escape a credential
-    // prefix that we then cannot decode. Validate named fragments first.
-    if (path.startsWith('#')) {
-      decodeURIComponent(path);
-    }
     return schemaResolver.resolve(base, path);
   } catch {
     // An invalid URI cannot safely distinguish embedded and external resources.
@@ -991,7 +1002,7 @@ function projectedJsonText(text: string, parsed: unknown, safe: string): string 
 // Names are identifiers, even when they look like encoded data. Preserve
 // their spelling unless sanitization removes an actual credential.
 function safeSchemaName(name: string): string {
-  if (UNPAIRED_SURROGATE.test(name)) {
+  if (!validSchemaEncoding(name, true)) {
     return REDACTED;
   }
   const trimmed = name.trim();
@@ -1496,7 +1507,7 @@ function sanitizeSchemaUri(
 ): string {
   const [path, fragment] = splitSchemaUri(value);
   const pointer = localSchemaPointer(fragment);
-  if (UNPAIRED_SURROGATE.test(path) || pointer === null) {
+  if (pointer === null) {
     return REDACTED;
   }
   // Preserve relative paths and scrub their queries without resolving them against a base.
@@ -1592,10 +1603,10 @@ export class SchemaDiagnostics {
   }
 
   private uri(value: string): string {
-    return (
-      this.names.get(value) ??
-      sanitizeSchemaUri(value, { renamed: this.names, patterns: this.patterns })
-    );
+    return sanitizeSchemaUri(this.names.get(value) ?? value, {
+      renamed: this.names,
+      patterns: this.patterns,
+    });
   }
 
   private sanitizeCompilationError(message: string): string {
