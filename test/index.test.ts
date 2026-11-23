@@ -10,6 +10,7 @@ import * as providers from '../src/providers/index';
 import { doRedteamRun } from '../src/redteam/shared';
 import * as fileUtils from '../src/util/file';
 import { warnOnDegradedJsonlRecovery, writeMultipleOutputs, writeOutput } from '../src/util/index';
+import { sanitizeConfigForPersistence } from '../src/util/sanitizer';
 import { createMockProvider } from './factories/provider';
 
 vi.mock('../src/cache');
@@ -1288,6 +1289,38 @@ describe('evaluate with external defaultTest', () => {
     );
     const result = summary.results[0] as any;
     expect(result.testCase.assert).toEqual(externalDefaultTest.assert);
+  });
+
+  it('carries resolved external default privacy into saved config without embedding the file', async () => {
+    maybeLoadFromExternalFileSpy.mockResolvedValueOnce({
+      assert: [
+        {
+          type: 'promptfoo:redteam:coding-agent:trace-redaction',
+          value: { rawReceiptPath: 'private-receipt.txt' },
+        },
+      ],
+    });
+    const secret = 'private sibling receipt';
+    const tests = [
+      { assert: [{ type: 'not-contains' as const, value: secret }] },
+      {
+        options: { disableDefaultAsserts: true },
+        assert: [{ type: 'contains' as const, value: 'public control' }],
+      },
+    ];
+    await evaluate({
+      providers: ['mock-provider'],
+      prompts: ['example'],
+      defaultTest: 'file://external-default.yaml',
+      tests,
+    });
+    const config = (vi.mocked(doEvaluate).mock.calls[0][1] as Eval).config;
+    const projected = JSON.stringify(sanitizeConfigForPersistence(config));
+    expect(projected).not.toContain(secret);
+    expect(projected).not.toContain('private-receipt.txt');
+    expect(projected).not.toContain('external-default.yaml');
+    expect(projected).toContain('public control');
+    expect(tests[0].assert[0].value).toBe(secret);
   });
 
   it('should handle inline defaultTest objects', async () => {

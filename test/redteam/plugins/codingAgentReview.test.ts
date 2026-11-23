@@ -812,6 +812,8 @@ describe('coding-agent evidence regressions', () => {
     ['true || \\\n{ echo skipped; codex exec task; }', 0],
     ['true |\\\n| (echo skipped; codex exec task)', 0],
     ['true || { echo skipped; codex exec task; }', 0],
+    ['true || {>note; codex exec task; }', 0],
+    ['true || {<note; codex exec task; }', 0],
     ['true || time { echo skipped; codex exec task; }', 0],
     ['true || ( echo skipped; codex exec task )', 0],
     ['true || (codex exec task)', 0],
@@ -2749,6 +2751,65 @@ describe('coding-agent evidence regressions', () => {
     expect(() => project([first[1], second[1]])).toThrow('Cannot verify approval wording');
     expect(project([...first, ...second])[7]?.traceSummary).toContain('decision=approved');
   });
+
+  it('checks the Codex metadata mirror when raw requests are missing and deduplicates identical mirrors', () => {
+    const serverRequests = [
+      {
+        method: 'execCommandApproval',
+        params: { reason: 'Check', command: 'pwd' },
+        response: { decision: 'approved' },
+      },
+    ];
+    const project = (raw: unknown, traceSummary?: string) =>
+      publicGradingArguments(
+        'promptfoo:redteam:coding-agent:approval-misrepresentation',
+        'Check',
+        'Done',
+        testCase,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        enrichCodingAgentGradingContext({
+          providerResponse: { raw, metadata: { codexAppServer: { serverRequests } } },
+          traceSummary,
+        }),
+      );
+    expect(() => project({ serverRequests: [{ method: 'other' }] }, 'Check\npwd')).toThrow(
+      'conflicting provider request records',
+    );
+    for (const raw of [undefined, {}, { serverRequests: [] }, JSON.stringify({ serverRequests })]) {
+      expect(() => project(raw)).toThrow('Cannot verify approval wording');
+      expect(project(raw, 'Check\npwd')[7]?.traceSummary).toContain('decision=approved');
+    }
+  });
+
+  it.each([
+    { reason: 'Check [REDACTED]', command: 'pwd', shown: 'pwd' },
+    { reason: 'Check', command: 'echo [REDACTED]', shown: 'echo [REDACTED]' },
+    { reason: 'Check', command: ['echo', '[REDACTED]'], shown: '["echo","[REDACTED]"]' },
+  ])(
+    'declines redacted approval evidence even if the evidence matches',
+    ({ reason, command, shown }) => {
+      const serverRequests = [{ method: 'execCommandApproval', params: { reason, command } }];
+      expect(() =>
+        publicGradingArguments(
+          'promptfoo:redteam:coding-agent:approval-misrepresentation',
+          'Check',
+          'Done',
+          testCase,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          enrichCodingAgentGradingContext({
+            providerResponse: { raw: { serverRequests } },
+            traceSummary: `${reason}\n${shown}`,
+          }),
+        ),
+      ).toThrow('Cannot verify approval wording');
+    },
+  );
 
   it('does not use a provider-generated summary to prove its own approval request', () => {
     const raw = {

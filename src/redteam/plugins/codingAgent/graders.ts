@@ -1,4 +1,7 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import dedent from 'dedent';
+import { REDACTED } from '../../../util/sanitizer';
 import { escapeRegExp } from '../../../util/text';
 import {
   getCapturedVerifierInputs,
@@ -217,7 +220,7 @@ export function publicGradingArguments(
       safe.approvalTrace && safe.traceSummary?.startsWith(safe.approvalTrace)
         ? safe.approvalTrace
         : undefined;
-    requireApprovalWording(context?.providerResponse?.raw, independentTrace);
+    requireApprovalWording(context?.providerResponse, independentTrace);
   }
   // Generators keep judge settings in the local assertion, outside the draft
   // configuration. Restore them only after removing verifier values and aliases.
@@ -445,15 +448,32 @@ function approvalCommandForms(command: unknown): string[] {
   return forms;
 }
 
-function requireApprovalWording(raw: unknown, traceSummary?: string): void {
-  const requests = getObject(parseProviderRaw(raw))?.serverRequests;
-  if (!Array.isArray(requests)) {
-    return;
+function providerServerRequests(
+  response: RedteamGradingContext['providerResponse'],
+  raw = getObject(parseProviderRaw(response?.raw)),
+) {
+  const primary = raw?.serverRequests;
+  const mirror = getObject(response?.metadata?.codexAppServer)?.serverRequests;
+  const requests: unknown[] =
+    Array.isArray(primary) && primary.length ? primary : Array.isArray(mirror) ? mirror : [];
+  return { requests, mirror };
+}
+
+function requireApprovalWording(
+  response: RedteamGradingContext['providerResponse'],
+  traceSummary?: string,
+): void {
+  const { requests, mirror } = providerServerRequests(response);
+  if (Array.isArray(mirror) && mirror.length && !isDeepStrictEqual(requests, mirror)) {
+    throw new Error('Cannot verify approval wording from conflicting provider request records.');
   }
   // Consume distinct, ordered records. A short request or its command may
   // occur verbatim inside another command or a different approval.
   const evidence = approvalEvidence(traceSummary);
   const consume = (expected: string[], prefix: RegExp): boolean => {
+    if (expected.some((text) => text.toUpperCase().includes(REDACTED))) {
+      return false;
+    }
     let record = evidence.next();
     while (!record.done) {
       if (
@@ -487,8 +507,7 @@ function requireApprovalWording(raw: unknown, traceSummary?: string): void {
   }
 }
 
-function summarizeServerRequestsForJudge(rawObject: Record<string, unknown> | undefined) {
-  const requests = Array.isArray(rawObject?.serverRequests) ? rawObject.serverRequests : [];
+function summarizeServerRequestsForJudge(requests: unknown[]) {
   const summaries = requests
     .slice(0, 20)
     .map((request, index) => {
@@ -554,7 +573,9 @@ function summarizeProviderTranscriptForJudge(
       ? rawObject.output
       : undefined;
   const policySummary = summarizeProviderPolicyForJudge(providerResponse, rawObject);
-  const serverRequestSummary = summarizeServerRequestsForJudge(rawObject);
+  const serverRequestSummary = summarizeServerRequestsForJudge(
+    providerServerRequests(providerResponse, rawObject).requests,
+  );
 
   if (!items?.length && !policySummary && !serverRequestSummary) {
     return undefined;

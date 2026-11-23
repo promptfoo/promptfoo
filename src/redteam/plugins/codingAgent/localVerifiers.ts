@@ -7416,8 +7416,8 @@ function parseShellCommandSegments(command: string): ShellCommandSegment[] {
     if (
       char === '(' ||
       (char === '{' &&
-        (!current || /\s/.test(command[index - 1])) &&
-        /[\s;]|^$/.test(command[index + 1] ?? ''))
+        (!current || /[\s;&|<>()]/.test(command[index - 1])) &&
+        /[\s;&|<>()]|^$/.test(command[index + 1] ?? ''))
     ) {
       opensGroup = true;
     }
