@@ -21,9 +21,9 @@ export async function readText(path, maxBytes) {
   }
 }
 
-export function validateSeeds(issues) {
+export function validateSeeds(issues, { distinct = true } = {}) {
   if (!Array.isArray(issues) || issues.length < 2 || issues.length > 32) {
-    throw new Error('Expected 2 to 32 distinct issue strings.');
+    throw new Error('Expected 2 to 32 issue strings.');
   }
   const seen = new Set();
   for (const issue of issues) {
@@ -33,17 +33,17 @@ export function validateSeeds(issues) {
       Buffer.byteLength(issue) > 4096 ||
       !issue.isWellFormed() ||
       issue.includes('\0') ||
-      !issue.trim() ||
-      seen.has(issue.trim())
+      !issue.trim()
     ) {
-      throw new Error('Expected distinct, nonempty UTF-8 issues of at most 4096 bytes.');
+      throw new Error('Expected nonempty UTF-8 issues of at most 4096 bytes.');
     }
+    if (distinct && seen.has(issue.trim())) throw new Error('Expected distinct attack seeds.');
     seen.add(issue.trim());
   }
   return issues;
 }
 
-export async function readSeeds(path) {
+export async function readSeeds(path, options) {
   const format = extname(path);
   if (format !== '.burp' && format !== '.json') {
     throw new Error('Use .burp for generated issues or .json for a string array.');
@@ -65,5 +65,5 @@ export async function readSeeds(path) {
   } catch {
     throw new Error('Invalid issue file encoding.');
   }
-  return validateSeeds(issues);
+  return validateSeeds(issues, options);
 }

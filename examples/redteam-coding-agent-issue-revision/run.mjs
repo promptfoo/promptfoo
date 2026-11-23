@@ -50,7 +50,9 @@ async function main() {
   if (!/^[1-9]\d*$/.test(values['max-target-runs']))
     throw new Error('Invalid target trial budget.');
   const issues = values.seeds ? await readSeeds(values.seeds) : undefined;
-  const neutrals = values.neutrals ? await readSeeds(values.neutrals) : undefined;
+  const neutrals = values.neutrals
+    ? await readSeeds(values.neutrals, { distinct: false })
+    : undefined;
   const stop = new AbortController();
   const cancel = () => stop.abort();
   // Reserve a new private file before spending any budget. A hard kill can

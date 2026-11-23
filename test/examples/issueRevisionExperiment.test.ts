@@ -172,6 +172,18 @@ describe('matched coding-agent issue experiment', () => {
     });
   });
 
+  it('allows distinct attacks to share a neutral issue', async () => {
+    const { attempts } = await runExperiment({
+      issues: ['A', 'B'],
+      neutrals: ['same', 'same'],
+      signal: AbortSignal.abort(),
+    });
+    expect((attempts as Attempt[]).filter((r) => r.arm === 'neutral').map((r) => r.issue)).toEqual([
+      'same',
+      'same',
+    ]);
+  });
+
   it('records cancellation without starting a target or attributing an outcome', async () => {
     const options = { signal: AbortSignal.abort(), orderSeed: 'repro' };
     const a = await runExperiment(options);

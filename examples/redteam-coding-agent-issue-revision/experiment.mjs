@@ -84,7 +84,7 @@ function row(seedId, arm, issue, parentId = null) {
 
 function controlsFor(issues, neutrals) {
   if (neutrals !== undefined) {
-    validateSeeds(neutrals);
+    validateSeeds(neutrals, { distinct: false });
     if (neutrals.length !== issues.length) throw new Error('Supply one neutral issue per seed.');
   }
   return issues.map((issue, i) => {
@@ -134,6 +134,45 @@ function validate({ issues, orderSeed, target, proposer, allowModelCalls, maxTar
     if (typeof config.model !== 'string' || !/^[\w][\w.:/-]{0,255}$/.test(config.model))
       throw new Error('Invalid model ID.');
   }
+}
+
+async function proposeChild(seed, donor, arm, proposer, signal) {
+  const child = row(seed.seedId, arm, null, seed.id);
+  const source = arm === 'blind' ? null : arm === 'actual' ? seed : donor;
+  if (arm === 'unrelated') {
+    child.donorDistinct = isEligible(source) && source.patch !== seed.patch;
+    if (!isEligible(source)) {
+      child.reason = 'Assigned donor has no verified safe completed patch.';
+      return child;
+    }
+  }
+  child.feedbackSourceId = source?.id ?? null;
+  if (signal?.aborted) {
+    child.reason = 'Cancelled before proposal.';
+    return child;
+  }
+  const start = performance.now();
+  try {
+    const feedback = source ? { issue: seed.issue, patch: source.patch } : { issue: seed.issue };
+    const { issue, ...receipt } = await proposeIssue(feedback, { ...proposer, signal });
+    child.proposal = receipt;
+    if (receipt.error || !issue || issue.trim() === seed.issue.trim()) {
+      child.reason = 'No usable replacement issue.';
+      return child;
+    }
+    child.issue = issue;
+  } catch {
+    child.proposal = {
+      requests: null,
+      usage: { inputTokens: null, outputTokens: null },
+      error: 'Proposal failed.',
+    };
+    child.reason = 'Proposal failed.';
+    return child;
+  } finally {
+    child.proposalMs = Math.round(performance.now() - start);
+  }
+  return child;
 }
 
 // Never put private observations, diagnostics or model credentials in the
@@ -217,43 +256,9 @@ export async function runExperiment({
   for (const { i, arm } of plan.second) {
     const seed = seeds.get(i);
     if (!isEligible(seed)) continue;
-    const child = row(seed.seedId, arm, null, seed.id);
+    const child = await proposeChild(seed, seeds.get(plan.donors.get(i)), arm, proposer, signal);
     attempts.push(child);
-    const source = arm === 'blind' ? null : arm === 'actual' ? seed : seeds.get(plan.donors.get(i));
-    if (arm === 'unrelated') {
-      child.donorDistinct = isEligible(source) && source.patch !== seed.patch;
-      if (!isEligible(source)) {
-        child.reason = 'Assigned donor has no verified safe completed patch.';
-        continue;
-      }
-    }
-    child.feedbackSourceId = source?.id ?? null;
-    if (signal?.aborted) {
-      child.reason = 'Cancelled before proposal.';
-      continue;
-    }
-    const start = performance.now();
-    try {
-      const feedback = source ? { issue: seed.issue, patch: source.patch } : { issue: seed.issue };
-      const { issue, ...receipt } = await proposeIssue(feedback, { ...proposer, signal });
-      child.proposal = receipt;
-      if (receipt.error || !issue || issue.trim() === seed.issue.trim()) {
-        child.reason = 'No usable replacement issue.';
-        continue;
-      }
-      child.issue = issue;
-    } catch {
-      child.proposal = {
-        requests: null,
-        usage: { inputTokens: null, outputTokens: null },
-        error: 'Proposal failed.',
-      };
-      child.reason = 'Proposal failed.';
-      continue;
-    } finally {
-      child.proposalMs = Math.round(performance.now() - start);
-    }
-    await dispatch(child);
+    if (child.issue !== null) await dispatch(child);
   }
 
   const describe = ({ mode, model }) => ({

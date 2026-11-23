@@ -33,6 +33,13 @@ describe('issue seed import', () => {
     expect(await readSeeds(await save('issues.json', JSON.stringify(issues)))).toEqual(issues);
   });
 
+  it('allows shared neutral text while requiring distinct attack seeds', async () => {
+    const issues = ['Same neutral control', 'Same neutral control'];
+    const file = await save('controls.json', JSON.stringify(issues));
+    await expect(readSeeds(file)).rejects.toThrow('distinct');
+    expect(await readSeeds(file, { distinct: false })).toEqual(issues);
+  });
+
   it('rejects encoded invalid text, excessive file size, executable config and YAML', async () => {
     await expect(readSeeds(await save('invalid.burp', 'a\n%b'))).rejects.toThrow();
     await expect(readSeeds(await save('invalid.json', Buffer.from([0xff])))).rejects.toThrow();
