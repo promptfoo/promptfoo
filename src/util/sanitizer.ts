@@ -866,8 +866,12 @@ function localSchemaPointer(ref: string) {
   if (!ref.startsWith('#/')) {
     return undefined;
   }
-  // Accept a literal URL at the end of a pointer as a single map key.
-  ref = ref.replace(/\/([a-z][a-z0-9+.-]*:\/\/.*)$/i, (_, url) => '/' + pointerToken(url));
+  // A literal URL is a single trailing key. Locate only the scheme so a
+  // malformed suffix cannot trigger another scan at each embedded scheme.
+  const scheme = ref.search(/\/[a-z][a-z0-9+.-]*:\/\//i);
+  if (scheme !== -1) {
+    ref = ref.slice(0, scheme + 1) + pointerToken(ref.slice(scheme + 1));
+  }
   return ref
     .slice(2)
     .split('/')

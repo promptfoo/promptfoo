@@ -1028,6 +1028,28 @@ describe('sanitizeConfigForOutput', () => {
     expect(projected.properties).toEqual(schema.properties);
   });
 
+  it.each([
+    ['valid', 'tail'],
+    ['malformed', '\n%zz'],
+  ])('keeps a long %s URL alias equivalent to its escaped pointer', (_, tail) => {
+    const name = `https://example.test/${'u://'.repeat(2048)}${tail}?token=opaque`;
+    const escaped = encodeURIComponent(name.replace(/~/g, '~0').replace(/\//g, '~1'));
+    const value = {
+      type: 'object',
+      $defs: { [name]: { type: 'number' } },
+      properties: {
+        alias: { $ref: '#/$defs/' + name },
+        escaped: { $ref: '#/$defs/' + escaped },
+      },
+    };
+    const safe = projectAssertionSchemas({ type: 'is-json', value }).value;
+    expect(JSON.stringify(safe)).not.toContain('opaque');
+    expect(safe.properties.alias.$ref).toBe(safe.properties.escaped.$ref);
+    const validate = new Ajv().compile(safe);
+    expect(validate({ alias: 1, escaped: 2 })).toBe(true);
+    expect(validate({ alias: 'wrong' })).toBe(false);
+  });
+
   it('updates name lists and local pointers when URL names collide', () => {
     const authored = 'https://example.test/data?token=private-value';
     const existing = 'https://example.test/data?token=%5BREDACTED%5D';
