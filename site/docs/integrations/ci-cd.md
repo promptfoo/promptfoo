@@ -41,7 +41,7 @@ npx promptfoo@latest redteam run
 
 ## Prerequisites
 
-- Node.js `>=22.22.0` installed in your CI environment (Node.js 24 LTS recommended)
+- A [supported Node.js version](/docs/installation#nodejs-runtime-support) installed in your CI environment
 - LLM provider API keys (stored as secure environment variables)
 - A promptfoo configuration file (`promptfooconfig.yaml`)
 - (Optional) Docker for containerized environments

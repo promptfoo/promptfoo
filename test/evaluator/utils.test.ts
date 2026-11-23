@@ -1,6 +1,6 @@
 import './setup';
 
-import { globSync } from 'glob';
+import { globSync } from 'glob/raw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   formatVarsForDisplay,

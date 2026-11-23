@@ -11,7 +11,7 @@ cd config-stateful-session-management
 
 ## Requirements
 
-- Node.js >=22.22.0 (Node.js 24 LTS recommended)
+- A [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support)
 - An OpenAI API key in `OPENAI_API_KEY`
 
 ## Setup

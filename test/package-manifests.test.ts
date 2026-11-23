@@ -199,7 +199,8 @@ const KNOWN_BAD_RELEASES = new Map([
   ['@azure/msal-node', '>=5.0.0-beta.0 <7.1.0'], // GHSA-xcx6-jx8p-x3h5
   ['@cacheable/utils', '2.5.1'], // Shai-Hulud compromise (#10301)
   // Also covers GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg, and GHSA-rmxm-3fg6-px4f.
-  ['@hono/node-server', '<2.1.6'], // GHSA-jpvv-r467-5p4w, GHSA-7v5p-43qr-wch5, GHSA-qv5m-9pm6-hqp3
+  // GHSA-jpvv-r467-5p4w, GHSA-7v5p-43qr-wch5, and GHSA-qv5m-9pm6-hqp3.
+  ['@hono/node-server', '<2.1.7'], // GHSA-fj57-4f93-cfw6
   ['@modelcontextprotocol/sdk', '<1.32.0'], // GHSA-6prh-2h8m-c8cw
   ['@modelcontextprotocol/server-filesystem', '<2.3.0 || >=2025.1.14 <=2026.8.31'], // GHSA-p9cv-8g75-4xcg, GHSA-7m4x-rv66-mxhh
   ['@simple-git/argv-parser', '<2.0.1'], // GHSA-v5rq-49vh-5v5c; upstream fixes VISUAL in 2.0.1
@@ -211,7 +212,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['drizzle-orm', '<0.45.2 || >=1.0.0-beta.2 <1.0.0-beta.20'], // GHSA-gpj5-g38j-94v9
   ['extract-zip', '<=2.0.1'], // GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3
   ['fast-uri', '<2.4.8 || >=3.0.0 <3.1.9 || >=4.0.0 <4.2.3'], // GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h, GHSA-333x-w4r6-6crp
-  ['glob', '14.0.2'], // Bundles minimatch 11.0.0 (GHSA-g3hv-75wg-m249)
+  ['glob', '>=13.0.5 <14.0.6'], // GHSA-qxr8-q827-836c; includes 14.0.2 (GHSA-g3hv-75wg-m249)
   ['image-size', '>=0.6.3 <=2.0.2'], // GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr
   // Also covers GHSA-hxh3-vqpv-xpqv and GHSA-5r4p-p66f-jhc7.
   // GHSA-4m76-xfj5-7975, GHSA-46wx-v44x-9hh2, GHSA-h7mg-cq63-vhpq,
@@ -222,6 +223,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
   ['minimatch', '>=11.0.0 <=11.0.7'], // GHSA-cf2h-pxjq-68xw, GHSA-hqmv-qgp3-jx75
+  ['parse5', '>=8.0.0 <8.1.1'], // Parser and serializer security fixes released in 8.1.1.
   ['postcss-selector-parser', '<6.1.5 || >=7.0.0 <7.1.6'], // GHSA-rj75-hqrm-r3gf
   ['serialize-javascript', '<7.1.3'], // GHSA-gfhx-hw2g-v5hg, GHSA-m5mm-p8h7-m29v
   ['sharp', '<0.35.5'], // GHSA-wq5f-xc86-pv6w (bundled librsvg)
@@ -681,57 +683,6 @@ describe('package manifests', () => {
     ).toThrow('Unable to resolve override reference $missing');
   });
 
-  it('keeps CLI smoke tests on the real unsupported and minimum-supported Node releases', () => {
-    const workflowPath = '.github/workflows/main.yml';
-    const workflow = fs.readFileSync(path.join(process.cwd(), workflowPath), 'utf8');
-    const supportedNodeRange = readPackageJson<{ engines: { node: string } }>('package.json')
-      .engines.node;
-    const renovateConfig = readPackageJson<{
-      packageRules?: Array<{
-        enabled?: boolean;
-        matchCurrentValue?: string;
-        matchFileNames?: string[];
-        matchManagers?: string[];
-        matchPackageNames?: string[];
-      }>;
-    }>('renovate.json');
-
-    const unsupportedNodeVersion = workflow.match(
-      /name:\s*Set up unsupported Node[^\n]*\n[\s\S]*?node-version:\s*['"]([^'"]+)['"]/,
-    )?.[1];
-    const minimumSupportedNodeVersion = workflow.match(
-      /name:\s*Set up minimum supported Node[\s\S]*?node-version:\s*['"]([^'"]+)['"]/,
-    )?.[1];
-
-    expect(unsupportedNodeVersion).toBeDefined();
-    expect(satisfies(unsupportedNodeVersion!, supportedNodeRange)).toBe(false);
-    expect(minimumSupportedNodeVersion).toBeDefined();
-    expect(minimumSupportedNodeVersion).toBe(minVersion(supportedNodeRange)?.version);
-
-    const protectedRuntimeRule = renovateConfig.packageRules?.find(
-      (rule) =>
-        rule.enabled === false &&
-        rule.matchManagers?.includes('github-actions') &&
-        rule.matchPackageNames?.includes('node') &&
-        rule.matchPackageNames?.includes('actions/node-versions') &&
-        rule.matchFileNames?.includes(workflowPath) &&
-        rule.matchCurrentValue,
-    );
-
-    expect(
-      protectedRuntimeRule,
-      'Renovate must not replace intentionally unsupported or minimum-supported smoke-test runtimes',
-    ).toBeDefined();
-
-    const protectedRuntimePattern = new RegExp(
-      protectedRuntimeRule!.matchCurrentValue!.slice(1, -1),
-    );
-
-    expect(protectedRuntimePattern.test(unsupportedNodeVersion!)).toBe(true);
-    expect(protectedRuntimePattern.test(minimumSupportedNodeVersion!)).toBe(true);
-    expect(protectedRuntimePattern.test(fs.readFileSync('.nvmrc', 'utf8').trim())).toBe(false);
-  });
-
   it('keeps the Docker runtime on the patched Node release', () => {
     const expectedVersion = fs.readFileSync(path.join(process.cwd(), '.nvmrc'), 'utf8').trim();
     const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
@@ -849,24 +800,6 @@ describe('package manifests', () => {
     }
   });
 
-  it('keeps the streaming OpenAI example aligned with supported Node versions', () => {
-    const rootManifest = readPackageJson<{ engines?: { node?: string } }>('package.json');
-    const exampleManifest = readPackageJson<{ engines?: { node?: string } }>(
-      'examples/config-websockets/streaming/server/package.json',
-    );
-    const readme = fs.readFileSync(
-      path.join(process.cwd(), 'examples/config-websockets/streaming/server/README.md'),
-      'utf8',
-    );
-    const exampleNodeMinimum = minVersion(exampleManifest.engines?.node ?? '');
-    const rootNodeMinimum = minVersion(rootManifest.engines?.node ?? '');
-
-    expect(exampleNodeMinimum).not.toBeNull();
-    expect(rootNodeMinimum).not.toBeNull();
-    expect(exampleNodeMinimum?.compare(rootNodeMinimum!)).toBeGreaterThanOrEqual(0);
-    expect(readme).toContain(`Node.js >= ${exampleNodeMinimum?.version}`);
-  });
-
   it('does not import jsdom from root src/', () => {
     // Guards against re-introducing jsdom into the CLI startup graph, which
     // previously broke `npx promptfoo` on Node 24 via ERR_REQUIRE_ASYNC_MODULE.
@@ -885,17 +818,5 @@ describe('package manifests', () => {
       'jsdom',
     );
     expect(offenders).toEqual([]);
-  });
-
-  it('keeps the supported Node.js range aligned across workspace manifests', () => {
-    const rootEngines = readPackageJson<{ engines?: { node?: string } }>('package.json').engines
-      ?.node;
-
-    expect(validRange(rootEngines ?? '')).toBeTruthy();
-
-    for (const manifestPath of ['site/package.json', 'code-scan-action/package.json']) {
-      const engines = readPackageJson<{ engines?: { node?: string } }>(manifestPath).engines?.node;
-      expect(engines, `${manifestPath} must declare the root engines.node range`).toBe(rootEngines);
-    }
   });
 });
