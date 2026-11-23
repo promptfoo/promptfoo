@@ -163,6 +163,42 @@ describe('POST /api/eval/replay provider boundary', () => {
     });
   });
 
+  it('accepts an empty config and binds a templated label to the saved column', async () => {
+    vi.stubEnv('REPLAY_LABEL', 'Local echo');
+    try {
+      const echo = {
+        id: '{{ env.NAME }}',
+        env: { NAME: 'echo' },
+        config: {},
+        label: '{{ env.REPLAY_LABEL }}',
+      };
+      storedConfig([echo], undefined, ['Local echo']);
+      expect((await replay(0, 0)).status).toBe(200);
+      expect(evaluate.mock.calls[0][0].providers).toEqual([
+        { id: 'echo', label: 'Local echo', prompts: ['Replay'] },
+      ]);
+
+      vi.stubEnv('REPLAY_LABEL', 'changed');
+      expect((await replay(0, 0)).status).toBe(400);
+      expect((await replay()).status).toBe(400);
+      expect(evaluate).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('skips a different labelled selector without making that selector replayable', async () => {
+    const selected = { id: 'echo', label: 'Local echo' };
+    storedConfig([
+      selected,
+      { id: '{{ env.NAME }}', label: 'Scanner', env: { NAME: 'openai:codex-security' } },
+    ]);
+    expect((await replay(0, 0)).status).toBe(200);
+    expect(evaluate.mock.calls[0][0].providers).toEqual([{ ...selected, prompts: ['Replay'] }]);
+    expect((await replay(0, 1)).status).toBe(400);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     { '{{ env.NAME | lower }}': { env: { NAME: 'echo' } } },
     { '{{ env.NAME }}': { id: '{{ env.DISPLAY }}', env: { NAME: 'echo' } } },
@@ -256,6 +292,41 @@ describe('POST /api/eval/replay provider boundary', () => {
     );
     expect((await replay(0, 0)).status).toBe(200);
     expect(evaluate.mock.calls[0][0].providers).toEqual([{ ...selected, prompts: ['Replay'] }]);
+  });
+
+  it('matches each WebSocket column by its effective URL, including URL overrides', async () => {
+    const url = 'ws://a.invalid';
+    const config = { url, messageTemplate: '{{prompt}}' };
+    const providers = [
+      { id: 'websocket', config },
+      { id: url, config: { ...config, url: 'wss://b.invalid' } },
+    ];
+    const loaded = await loadApiProviders(providers);
+    storedConfig(
+      providers,
+      undefined,
+      loaded.map((provider) => provider.id()),
+    );
+    for (const [index, provider] of providers.entries()) {
+      expect((await replay(0, index)).status).toBe(200);
+      expect(evaluate.mock.calls[index][0].providers).toEqual([
+        { ...provider, prompts: ['Replay'] },
+      ]);
+    }
+  });
+
+  it('rejects WebSocket targets whose credentials produce the same saved identity', async () => {
+    const providers = ['first', 'second'].map((token) => ({
+      id: 'wss',
+      config: { url: `wss://a.invalid/?token=${token}`, messageTemplate: '{{prompt}}' },
+    }));
+    const [first, second] = await loadApiProviders(providers);
+    expect(first.id()).toBe(second.id());
+    storedConfig([providers[0]], undefined, [first.id()]);
+    expect((await replay(0, 0)).status).toBe(200);
+    storedConfig(providers, undefined, [first.id(), second.id()]);
+    expect((await replay(0, 1)).status).toBe(400);
+    expect(evaluate).toHaveBeenCalledTimes(1);
   });
 
   it('does not confuse a URL provider with another target using it as an alias', async () => {

@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
@@ -8,6 +10,7 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { getNamedOpenAiTextId, resolveProviderConfigs } from '../../providers/index';
+import { getSafeProviderId } from '../../providers/providerLogging';
 import { EvalSchemas } from '../../types/api/eval';
 import {
   getCloudDatabaseId,
@@ -639,7 +642,9 @@ function replayEcho(path: string, options?: ProviderOptions) {
     (v) => v !== undefined && (typeof v !== 'string' || TEMPLATE_MARKER.test(v)),
   );
   const extra = Object.keys(options ?? {}).some(
-    (k) => !['id', 'label', 'env', 'prompts'].includes(k),
+    (k) =>
+      !['id', 'label', 'env', 'prompts'].includes(k) &&
+      !(k === 'config' && isDeepStrictEqual(options?.config, {})),
   );
   const env = options?.env;
   if (
@@ -653,12 +658,27 @@ function replayEcho(path: string, options?: ProviderOptions) {
 }
 
 // Replace saved prompt filters while retaining routing and provider-specific options.
-function prepareReplayCandidate<T>(provider: T) {
+function prepareReplayCandidate<T>(provider: T, column: string | undefined) {
   const ref = normalizeProviderRef(provider);
   if (ref.kind !== 'options' && ref.kind !== 'map' && ref.kind !== 'named') {
     return provider;
   }
   let options = 'loadOptions' in ref ? ref.loadOptions : undefined;
+  if (options?.label && TEMPLATE_MARKER.test(options.label)) {
+    const key = replayEnvKey(options.label);
+    // An ambient value may only confirm an existing saved label, never supply a new one.
+    const label =
+      options.env && Object.hasOwn(options.env, key)
+        ? options.env[key]
+        : column && getTemplateEnvValue(key);
+    if (!label || TEMPLATE_MARKER.test(label)) {
+      throw new Error('Cannot identify the replay provider safely');
+    }
+    options = { ...options, label };
+  }
+  if (column && options?.label && options.label !== column) {
+    return;
+  }
   let path = ref.loadProviderPath;
   if (TEMPLATE_MARKER.test(path)) {
     options = replayEcho(path, options);
@@ -666,17 +686,25 @@ function prepareReplayCandidate<T>(provider: T) {
   } else if (ref.kind === 'named' && !isCloudProvider(path)) {
     // A bare string has no saved prompt filters. Wrapping it would override the native ID.
     return provider;
-  } else if (options?.label && TEMPLATE_MARKER.test(options.label)) {
-    const key = replayEnvKey(options.label);
-    const label = options.env && Object.hasOwn(options.env, key) ? options.env[key] : undefined;
-    if (!label || TEMPLATE_MARKER.test(label)) {
-      throw new Error('Cannot identify the replay provider safely');
-    }
-    options = { ...options, label };
   }
   return ref.kind === 'map'
     ? { [path]: { ...options, prompts: ['Replay'] } }
     : { ...options, id: path, prompts: ['Replay'] };
+}
+
+function replayProviderId(target: ProviderRefDescriptor) {
+  if ('loadProviderPath' in target) {
+    // URL providers ignore ID overrides. WebSocket columns also redact URL credentials.
+    const path = target.loadProviderPath;
+    const url = ('loadOptions' in target && target.loadOptions.config?.url) || path;
+    if (/^https?(?::|$)/.test(path)) {
+      return url;
+    }
+    if (path === 'websocket' || /^wss?(?::|$)/.test(path)) {
+      return getSafeProviderId(url);
+    }
+  }
+  return target.kind === 'named' ? (getNamedOpenAiTextId(target.id) ?? target.id) : target.id;
 }
 
 async function matchReplayTarget(
@@ -684,10 +712,6 @@ async function matchReplayTarget(
   column: string | undefined,
   uniqueColumn: boolean,
 ) {
-  if (column && ref.label && ref.label !== column) {
-    return;
-  }
-
   let cloud;
   if ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) {
     try {
@@ -710,14 +734,7 @@ async function matchReplayTarget(
         config: { ...cloud.provider.config, ...cloud.options.config },
       })
     : ref;
-  let identity = target.id;
-  if (target.kind === 'named') {
-    identity = getNamedOpenAiTextId(target.id) ?? target.id;
-  } else if ('loadOptions' in target && /^https?(?::|$)/i.test(target.loadProviderPath)) {
-    // HttpProvider.id() returns the effective URL, even when an alias names another URL.
-    identity = target.loadOptions.config?.url || target.loadProviderPath;
-  }
-  if (column && column !== (target.label || identity)) {
+  if (column && column !== (target.label || replayProviderId(target))) {
     return;
   }
   return { target, cloud };
@@ -746,7 +763,10 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
   });
   let selected;
   for (const provider of resolved) {
-    const candidate = prepareReplayCandidate(provider);
+    const candidate = prepareReplayCandidate(provider, name);
+    if (candidate === undefined) {
+      continue;
+    }
     const match = await matchReplayTarget(normalizeProviderRef(candidate), name, unique);
     if (match) {
       if (selected) {
