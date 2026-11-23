@@ -604,6 +604,11 @@ describe('OTLPTracingExporter', () => {
       spaced: 'cfg.password = String ( "opaque" );',
       second: 'cfg.apiKey = getValue(env,\n "opaque");',
       member: 'cfg.password = "" .concat("opaque");',
+      comparison: 'const password = "dev" === process.env.MODE ? "opaque" : env.PASS;',
+      inequality: 'cfg.apiKey = "prod"\n!== env.MODE && "opaque";',
+      membership: 'cfg.apiKey = "dev" in env ? "opaque" : env.PASS;',
+      bitwise: 'cfg.password = "1"&mode ? "opaque" : env.PASS;',
+      tagged: 'cfg.password = String.raw`dev` /* mode */ === env.MODE ? "opaque" : fallback;',
       async: 'cfg.apiKey = await "opaque";',
       continued: 'cfg.apiKey = await\n"opaque";',
       numeric: 'cfg.password = Number(/* input */\n654371);',
@@ -617,10 +622,12 @@ describe('OTLPTracingExporter', () => {
       line: 'export PASSWORD=part\\\nopaque',
       ordinary,
       path: 'PATH=part#shown',
+      mode: 'const cacheKey = "dev" === env.MODE ? "shown" : env.CACHE;',
     });
     expect(attributes.numeric).not.toContain('654371');
     expect(attributes.ordinary).toBe(ordinary);
     expect(attributes.path).toBe('PATH=part#shown');
+    expect(attributes.mode).toBe('const cacheKey = "dev" === env.MODE ? "shown" : env.CACHE;');
   });
 
   it.each(formats)('withholds named credential values in source text in %s', async (format) => {
@@ -635,6 +642,18 @@ describe('OTLPTracingExporter', () => {
     });
     expect(attributes.ordinary).toBe(ordinary);
     expect(attributes.publicTable).toBe('[[headers]]\nname="Cache-Control"\nvalues=["shown"]');
+  });
+
+  it.each(formats)('recognizes line comments after property colons in %s', async (format) => {
+    const ordinary = 'const cfg = { url: "https://example.test", cache:// note\n{ key: "shown" }};';
+    const { attributes } = await exportCustomData(format, {
+      qualified: 'const cfg = { api:// region\n { key: "opaque/qualified" }};',
+      quoted: 'const cfg = { "private":// }\r\n [{keys: ["opaque/array"]}] };',
+      label: 'const headers = [{ name:// note\n"Authorization", values: ["opaque/label"] }];',
+      keyed: 'const h = { value: "opaque/keyed", key:// label\u2028 "X-Api-Key" };',
+      ordinary,
+    });
+    expect(attributes.ordinary).toBe(ordinary);
   });
 
   it.each(formats)(

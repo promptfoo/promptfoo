@@ -1103,8 +1103,18 @@ function javascriptPropertyText(value: string): string {
   let text = '';
   let copied = 0;
   let remaining = MAX_STRUCTURED_ATTRIBUTE_NODES;
+  const replace = (start: number, end: number, spelling: string) => {
+    text += value.slice(copied, start) + spelling;
+    copied = end;
+  };
   try {
-    for (const token of tokenizer(value, { ecmaVersion: 'latest' })) {
+    const tokens = tokenizer(value, {
+      ecmaVersion: 'latest',
+      // Preserve property qualifiers across comments immediately after
+      // the colon. Acorn keeps // inside quoted URLs intact.
+      onComment: (_block, _comment, start, end) => replace(start, end, ' '),
+    });
+    for (const token of tokens) {
       if (--remaining < 0) {
         return '<redacted>';
       }
@@ -1127,8 +1137,7 @@ function javascriptPropertyText(value: string): string {
       } else {
         continue;
       }
-      text += value.slice(copied, token.start) + spelling;
-      copied = token.end;
+      replace(token.start, token.end, spelling);
     }
   } catch (error) {
     if (!(error instanceof SyntaxError)) {
@@ -1329,8 +1338,10 @@ function maskAssignedLiterals(value: string, requireMaskedScalars = false): stri
   const segments =
     /((?<!\\)"(?:\\.|[^"\\\r\n])*"|'[^'\r\n]*'|`[^`\r\n]*`(?=\s*\])|(?<![\w$-])[\w$-]+)(\s*(?:\]\s*)?([.:]|(?:\+|\?\?|\|\||&&)?=|\[(?=\s*["'`])|\/[*/])\s*)/g;
   const templateTag = /[\w$]+(?:\s*\.\s*[\w$]+)*\s*(?:\.\s*)?(?=`|\/[*/]|\[|\()/y;
-  // Reject adjacent shell fragments and operators extending a static literal.
-  const boundary = /(?!\s*(?:[+.?[(`]|\|\||&&))[,)\]}]*(?=$|[\s;&])/y;
+  // Whitespace alone does not end a value. Accept a clear delimiter,
+  // another assignment or a single trailing word, never an unknown expression.
+  const boundary =
+    /\s*(?:$|;|[,)\]}]+(?=$|[\s;]))|&[\w.%+[\]-]+=(?![=>])|\s+(?:(?:\/\/|["'\w])[\w."'\\:/\t -]*=(?![=>])|[A-Za-z]\w*$)/y;
   const delimiters = ['"""', "'''", '"', "'", '`'];
   const hasTemplate = value.includes('`');
   const hasExpression = hasAssignmentExpression(value);
