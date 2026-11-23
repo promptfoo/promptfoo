@@ -798,6 +798,26 @@ describe('evaluator trace integration', () => {
       },
     );
 
+    it('keeps a missing trace error local when the provider reuses a response', async () => {
+      const response = { output: 'Target output', cost: 0.01, tokenUsage: { total: 3 } };
+      const provider = createMockProvider({ callApi: async () => response });
+      const traced = createRunOptions(provider);
+      traced.test.assert = [{ type: 'trace-error-spans' }];
+      mockFetchTraceContext.mockResolvedValueOnce(null);
+
+      const [missing] = await runEval(traced);
+      expect(missing.error).toContain('Required external trace is unavailable');
+      expect(missing.response?.output).toBe(response.output);
+      expect(missing.cost).toBe(response.cost);
+      expect(missing.tokenUsage?.total).toBe(3);
+      expect(response).not.toHaveProperty('error');
+
+      const outputOnly = createRunOptions(provider);
+      outputOnly.test.assert = [{ type: 'equals', value: response.output }];
+      const [next] = await runEval(outputOnly);
+      expect(next.success).toBe(true);
+    });
+
     it.each(['trace', 'script', 'output'] as const)(
       'retains completed work after an earlier rejected snapshot with %s grading',
       async (grading) => {

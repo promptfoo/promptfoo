@@ -492,6 +492,7 @@ async function callProviderForRunEval({
 }): Promise<ProviderCallResult> {
   const startTime = performance.now();
   let response: ProviderResponse | undefined;
+  let latencyMs: number;
   let providerInvoked = false;
   let providerFailed = false;
 
@@ -527,13 +528,8 @@ async function callProviderForRunEval({
 
     sanitizeResponseMetadata(response);
 
-    return {
-      // Results store whole milliseconds. Shared results land in integer columns, and
-      // servers reject fractional values.
-      latencyMs: Math.round(performance.now() - startTime),
-      response,
-      traceContext,
-    };
+    // Store whole milliseconds and exclude external trace collection from provider latency.
+    latencyMs = Math.round(performance.now() - startTime);
   } catch (error) {
     providerFailed = true;
     throw error;
@@ -556,8 +552,11 @@ async function callProviderForRunEval({
           test.assert?.some((assertion) => assertionRequiresTrace(assertion, rejected))
         ) {
           // Local spans alone would make missing external evidence look like an empty trace.
-          response.error =
-            'Required external trace is unavailable. Check the trace provider and retry without caching.';
+          response = {
+            ...response,
+            error:
+              'Required external trace is unavailable. Check the trace provider and retry without caching.',
+          };
         }
       } catch (error) {
         // Trace collection must not discard a target response that completed
@@ -572,6 +571,7 @@ async function callProviderForRunEval({
       }
     }
   }
+  return { latencyMs, response, traceContext };
 }
 
 async function collectExternalTraceAfterProviderCall({
