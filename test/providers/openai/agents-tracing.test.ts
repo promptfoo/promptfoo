@@ -999,6 +999,24 @@ describe('OTLPTracingExporter', () => {
     expect(attributes.publicHeader).toBe('curl -H "X-Example: a > b" https://host');
   });
 
+  it.each(formats)('protects operands of masked curl options in %s', async (format) => {
+    const ordinary = "curl -d '-H' '--header' 'Accept: text/plain' https://host";
+    const { attributes } = await exportCustomData(format, {
+      cmd: "curl -d '-H' '--cookie' ticket=opaque/value https://host",
+      native: ['curl', '-d', '-H', '--cookie', 'ticket=opaque/value', 'https://host'],
+      repeated: "curl -d '-u' '-H' '--cookie' ticket=opaque/value https://host",
+      redirect: "curl -d '-H' '--cookie' 2>out ticket=opaque/value",
+      ordinary,
+    });
+    expect(attributes.cmd).toBe("curl -d '-H' <redacted> <redacted> https://host");
+    expect(attributes.command).toBe(attributes.cmd);
+    expect(attributes.native).toEqual(
+      wireStrings('curl', '-d', '-H', '<redacted>', '<redacted>', 'https://host'),
+    );
+    expect(attributes.redirect).toBe('<redacted>');
+    expect(attributes.ordinary).toBe(ordinary);
+  });
+
   it.each(formats)('masks curl header operands in native arguments in %s', async (format) => {
     const argv = ['curl', '-sSHAuthorization:opaque/value', '-HIdempotency-Key:shown'];
     const native = await exportCustomData(format, {

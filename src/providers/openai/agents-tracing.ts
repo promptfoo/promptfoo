@@ -1043,6 +1043,15 @@ function argumentRedactor(context?: AttributeContext, command?: string) {
     }
     const option = credentialOption(arg, mode === 'curl', property);
     property = PROPERTY_OPTIONS.has(arg);
+    // The preceding flag may have been literal data. Protect this option's
+    // operand even when the option itself must be masked as a header.
+    const detached = option?.flag === arg && !arg.endsWith('=');
+    if (detached) {
+      next = option.header ? 'header' : 'credential';
+      if (command && /^\s*(?!<redacted>(?:\s|$))(?:\d+|\{\w+\}|&)?[<>]/.test(command.slice(end))) {
+        redact.ambiguous = true;
+      }
+    }
     const prefix = option?.header ? option.flag : '';
     if (prefix || isHeaderOperand) {
       const replacement = redactHeader(word, arg, prefix, end);
@@ -1050,17 +1059,9 @@ function argumentRedactor(context?: AttributeContext, command?: string) {
         return replacement;
       }
     }
-    if (!option) {
-      return;
+    if (option && !option.header && !detached) {
+      return option.flag + '<redacted>';
     }
-    const { flag, header } = option;
-    if (arg !== flag || flag.endsWith('=')) {
-      return header ? undefined : flag + '<redacted>';
-    }
-    if (command && /^\s*(?!<redacted>(?:\s|$))(?:\d+|\{\w+\}|&)?[<>]/.test(command.slice(end))) {
-      redact.ambiguous = true;
-    }
-    next = header ? 'header' : 'credential';
   }
 
   function endsCommand(word: unknown, end: number) {
