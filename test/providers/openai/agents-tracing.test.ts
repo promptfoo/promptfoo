@@ -596,6 +596,47 @@ describe('OTLPTracingExporter', () => {
     }
   });
 
+  it.each(formats)('withholds partially masked assignments in %s', async (format) => {
+    const ordinary = 'const cacheKey = String("shown");';
+    const { attributes } = await exportCustomData(format, {
+      called: 'const password = String("opaque");',
+      chained: 'const API_KEY = Buffer.from("opaque", "base64").toString();',
+      spaced: 'cfg.password = String ( "opaque" );',
+      second: 'cfg.apiKey = getValue(env,\n "opaque");',
+      member: 'cfg.password = "" .concat("opaque");',
+      async: 'cfg.apiKey = await "opaque";',
+      continued: 'cfg.apiKey = await\n"opaque";',
+      numeric: 'cfg.password = Number(/* input */\n654371);',
+      adjacent: `PASSWORD=""'opaque'`,
+      suffix: 'PASSWORD="part"opaque',
+      prefix: `PASSWORD=part"opaque"`,
+      fragment: 'PASSWORD=part#opaque',
+      comma: 'export PASSWORD=part,opaque',
+      commas: 'export PASSWORD="part",,opaque',
+      escaped: String.raw`export PASSWORD=part\ opaque`,
+      line: 'export PASSWORD=part\\\nopaque',
+      ordinary,
+      path: 'PATH=part#shown',
+    });
+    expect(attributes.numeric).not.toContain('654371');
+    expect(attributes.ordinary).toBe(ordinary);
+    expect(attributes.path).toBe('PATH=part#shown');
+  });
+
+  it.each(formats)('withholds named credential values in source text in %s', async (format) => {
+    const ordinary = 'const headers = [{name: "Cache-Control", values: ["shown"]}];';
+    const { attributes } = await exportCustomData(format, {
+      table: '[[headers]]\nname="Authorization"\nvalues=["opaque"]',
+      source: 'const headers = [{ name: "Authorization", values: ["opaque"] }];',
+      single: 'const auth = { "Value": "opaque", "KEY": "X-Api-Key" };',
+      escaped: String.raw`const entries = [{ ["na\u006De"]: "Authoriza\u0074ion", values: ["opaque"] }];`,
+      ordinary,
+      publicTable: '[[headers]]\nname="Cache-Control"\nvalues=["shown"]',
+    });
+    expect(attributes.ordinary).toBe(ordinary);
+    expect(attributes.publicTable).toBe('[[headers]]\nname="Cache-Control"\nvalues=["shown"]');
+  });
+
   it.each(formats)(
     'withholds ambiguous JavaScript credential assignments in %s',
     async (format) => {

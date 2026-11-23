@@ -1186,7 +1186,7 @@ function literalKeySegment(key: string): string {
 
 // Check TOML table paths and static object properties without interpreting their values.
 function hasCredentialTable(value: string): boolean {
-  if (!/[:=]/.test(value) || !/^[ \t\uFEFF]*\[|[:=][\s(]*[[{]/m.test(value)) {
+  if (!/[:=]/.test(value) || !/^[ \t\uFEFF]*\[|[:=][\s(]*[[{]|\bvalues?\b/im.test(value)) {
     return false;
   }
   // TOML literal strings and JavaScript disagree about escaped apostrophes.
@@ -1195,6 +1195,20 @@ function hasCredentialTable(value: string): boolean {
     hasCredentialPath(value) ||
     (value.includes("\\'") && hasCredentialPath(value.replace(/\\'/g, '_')))
   );
+}
+
+// A name/value header or parameter can put the credential label and its
+// payload in either order. Withhold the dump without guessing row boundaries.
+function hasCredentialLabel(names: string): boolean {
+  if (!/\bvalues?[:=]/i.test(names)) {
+    return false;
+  }
+  for (const [, label] of names.matchAll(/\b(?:name|key)[:=]\s*([\w.\\-]+)/gi)) {
+    if (isCredentialAttributeKey(label, 'headers')) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function hasCredentialPath(value: string): boolean {
@@ -1207,10 +1221,8 @@ function hasCredentialPath(value: string): boolean {
         if (token.startsWith('#')) {
           return '';
         }
-        if (token.startsWith('"""') || token.startsWith("'''")) {
-          return '_'; // Keep a value before the next table's opening bracket.
-        }
-        const key = token.startsWith('\\') ? token : token.slice(1, -1);
+        const width = token.startsWith('"""') || token.startsWith("'''") ? 3 : 1;
+        const key = token.startsWith('\\') ? token : token.slice(width, -width);
         return literalKeySegment(key).replace(/[^\w.\\-]/g, '_') || '_';
       },
     )
@@ -1218,6 +1230,9 @@ function hasCredentialPath(value: string): boolean {
     .replace(/(\S)\s+([.:=])/g, '$1$2')
     .replace(/\.[ \t]+/g, '.')
     .replace(/\[\s*([\w$.\\-]+)\s*\](?=[ \t]*[[.:=])/g, '.$1');
+  if (hasCredentialLabel(names)) {
+    return true;
+  }
   // A header resets the prefix. Inline tables and arrays inherit it.
   const entries =
     /^[ \t]*\[\[?([\w.\\\t -]+)\]\]?[ \t]*$|(?<![\w$.\\-])([\w$.\\-]+)[:=][\s(]*([[{]?)|([[\]{}])/gm;
@@ -1257,9 +1272,26 @@ function hasCredentialPath(value: string): boolean {
   return false;
 }
 
-function isAmbiguousAssignment(value: string, start: number, requireMasked: boolean): boolean {
+function isAmbiguousAssignment(
+  value: string,
+  start: number,
+  requireMasked: boolean,
+  prefix: string,
+): boolean {
   if (requireMasked) {
-    return !value.startsWith('<redacted>', start);
+    // Require a complete scalar. A redacted prefix can precede a function
+    // argument, another shell word fragment or part of a compound expression.
+    if (!value.startsWith('<redacted>', start)) {
+      return true;
+    }
+    const end = start + '<redacted>'.length;
+    if ((prefix === '"' || prefix === "'") && value[end] === prefix) {
+      return end + 1 < value.length && !/\s/.test(value[end + 1]); // Quoted shell header.
+    }
+    // Keep separated assignments, options and trailing command names.
+    const complete = /$|;|&(?!&)|\s+(?:[-\w.:/]+[ \t]*=|--?[A-Za-z]|[A-Za-z]\w*$|$)/y;
+    complete.lastIndex = end;
+    return !complete.test(value);
   }
   if (value[start] === '{') {
     // Only a flat brace-delimited ODBC value can use the scalar masker.
@@ -1276,10 +1308,11 @@ function isAmbiguousAssignment(value: string, start: number, requireMasked: bool
   );
 }
 
-// A scalar masker would leave a literal in a default or conditional expression intact.
+// Scalar masking can leave escaped word fragments or literals in expressions intact.
 function hasAssignmentExpression(value: string): boolean {
   return (
-    /(?:\?\?|\|\|)(?!=)|(?:&&|[?+])[\s(]*["'`]/.test(value) ||
+    /\\[\s#;,&]|(?:\?\?|\|\|)(?!=)|(?:&&|[?+])[\s(]*["'`]/.test(value) ||
+    (value.includes('(') && /["'`]|\(\s/.test(value)) ||
     (value.includes('?') && /:[\s(]*["'`]/.test(value))
   );
 }
@@ -1296,7 +1329,8 @@ function maskAssignedLiterals(value: string, requireMaskedScalars = false): stri
   const segments =
     /((?<!\\)"(?:\\.|[^"\\\r\n])*"|'[^'\r\n]*'|`[^`\r\n]*`(?=\s*\])|(?<![\w$-])[\w$-]+)(\s*(?:\]\s*)?([.:]|(?:\+|\?\?|\|\||&&)?=|\[(?=\s*["'`])|\/[*/])\s*)/g;
   const templateTag = /[\w$]+(?:\s*\.\s*[\w$]+)*\s*(?:\.\s*)?(?=`|\/[*/]|\[|\()/y;
-  const continuation = /\s*(?:[+?]|\|\||&&)/y;
+  // Reject adjacent shell fragments and operators extending a static literal.
+  const boundary = /(?!\s*(?:[+.?[(`]|\|\||&&))[,)\]}]*(?=$|[\s;&])/y;
   const delimiters = ['"""', "'''", '"', "'", '`'];
   const hasTemplate = value.includes('`');
   const hasExpression = hasAssignmentExpression(value);
@@ -1338,18 +1372,25 @@ function maskAssignedLiterals(value: string, requireMaskedScalars = false): stri
       if (
         operator.length > 1 ||
         hasExpression ||
-        isAmbiguousAssignment(value, start, qualified || requireMaskedScalars)
+        isAmbiguousAssignment(
+          value,
+          start,
+          qualified || requireMaskedScalars,
+          value[match.index - 1],
+        )
       ) {
         return '<redacted>';
       }
       continue; // Unquoted scalars have format-specific delimiters.
     }
     const end = credentialLiteralEnd(value, start, delimiter);
-    continuation.lastIndex = end;
-    if (end === -1 || crossesBoundary(start, end) || continuation.test(value)) {
+    boundary.lastIndex = end;
+    if (end === -1 || crossesBoundary(start, end) || !boundary.test(value)) {
       return '<redacted>';
     }
-    result += value.slice(copied, start) + delimiter + '<redacted>' + delimiter;
+    // Include a template tag in the value. Otherwise scalar masking can
+    // mistake the tag and template for separate assignments.
+    result += value.slice(copied, segments.lastIndex) + delimiter + '<redacted>' + delimiter;
     copied = end;
     // Continue looking for keys from the previous operator. A conflicting
     // interpretation of an earlier quote can make two assignments overlap.
