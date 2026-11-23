@@ -2648,7 +2648,15 @@ describe('evalCommand', () => {
           // Commander consumes this option on the root command.
           program.option('--env-file, --env-path <path>');
           evalCommand(program, defaultConfig, defaultConfigPath);
-          await program.parseAsync(['node', 'test', 'eval', '--env-file', 'caller-selected.env']);
+          await program.parseAsync([
+            'node',
+            'test',
+            'eval',
+            '--no-table',
+            '--no-write',
+            '--env-file',
+            'caller-selected.env',
+          ]);
           expect(vi.mocked(evaluate).mock.lastCall?.[2]).not.toMatchObject({
             allowedMetaTicketRevisions: [],
           });

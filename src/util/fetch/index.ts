@@ -228,6 +228,34 @@ function isLoopbackHostname(hostname: string) {
   return loopback.check(address, family === 4 ? 'ipv4' : 'ipv6');
 }
 
+async function loadCustomCa(caCertPath: string, verified: boolean, logEnabled: boolean) {
+  // On Windows a single leading slash is relative to the current drive.
+  if (
+    verified &&
+    (!path.isAbsolute(caCertPath) || (path.sep === '\\' && path.parse(caCertPath).root.length < 2))
+  ) {
+    throw new Error('Verified transport requires an absolute PROMPTFOO_CA_CERT_PATH.');
+  }
+  try {
+    const resolvedPath = verified ? caCertPath : path.resolve(cliState.basePath || '', caCertPath);
+    const ca = await fsPromises.readFile(resolvedPath, 'utf8');
+    if (verified && !ca.trim()) {
+      throw new Error('Empty CA certificate.');
+    }
+    if (logEnabled && !verified) {
+      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+    }
+    return ca;
+  } catch (e) {
+    if (verified) {
+      throw new Error('Verified transport could not load the configured CA certificate.');
+    }
+    if (logEnabled) {
+      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
+    }
+  }
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -313,25 +341,10 @@ export async function fetchWithProxy(
     rejectUnauthorized: requireSecureTransport || !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
   };
 
-  // Support custom CA certificates
-  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
-  if (caCertPath) {
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
-      tlsOptions.ca = ca;
-      if (logEnabled) {
-        logger.debug(`Using custom CA certificate from ${resolvedPath}`);
-      }
-    } catch (e) {
-      if (logEnabled) {
-        logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
-      }
-    }
-  }
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
-  if (requireSecureTransport) {
-    const { protocol, hostname } = new URL(finalUrlString);
+  const verifiedUrl = requireSecureTransport ? new URL(finalUrlString) : undefined;
+  if (verifiedUrl) {
+    const { protocol, hostname } = verifiedUrl;
     if (
       protocol !== 'https:' &&
       !(protocol === 'http:' && !proxyUrl && isLoopbackHostname(hostname))
@@ -339,6 +352,17 @@ export async function fetchWithProxy(
       throw new Error('Verified transport requires HTTPS or direct HTTP loopback.');
     }
     finalOptions.redirect = 'error';
+  }
+
+  // Direct HTTP loopback workers do not use TLS. For HTTPS proposals the
+  // suite directory must never determine which certificate authorities we trust.
+  const caCertPath =
+    verifiedUrl?.protocol === 'http:' ? undefined : getEnvString('PROMPTFOO_CA_CERT_PATH');
+  if (caCertPath) {
+    const ca = await loadCustomCa(caCertPath, Boolean(verifiedUrl), logEnabled);
+    if (ca !== undefined) {
+      tlsOptions.ca = ca;
+    }
   }
 
   if (proxyUrl && logEnabled) {
