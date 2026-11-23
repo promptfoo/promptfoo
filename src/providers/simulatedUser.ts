@@ -1,5 +1,6 @@
 import logger, { isDebugEnabled } from '../logger';
 import { getSessionId } from '../redteam/util';
+import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
@@ -271,6 +272,7 @@ export class SimulatedUser implements ApiProvider {
     logger.debug(`[SimulatedUser] Sending message to target provider: ${targetPrompt}`);
 
     const response = await targetProvider.callApi(targetPrompt, context);
+    getProviderCallExecutionContext()?.onTargetCacheStatus?.(response.cached === true);
 
     if (response.sessionId) {
       context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };

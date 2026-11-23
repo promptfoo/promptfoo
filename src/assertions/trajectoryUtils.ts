@@ -221,6 +221,7 @@ function extractCommand(
   toolName = extractToolName(span),
   getToolArgs = () => extractToolArgs(span),
   commandToolNames = resolveCommandToolNames(undefined),
+  preferSpanCommands = false,
 ): string | undefined {
   const attributes = span.attributes || {};
 
@@ -229,14 +230,23 @@ function extractCommand(
     return directMatch;
   }
 
+  let processCommand: string | undefined;
   for (const [key, value] of Object.entries(attributes)) {
-    if (typeof value !== 'string' || !value.trim()) {
+    if (
+      typeof value !== 'string' ||
+      !value.trim() ||
+      !/command/i.test(key) ||
+      /output|result/i.test(key) ||
+      EXIT_CODE_ATTRIBUTE.test(key)
+    ) {
       continue;
     }
 
-    if (/command/i.test(key) && !/output|result/i.test(key) && !EXIT_CODE_ATTRIBUTE.test(key)) {
+    // Resource attributes can describe the host on every span, including shell tools.
+    if (!preferSpanCommands || !key.startsWith('process.')) {
       return value.trim();
     }
+    processCommand ??= value.trim();
   }
 
   const toolArgs = getToolArgs();
@@ -269,7 +279,7 @@ function extractCommand(
     return span.name.slice('exec '.length).trim();
   }
 
-  return undefined;
+  return processCommand;
 }
 
 function extractSearchQuery(span: TraceSpan): string | undefined {
@@ -310,7 +320,10 @@ function isMessageSpan(span: TraceSpan): boolean {
   return span.name === 'agent response' || span.name === 'send input';
 }
 
-export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
+export function extractTrajectorySteps(
+  trace: TraceData,
+  preferSpanCommands = false,
+): TrajectoryStep[] {
   const commandToolNames = getTraceCommandToolNames(trace);
 
   return [...(trace.spans || [])]
@@ -340,7 +353,13 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
         }
         return toolArgs;
       };
-      const command = extractCommand(span, toolName, getToolArgs, commandToolNames);
+      const command = extractCommand(
+        span,
+        toolName,
+        getToolArgs,
+        commandToolNames,
+        preferSpanCommands,
+      );
       const searchQuery = extractSearchQuery(span);
 
       let type: TrajectoryStepType = 'span';
@@ -502,6 +521,19 @@ export function summarizeTrajectoryForJudge(trace: TraceData): string {
   return formatTrajectorySummary(extractTrajectorySteps(trace), trace.traceId);
 }
 
+/** Expand a bare executable only when the process line describes that same command. */
+function localCommand(step: TrajectoryStep): string {
+  const line = getFirstStringAttribute(step.attributes, ['process.command_line']);
+  if (line) {
+    const executable = /^(?:"([^"]+)"|'([^']+)')/.exec(line);
+    const path = executable?.[1] ?? executable?.[2] ?? getCommandExecutable(line);
+    if (path === step.name || path?.split(/[\\/]/).at(-1) === step.name) {
+      return line;
+    }
+  }
+  return step.name;
+}
+
 /** Only deterministic coding-agent checks may inspect full command arguments. */
 export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
   const localSpans = codingAgent && getLocalEvaluatorSpans();
@@ -518,7 +550,7 @@ export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
     });
     trace = { ...trace, spans };
   }
-  const steps = extractTrajectorySteps(trace);
+  const steps = extractTrajectorySteps(trace, codingAgent);
   const localTraceActions = codingAgent
     ? steps.flatMap((step, index) => {
         if (step.type === 'message' || step.type === 'reasoning') {
@@ -532,10 +564,7 @@ export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
           !Object.entries(step.attributes ?? {}).some(
             ([key, value]) => EXIT_CODE_ATTRIBUTE.test(key) && value !== 0 && value !== '0',
           );
-        // A short executable name can hide arguments recorded by OpenTelemetry.
-        const confirmedCommand = completedCommand
-          ? (getFirstStringAttribute(step.attributes, ['process.command_line']) ?? step.name)
-          : undefined;
+        const confirmedCommand = completedCommand ? localCommand(step) : undefined;
         return [{ step: index + 1, confirmedCommand }];
       })
     : undefined;

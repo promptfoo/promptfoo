@@ -525,10 +525,17 @@ async function callProviderForRunEval({
           traceContext,
           vars,
         });
-      response = await (needsLiveTrace ? withCacheEnabled(false, invoke) : invoke());
-      if (needsLiveTrace && response.cached) {
+      const call = await (needsLiveTrace ? withCacheEnabled(false, invoke) : invoke());
+      response = call.response;
+      if (needsLiveTrace && (call.hadCachedTarget || response.cached)) {
+        // Discard stale evidence without losing the cost of live turns in a mixed response.
+        const { cached, cost, incurredCost, latencyMs, tokenUsage } = response;
         response = {
-          ...response,
+          cached,
+          cost,
+          incurredCost,
+          latencyMs,
+          tokenUsage,
           error: 'Trace-aware redteam grading requires a live target response.',
         };
       }
@@ -671,7 +678,7 @@ async function callActiveProvider({
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
-}): Promise<ProviderResponse> {
+}): Promise<{ response: ProviderResponse; hadCachedTarget: boolean }> {
   const originalProvider = maybeWrapMcpProviderForRedteam(provider, test);
   const cleanupOwner = isApiProvider(test.provider) ? test.provider : provider;
   const activeProvider =
@@ -692,6 +699,11 @@ async function callActiveProvider({
     vars,
   });
   let completedResponse: ProviderResponse | undefined;
+  // A strategy may discard a replayed turn or combine it with fresh responses.
+  let hadCachedTarget = false;
+  const onTargetCacheStatus = (cached: boolean) => {
+    hadCachedTarget ||= cached;
+  };
   const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
   const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
     // A previous response belongs only to backoff until the next attempt starts.
@@ -725,7 +737,9 @@ async function callActiveProvider({
         abortSignal,
         rateLimitRegistry,
         rateLimitProvider: activeProvider,
+        onTargetCacheStatus,
         onTargetResponse: (prompt, response) => {
+          onTargetCacheStatus(response.cached === true);
           completedTargets.push({ prompt, response });
         },
       },
@@ -790,7 +804,7 @@ async function callActiveProvider({
 
   logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
   logger.debug(`Provider response cached property explicitly: ${response.cached}`);
-  return response;
+  return { response, hadCachedTarget };
 }
 
 function buildCallApiContext({

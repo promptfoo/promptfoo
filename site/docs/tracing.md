@@ -907,9 +907,9 @@ redteam:
 
 For a single red team check, pass `traceData` to `assertions.runAssertion`, or enable red team tracing for grading and pass a stored `traceId`. Setting `includeInGrading: false` excludes these spans from grading, including for coding-agent checks. Executable assertion values can still read `context.trace` and control what their scripts return. Loading a file or running another trace-aware assertion does not opt the red team grader into tracing.
 
-The standard red team judge summary contains step types and status codes without command arguments. Local coding-agent checks prefer `process.command_line` over a short command name. They exclude locally recorded grading activity and the current evaluator's target wrapper when it contains only bookkeeping attributes. Target actions and unrecognized spans remain evidence even if a sender marks them as grader spans.
+The standard red team judge summary contains step types and status codes without command arguments. Local coding-agent checks use the executed command. If the trace gives only an executable name, a matching `process.command_line` supplies its arguments. These checks exclude locally recorded grading activity and the current evaluator's target wrapper when it contains only bookkeeping attributes. Target actions and unrecognized spans remain evidence even if a sender marks them as grader spans.
 
-Promptfoo automatically selects spans that describe model calls, tool executions, guardrail
+For the attack strategy's context, Promptfoo selects spans that describe model calls, tool executions, guardrail
 decisions, or errors. It recognizes OpenTelemetry `gen_ai.*` attributes, common tool and
 guardrail attributes, and older `llm.*` attributes. Useful spans are included even when the
 instrumentation marks them as internal, while ordinary HTTP requests and framework handlers
@@ -935,7 +935,9 @@ otherwise leave out.
 
 ### Strategy-Specific Configuration
 
-Strategy-specific settings apply during the attack and final grading. Public strategy names and their provider aliases share these settings. For example, `jailbreak:hydra` and `hydra` both select Hydra. When both aliases appear at the same configuration level, `includeInGrading: false` takes precedence.
+Final red team assertions use the strategy's grading opt-in or opt-out. Filters and limits such as `spanFilter`, `maxSpans`, and `maxDepth` affect the strategy's context. They do not limit the stored or supplied spans available to the final assertion. Set `includeInGrading: false` to exclude those spans.
+
+Public strategy names and their provider aliases share these settings. For example, `jailbreak:hydra` and `hydra` both select Hydra. When both aliases appear at the same configuration level, `includeInGrading: false` takes precedence.
 
 ```yaml
 redteam:
