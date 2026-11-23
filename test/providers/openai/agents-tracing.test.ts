@@ -885,6 +885,37 @@ describe('OTLPTracingExporter', () => {
     },
   );
 
+  it.each(formats)('masks curl header operands in shell commands in %s', async (format) => {
+    const cmd = 'curl -HAuthorization:opaque/value https://host';
+    const publicCommand = 'curl -sSHAccept:text/plain -H "X-Token-Count: 42" https://host';
+    const { attributes } = await exportCustomData(format, {
+      cmd,
+      grouped: "curl -fsSLH'X-Service-Key: opaque value' https://host",
+      proxy: 'curl --proxy-header="Proxy-Authorization: opaque/proxy" https://host',
+      vendor: "curl --header 'Service-Key: opaque/other' https://host",
+      flattened: 'curl -H Authorization: Bearer opaque/lost-quotes',
+      flattenedGroup: 'curl -sSHAuthorization:Bearer opaque/lost-quotes',
+      publicCommand,
+    });
+    expect(attributes.cmd).toBe('curl -H<redacted> https://host');
+    expect(attributes.command).toBe(attributes.cmd);
+    expect(attributes.grouped).toBe('curl -fsSLH<redacted> https://host');
+    expect(attributes.proxy).toBe('curl --proxy-header=<redacted> https://host');
+    expect(attributes.publicCommand).toBe(publicCommand);
+  });
+
+  it.each(formats)('masks curl header operands in native arguments in %s', async (format) => {
+    const argv = ['curl', '-sSHAuthorization:opaque/value', '-HIdempotency-Key:shown'];
+    const native = await exportCustomData(format, {
+      cmd: argv,
+      nested: { executable: '/usr/bin/curl', argv: ['-HX-Api-Key:opaque/split'] },
+    });
+    expect(native.attributes.cmd).toEqual(
+      wireStrings('curl', '-sSH<redacted>', '-HIdempotency-Key:shown'),
+    );
+    expect(native.attributes.command).toBe('curl -sSH<redacted> -HIdempotency-Key:shown');
+  });
+
   it.each(formats)(
     'masks curl credentials in command chains and nested shell programs in %s',
     async (format) => {

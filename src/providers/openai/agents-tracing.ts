@@ -937,18 +937,22 @@ function isCredentialProperty(assignment: string) {
   return field !== undefined && isCredentialAttributeKey(field);
 }
 
-function credentialOption(arg: string, curl: boolean, property: boolean): string | undefined {
+function credentialOption(
+  arg: string,
+  curl: boolean,
+  property: boolean,
+): { flag: string; header?: boolean } | undefined {
   if (property && isCredentialProperty(arg)) {
-    return '';
+    return { flag: '' };
   }
   if (curl) {
     // curl permits short options without operands before the credential flag.
     const flag =
-      /^(?:-[#0-46:aBfgGiIjJklLMnNOpqRsSvVZ]*[uUEb]|--(?:(?:proxy-)?(?:user|pass|cert|tlspassword)|oauth2-bearer|cookie)(?:=|$))/.exec(
+      /^(?:-[#0-46:aBfgGiIjJklLMnNOpqRsSvVZ]*[uUEbH]|--(?:(?:proxy-)?(?:user|pass|cert|tlspassword|header)|oauth2-bearer|cookie)(?:=|$))/.exec(
         arg,
       )?.[0];
     if (flag) {
-      return flag;
+      return { flag, header: /(?:H|header=?)$/.test(flag) };
     }
   }
   for (const option of arg.matchAll(/(?:^|(?<=[\s=]))(--?[A-Za-z][\w.-]*)(=|(?=\s|$))/g)) {
@@ -956,36 +960,74 @@ function credentialOption(arg: string, curl: boolean, property: boolean): string
       PROPERTY_OPTIONS.has(option[1]) &&
       isCredentialProperty(arg.slice(option.index + option[0].length))
     ) {
-      return '';
+      return { flag: '' };
     }
     if (isCredentialAttributeKey(option[1])) {
       // A nested shell script can be a single argument. Withhold it in full.
-      return option.index === 0 ? option[1] + option[2] : '';
+      return { flag: option.index === 0 ? option[1] + option[2] : '' };
     }
   }
   return undefined;
 }
 
+function isPrivateCurlHeader(header: string) {
+  if (/[\r\n]/.test(header)) {
+    return true;
+  }
+  const colon = header.indexOf(':');
+  return (
+    colon >= 0 &&
+    (isCredentialAttributeKey(header.slice(0, colon).trim(), 'headers') ||
+      isCredentialHeader('', header.slice(colon + 1)))
+  );
+}
+
 function argumentRedactor(context?: AttributeContext, native = false) {
   let mode: 'start' | 'unknown' | 'operands' | 'curl' | 'expanded' =
     context === 'operands' || context === 'curl' ? context : 'start';
-  let maskNext = false;
+  let next: 'credential' | 'header' | undefined;
   let property = false;
+
+  function redactOption(word: string, arg: string, isHeaderOperand: boolean) {
+    const option = credentialOption(arg, mode === 'curl', property);
+    property = PROPERTY_OPTIONS.has(arg);
+    const prefix = option?.header ? option.flag : '';
+    if ((prefix || isHeaderOperand) && isPrivateCurlHeader(arg.slice(prefix.length))) {
+      // A logged command may have lost its quotes, splitting the credential
+      // after the colon or authentication scheme across several words.
+      if (!native && /:(?:Bearer|Basic|Token|Digest|Api[-_]?Key)?$/i.test(word)) {
+        mode = 'expanded';
+      }
+      const label = /^(["'])[\w-]+:[ \t]*/.exec(word);
+      return !prefix && label && word.endsWith(label[1])
+        ? label[0] + '<redacted>' + label[1]
+        : prefix + '<redacted>';
+    }
+    if (!option) {
+      return;
+    }
+    const { flag, header } = option;
+    if (arg !== flag || flag.endsWith('=')) {
+      return header ? undefined : flag + '<redacted>';
+    }
+    next = header ? 'header' : 'credential';
+  }
+
   return (word: unknown) => {
+    const operand = next;
+    next = undefined;
     // In native argv, even a standalone shell operator can be a literal
     // operand. Never let it clear an active credential context.
     if (
       typeof word === 'string' &&
       /^[;&|\r\n]+$/.test(word) &&
-      (!native || (!maskNext && mode !== 'expanded' && mode !== 'curl'))
+      (!native || (!operand && mode !== 'expanded' && mode !== 'curl'))
     ) {
       mode = 'start';
-      maskNext = false;
       property = false;
       return;
     }
-    if (maskNext || mode === 'expanded') {
-      maskNext = false;
+    if (operand === 'credential' || mode === 'expanded') {
       return '<redacted>';
     }
     if (typeof word !== 'string') {
@@ -1008,15 +1050,7 @@ function argumentRedactor(context?: AttributeContext, native = false) {
       mode = 'expanded';
       return '<redacted>';
     }
-    const flag = credentialOption(arg, mode === 'curl', property);
-    property = PROPERTY_OPTIONS.has(arg);
-    if (flag === undefined) {
-      return;
-    }
-    if (arg !== flag || flag.endsWith('=')) {
-      return flag + '<redacted>';
-    }
-    maskNext = true;
+    return redactOption(word, arg, operand === 'header');
   };
 }
 
@@ -1570,7 +1604,7 @@ function attributeContext(key: string, source?: Record<string, unknown>): Attrib
     }
     // The operand for a trailing credential option may start the sibling list.
     const last = unquoteShellWord(tail).trimEnd().split(/\s+/).pop();
-    if (last && credentialOption(last, context === 'curl', false) === last) {
+    if (last && credentialOption(last, context === 'curl', false)?.flag === last) {
       return 'omit';
     }
   }
