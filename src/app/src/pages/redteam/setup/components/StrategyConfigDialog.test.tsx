@@ -1427,18 +1427,20 @@ describe('StrategyConfigDialog', () => {
       },
     );
 
-    it.each([null, { id: 'rot13', config: 'bad' }])(
-      'lets an imported malformed step %j be removed before saving',
-      async (step) => {
-        renderLayer([step, 'base64']);
-        const save = screen.getByRole('button', { name: 'Save' });
-        expect(save).toBeDisabled();
-        expect(screen.getByText(/Invalid layer step 1/)).toBeInTheDocument();
-        await userEvent.click(screen.getAllByLabelText('delete step')[0]);
-        await userEvent.click(save);
-        expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
-      },
-    );
+    it.each([
+      null,
+      { id: 'rot13', config: 'bad' },
+      { id: 'rot13', config: { plugins: 'pii' } },
+      { id: 'rot13', config: { plugins: ['intent', { id: 'pii' }] } },
+    ])('lets an imported malformed step %j be removed before saving', async (step) => {
+      renderLayer([step, 'base64']);
+      const save = screen.getByRole('button', { name: 'Save' });
+      expect(save).toBeDisabled();
+      expect(screen.getByText(/Invalid layer step 1/)).toBeInTheDocument();
+      await userEvent.click(screen.getAllByLabelText('delete step')[0]);
+      await userEvent.click(save);
+      expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
+    });
 
     it('applies the parent strategy restrictions to layer choices and saved steps', async () => {
       renderLayer(['best-of-n'], (id) => id === 'best-of-n' || id === 'audio');

@@ -38,7 +38,10 @@ export function getLayerConfigError(
   if (error) {
     return error;
   }
-  for (const step of steps) {
+  for (const [index, step] of steps.entries()) {
+    if (typeof step !== 'string' && getLayerPluginSelectors(step.config?.plugins).includes('')) {
+      return `Invalid layer step ${index + 1}. Remove the step or repair its plugin selectors.`;
+    }
     const id = getStrategyId(step);
     if (isCustomStrategy(id) && !isCustomStrategyConfigValid(step)) {
       return `The "${id}" step requires a nonempty strategyText in its config.`;

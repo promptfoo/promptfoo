@@ -169,6 +169,8 @@ describe('Strategies', () => {
     it.each([
       { steps: ['unknown-id'], remote: true, valid: false },
       { steps: [{ id: 'base64', config: 'bad' }], remote: true, valid: false },
+      { steps: [{ id: 'base64', config: { plugins: 'pii' } }], remote: true, valid: false },
+      { steps: [{ id: 'base64', config: { plugins: ['pii'] } }], remote: true, valid: true },
       { steps: ['authoritative-markup-injection', 'base64'], remote: true, valid: false },
       { steps: ['custom'], remote: true, valid: false },
       { steps: [{ id: 'custom:greeting' }], remote: true, valid: false },
