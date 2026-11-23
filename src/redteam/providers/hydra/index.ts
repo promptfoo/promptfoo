@@ -772,11 +772,9 @@ export class HydraProvider implements ApiProvider {
         : undefined;
       const last = chat?.[chat.length - 1];
       const reportedCurrent = last?.role === 'user' ? last.content : reported;
-      if (
-        reported !== undefined &&
-        reportedCurrent !== currentPrompt &&
-        reportedCurrent !== finalTargetPrompt
-      ) {
+      const confirmedRequest =
+        reportedCurrent === finalTargetPrompt && finalTargetPrompt.trim() !== '';
+      if (reported !== undefined && reportedCurrent !== currentPrompt && !confirmedRequest) {
         lastTargetResponse = {
           ...targetResponse,
           error: 'Target-reported input does not identify the current user turn.',
@@ -846,7 +844,12 @@ export class HydraProvider implements ApiProvider {
       // Externalization can replace the response object. Return the same output we grade.
       lastTargetResponse = targetResponse;
       completedResponse = targetResponse;
-      lastFinalAttackPrompt = currentPrompt;
+      // Stateful templates can omit part of the generated input. Grade and save the
+      // confirmed text. Stateless replays and media envelopes can include earlier turns.
+      lastFinalAttackPrompt =
+        this.stateful && confirmedRequest && !lastTransformResult
+          ? finalTargetPrompt
+          : currentPrompt;
       lastTransformDisplayVars = lastTransformResult?.displayVars;
       verifiedContext = undefined;
       const historyOutput =
