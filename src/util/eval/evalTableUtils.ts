@@ -1,6 +1,10 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import { ResultFailureReason } from '../../types/index';
-import { isPromptAllowed, promptIdentityCandidates } from '../promptMatching';
+import {
+  getProviderPromptOverride,
+  isPromptAllowed,
+  promptIdentityCandidates,
+} from '../promptMatching';
 import { getPersistedProviderFilterOptions } from './filterProviders';
 
 import type Eval from '../../models/eval';
@@ -11,6 +15,7 @@ import type {
   EvalTableDTO,
   EvaluateTableRow,
   Prompt,
+  TestSuite,
 } from '../../types/index';
 
 /**
@@ -66,8 +71,17 @@ export function getReplayColumn(eval_: Eval, promptIndex?: number) {
   const allowsProvider = (id: string, label?: string) =>
     !filter || filter.test(id) || Boolean(label && filter.test(label));
   const prompts = promptIndex === undefined ? columns : [columns[promptIndex]];
-  const allowsPrompts = (selectors?: string[]) =>
-    selectors === undefined || matchesReplayPrompts(prompts, eval_.config.prompts, selectors);
+  // Programmatic evaluations can persist the runtime suite's overrides. Use
+  // the saved column label and native provider ID before the instance filter.
+  const config: Eval['config'] & Pick<TestSuite, 'providerPromptMap'> = eval_.config;
+  const allowsPrompts = (id: string, label?: string, defaults?: string[]) => {
+    const provider = { id: () => id, label: name ?? groups[0] ?? label };
+    const selectors = getProviderPromptOverride(provider, config.providerPromptMap) ?? defaults;
+    return (
+      selectors === undefined ||
+      (Array.isArray(selectors) && matchesReplayPrompts(prompts, config.prompts, selectors))
+    );
+  };
   return { name, groups, unique, allowsProvider, allowsPrompts };
 }
 

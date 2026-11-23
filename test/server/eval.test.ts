@@ -99,6 +99,35 @@ describe('eval routes', () => {
     expect((await request(original.label, ambiguous)).status).toBe(200);
   });
 
+  it('applies saved label and ID prompt overrides before provider filters on replay', async () => {
+    const prompt = { id: 'current', label: 'Readable', raw: 'Original' };
+    const replay = async (
+      providerPromptMap: Record<string, string[]>,
+      instance: string[],
+      label = 'named',
+    ) => {
+      const config = {
+        providers: [{ id: 'echo', label, prompts: instance }],
+        prompts: [prompt],
+        providerPromptMap,
+      };
+      const saved = await Eval.create(config, [prompt], {
+        completedPrompts: [{ ...prompt, id: generateIdFromPrompt(prompt), provider: label }],
+      });
+      testEvalIds.add(saved.id);
+      return api
+        .post('/api/eval/replay')
+        .send({ evaluationId: saved.id, promptIndex: 0, prompt: 'edited' });
+    };
+    const allowed = [prompt.id];
+    expect((await replay({ named: allowed, echo: [] }, ['legacy'])).body.output).toBe('edited');
+    expect((await replay({ named: [], echo: allowed }, allowed)).status).toBe(400);
+    expect((await replay({ echo: [] }, allowed)).status).toBe(400);
+    expect((await replay({ echo: allowed }, [], 'toString')).status).toBe(200);
+    expect((await replay({ unrelated: [] }, allowed)).status).toBe(200);
+    expect((await replay({ unrelated: allowed }, [])).status).toBe(400);
+  });
+
   it('sends a replay only to the HTTP destination bound by the saved suite', async () => {
     const requests: { url?: string; authorization?: string; tenant?: string | string[] }[] = [];
     const target = createServer((req, res) => {

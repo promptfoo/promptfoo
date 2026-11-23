@@ -16,7 +16,7 @@ export function promptIdentityCandidates(prompts: Prompt[]): Map<string, Set<str
 
 /** Returns an own label/ID override without copying its array; undefined means no override. */
 export function getProviderPromptOverride(
-  provider: TestSuite['providers'][number],
+  provider: Pick<TestSuite['providers'][number], 'label' | 'id'>,
   map: TestSuite['providerPromptMap'],
 ): string[] | undefined {
   const ownSelectors = (key: string) =>

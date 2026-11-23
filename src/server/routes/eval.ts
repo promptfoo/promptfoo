@@ -941,7 +941,8 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number, recordedI
   const selectors =
     ('loadOptions' in selected.ref ? selected.ref.loadOptions.prompts : undefined) ??
     selected.cloud?.provider.prompts;
-  if (!allowsProvider(id, selected.target.label) || !allowsPrompts(selectors)) {
+  const { label } = selected.target;
+  if (!allowsProvider(id, label) || !allowsPrompts(id, label, selectors)) {
     throw new Error('Provider excluded from the original evaluation');
   }
   return { ...selected, id };
