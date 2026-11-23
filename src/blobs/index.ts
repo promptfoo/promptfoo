@@ -60,16 +60,23 @@ export function resetBlobStorageProvider(): void {
   defaultProvider = null;
 }
 
+type BlobReferenceDb = Pick<Awaited<ReturnType<typeof getDb>>, 'insert' | 'select' | 'update'>;
+export type BlobReferenceWrite = (db: BlobReferenceDb) => Promise<unknown>;
+
+export interface BlobContext {
+  evalId?: string;
+  testIdx?: number;
+  promptIdx?: number;
+  /** Prepare files now, but associate them with an eval in its replacement transaction. */
+  deferReference?: (write: BlobReferenceWrite) => void;
+}
+
+type BlobReferenceContext = BlobContext & { location?: string; kind?: string };
+
 export async function storeBlob(
   data: Buffer,
   mimeType: string,
-  refContext?: {
-    evalId?: string;
-    testIdx?: number;
-    promptIdx?: number;
-    location?: string;
-    kind?: string;
-  },
+  refContext?: BlobReferenceContext,
 ): Promise<BlobStoreResult> {
   const provider = getBlobStorageProvider();
   const result = await provider.store(data, mimeType);
@@ -93,19 +100,22 @@ export async function storeBlob(
       .run();
 
     if (refContext?.evalId) {
-      await tx
-        .insert(blobReferencesTable)
-        .values({
-          id: randomUUID(),
-          blobHash: result.ref.hash,
-          evalId: refContext.evalId,
-          testIdx: refContext.testIdx,
-          promptIdx: refContext.promptIdx,
-          location: refContext.location,
-          kind: refContext.kind,
-        })
-        .onConflictDoNothing()
-        .run();
+      const reference = {
+        id: randomUUID(),
+        blobHash: result.ref.hash,
+        evalId: refContext.evalId,
+        testIdx: refContext.testIdx,
+        promptIdx: refContext.promptIdx,
+        location: refContext.location,
+        kind: refContext.kind,
+      };
+      const write: BlobReferenceWrite = (db) =>
+        db.insert(blobReferencesTable).values(reference).onConflictDoNothing().run();
+      if (refContext.deferReference) {
+        refContext.deferReference(write);
+      } else {
+        await write(tx);
+      }
     }
 
     const asset = await tx
@@ -171,13 +181,7 @@ export async function getShareAuthorizedBlob(
 
 export async function recordBlobReference(
   hash: string,
-  refContext: {
-    evalId?: string;
-    testIdx?: number;
-    promptIdx?: number;
-    location?: string;
-    kind?: string;
-  },
+  refContext: BlobReferenceContext,
 ): Promise<void> {
   if (!refContext.evalId) {
     return;
@@ -194,7 +198,19 @@ export async function recordBlobReference(
     return;
   }
 
-  const db = await getDb();
+  const reference = { ...refContext, evalId: refContext.evalId };
+  if (refContext.deferReference) {
+    refContext.deferReference((tx) => registerBlobReference(tx, hash, reference));
+  } else {
+    await registerBlobReference(await getDb(), hash, reference);
+  }
+}
+
+async function registerBlobReference(
+  db: BlobReferenceDb,
+  hash: string,
+  refContext: BlobReferenceContext & { evalId: string },
+) {
   // A failed store can retain bytes without committing their asset registration.
   // Referencing those bytes must not adopt them or create an invalid foreign key.
   const asset = await db

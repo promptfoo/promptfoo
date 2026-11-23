@@ -41,8 +41,28 @@ import { sanitizeRedactionResult } from '../util/verifierPrivacy';
 import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
+import type { BlobContext } from '../blobs';
+
+/** Externalize only projected responses, before opening the batch transaction. */
+export async function prepareBatchResult(
+  input: EvaluateResult,
+  evalId: string,
+  deferReference?: BlobContext['deferReference'],
+): Promise<EvaluateResult> {
+  const result = serializeResultProviderRefs(input);
+  const response = isBlobStorageEnabled()
+    ? await extractAndStoreBinaryData(result.response, {
+        evalId,
+        testIdx: result.testIdx,
+        promptIdx: result.promptIdx,
+        deferReference,
+      })
+    : result.response;
+  return { ...result, response: response ?? undefined };
+}
+
 /** Prepare a result for batch writes after serializing its provider references. */
-export function sanitizeBatchResultForDb(result: EvaluateResult) {
+function sanitizeBatchResultForDb(result: EvaluateResult) {
   // See `createFromEvaluateResult` for why `testCase` and `prompt` go
   // through the credential-redacting sanitizer while the other fields
   // stay on the lighter `sanitizeForDb`. Trace and repeat linkage travel inside
@@ -160,23 +180,20 @@ export default class EvalResult {
     return new EvalResult(args);
   }
 
-  static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
+  static async createManyFromEvaluateResult(
+    results: EvaluateResult[],
+    evalId: string,
+    options?: { mediaPrepared?: boolean },
+  ) {
     const db = await getDb();
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
     for (const input of results) {
-      const result = serializeResultProviderRefs(input);
-      const processedResponse = isBlobStorageEnabled()
-        ? await extractAndStoreBinaryData(result.response, {
-            evalId,
-            testIdx: result.testIdx,
-            promptIdx: result.promptIdx,
-          })
-        : result.response;
-      processedResults.push({
-        ...result,
-        response: processedResponse ?? undefined,
-      });
+      processedResults.push(
+        options?.mediaPrepared
+          ? serializeResultProviderRefs(input)
+          : await prepareBatchResult(input, evalId),
+      );
     }
 
     await db.transaction(async (tx) => {

@@ -2,22 +2,27 @@ import crypto from 'crypto';
 import fs from 'fs/promises';
 
 import { z } from 'zod';
-import { BLOB_MAX_SIZE, isSafeInlineBlobMimeType, recordBlobReference, storeBlob } from '../blobs';
+import {
+  BLOB_MAX_SIZE,
+  type BlobReferenceWrite,
+  isSafeInlineBlobMimeType,
+  recordBlobReference,
+  storeBlob,
+} from '../blobs';
 import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
 import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
-import { serializeResultProviderRefs } from '../evaluator/resultProcessing';
 import { parseImportFile } from '../importers/parse';
 import logger from '../logger';
 import Eval, { createEvalId, sanitizeLegacyResults } from '../models/eval';
-import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
+import { notifyEvaluationChanged } from '../models/evalMutation';
 import EvalResult, {
-  sanitizeBatchResultForDb,
+  prepareBatchResult,
   stripTraceLinkageFromMetadata,
 } from '../models/evalResult';
 import { generateIdFromPrompt } from '../models/prompt';
 import telemetry from '../telemetry';
-import { getTraceStore } from '../tracing/store';
+import { getTraceStore, TraceStore } from '../tracing/store';
 import { sha256 } from '../util/createHash';
 import { sanitizeConfigForPersistence } from '../util/sanitizer';
 import { configRequiresTraceRedaction } from '../util/verifierPrivacy';
@@ -30,7 +35,6 @@ import type {
   ExportedBlobAsset,
   TraceData,
   TraceSpan,
-  UnifiedConfig,
 } from '../types';
 
 function extractEvalId(evalData: any): string | undefined {
@@ -136,10 +140,11 @@ const ImportedResultSchema = z.object({
   cost: z.number().nullish(),
 });
 
-function preflightV3Replacement(config: Partial<UnifiedConfig>, summary: EvaluateSummaryV3) {
-  // Eval.create needs the original tests for dataset identity. Validate the
-  // projected copy without replacing the original config or prompt metrics.
-  sanitizeConfigForPersistence(config);
+async function prepareV3Replacement(
+  summary: EvaluateSummaryV3,
+  evalId: string,
+  deferReference: (write: BlobReferenceWrite) => void,
+) {
   for (const [idx, prompt] of summary.prompts.entries()) {
     if (typeof (prompt?.label || prompt?.display || prompt?.raw) !== 'string') {
       throw new Error(`Invalid catalog prompt at index ${idx}`);
@@ -147,13 +152,12 @@ function preflightV3Replacement(config: Partial<UnifiedConfig>, summary: Evaluat
     generateIdFromPrompt(prompt);
   }
   for (const [idx, row] of summary.results.entries()) {
-    // Both verifier and credential projection can fail on an ordinary import.
-    // Check one row at a time without storing blobs or changing trace linkage.
-    const fields = row && sanitizeBatchResultForDb(serializeResultProviderRefs(row));
-    if (!fields || !ImportedResultSchema.safeParse(fields).success) {
+    const prepared = row && (await prepareBatchResult(row, evalId, deferReference));
+    if (!prepared || !ImportedResultSchema.safeParse(prepared).success) {
       throw new Error(`Invalid result at index ${idx}`);
     }
-    generateIdFromPrompt(fields.prompt);
+    generateIdFromPrompt(prepared.prompt);
+    summary.results[idx] = prepared;
   }
 }
 
@@ -256,33 +260,17 @@ async function importBlobAssets(blobAssets: PreparedBlobAsset[]): Promise<void> 
 async function recordImportedBlobReferences(
   blobAssets: PreparedBlobAsset[],
   evalId: string,
+  deferReference?: (write: BlobReferenceWrite) => void,
 ): Promise<void> {
   await Promise.all(
     blobAssets.map(({ asset }) =>
       recordBlobReference(asset.hash.toLowerCase(), {
         evalId,
         location: 'import',
+        deferReference,
       }),
     ),
   );
-}
-
-/**
- * Deletes the eval being replaced by a --force import. Returns its ID when a
- * delete happened so the caller can disclose the data loss if the rest of the
- * import then fails.
- */
-async function replaceExistingEval(
-  existingEval: Eval | undefined,
-  importId: string | undefined,
-): Promise<string | undefined> {
-  if (!existingEval) {
-    return undefined;
-  }
-
-  logger.info(`Replacing existing eval ${importId}`);
-  await existingEval.delete({ notify: false });
-  return importId;
 }
 
 function isImportableTrace(trace: unknown): trace is TraceData {
@@ -337,8 +325,8 @@ async function importTraces(
   traces: TraceData[],
   evalId: string,
   generateNewTraceIds: boolean,
+  traceStore: TraceStore,
 ): Promise<Map<string, string>> {
-  const traceStore = getTraceStore();
   const usedTraceIds = new Set<string>();
   const importedTraceIds = new Map<string, string>();
   for (const trace of traces) {
@@ -402,6 +390,8 @@ interface ImportedEvalContext {
   importAuthor: string | undefined;
 }
 
+type ImportDb = Pick<Awaited<ReturnType<typeof getDb>>, 'select' | 'insert' | 'transaction'>;
+
 function prepareImportArtifacts(
   evalData: any,
   importV3: boolean,
@@ -458,6 +448,7 @@ async function createImportedV3Eval(
   traces: TraceData[],
   blobAssets: PreparedBlobAsset[],
   context: ImportedEvalContext,
+  tx?: ImportDb,
 ): Promise<string> {
   logger.debug('Importing v3 eval');
   const evalRecord = await Eval.create(evalData.config, evalData.results.prompts, {
@@ -469,23 +460,36 @@ async function createImportedV3Eval(
     runtimeOptions: evalData.runtimeOptions,
     ...extractDurations(evalData),
   });
-  const importedTraceIds = await importTraces(traces, evalRecord.id, context.newId);
+  const importedTraceIds = await importTraces(
+    traces,
+    evalRecord.id,
+    context.newId,
+    tx ? new TraceStore(tx) : getTraceStore(),
+  );
   const importedResults = remapImportedResultTraceLinkage(
     evalData.results.results,
     importedTraceIds,
     evalRecord.id,
   );
-  await EvalResult.createManyFromEvaluateResult(importedResults, evalRecord.id);
-  await recordImportedBlobReferences(blobAssets, evalRecord.id);
+  await EvalResult.createManyFromEvaluateResult(importedResults, evalRecord.id, {
+    mediaPrepared: !!tx,
+  });
+  if (!tx) {
+    await recordImportedBlobReferences(blobAssets, evalRecord.id);
+  }
   return evalRecord.id;
 }
 
-async function createImportedV2Eval(evalData: any, context: ImportedEvalContext): Promise<string> {
+async function createImportedV2Eval(
+  evalData: any,
+  context: ImportedEvalContext,
+  tx?: ImportDb,
+): Promise<string> {
   logger.debug('Importing v2 eval');
   const evalId = context.newId
     ? createEvalId(context.importCreatedAt)
     : context.importId || createEvalId(context.importCreatedAt);
-  const db = await getDb();
+  const db = tx ?? (await getDb());
   await db
     .insert(evalsTable)
     .values({
@@ -501,6 +505,46 @@ async function createImportedV2Eval(evalData: any, context: ImportedEvalContext)
   return evalId;
 }
 
+async function persistImport(
+  evalData: any,
+  importV3: boolean,
+  { traces, blobAssets }: ReturnType<typeof prepareImportArtifacts>,
+  context: ImportedEvalContext,
+  existingEval?: Eval,
+) {
+  const create = (tx?: ImportDb) =>
+    importV3
+      ? createImportedV3Eval(evalData, traces, blobAssets, context, tx)
+      : createImportedV2Eval(evalData, context, tx);
+
+  await importBlobAssets(blobAssets);
+  if (!existingEval) {
+    return create();
+  }
+
+  // Store media outside the transaction. File contents are shared by hash.
+  // Defer all references, including share permissions, until the new eval exists.
+  const references: BlobReferenceWrite[] = [];
+  if (importV3) {
+    const defer = (write: BlobReferenceWrite) => references.push(write);
+    await prepareV3Replacement(evalData.results, existingEval.id, defer);
+    await recordImportedBlobReferences(blobAssets, existingEval.id, defer);
+  }
+
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    // Nested model transactions reuse this transaction. Roll back the deletion
+    // even if a projection fails on a row returned by the database.
+    logger.info(`Replacing existing eval ${existingEval.id}`);
+    await existingEval.delete({ notify: false });
+    const id = await create(tx);
+    for (const write of references) {
+      await write(tx);
+    }
+    return id;
+  });
+}
+
 export function importCommand(program: Command) {
   program
     .command('import <file>')
@@ -508,10 +552,6 @@ export function importCommand(program: Command) {
     .option('--new-id', 'Generate a new eval ID instead of preserving the original')
     .option('--force', 'Replace existing eval with the same ID')
     .action(async (file, cmdObj) => {
-      let evalId: string;
-      // Tracks the eval a --force replace deleted, so a later failure can warn
-      // the user it is gone instead of reporting an opaque error.
-      let removedExistingEvalId: string | undefined;
       try {
         const fileContent = await fs.readFile(file, 'utf-8');
         const parsed = parseImportFile(fileContent);
@@ -558,16 +598,7 @@ export function importCommand(program: Command) {
           }
         }
 
-        const { traces, blobAssets } = prepareArtifacts();
-        if (existingEval && importV3) {
-          preflightV3Replacement(evalData.config, evalData.results);
-        }
-
-        // Restore embedded media before the destructive replace so a corrupt
-        // artifact cannot delete the existing eval. blobAssets is empty for v2.
-        await importBlobAssets(blobAssets);
-        removedExistingEvalId = await replaceExistingEval(existingEval, importId);
-
+        const prepared = prepareArtifacts();
         const context: ImportedEvalContext = {
           newId: Boolean(cmdObj.newId),
           importId,
@@ -576,9 +607,7 @@ export function importCommand(program: Command) {
             ? undefined
             : extractAuthor(evalData),
         };
-        evalId = importV3
-          ? await createImportedV3Eval(evalData, traces, blobAssets, context)
-          : await createImportedV2Eval(evalData, context);
+        const evalId = await persistImport(evalData, importV3, prepared, context, existingEval);
         notifyEvaluationChanged(evalId);
 
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);
@@ -594,12 +623,6 @@ export function importCommand(program: Command) {
         logger.error(
           `Failed to import eval: ${error instanceof Error ? error.message : String(error)}`,
         );
-        if (removedExistingEvalId) {
-          notifyEvaluationsDeleted([removedExistingEvalId]);
-          logger.error(
-            `The existing eval ${removedExistingEvalId} was deleted for a --force replacement that did not complete. Re-import it from a backup.`,
-          );
-        }
         process.exitCode = 1;
       }
     });

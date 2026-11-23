@@ -88,6 +88,7 @@ describe('importCommand', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     process.exitCode = undefined;
 
     // Clean up temp file if it exists
@@ -1050,10 +1051,81 @@ describe('importCommand', () => {
       score: 1,
     };
 
+    it('commits trace linkage and media permissions with a V3 replacement', async () => {
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'false');
+      const blobDir = createTempDir('promptfoo-import-references-');
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+      try {
+        const { id } = await Eval.create({}, []);
+        const store = new TraceStore();
+        const traceId = 'replacement-trace';
+        await store.createTrace({ traceId, evaluationId: id, testCaseId: 'old' });
+        const { ref } = await storeBlob(Buffer.from('original'), 'image/png', {
+          evalId: id,
+          kind: 'image',
+        });
+        const audio = Buffer.alloc(2048, 1);
+        const embedded = Buffer.from('embedded image');
+        const hash = sha256(embedded);
+        const response = {
+          output: `promptfoo://blob/${ref.hash}`,
+          audio: { format: 'wav', data: audio.toString('base64') },
+          metadata: { image: `promptfoo://blob/${hash}` },
+        };
+        const data = {
+          id,
+          config: {},
+          results: { version: 3, prompts: [prompt], results: [{ ...validRow, traceId, response }] },
+          traces: [
+            { traceId, testCaseId: 'new', spans: [{ spanId: 'span', name: 'new', startTime: 1 }] },
+          ],
+          blobAssets: [
+            {
+              hash,
+              mimeType: 'image/png',
+              sizeBytes: embedded.length,
+              data: embedded.toString('base64'),
+            },
+          ],
+        };
+        tempFilePath = path.join(blobDir, 'replacement.json');
+        fs.writeFileSync(tempFilePath, JSON.stringify({ ...data, author: {} }));
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        expect(process.exitCode).toBe(1);
+        expect(await getShareAuthorizedBlob(ref.hash, id)).not.toBeNull();
+        expect(await getShareAuthorizedBlob(sha256(audio), id)).toBeNull();
+        expect(await getShareAuthorizedBlob(hash, id)).toBeNull();
+
+        process.exitCode = undefined;
+        fs.writeFileSync(tempFilePath, JSON.stringify(data));
+        const retry = new Command();
+        importCommand(retry);
+        await retry.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        expect(process.exitCode).toBeUndefined();
+        const [row] = await EvalResult.findManyByEvalId(id);
+        expect(row.toEvaluateResult()).toMatchObject({ evaluationId: id, traceId });
+        expect((await store.getTrace(traceId))?.spans[0].name).toBe('new');
+        expect((await getShareAuthorizedBlob(sha256(audio), id))?.data).toEqual(audio);
+        expect((await getShareAuthorizedBlob(hash, id))?.data).toEqual(embedded);
+        // A copied URI does not inherit the old eval's permission to share it.
+        expect(await getShareAuthorizedBlob(ref.hash, id)).toBeNull();
+      } finally {
+        resetBlobStorageProvider();
+        removeTempDir(blobDir);
+      }
+    });
+
     it.each([
       ['null result', 'results', null],
       ['missing provider', 'results', { ...validRow, provider: undefined }],
       ['missing prompt', 'results', { ...validRow, prompt: {} }],
+      ['malformed image', 'results', { ...validRow, response: { images: [null] } }],
+      [
+        'malformed audio',
+        'results',
+        { ...validRow, response: { audio: { data: 'noop', format: 1 } } },
+      ],
       ['null prompt', 'prompts', null],
       ['invalid label', 'prompts', { label: { text: 'invalid' } }],
       [
@@ -1067,9 +1139,22 @@ describe('importCommand', () => {
           vars: { values: Array(100_001).fill(0) },
         },
       ],
+      [
+        'oversized persisted verifier',
+        'results',
+        {
+          ...validRow,
+          testCase: {
+            assert: [{ type: 'promptfoo:redteam:coding-agent:connector-parameter-exfil' }],
+            // Fits until the database supplies additional columns for the stored row.
+            vars: { values: Array(99_979).fill(0) },
+          },
+        },
+      ],
     ] as const)(
       'keeps the original rows on an invalid V3 replacement (%s)',
       async (name, field, invalid) => {
+        vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'false');
         const id = 'eval-import-preflight';
         const results = { version: 3, prompts: [prompt], results: [validRow] };
         tempFilePath = path.join(__dirname, `temp-v3-projection-${Date.now()}.json`);
@@ -1089,7 +1174,7 @@ describe('importCommand', () => {
         await replacement.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
 
         expect(process.exitCode).toBe(1);
-        if (name === 'oversized verifier') {
+        if (name.startsWith('oversized')) {
           expect(logger.error).toHaveBeenCalledWith(
             expect.stringContaining('Verifier input is too large'),
           );
@@ -1099,6 +1184,40 @@ describe('importCommand', () => {
         expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
       },
     );
+
+    it.each([
+      [2, { author: {} }],
+      [2, { config: { description: {} } }],
+      [3, { author: {} }],
+      [3, { config: { description: {} } }],
+      [3, { config: { tags: { category: { toString: 5 } } } }],
+      [
+        3,
+        {
+          traces: [
+            {
+              traceId: 'invalid',
+              testCaseId: 'test',
+              spans: [{ spanId: 'span', name: 'fixture', startTime: 1, statusMessage: {} }],
+            },
+          ],
+        },
+      ],
+    ] as const)('rolls back malformed V%s import fields (case %#)', async (version, invalid) => {
+      const { id } = await Eval.create({ description: 'original' }, []);
+      const results =
+        version === 3
+          ? { version, prompts: [prompt], results: [validRow] }
+          : { version, table: { body: [] }, results: [] };
+      tempFilePath = path.join(__dirname, `temp-force-binding-${Date.now()}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify({ id, config: {}, results, ...invalid }));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+      expect(process.exitCode).toBe(1);
+      expect((await Eval.findById(id))?.config.description).toBe('original');
+      expect(await new TraceStore().getTracesByEvaluation(id)).toEqual([]);
+      expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
+    });
 
     it('redacts both result copies when importing legacy privacy checks', async () => {
       const id = 'eval-legacy-privacy';
@@ -1840,7 +1959,7 @@ describe('importCommand', () => {
       }
     });
 
-    it('should warn that the original eval was deleted when a --force replacement fails after deletion', async () => {
+    it('rolls back the original rows, traces and blob references when a replacement write fails', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
 
@@ -1848,10 +1967,25 @@ describe('importCommand', () => {
       await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
       expect(process.exitCode).toBeUndefined();
       expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(4);
+      const traceStore = new TraceStore();
+      await traceStore.createTrace({
+        traceId: 'original',
+        evaluationId: sampleData.evalId,
+        testCaseId: 'test',
+      });
+      await traceStore.addSpans('original', [
+        { spanId: 'span', name: 'original span', startTime: 1 },
+      ]);
+      const blobDir = createTempDir('promptfoo-import-rollback-');
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+      const { ref } = await storeBlob(Buffer.from('synthetic fixture'), 'image/png', {
+        evalId: sampleData.evalId,
+        kind: 'image',
+      });
 
       vi.clearAllMocks();
       process.exitCode = undefined;
-      // Fail after replaceExistingEval has already deleted the original eval.
+      // Fail after the replacement header has been inserted.
       const createSpy = vi
         .spyOn(EvalResult, 'createManyFromEvaluateResult')
         .mockRejectedValueOnce(new Error('result write failed'));
@@ -1862,15 +1996,16 @@ describe('importCommand', () => {
         await program2.parseAsync(['node', 'test', 'import', '--force', sampleFilePath]);
 
         expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('result write failed'));
-        expect(logger.error).toHaveBeenCalledWith(
-          expect.stringContaining('was deleted for a --force replacement'),
-        );
-        expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([sampleData.evalId]);
+        expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
+        expect(updateSignalFile).not.toHaveBeenCalled();
         expect(process.exitCode).toBe(1);
-        // The original results are gone — the disclosure tells the user why.
-        expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(0);
+        expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(4);
+        expect((await traceStore.getTrace('original'))?.spans[0].name).toBe('original span');
+        expect(await getShareAuthorizedBlob(ref.hash, sampleData.evalId)).not.toBeNull();
       } finally {
         createSpy.mockRestore();
+        resetBlobStorageProvider();
+        removeTempDir(blobDir);
       }
     });
 

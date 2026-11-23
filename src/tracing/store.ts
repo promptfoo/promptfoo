@@ -89,7 +89,12 @@ function computeDepth(
 }
 
 export class TraceStore {
-  private db: Awaited<ReturnType<typeof getDb>> | null = null;
+  constructor(
+    private db: Pick<
+      Awaited<ReturnType<typeof getDb>>,
+      'insert' | 'select' | 'transaction'
+    > | null = null,
+  ) {}
 
   private async getDatabase() {
     if (!this.db) {
