@@ -43,25 +43,29 @@ vi.mock('@app/stores/userStore', () => ({
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
-function Editor({ initial }: { initial: ProviderOptions }) {
+function Editor({ initial, validate }: { initial: ProviderOptions; validate?: boolean }) {
   const [target, setTarget] = useState(initial);
+  const [error, setError] = useState<string | null>(null);
   return (
     <TooltipProvider>
       <ProviderConfigEditor
         provider={target}
         setProvider={setTarget}
         providerType={getProviderEditorType(initial.id)}
+        validateAll={validate}
+        setError={setError}
       />
       <output data-testid="saved-target">{JSON.stringify(target)}</output>
+      {validate && <output data-testid="validation-error">{error}</output>}
     </TooltipProvider>
   );
 }
 
-function renderEditor(initial: ProviderOptions) {
+function renderEditor(initial: ProviderOptions, validate = false) {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
-  flushSync(() => root?.render(<Editor initial={initial} />));
+  flushSync(() => root?.render(<Editor initial={initial} validate={validate} />));
 }
 
 afterEach(() => {
@@ -667,13 +671,22 @@ it('preserves MCP while typing a Converse model ID', async () => {
 });
 
 it('configures OpenAI Responses from the Vertex form without carrying over other API settings', async () => {
+  const googleAuth = {
+    credentials: 'file://fixture-credentials.json',
+    keyFilename: '/fixture-key.json',
+    googleAuthOptions: { quotaProjectId: 'fixture-quota-project' },
+    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+  };
   renderEditor({
     id: 'vertex:claude-sonnet-5-5',
     config: {
+      ...googleAuth,
+      googleAuthOptions: { ...googleAuth.googleAuthOptions, apiKey: 'fixture-key' },
       projectId: 'preview-project',
       region: 'us-central1',
       apiKey: 'not-a-responses-credential',
       apiBaseUrl: 'https://example.com/v1',
+      tools: [{ type: 'web_search' }],
       max_tokens: 48,
     },
   });
@@ -696,6 +709,7 @@ it('configures OpenAI Responses from the Vertex form without carrying over other
     id: 'vertex:responses:gpt-6-luna',
     config: {
       region: 'global',
+      ...googleAuth,
       projectId: 'another-preview-project',
       max_output_tokens: 48,
       store: false,
@@ -705,7 +719,12 @@ it('configures OpenAI Responses from the Vertex form without carrying over other
   await page.getByLabelText('Vertex AI API').selectOptions('vertex');
   expect(JSON.parse((await saved.element()).textContent ?? '{}')).toEqual({
     id: 'vertex:gemini-3.8-flash',
-    config: { region: 'global', projectId: 'another-preview-project', max_tokens: 48 },
+    config: {
+      region: 'global',
+      ...googleAuth,
+      projectId: 'another-preview-project',
+      max_tokens: 48,
+    },
   });
 });
 
@@ -727,5 +746,31 @@ it('reopens and edits the canonical output token cap on a saved Vertex Responses
   expect(JSON.parse((await saved.element()).textContent ?? '{}')).toEqual({
     id: 'vertex:responses:gpt-6-luna',
     config: { max_output_tokens: 64, projectId: 'preview-project' },
+  });
+});
+
+it('flags a different provider route and accepts a full Vertex Responses provider ID', async () => {
+  renderEditor(
+    { id: 'vertex:responses:gpt-6-luna', config: { projectId: 'preview-project' } },
+    true,
+  );
+  const error = page.getByTestId('validation-error');
+  const model = page.getByLabelText('Model ID', { exact: false });
+
+  await model.fill('vertex:gemini-3.8-flash');
+  await expect.element(model).toHaveAttribute('aria-invalid', 'true');
+  await expect
+    .element(page.getByRole('alert'))
+    .toHaveTextContent('Enter a bare OpenAI model ID or a vertex:responses:<model> provider ID.');
+  expect((await error.element()).textContent).toContain('Enter a bare OpenAI model ID');
+
+  await model.fill('vertex:responses:gpt-6.2-sol');
+  await expect.element(model).toHaveValue('gpt-6.2-sol');
+  await expect.element(model).toHaveAttribute('aria-invalid', 'false');
+  expect(
+    JSON.parse((await page.getByTestId('saved-target').element()).textContent ?? '{}'),
+  ).toEqual({
+    id: 'vertex:responses:gpt-6.2-sol',
+    config: { projectId: 'preview-project' },
   });
 });

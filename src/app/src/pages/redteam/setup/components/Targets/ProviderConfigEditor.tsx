@@ -19,6 +19,7 @@ import CustomTargetConfiguration from './CustomTargetConfiguration';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import {
+  getVertexResponsesModelIdError,
   isBedrockAgentProviderId,
   isLocalOpenAiProviderType,
   isOpenAiChatProviderId,
@@ -436,8 +437,11 @@ function ProviderConfigEditor({
       }
     } else if (editorKind === 'foundation') {
       // Foundation model providers validation
-      if (!provider.id || !provider.id.trim() || provider.id.trim() === VERTEX_RESPONSES_PREFIX) {
-        errors.push('Model ID is required');
+      const modelError = provider.id?.trim()
+        ? getVertexResponsesModelIdError(provider.id)
+        : 'Model ID is required';
+      if (modelError) {
+        errors.push(modelError);
       }
       // Validate that temperature is within reasonable bounds if provided
       if (

@@ -28,6 +28,7 @@ import {
 } from '../constants';
 import { SetupSection } from '../SetupSection';
 import BedrockAuthentication from './BedrockAuthentication';
+import { getVertexResponsesModelIdError } from './helpers';
 
 import type { ProviderOptions } from '../../types';
 
@@ -236,6 +237,7 @@ const FoundationModelConfiguration = ({
     isBedrock && bedrockApiMode
       ? getBedrockApiError(bedrockApiMode, getBedrockModelFromId(modelDraft.providerId))
       : undefined;
+  const vertexModelError = getVertexResponsesModelIdError(selectedTarget.id);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isMcpOpen, setIsMcpOpen] = useState(Boolean(selectedTarget.config?.mcp?.servers?.length));
   const [isBedrockSettingsOpen, setIsBedrockSettingsOpen] = useState(
@@ -275,8 +277,8 @@ const FoundationModelConfiguration = ({
 
   const handleModelIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newId = e.target.value;
-    if (isVertex && !isVertexResponses && newId.startsWith(VERTEX_RESPONSES_PREFIX)) {
-      switchVertexRoute(newId);
+    if (isVertex && !isVertexResponses && newId.trim().startsWith(VERTEX_RESPONSES_PREFIX)) {
+      switchVertexRoute(newId.trim());
       return;
     }
     const providerId = isVertexResponses
@@ -314,11 +316,18 @@ const FoundationModelConfiguration = ({
 
   const switchVertexRoute = (id: string) => {
     // Don't carry endpoint overrides, API keys or tool settings across transports.
-    const { projectId } = selectedTarget.config ?? {};
+    const { projectId, credentials, keyFilename, googleAuthOptions, scopes } =
+      selectedTarget.config ?? {};
+    // The OAuth options also accept an API key, which is not shared by these routes.
+    const { apiKey: _apiKey, ...oauthOptions } = googleAuthOptions ?? {};
     const isResponses = id.startsWith(VERTEX_RESPONSES_PREFIX);
     updateCustomTarget('config', {
       region: 'global',
-      ...(projectId && { projectId }),
+      ...(projectId !== undefined && { projectId }),
+      ...(credentials !== undefined && { credentials }),
+      ...(keyFilename !== undefined && { keyFilename }),
+      ...(Object.keys(oauthOptions).length > 0 && { googleAuthOptions: oauthOptions }),
+      ...(scopes !== undefined && { scopes }),
       ...(typeof tokenLimit === 'number' && {
         [isResponses ? 'max_output_tokens' : 'max_tokens']: tokenLimit,
       }),
@@ -582,13 +591,15 @@ const FoundationModelConfiguration = ({
                   ? 'us.openai.gpt-5.6-sol'
                   : providerInfo.placeholder
             }
-            aria-invalid={Boolean(bedrockApiError)}
+            aria-invalid={Boolean(bedrockApiError || vertexModelError)}
             aria-describedby={
               isBedrock
                 ? bedrockApiError
                   ? 'bedrock-model-help bedrock-model-error'
                   : 'bedrock-model-help'
-                : undefined
+                : vertexModelError
+                  ? 'vertex-model-error'
+                  : undefined
             }
           />
           {isBedrock && (
@@ -613,6 +624,11 @@ const FoundationModelConfiguration = ({
               {bedrockApiError}
             </p>
           )}
+          {vertexModelError && (
+            <p id="vertex-model-error" role="alert" className="text-sm text-destructive">
+              {vertexModelError}
+            </p>
+          )}
           {isVertexResponses && (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
@@ -629,9 +645,9 @@ const FoundationModelConfiguration = ({
                 }
               />
               <p id="vertex-responses-auth" className="text-sm text-muted-foreground">
-                Uses Google Application Default Credentials on the machine running the eval, not an
-                OpenAI or Gemini API key. Leave the project blank to use{' '}
-                <code>GOOGLE_CLOUD_PROJECT</code>.
+                Uses Google OAuth, not an OpenAI or Gemini API key. If no Google credentials are
+                configured, it uses Application Default Credentials on the eval runner. Leave the
+                project blank to use <code>GOOGLE_CLOUD_PROJECT</code>.
               </p>
               {selectedTarget.config?.apiBaseUrl && (
                 <p className="text-sm text-muted-foreground">

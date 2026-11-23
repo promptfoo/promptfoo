@@ -1,3 +1,18 @@
+import { VERTEX_RESPONSES_PREFIX } from '../constants';
+
+export function getVertexResponsesModelIdError(providerId?: string): string | null {
+  if (!providerId?.startsWith(VERTEX_RESPONSES_PREFIX)) {
+    return null;
+  }
+  const model = providerId.slice(VERTEX_RESPONSES_PREFIX.length);
+  if (!model.trim()) {
+    return 'Model ID is required';
+  }
+  return /[:\s]/.test(model)
+    ? 'Enter a bare OpenAI model ID or a vertex:responses:<model> provider ID.'
+    : null;
+}
+
 type LocalOpenAiProviderType = 'llamafile' | 'vllm' | 'text-generation-webui';
 
 export function isOpenAiChatProviderId(providerId?: string): boolean {
