@@ -853,24 +853,26 @@ function pointerToken(name: string): string {
 
 // Return both the source spelling and decoded key so unchanged tokens stay intact.
 function localSchemaPointer(ref: string) {
-  if (/^#%2f/i.test(ref)) {
-    try {
+  try {
+    if (/^#%2f/i.test(ref)) {
       ref = decodeURIComponent(ref);
-    } catch {
-      return [{ raw: REDACTED, name: REDACTED }];
     }
-  }
-  if (ref === '#') {
-    return [];
-  }
-  if (!ref.startsWith('#/')) {
-    return undefined;
-  }
-  // A literal URL is a single trailing key. Locate only the scheme so a
-  // malformed suffix cannot trigger another scan at each embedded scheme.
-  const scheme = ref.search(/\/[a-z][a-z0-9+.-]*:\/\//i);
-  if (scheme !== -1) {
-    ref = ref.slice(0, scheme + 1) + pointerToken(ref.slice(scheme + 1));
+    if (ref === '#') {
+      return [];
+    }
+    if (!ref.startsWith('#/')) {
+      return undefined;
+    }
+    // A literal URL is a single trailing key. Locate only the scheme so a
+    // malformed suffix cannot trigger another scan at each embedded scheme.
+    const scheme = ref.search(/\/[a-z][a-z0-9+.-]*:\/\//i);
+    if (scheme !== -1) {
+      ref = ref.slice(0, scheme + 1) + pointerToken(ref.slice(scheme + 1));
+    }
+  } catch {
+    // Invalid percent escapes or lone surrogates have no unambiguous URI
+    // spelling. Never restore the raw suffix or guess a different key.
+    return [{ raw: REDACTED, name: REDACTED }];
   }
   return ref
     .slice(2)

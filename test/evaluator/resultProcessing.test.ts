@@ -57,6 +57,27 @@ describe('model-independent result processing', () => {
     }
   });
 
+  it.each(['\ud800', '\n\udfff'])('redacts unencodable URL pointers in saved rows (%j)', (tail) => {
+    const name = `https://example.test/${tail}?token=opaque`;
+    const ref = '#/$defs/' + name;
+    const value = {
+      type: 'object',
+      $defs: { [name]: { const: 'opaque' }, field: { type: 'integer' } },
+      properties: { password: { $ref: ref }, public: { $ref: '#/$defs/field' } },
+    };
+    const row = {
+      testCase: { assert: [{ type: 'is-json', value: JSON.stringify(value) }] },
+      error: `can't resolve reference ${ref} from id #`,
+    };
+    const safe = projectResultSchemas(row);
+    expect(JSON.stringify(safe)).not.toContain('opaque');
+    const projected = JSON.parse(safe.testCase.assert[0].value);
+    expect(projected.properties.password.$ref).toBe('#/[REDACTED]');
+    expect(projected.properties.public).toEqual(value.properties.public);
+    expect(projected.$defs.field).toEqual(value.$defs.field);
+    expect(projectResultSchemas(safe)).toEqual(safe);
+  });
+
   it('retains public diagnostics in nested results while protecting aggregate errors', () => {
     const assertion = {
       type: 'is-json',
