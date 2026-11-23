@@ -10,7 +10,7 @@ import {
   trace,
 } from '@opentelemetry/api';
 import logger from '../logger';
-import { getActiveSpanRole, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
+import { getActiveSpanRole, recordGraderChildSpan, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 import type { TokenUsage } from '../types/shared';
@@ -295,6 +295,7 @@ export async function withGenAIToolSpan<T>(
         }
         throw error;
       } finally {
+        recordGraderChildSpan(span);
         span.end();
       }
     },
@@ -446,6 +447,7 @@ export async function withGenAISpan<T>(
 
       throw error;
     } finally {
+      recordGraderChildSpan(span);
       span.end();
     }
   };
@@ -866,6 +868,7 @@ export function closeTurnSpan(
         ? { code: SpanStatusCode.ERROR, message: opts.errorMessage }
         : { code: SpanStatusCode.OK },
     );
+    recordGraderChildSpan(span);
     span.end(opts.eventTime);
   } catch (err) {
     logger.warn(`[${opts.logLabel ?? 'TurnSpan'}] Failed to end turn span: ${err}`);
@@ -899,6 +902,7 @@ export function emitTurnMarkerSpan(opts: {
         ? { code: SpanStatusCode.ERROR, message: opts.errorMessage }
         : { code: SpanStatusCode.OK },
     );
+    recordGraderChildSpan(span);
     span.end(opts.endTime);
   } catch (err) {
     logger.warn(`[${opts.logLabel ?? 'TurnSpan'}] Failed to emit turn span: ${err}`);

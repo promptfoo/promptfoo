@@ -1,4 +1,4 @@
-import { getLocalTargetSpans, SPAN_ROLE_ATTRIBUTE } from '../tracing/spanRoles';
+import { getLocalEvaluatorSpans, SPAN_ROLE_ATTRIBUTE } from '../tracing/spanRoles';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
@@ -504,16 +504,16 @@ export function summarizeTrajectoryForJudge(trace: TraceData): string {
 
 /** Only deterministic coding-agent checks may inspect full command arguments. */
 export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
-  const localTargets = codingAgent && getLocalTargetSpans();
-  if (localTargets && localTargets.size > 0) {
-    // Exclude only known bookkeeping. Retain child spans and extra action attributes.
+  const localSpans = codingAgent && getLocalEvaluatorSpans();
+  if (localSpans && localSpans.size > 0) {
+    // Retain untrusted spans, target actions and unexpected attributes.
     const spans = trace.spans.filter((span) => {
-      const target = localTargets.get(span.spanId);
+      const local = localSpans.get(span.spanId);
       return !(
-        target?.traceId === trace.traceId &&
-        target.name === span.name &&
-        span.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'target' &&
-        Object.keys(span.attributes).every((key) => target.attributes.includes(key))
+        local?.traceId === trace.traceId &&
+        local.name === span.name &&
+        span.attributes?.[SPAN_ROLE_ATTRIBUTE] === local.role &&
+        Object.keys(span.attributes).every((key) => local.attributes.includes(key))
       );
     });
     trace = { ...trace, spans };

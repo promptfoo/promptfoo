@@ -14,6 +14,9 @@ import { OffTopicPluginGrader } from '../../../src/redteam/plugins/offTopic';
 import { PolicyViolationGrader } from '../../../src/redteam/plugins/policy';
 import { SsrfGrader } from '../../../src/redteam/plugins/ssrf';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { resolveTracingOptions } from '../../../src/redteam/providers/tracingOptions';
+import { addHydra } from '../../../src/redteam/strategies/hydra';
+import { addIterativeJailbreaks } from '../../../src/redteam/strategies/iterative';
 import { isBasicRefusal } from '../../../src/redteam/util';
 import { getTraceStore } from '../../../src/tracing/store';
 import { createMockProvider } from '../../factories/provider';
@@ -324,6 +327,56 @@ describe('redteam output evidence', () => {
         hasTraceAwareAssertions([{ type: 'promptfoo:redteam:coding-agent:secret-env-read' }], test),
       ).toBe(false);
       const result = await runAssertion({ ...options, test, assertion, traceData });
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+      expect(result.pass).toBe(true);
+    });
+
+    it.each([
+      ['hydra', 'jailbreak:hydra'],
+      ['iterative', 'jailbreak'],
+      ['iterative-meta', 'jailbreak:meta'],
+    ] as const)('honors %s and %s trace opt-outs in both directions', async (runtime, strategy) => {
+      for (const source of [runtime, strategy, 'provider']) {
+        const exclude = { includeInGrading: false };
+        const input = {
+          ...options.test,
+          vars: { question: 'Fixture' },
+          metadata: {
+            ...options.test.metadata,
+            tracing: {
+              enabled: true,
+              strategies: source === 'provider' ? {} : { [source]: exclude },
+            },
+          },
+        };
+        const config = source === 'provider' ? { tracing: exclude } : {};
+        const [generated] =
+          runtime === 'hydra'
+            ? addHydra([input], 'question', config)
+            : addIterativeJailbreaks(
+                [input],
+                'question',
+                runtime === 'iterative' ? runtime : 'iterative:meta',
+                config,
+              );
+        const test = generated as AtomicTestCase;
+        expect(test.metadata?.strategyId).toBe(strategy);
+        expect(resolveTracingOptions({ strategyId: runtime, test, config }).includeInGrading).toBe(
+          false,
+        );
+        expect(hasTraceAwareAssertions([options.assertion], test)).toBe(false);
+        const result = await runAssertion({ ...options, test, traceData });
+        expect(matchesLlmRubric).not.toHaveBeenCalled();
+        expect(result.pass).toBe(true);
+      }
+    });
+
+    it('honors the active strategy provider when passed separately from the test', async () => {
+      const provider = createMockProvider({
+        id: 'promptfoo:redteam:hydra',
+        config: { tracing: { includeInGrading: false } },
+      });
+      const result = await runAssertion({ ...options, provider, traceData });
       expect(matchesLlmRubric).not.toHaveBeenCalled();
       expect(result.pass).toBe(true);
     });

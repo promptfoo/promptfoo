@@ -132,6 +132,7 @@ export async function runMetaAgentRedteam({
   perTurnLayers = [],
   inputs,
   targetId,
+  strategyConfig,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -148,6 +149,7 @@ export async function runMetaAgentRedteam({
   inputs?: Inputs;
   perTurnLayers?: LayerConfig[];
   targetId?: string;
+  strategyConfig?: Record<string, unknown>;
 }): Promise<{
   output: string;
   prompt?: string;
@@ -169,7 +171,7 @@ export async function runMetaAgentRedteam({
   const tracingOptions = resolveTracingOptions({
     strategyId: 'iterative-meta',
     test,
-    config: {},
+    config: strategyConfig,
   });
   const shouldFetchTrace =
     tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
@@ -829,6 +831,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      strategyConfig: this.config,
       targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
     });
   }

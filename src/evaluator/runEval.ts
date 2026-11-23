@@ -1,5 +1,9 @@
 import { LRUCache } from 'lru-cache';
-import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
+import {
+  hasTraceAwareAssertions,
+  hasTraceAwareRedteamAssertions,
+  runAssertions,
+} from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
@@ -500,9 +504,7 @@ async function callProviderForRunEval({
       };
     } else {
       const needsLiveTrace =
-        traceContext?.traceparent &&
-        test.assert?.some(hasNestedRedteamAssertion) &&
-        hasTraceAwareAssertions(test.assert, test);
+        traceContext?.traceparent && hasTraceAwareRedteamAssertions(test, provider);
       const invoke = () =>
         callActiveProvider({
           abortSignal,
@@ -549,6 +551,7 @@ async function callProviderForRunEval({
       try {
         await collectExternalTraceAfterProviderCall({
           abortSignal,
+          provider,
           providerFailed,
           response,
           test,
@@ -572,6 +575,7 @@ async function callProviderForRunEval({
 
 async function collectExternalTraceAfterProviderCall({
   abortSignal,
+  provider,
   providerFailed,
   response,
   test,
@@ -579,6 +583,7 @@ async function collectExternalTraceAfterProviderCall({
   traceContext,
 }: {
   abortSignal?: AbortSignal;
+  provider: ApiProvider;
   providerFailed: boolean;
   response?: ProviderResponse;
   test: AtomicTestCase;
@@ -603,7 +608,7 @@ async function collectExternalTraceAfterProviderCall({
     !response?.error &&
     response?.output !== null &&
     response?.output !== undefined &&
-    hasTraceAwareAssertions(test.assert, test);
+    hasTraceAwareAssertions(test.assert, test, provider);
 
   try {
     if (needsTraceForGrading) {
@@ -1131,7 +1136,7 @@ async function gradeRunEvalResponse({
   const traceId = getTraceId(traceContext);
   if (
     traceId &&
-    hasTraceAwareAssertions(test.assert, test) &&
+    hasTraceAwareAssertions(test.assert, test, provider) &&
     !isExternalTraceProvider(testSuite?.tracing?.provider)
   ) {
     await flushOtel();

@@ -167,6 +167,7 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
 function assertionTraceAccess(
   assertion: AssertionOrSet,
   test: AtomicTestCase,
+  provider?: ApiProvider,
   suppliedTrace = false,
 ): 'grading' | 'script' | undefined {
   if (assertionUsesTrace(assertion)) {
@@ -174,13 +175,13 @@ function assertionTraceAccess(
   }
 
   if (assertion.type === 'assert-set') {
-    return assertion.assert.some((item) => assertionTraceAccess(item, test))
+    return assertion.assert.some((item) => assertionTraceAccess(item, test, provider))
       ? 'grading'
       : undefined;
   }
 
   if (assertion.type.startsWith('promptfoo:redteam:')) {
-    const tracing = resolveTracingOptions({ test, strategyId: test.metadata?.strategyId ?? '' });
+    const tracing = resolveTracingOptions({ test, provider });
     if (
       tracing.includeInGrading &&
       (tracing.enabled ||
@@ -214,8 +215,21 @@ function assertionTraceAccess(
 export function hasTraceAwareAssertions(
   assertions?: AssertionOrSet[],
   test: AtomicTestCase = {},
+  provider?: ApiProvider,
 ): boolean {
-  return Boolean(assertions?.some((assertion) => assertionTraceAccess(assertion, test)));
+  return Boolean(assertions?.some((assertion) => assertionTraceAccess(assertion, test, provider)));
+}
+
+export function hasTraceAwareRedteamAssertions(
+  test: AtomicTestCase,
+  provider?: ApiProvider,
+): boolean {
+  const needsTrace = (assertion: AssertionOrSet): boolean =>
+    assertion.type === 'assert-set'
+      ? assertion.assert.some(needsTrace)
+      : assertion.type.startsWith('promptfoo:redteam:') &&
+        assertionTraceAccess(assertion, test, provider) === 'grading';
+  return Boolean(test.assert?.some(needsTrace));
 }
 
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
@@ -507,7 +521,7 @@ async function runAssertionInternal({
 
   const suppliedTrace = !!traceData && assertion.type.startsWith('promptfoo:redteam:');
   const traceAccess =
-    (traceId || suppliedTrace) && assertionTraceAccess(assertion, test, suppliedTrace);
+    (traceId || suppliedTrace) && assertionTraceAccess(assertion, test, provider, suppliedTrace);
   if (traceAccess) {
     try {
       const provided = traceData === undefined ? preloadedTraceData : traceData;
@@ -851,7 +865,7 @@ export async function runAssertions({
     .flat();
 
   let preloadedTraceData: TraceData | null | undefined;
-  if (traceId && hasTraceAwareAssertions(test.assert, test)) {
+  if (traceId && hasTraceAwareAssertions(test.assert, test, provider)) {
     try {
       preloadedTraceData = await loadTraceData(traceId);
     } catch (error) {

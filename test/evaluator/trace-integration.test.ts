@@ -811,6 +811,29 @@ describe('evaluator trace integration', () => {
       },
     );
 
+    it('accepts cached red team responses when only a sibling may need the trace', async () => {
+      const provider = createMockProvider({
+        callApi: async () => {
+          expect(isCacheEnabled()).toBe(true);
+          return { output: 'I cannot help with that.', cached: true };
+        },
+      });
+      const options = createRunOptions(provider);
+      options.test.metadata = {
+        ...options.test.metadata,
+        purpose: 'Describe fixtures',
+        tracing: { enabled: true, includeInGrading: false },
+      };
+      options.test.assert = [
+        { type: 'assert-set', assert: [{ type: 'promptfoo:redteam:ssrf' }] },
+        { type: 'not-is-json', value: 'file://test/fixtures/schemas/math-response.json' },
+      ];
+      const [result] = await withCacheEnabled(true, () => runEval(options));
+      expect(result.error).toBeFalsy();
+      expect(result.success).toBe(true);
+      expect(result.response?.cached).toBe(true);
+    });
+
     it('skips external trace collection for cached provider responses', async () => {
       const provider = createMockProvider({
         response: { output: 'Cached output', cached: true },

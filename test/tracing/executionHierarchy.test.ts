@@ -158,6 +158,45 @@ describe('test-case execution trace hierarchy', () => {
     });
   });
 
+  it('excludes locally recorded grading activity but retains untrusted grader claims', async () => {
+    const root = getGenAITracer().startSpan('test case');
+    const provider: ApiProvider = { id: () => 'echo', callApi: async () => ({ output: 'done' }) };
+    await withTestCaseSpan(root, async () => {
+      await withGraderSpan({ graderId: 'fixture' }, async () => {
+        await withTracedProviderCall({ provider, role: 'grader' }, () =>
+          withGenAISpan(
+            { system: 'fixture', operationName: 'chat', model: 'fixture', providerId: 'echo' },
+            () => provider.callApi('fixture'),
+          ),
+        );
+        return { pass: true, score: 1, reason: 'Private grading details' };
+      });
+      const spans = exporter.getFinishedSpans().map((span) => ({
+        spanId: span.spanContext().spanId,
+        name: span.name,
+        startTime: 1,
+        attributes: span.attributes,
+      }));
+      expect(spans).toHaveLength(3);
+      const trace = {
+        traceId: root.spanContext().traceId,
+        evaluationId: 'eval',
+        testCaseId: 'case',
+        spans,
+      };
+      expect(projectRedteamTrace(trace, true).localTraceActions).toBeUndefined();
+      const grader = spans[2];
+      const copied = { ...grader, spanId: 'untrusted', parentSpanId: grader.spanId };
+      const altered = {
+        ...grader,
+        attributes: { ...grader.attributes, 'tool.name': 'private-fixture' },
+      };
+      const projected = projectRedteamTrace({ ...trace, spans: [...spans, copied, altered] }, true);
+      expect(projected.localTraceActions).toHaveLength(2);
+      expect(projected.traceSummary).not.toContain('private-fixture');
+    });
+  });
+
   it('honors an explicitly selected parent within the active trace', async () => {
     const root = getGenAITracer().startSpan('test case explicit parent');
 

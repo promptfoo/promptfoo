@@ -142,6 +142,7 @@ export async function runRedteamConversation({
   inputs,
   attackerUsesRemoteProvider,
   targetId,
+  strategyConfig,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -162,6 +163,7 @@ export async function runRedteamConversation({
    * stays on the local path even when remote generation is enabled. */
   attackerUsesRemoteProvider?: boolean;
   targetId?: string;
+  strategyConfig?: Record<string, unknown>;
 }): Promise<{
   output: string;
   prompt?: string;
@@ -251,7 +253,7 @@ export async function runRedteamConversation({
   const tracingOptions = resolveTracingOptions({
     strategyId: 'iterative',
     test,
-    config: test?.metadata?.strategyConfig,
+    config: strategyConfig,
   });
   const shouldFetchTrace =
     tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
@@ -993,6 +995,7 @@ class RedteamIterativeProvider implements ApiProvider {
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
       attackerUsesRemoteProvider: this.attackerUsesRemoteProvider,
+      strategyConfig: this.config,
       targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
     });
   }
