@@ -534,18 +534,23 @@ describe('assertion schema projection', () => {
     },
   );
 
-  it('follows a public pointer to a schema inside an annotation and its credential references', () => {
-    const value = {
-      $ref: '#/examples/0',
-      examples: [{ type: 'object', properties: { password: { $ref: '#/default' } } }],
-      default: { $ref: '#/$defs/field' },
-      $defs: { field: { const: 'opaque' } },
-    };
-    expect(new Ajv().compile(value)({ password: 'opaque' })).toBe(true);
-    const validate = new Ajv().compile(project(value));
-    expect(validate({ password: '[REDACTED]' })).toBe(true);
-    expect(validate({ password: 'opaque' })).toBe(false);
-  });
+  it.each(['#/examples/0', '#/examples/0#', '#/examples/0#/'])(
+    'follows credential references in an annotation at %s',
+    ($ref) => {
+      const value = {
+        $ref,
+        examples: [{ type: 'object', properties: { password: { $ref: '#/default' } } }],
+        default: { $ref: '#/$defs/field' },
+        $defs: { field: { const: 'opaque' } },
+      };
+      expect(new Ajv().compile(value)({ password: 'opaque' })).toBe(true);
+      const safe = project(value);
+      expect(project(safe)).toEqual(safe);
+      const validate = new Ajv().compile(safe);
+      expect(validate({ password: '[REDACTED]' })).toBe(true);
+      expect(validate({ password: 'opaque' })).toBe(false);
+    },
+  );
 
   it.each(['default', 'examples/0'])(
     'inherits an embedded $id along a pointer through %s',
@@ -652,6 +657,32 @@ describe('assertion schema projection', () => {
     expect(safe.examples[0].env.PUBLIC_URL).toBe('ok');
     expect(new Ajv().compile(value)({ env })).toBe(true);
     expect(new Ajv().compile(safe)(safe.examples[0])).toBe(true);
+  });
+
+  it.each([
+    ['#vars', '#vars#'],
+    ['#vars', '#vars#/'],
+    ['#vars#', '#vars'],
+    ['#vars#/', '#vars'],
+  ])('protects environment members through anchor %s and reference %s', ($id, $ref) => {
+    const value = {
+      $id: 'https://example.test/root',
+      type: 'object',
+      definitions: {
+        vars: {
+          $id,
+          type: 'object',
+          properties: { DBPWD: { const: 'opaque' }, PUBLIC: { const: 'ok' } },
+        },
+      },
+      properties: { env: { $ref } },
+    };
+    const safe = project(value);
+    expect(safe.definitions.vars.properties.PUBLIC.const).toBe('ok');
+    expect(project(safe)).toEqual(safe);
+    const validate = new Ajv().compile(safe);
+    expect(validate({ env: { DBPWD: '[REDACTED]' } })).toBe(true);
+    expect(validate({ env: { DBPWD: 'opaque' } })).toBe(false);
   });
 
   const itemRef = { $ref: '#/definitions/item' };

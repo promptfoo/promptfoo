@@ -86,7 +86,7 @@ describe('model-independent result processing', () => {
     expect(projectResultSchemas(safe)).toEqual(safe);
   });
 
-  it.each(['#/[REDACTED]', '#%2F$defs%2Fbad%zz', '#/$defs/bad%zz', '#/$defs/vars#'])(
+  it.each(['#/[REDACTED]', '#%2F$defs%2Fbad%zz', '#/$defs/bad%zz'])(
     'does not guess which definition an ambiguous environment pointer identifies (%s)',
     ($ref) => {
       const value = {
@@ -104,6 +104,36 @@ describe('model-independent result processing', () => {
       expect(projectResultSchemas(safe)).toEqual(safe);
     },
   );
+
+  it.each(['[REDACTED]', '#/examples/bad%zz', '#/examples/0##'])(
+    'protects indirect credentials after losing a public reference (%s)',
+    ($ref) => {
+      const value = {
+        $ref,
+        examples: [{ properties: { password: { $ref: '#/default' } } }],
+        default: { $ref: '#/$defs/field' },
+        $defs: { field: { type: 'string', pattern: '^opaque$' } },
+      };
+      const row = {
+        testCase: { assert: [{ type: 'is-json', value }] },
+        error: 'data/password must match pattern "^opaque$"',
+      };
+      const safe = projectResultSchemas(row);
+      expect(JSON.stringify(safe)).not.toContain('opaque');
+      expect(safe.testCase.assert[0].value.$defs.field.type).toBe('string');
+      expect(projectResultSchemas(safe)).toEqual(safe);
+    },
+  );
+
+  it('protects environment constraints after losing a local anchor declaration', () => {
+    const value = {
+      $defs: { vars: { $id: '#vars##', properties: { DBPWD: { const: 'opaque' } } } },
+      properties: { env: { $ref: '#vars' } },
+    };
+    const safe = projectResultSchemas({ testCase: { assert: [{ type: 'is-json', value }] } });
+    expect(JSON.stringify(safe)).not.toContain('opaque');
+    expect(projectResultSchemas(safe)).toEqual(safe);
+  });
 
   it('retains public diagnostics in nested results while protecting aggregate errors', () => {
     const assertion = {

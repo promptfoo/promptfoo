@@ -817,9 +817,21 @@ function credentialSchemaName(literal: string, keyword?: string, env = false): b
   );
 }
 
+const SCHEMA_URL_TAIL = /\/[a-z][a-z0-9+.-]*:\/\//i;
+
 function splitSchemaUri(uri: string): [string, string] {
   const hash = uri.indexOf('#');
-  return hash === -1 ? [uri, ''] : [uri.slice(0, hash), uri.slice(hash)];
+  if (hash === -1) {
+    return [uri, ''];
+  }
+  let fragment = uri.slice(hash);
+  // AJV strips an extra trailing delimiter from pointers and named anchors.
+  // Normalize both lookup and output, except inside a literal URL key.
+  const suffix = fragment.search(/#\/?$/);
+  if (suffix > 0 && !SCHEMA_URL_TAIL.test(fragment)) {
+    fragment = fragment.slice(0, suffix);
+  }
+  return [uri.slice(0, hash), fragment];
 }
 
 // Only a whole # or #/ fragment names the resource itself. A trailing
@@ -861,7 +873,9 @@ type SchemaPointer = { raw: string; name: string }[];
 
 // An absent pointer may be an anchor. A malformed pointer has no safe target.
 function localSchemaPointer(ref: string): SchemaPointer | undefined | null {
-  if (UNPAIRED_SURROGATE.test(ref)) {
+  // After normalizing AJV's single delimiter, another raw hash outside
+  // a URL is ambiguous. An encoded %23 is still a valid part of a key.
+  if (UNPAIRED_SURROGATE.test(ref) || (ref.includes('#', 1) && !SCHEMA_URL_TAIL.test(ref))) {
     return null;
   }
   try {
@@ -882,14 +896,10 @@ function localSchemaPointer(ref: string): SchemaPointer | undefined | null {
     }
     // A literal URL is a single trailing key. Locate only the scheme so a
     // malformed suffix cannot trigger another scan at each embedded scheme.
-    const scheme = ref.search(/\/[a-z][a-z0-9+.-]*:\/\//i);
+    const scheme = ref.search(SCHEMA_URL_TAIL);
     const head = scheme < 0 ? ref.slice(2) : ref.slice(2, scheme + 1);
     const tail = scheme < 0 ? '' : pointerToken(ref.slice(scheme + 1));
-    // AJV strips a raw trailing # or #/ from an ordinary pointer. Do not
-    // guess between the shortened and literal keys. Encoded hashes are data.
-    if (!encoded && !tail && /#\/?$/.test(head)) {
-      return null;
-    }
+    // Percent signs and hashes from a decoded fragment are literal data.
     const body = (encoded ? head.replace(/[%#]/g, encodeURIComponent) : head) + tail;
     return body.split('/').map((raw) => ({
       raw,
@@ -1190,6 +1200,9 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
     if (typeof schema.$id === 'string') {
       const [path, fragment] = splitResourceUri(schema.$id);
       base = schemaResourceId(path, base);
+      if (base === REDACTED || schema.$id === REDACTED || localSchemaPointer(fragment) === null) {
+        pending.push(REDACTED);
+      }
       register(base + fragment, schema);
     }
     if (schema === root) {
@@ -1365,7 +1378,9 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
   // Even an ordinary reference can reach an annotation containing credential
   // properties. Promoted schemas append their own references to this queue.
   for (const { value, base } of references) {
-    referenceTarget(value, base);
+    if (referenceTarget(value, base) === REDACTED) {
+      pending.push(REDACTED);
+    }
   }
 
   function addEnvironment(value: unknown) {
