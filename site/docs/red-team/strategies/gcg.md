@@ -10,10 +10,6 @@ The GCG strategy generates adversarial suffixes inspired by the attack method de
 
 Promptfoo uses a hosted model to generate transferable GCG-style suffixes. It does not calculate gradients against your target model.
 
-:::note
-The hosted service currently generates at most two suffixes per prompt. Use this strategy to test whether transferable suffixes affect your target, not to reproduce the full white-box optimization from the paper.
-:::
-
 ## Implementation
 
 GCG requires an authenticated Promptfoo Cloud account. Sign in before generating tests:
@@ -28,7 +24,7 @@ Then add it to your `promptfooconfig.yaml`:
 strategies:
   - id: gcg
     config:
-      n: 2 # Number of adversarial suffixes to generate per prompt (maximum: 2, default: 1)
+      n: 2 # Number of adversarial suffixes to request per prompt
 ```
 
 ## How It Works
@@ -37,8 +33,8 @@ Promptfoo's strategy works by:
 
 1. Taking the original prompt
 2. Sending it to the hosted GCG generation service
-3. Receiving one or two transferable adversarial suffixes
-4. Appending those suffixes before the target is tested
+3. Receiving prompts with transferable adversarial suffixes
+4. Using each returned prompt as a test case
 
 The original GCG research uses a different, white-box optimization process:
 
@@ -65,7 +61,7 @@ The suffix is intended to increase the likelihood of an affirmative response.
 
 ## Configuration Options
 
-- `n`: Number of suffixes requested per prompt (default: `1`, maximum: `2`). Values above `2` are capped by the hosted service.
+Set `n` to the number of suffixes to request per prompt (default `1`). The hosted service may return fewer.
 
 ## Effectiveness
 

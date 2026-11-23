@@ -18,8 +18,8 @@ strategies:
     config:
       useBasicRefusal: false
       maxConcurrency: 3 # Maximum concurrent API calls (default)
-      nSteps: 10000 # Candidate-generation steps (default: 5, maximum: 20000)
-      maxCandidatesPerStep: 1 # Candidates generated per step (default: 1, maximum: 100)
+      nSteps: 5 # Candidate-generation steps to request
+      maxCandidatesPerStep: 1 # Candidates to request per step
 ```
 
 ## How It Works
@@ -57,16 +57,16 @@ Maximum number of prompt variations to test simultaneously. Higher values increa
 ### nSteps
 
 **Type:** `number`  
-**Default:** `5`
+**Default:** Set by the hosted service
 
-Number of candidate-generation steps. Each step generates `maxCandidatesPerStep` variations. The hosted service accepts up to `20000` steps. Generating more candidates does not guarantee that the target will receive them, because scheduling stops after a response without an error.
+Number of candidate-generation steps to request. Promptfoo stops scheduling target requests after a response without an error, even if more candidates are available.
 
 ### maxCandidatesPerStep
 
 **Type:** `number`  
-**Default:** `1`
+**Default:** Set by the hosted service
 
-Number of text variations generated per step. The hosted service accepts up to `100` candidates per step. Higher values increase the candidate pool, but concurrent calls already in progress may still complete after a response is selected.
+Maximum number of text variations to request per step.
 
 Start with `1`. A larger pool mainly affects error retries and requests already running when a normal response stops further scheduling.
 
