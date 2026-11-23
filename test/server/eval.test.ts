@@ -11,6 +11,7 @@ import EvalResult from '../../src/models/evalResult';
 import { generateIdFromPrompt } from '../../src/models/prompt';
 import { evaluateWithSource } from '../../src/node';
 import { loadApiProviders } from '../../src/providers/index';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { createApp } from '../../src/server/server';
 import { ResultFailureReason } from '../../src/types';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
@@ -438,6 +439,57 @@ describe('eval routes', () => {
     expect(calls).toEqual([]);
     expect(replay.status).toBe(400);
   });
+
+  it.each(['ambient', 'suite', 'provider'])(
+    'checks the original model gateway when its %s setting could be overridden',
+    async (scope) => {
+      const id = 'openai:chat:gpt-4.1';
+      const gateway = 'https://gateway.invalid/v1';
+      const destinations: string[] = [];
+      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockImplementation(
+        async function (this: OpenAiChatCompletionProvider) {
+          destinations.push(this.getApiUrl());
+          return { output: 'fixture' };
+        },
+      );
+      vi.stubEnv('OPENAI_API_KEY', 'synthetic-gateway-key');
+      vi.stubEnv('OPENAI_BASE_URL', gateway);
+      onTestFinished(() => {
+        vi.unstubAllEnvs();
+      });
+      const env = { OPENAI_BASE_URL: gateway };
+      const saved = await evaluateWithSource(
+        {
+          providers: [scope === 'provider' ? { id, env } : id],
+          ...(scope === 'suite' && { env }),
+          prompts: ['original'],
+          tests: [{ vars: {} }],
+          writeLatestResults: true,
+          sharing: false,
+        },
+        { cache: false, showProgressBar: false, eventSource: 'library' },
+      );
+      testEvalIds.add(saved.id);
+      expect(destinations.splice(0)).toEqual([gateway]);
+      vi.stubEnv('OPENAI_BASE_URL', undefined);
+      if (scope !== 'ambient') {
+        vi.stubEnv('OPENAI_API_HOST', 'changed.invalid');
+      }
+      const response = await api.post('/api/eval/replay').send({
+        evaluationId: saved.id,
+        promptIndex: 0,
+        prompt: 'edited',
+      });
+      if (scope === 'ambient') {
+        expect(destinations).toEqual([]);
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain('original model endpoint');
+      } else {
+        expect(destinations).toEqual([gateway]);
+        expect(response.status).toBe(200);
+      }
+    },
+  );
 
   it('refuses an unverifiable Azure destination even when no environment was saved', async () => {
     const { calls, first, other } = await replayTargets();

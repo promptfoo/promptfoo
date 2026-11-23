@@ -21,6 +21,8 @@ import * as templates from '../../../src/util/templates';
 import { setupTestServer } from '../../util/testServer';
 
 const evaluate = vi.mocked(evaluateWithSource);
+const gateway = 'https://gateway.invalid/v1';
+const openAiEnv = { OPENAI_BASE_URL: gateway };
 
 describe('POST /api/eval/replay provider boundary', () => {
   const api = setupTestServer(createApp);
@@ -145,7 +147,7 @@ describe('POST /api/eval/replay provider boundary', () => {
   it.each(['echo', 'openai:gpt-4.1', 'openai:codex-security-other'])(
     'preserves an ordinary selected provider in a mixed evaluation: %j',
     async (provider) => {
-      storedConfig(['openai:codex-security', provider]);
+      storedConfig(['openai:codex-security', provider], undefined, undefined, openAiEnv);
       const response = await replay(0, 1);
       expect(response.status).toBe(200);
       expect(response.body.output).toBe('replayed');
@@ -172,7 +174,7 @@ describe('POST /api/eval/replay provider boundary', () => {
     recordedTarget(id);
     vi.mocked(Eval.findById).mockResolvedValue({
       getPrompts: () => [first, second],
-      config: { providers: [{ id }], prompts: [first, second] },
+      config: { providers: [{ id }], prompts: [first, second], env: openAiEnv },
     } as unknown as Eval);
     expect((await replay(0, 0)).status).toBe(400);
     expect((await replay()).status).toBe(400);
@@ -189,7 +191,7 @@ describe('POST /api/eval/replay provider boundary', () => {
     const id = 'openai:agents-api';
     vi.mocked(Eval.findById).mockResolvedValue({
       getPrompts: () => [{ provider: id, label: 'original' }],
-      config: { providers: [{ id }], ...config },
+      config: { providers: [{ id }], env: openAiEnv, ...config },
     } as unknown as Eval);
     expect((await replay(0, 0)).status).toBe(400);
     expect(evaluate).not.toHaveBeenCalled();
@@ -200,7 +202,7 @@ describe('POST /api/eval/replay provider boundary', () => {
     async (provider) => {
       const [named, explicit] = await loadApiProviders([provider, { id: provider }]);
       expect(named.id()).not.toBe(explicit.id());
-      storedConfig([provider, { id: provider }], undefined, [named.id(), explicit.id()]);
+      storedConfig([provider, { id: provider }], undefined, [named.id(), explicit.id()], openAiEnv);
       expect((await replay(0, 0)).status).toBe(200);
       expect(evaluate.mock.calls[0][0].providers).toEqual([provider]);
       expect((await replay(0, 1)).status).toBe(200);
@@ -221,6 +223,23 @@ describe('POST /api/eval/replay provider boundary', () => {
       }
     },
   );
+
+  it.each([
+    { id: 'openai:responses:gpt-4.1' },
+    { id: 'anthropic:messages:claude-sonnet-4-5' },
+    { id: 'ollama:chat:llama3' },
+    { id: 'openai:chat:gpt-4.1', config: { apiBaseUrl: 'https://gateway.invalid/[REDACTED]' } },
+    { id: 'openai:chat:gpt-4.1', env: { OPENAI_API_HOST: '[REDACTED]' } },
+    { id: 'anthropic:claude-agent-sdk', env: { ANTHROPIC_BASE_URL: gateway } },
+    { id: 'openai:agents:fixture', env: openAiEnv },
+  ])('requires a verifiable saved model endpoint for $id', async (provider) => {
+    storedConfig([provider]);
+    recordedTarget(provider.id);
+    const response = await replay(0, 0);
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('original model endpoint');
+    expect(evaluate).not.toHaveBeenCalled();
+  });
 
   it('rejects a legacy snapshot with an ambiguous OpenAI model ID', async () => {
     const id = 'openai:gpt-4.1';
@@ -254,7 +273,10 @@ describe('POST /api/eval/replay provider boundary', () => {
         env: { ANTHROPIC_API_KEY: 'fixture' },
       });
       recordedTarget(provider.id());
-      storedConfig([selector], undefined, [provider.id()]);
+      const env: Record<string, string> = selector.startsWith('ollama:')
+        ? { OLLAMA_BASE_URL: gateway }
+        : { ANTHROPIC_BASE_URL: gateway };
+      storedConfig([selector], undefined, [provider.id()], env);
       expect((await replay(0, 0)).status).toBe(200);
       expect((await replay()).status).toBe(200);
       expect(evaluate.mock.calls[0][0].providers).toEqual([selector]);
@@ -286,7 +308,7 @@ describe('POST /api/eval/replay provider boundary', () => {
   it('keeps a native selector that matches its repeated prompt columns', async () => {
     const provider = 'ollama:completion:llama3';
     const [native] = await loadApiProviders([provider]);
-    storedConfig([provider], undefined, [native.id(), native.id()]);
+    storedConfig([provider], undefined, [native.id(), native.id()], { OLLAMA_BASE_URL: gateway });
     expect((await replay(0, 1)).status).toBe(200);
     expect(evaluate.mock.calls[0][0].providers).toEqual([provider]);
   });

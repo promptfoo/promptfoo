@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
-import { getEnvBool, getEnvString } from '../../envars';
+import { getEnvBool } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
@@ -1139,13 +1139,16 @@ const REPLAY_REQUEST_SETTINGS = new Set([
   'stream',
 ]);
 
+function bindReplaySetting(value: string, env: ProviderOptions['env']) {
+  return value.replace(/\{\{[^{}]*\}\}/g, (expr) => replayEnvValue(expr, env));
+}
+
 // Outside the request body, an explicit setting can change the destination
 // (including an auxiliary session or token URL). Inspect only literal saved
 // environment bindings. Never run templates or read ambient values here.
 function verifyReplayBindings(value: unknown, env: ProviderOptions['env']) {
   if (typeof value === 'string' && TEMPLATE_MARKER.test(value)) {
-    const literal = value.replace(/\{\{[^{}]*\}\}/g, (expr) => replayEnvValue(expr, env));
-    if (TEMPLATE_MARKER.test(literal)) {
+    if (TEMPLATE_MARKER.test(bindReplaySetting(value, env))) {
       throw new Error('Cannot verify provider template');
     }
   } else if (value && typeof value === 'object') {
@@ -1155,40 +1158,51 @@ function verifyReplayBindings(value: unknown, env: ProviderOptions['env']) {
   }
 }
 
-// A runtime ID usually omits the endpoint. Never combine saved configuration
-// or credentials with an implicit destination, including a changed gateway.
+class UnverifiedModelEndpoint extends Error {}
+
+function isLiteralReplayAddress(address: unknown) {
+  return (
+    typeof address === 'string' &&
+    !!address.trim() &&
+    !TEMPLATE_MARKER.test(address) &&
+    !/\[REDACTED\]|%5BREDACTED%5D/i.test(address)
+  );
+}
+
+// Only accept aliases for native model transports that honor them. Agent
+// backends and multi-service providers can choose a different destination.
+function replayEndpointAliases(path: string) {
+  if (path.startsWith('ollama:')) {
+    return ['OLLAMA_BASE_URL'];
+  }
+  if (path.startsWith('anthropic:') && !/^anthropic:claude-(?:agent-sdk|code)/.test(path)) {
+    return ['ANTHROPIC_BASE_URL'];
+  }
+  if (/^(?:openai|mistral):/.test(path) && !/^openai:agents(?::|$)/.test(path)) {
+    return getProviderEndpointAliases(path);
+  }
+  return [];
+}
+
+// A model ID omits the endpoint. Even if no gateway is configured today,
+// one may have been set in the original process and removed since then.
 function verifyModelEndpoint(
   path: string,
   settings: Record<string, unknown>,
   env: ProviderOptions['env'],
 ) {
-  const aliases = path.startsWith('ollama:')
-    ? ['OLLAMA_BASE_URL']
-    : path.startsWith('anthropic:')
-      ? ['ANTHROPIC_BASE_URL']
-      : getProviderEndpointAliases(path);
-  // An unknown transport can read an ambient destination even without any
-  // saved settings. Its unchanged display ID is insufficient evidence.
-  if (!aliases.length) {
-    throw new Error('Unknown model destination');
-  }
   const explicit = getNamedOpenAiTextId(path) && (settings.apiHost || settings.apiBaseUrl);
   if (explicit) {
-    return; // Explicit templates are checked against saved bindings below.
-  }
-  const endpoints = aliases.map((key) => env?.[key]).filter(Boolean);
-  if (endpoints.length) {
-    if (endpoints.some((url) => typeof url !== 'string' || TEMPLATE_MARKER.test(url))) {
-      throw new Error('Cannot verify saved model destination');
+    if (typeof explicit !== 'string' || !isLiteralReplayAddress(bindReplaySetting(explicit, env))) {
+      throw new UnverifiedModelEndpoint();
     }
     return;
   }
-  if (
-    Object.keys(env ?? {}).length ||
-    aliases.some((key) => getEnvString(key)) ||
-    Object.keys(settings).length
-  ) {
-    throw new Error('Cannot verify implicit model destination');
+  const endpoints = replayEndpointAliases(path)
+    .map((key) => env?.[key])
+    .filter(Boolean);
+  if (!endpoints.length || !endpoints.every(isLiteralReplayAddress)) {
+    throw new UnverifiedModelEndpoint();
   }
 }
 
@@ -1262,12 +1276,7 @@ function hasStaticReplayRoute(path: string, config: Record<string, unknown>) {
   } else {
     return false;
   }
-  return (
-    typeof destination === 'string' &&
-    !!destination &&
-    !TEMPLATE_MARKER.test(destination) &&
-    !/\[REDACTED\]|%5BREDACTED%5D/i.test(destination)
-  );
+  return isLiteralReplayAddress(destination);
 }
 
 function prepareReplaySettings(
@@ -1393,10 +1402,13 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     let candidate;
     try {
       candidate = prepareReplaySettings(selected, eval_.config.basePath, eval_.config.env);
-    } catch {
-      res
-        .status(400)
-        .json({ error: 'Cannot verify provider settings. Rerun using the eval configuration.' });
+    } catch (error) {
+      res.status(400).json({
+        error:
+          error instanceof UnverifiedModelEndpoint
+            ? 'Cannot verify the original model endpoint. Rerun using the eval configuration with the intended endpoint set explicitly.'
+            : 'Cannot verify provider settings. Rerun using the eval configuration.',
+      });
       return;
     }
     const evaluateReplay = () =>

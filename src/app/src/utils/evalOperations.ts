@@ -22,6 +22,12 @@ export const replayEvaluation = async (
     });
 
     if (!response.ok) {
+      if (response.headers?.get('content-type')?.includes('application/json')) {
+        const data = await response.json();
+        return {
+          error: typeof data?.error === 'string' ? data.error : 'Failed to replay evaluation',
+        };
+      }
       const error = await response.text();
       return { error: error || 'Failed to replay evaluation' };
     }
