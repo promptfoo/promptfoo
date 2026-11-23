@@ -536,6 +536,67 @@ describe('OTLPTracingExporter', () => {
   });
 
   it.each(formats)(
+    'protects unquoted credential values and literal defaults in %s',
+    async (format) => {
+      const ordinary = 'const cacheKey = process.env.CACHE_KEY ?? "shown";';
+      const { attributes } = await exportCustomData(format, {
+        comma: 'status=ok,password=opaque',
+        table: 'service = { password=123456, region="west" }',
+        compact: 'service={password=123456}',
+        logical: 'if (ready) cfg.password??=123456;',
+        fallback: 'const apiKey = process.env.API_KEY ?? "opaque/default";',
+        alternative: 'const password = settings.value || "opaque/default";',
+        conditional: 'const apiKey = configured ? configured : "opaque/default";',
+        ordinary,
+      });
+      for (const key of ['table', 'compact', 'logical']) {
+        expect(attributes[key]).not.toContain('123456');
+      }
+      expect(attributes.ordinary).toBe(ordinary);
+    },
+  );
+
+  it.each(formats)(
+    'keeps static credential names through JavaScript lexical ambiguity in %s',
+    async (format) => {
+      const ordinary = 'const cache = { pattern: /[}]/, key: "shown" };';
+      const { attributes } = await exportCustomData(format, {
+        indexed: 'cfg.api[0].key = "opaque/index";',
+        nested: 'cfg.private[0x10][1].key = "opaque/nested";',
+        escaped: String.raw`cfg["pass\word"] = "opaque/identity";`,
+        privateField: 'class Client { #api = {key: "opaque/private"}; }',
+        pattern: 'const cfg = { api: {pattern: /#/, key: "opaque/hash"} };',
+        brace: 'const api = { pattern: /[}]/, key: "opaque/brace" };',
+        ordinary,
+        list: 'cfg.cache[0].key = "shown";',
+        oversized: 'const cache = { pattern: /#/, items: [' + '0,'.repeat(5_001) + '] };',
+      });
+      expect(attributes.ordinary).toBe(ordinary);
+      expect(attributes.list).toBe('cfg.cache[0].key = "shown";');
+      expect(attributes.oversized).toBe('<redacted>');
+    },
+  );
+
+  it.each(formats)('masks named multi-value headers in %s', async (format) => {
+    const headers = [
+      { name: 'Authorization', values: ['opaque/first', 'opaque/second'] },
+      { key: 'X-Api-Key', Values: ['opaque/key'] },
+      { name: 'Cache-Control', values: ['public'] },
+    ];
+    const { attributes } = await exportCustomData(format, {
+      request: { headers },
+      serialized: JSON.stringify({ headers }),
+    });
+    for (const key of ['request', 'serialized']) {
+      expect(JSON.parse(attributes[key] as string).headers).toEqual([
+        { name: 'Authorization', values: '<redacted>' },
+        { key: 'X-Api-Key', Values: '<redacted>' },
+        { name: 'Cache-Control', values: ['public'] },
+      ]);
+    }
+  });
+
+  it.each(formats)(
     'withholds ambiguous JavaScript credential assignments in %s',
     async (format) => {
       const { attributes } = await exportCustomData(format, {

@@ -1,3 +1,4 @@
+import { tokenizer, tokTypes } from 'acorn';
 import logger from '../../logger';
 import { encodeExportTraceServiceRequest } from '../../tracing/protobuf';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -754,7 +755,7 @@ function sanitizeCredentialText(
   }
 
   // Mask field values before Stripe keys, since names like sk_org_token can match both.
-  return redactStripeKeys(
+  const clean = redactStripeKeys(
     redactQuotedCredentials(value)
       .replace(/\b(?:gh[opsur]_|github_pat_|glpat-)[A-Za-z0-9_-]+/g, '<redacted>')
       .replace(/\b(?:sk|pk|key)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
@@ -809,13 +810,16 @@ function sanitizeCredentialText(
             : match,
       )
       .replace(
-        /(^|[?&#;:\s])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*(?:\[[\w.%+-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]]+)\4/gi,
+        /(^|[?&#;:,\s{])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*(?:\[[\w.%+-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]]+)\4/gi,
         (match, prefix: string, key: string, separator: string, quote: string, raw: string) =>
           isPrivateParameter(key, prefix, raw, inspectEncoding)
             ? prefix + key + separator + quote + '<redacted>' + quote
             : match,
       ),
   );
+  // The format-specific rules can consume an outer assignment while missing
+  // an inner unquoted credential. Never export a surviving bare assignment.
+  return /[:=]/.test(clean) ? checkCredentialAssignments(clean) : clean;
 }
 
 // Inspect escaped delimiters and ANSI colors without putting decoded text into a trace.
@@ -1089,6 +1093,52 @@ function literalBoundaryCheck(value: string) {
   };
 }
 
+// In JavaScript, # can introduce a private field and regex literals may
+// contain arbitrary braces or comment markers. Tokenize without evaluating
+// the source. Only use this alternate reading to withhold, never to export.
+function javascriptPropertyText(value: string): string {
+  if (!/[[{]/.test(value) || !/[#\\/]|\[\s*\d/.test(value)) {
+    return value;
+  }
+  let text = '';
+  let copied = 0;
+  let remaining = MAX_STRUCTURED_ATTRIBUTE_NODES;
+  try {
+    for (const token of tokenizer(value, { ecmaVersion: 'latest' })) {
+      if (--remaining < 0) {
+        return '<redacted>';
+      }
+      const literal = 'value' in token ? token.value : undefined;
+      let spelling: string;
+      if (token.type === tokTypes.regexp) {
+        spelling = '0';
+      } else if (token.type === tokTypes.privateId) {
+        spelling = value.slice(token.start + 1, token.end);
+      } else if (typeof literal === 'string' && token.type === tokTypes.string) {
+        spelling = JSON.stringify(literal);
+      } else if (
+        typeof literal === 'string' &&
+        token.type === tokTypes.template &&
+        /^[\w.$-]+$/.test(literal)
+      ) {
+        spelling = literal;
+      } else if (token.type === tokTypes.num && Number.isSafeInteger(literal)) {
+        spelling = String(literal);
+      } else {
+        continue;
+      }
+      text += value.slice(copied, token.start) + spelling;
+      copied = token.end;
+    }
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      return '<redacted>';
+    }
+    // Trace fields also contain fragments and non-JavaScript configuration.
+  }
+  return text + value.slice(copied);
+}
+
 function redactCredentialLiterals(value: string): string {
   if (!/[:="'`]/.test(value)) {
     return value;
@@ -1096,17 +1146,27 @@ function redactCredentialLiterals(value: string): string {
   if (hasCredentialTable(value)) {
     return '<redacted>';
   }
-  const masked = maskAssignedLiterals(value);
-  if (!/\/[*/]|[()]/.test(masked)) {
+  return maskAssignedLiterals(value);
+}
+
+function checkCredentialAssignments(value: string): string {
+  const masked = maskAssignedLiterals(value, true);
+  if (!/\/[*/]|[()[{]/.test(masked)) {
     return masked;
   }
   // Comments and grouping can split a static key, assignment, or template tag.
   // Skip quoted paths and globs so they cannot hide subsequent assignments.
   // Only use this alternate reading to decide whether to withhold the field.
-  const joined = masked.replace(SOURCE_LITERALS, (token) => (/^[()/]/.test(token) ? ' ' : token));
+  const source = javascriptPropertyText(masked);
+  if (source === '<redacted>') {
+    return source;
+  }
+  const joined = source
+    .replace(SOURCE_LITERALS, (token) => (/^[()/]/.test(token) ? ' ' : token))
+    .replace(/\[\s*["'`]?\d+["'`]?\s*\]/g, '');
   if (
     joined !== masked &&
-    (hasCredentialTable(joined) || maskAssignedLiterals(joined) !== joined)
+    (hasCredentialTable(joined) || maskAssignedLiterals(joined, true) !== joined)
   ) {
     return '<redacted>';
   }
@@ -1197,7 +1257,10 @@ function hasCredentialPath(value: string): boolean {
   return false;
 }
 
-function isAmbiguousAssignment(value: string, start: number): boolean {
+function isAmbiguousAssignment(value: string, start: number, requireMasked: boolean): boolean {
+  if (requireMasked) {
+    return !value.startsWith('<redacted>', start);
+  }
   if (value[start] === '{') {
     // Only a flat brace-delimited ODBC value can use the scalar masker.
     // A TOML inline table can contain nested or quoted closing braces.
@@ -1213,7 +1276,15 @@ function isAmbiguousAssignment(value: string, start: number): boolean {
   );
 }
 
-function maskAssignedLiterals(value: string): string {
+// A scalar masker would leave a literal in a default or conditional expression intact.
+function hasAssignmentExpression(value: string): boolean {
+  return (
+    /(?:\?\?|\|\|)(?!=)|(?:&&|[?+])[\s(]*["'`]/.test(value) ||
+    (value.includes('?') && /:[\s(]*["'`]/.test(value))
+  );
+}
+
+function maskAssignedLiterals(value: string, requireMaskedScalars = false): string {
   // Treat identifier escapes and continued lines as part of their token. Keep
   // offsets into the original text so only the assigned value gets replaced.
   const tokens = value.replace(
@@ -1225,9 +1296,10 @@ function maskAssignedLiterals(value: string): string {
   const segments =
     /((?<!\\)"(?:\\.|[^"\\\r\n])*"|'[^'\r\n]*'|`[^`\r\n]*`(?=\s*\])|(?<![\w$-])[\w$-]+)(\s*(?:\]\s*)?([.:]|(?:\+|\?\?|\|\||&&)?=|\[(?=\s*["'`])|\/[*/])\s*)/g;
   const templateTag = /[\w$]+(?:\s*\.\s*[\w$]+)*\s*(?:\.\s*)?(?=`|\/[*/]|\[|\()/y;
-  const continuation = /\s*(?:\+|\?\?|\|\||&&)/y;
+  const continuation = /\s*(?:[+?]|\|\||&&)/y;
   const delimiters = ['"""', "'''", '"', "'", '`'];
   const hasTemplate = value.includes('`');
+  const hasExpression = hasAssignmentExpression(value);
   const crossesBoundary = literalBoundaryCheck(value);
   const parts: string[] = [];
   let next = -1;
@@ -1263,7 +1335,11 @@ function maskAssignedLiterals(value: string): string {
       hasTemplate && templateTag.test(tokens) ? templateTag.lastIndex : segments.lastIndex;
     const delimiter = delimiters.find((candidate) => value.startsWith(candidate, start));
     if (!delimiter) {
-      if (qualified || isAmbiguousAssignment(value, start)) {
+      if (
+        operator.length > 1 ||
+        hasExpression ||
+        isAmbiguousAssignment(value, start, qualified || requireMaskedScalars)
+      ) {
         return '<redacted>';
       }
       continue; // Unquoted scalars have format-specific delimiters.
@@ -1394,7 +1470,7 @@ function isCredentialParameter(source: StructuredValue, key: string, context?: C
     }
     return /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) && isCredentialAttributeKey(option);
   }
-  if (key.toLowerCase() === 'value') {
+  if (/^values?$/i.test(key)) {
     return Object.entries(source).some(
       ([field, name]) =>
         /^(name|key)$/i.test(field) &&
@@ -1458,7 +1534,7 @@ function isCredentialEntry(
     /^key$/i.test(key) &&
     typeof entry === 'string' &&
     isCredentialHeader(entry, '') &&
-    Object.keys(source).some((field) => /^value$/i.test(field));
+    Object.keys(source).some((field) => /^values?$/i.test(field));
   return (
     (!headerLabel &&
       (isCredentialAttributeKey(key, context) ||
