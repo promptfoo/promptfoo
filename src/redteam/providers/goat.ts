@@ -19,6 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { getStrategyContext, requiresTraceRedaction } from '../../util/traceRedaction';
 import { getTargetConversation } from '../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
@@ -49,8 +50,12 @@ import {
   buildGraderResultAssertion,
   callTargetProvider,
   captureFlaggedTurn,
+  externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getLastMessageContent,
+  getTargetSessionId,
+  gradeRedactionResponse,
+  PrivateVerificationError,
   resolveStoredGraderResult,
   runRedteamGrader,
   tryUnblocking,
@@ -94,6 +99,8 @@ interface GoatMetadata extends BaseRedteamMetadata {
   successfulAttacks?: SuccessfulGoatAttack[];
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
+  storedGraderResults?: Record<number, GradingResult>;
+  redactionContentOmitted?: boolean;
   traceSnapshots?: Record<string, unknown>[];
   transformDisplayVars?: Record<string, string>;
 }
@@ -202,6 +209,7 @@ export default class GoatProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<GoatResponse> {
+    context = context && getStrategyContext(context);
     // Reset successful attacks array for each new call
     this.successfulAttacks = [];
 
@@ -210,12 +218,16 @@ export default class GoatProvider implements ApiProvider {
       test: context?.test,
       config: this.config,
     });
+    const redactTrace = requiresTraceRedaction(
+      (context?.test as AtomicTestCase | undefined)?.assert,
+    );
     const shouldFetchTrace =
-      tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
+      !redactTrace &&
+      tracingOptions.enabled &&
+      (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
     const traceSnapshots: TraceContextData[] = [];
 
     let response: Response | undefined = undefined;
-    logger.debug('[GOAT] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -253,6 +265,7 @@ export default class GoatProvider implements ApiProvider {
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
+    const storedGraderResults: Record<number, GradingResult> = {};
     let flaggedTurn: FlaggedTurn | undefined;
     const { getGraderById } = await import('../graders');
     let test: AtomicTestCase | undefined;
@@ -268,6 +281,10 @@ export default class GoatProvider implements ApiProvider {
         assertToUse = test?.assert?.find((a: { type: string }) => a.type);
       }
     }
+
+    let privateSessionId: string | undefined;
+    let redactionError: string | undefined;
+    let mediaRedactionFailed = false;
 
     let previousAttackerMessage = '';
     let previousTargetOutput = '';
@@ -332,12 +349,38 @@ export default class GoatProvider implements ApiProvider {
             }
 
             throwIfTargetPromptExceedsMaxChars(unblockingTargetPrompt, maxCharsPerMessage);
-            const unblockingResponse = await callTargetProvider(
+            let unblockingResponse = await callTargetProvider(
               targetProvider,
               unblockingTargetPrompt,
-              context,
+              privateSessionId
+                ? { ...context, vars: { ...context.vars, sessionId: privateSessionId } }
+                : context,
               options,
             );
+
+            if (redactTrace) {
+              privateSessionId = getTargetSessionId(unblockingResponse) ?? privateSessionId;
+            } else if (unblockingResponse.sessionId) {
+              context.vars.sessionId = unblockingResponse.sessionId;
+            }
+
+            if (redactTrace) {
+              unblockingResponse = await externalizeResponseForRedteamHistory(
+                unblockingResponse,
+                context,
+              );
+              storedGraderResult = await gradeRedactionResponse(
+                unblockingTargetPrompt,
+                unblockingResponse,
+                test,
+                storedGraderResults,
+              );
+              graderPassed = storedGraderResult?.pass;
+              if (!mediaRedactionFailed) {
+                redactionError = unblockingResponse.error;
+              }
+              mediaRedactionFailed ||= unblockingResponse.metadata?.redactionMediaOmitted === true;
+            }
 
             if (!unblockingResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
               logger.debug(`Sleeping for ${targetProvider.delay}ms`);
@@ -599,11 +642,12 @@ export default class GoatProvider implements ApiProvider {
               ...context,
               vars: {
                 ...targetVars,
+                ...(privateSessionId && { sessionId: privateSessionId }),
                 [this.config.injectVar]: targetPrompt,
               },
             }
           : context;
-        const targetResponse = (await callTargetProvider(
+        let targetResponse = (await callTargetProvider(
           targetProvider,
           targetPrompt,
           targetContext,
@@ -611,6 +655,27 @@ export default class GoatProvider implements ApiProvider {
         )) as GoatProviderResponse;
         messages.push(pendingMessage);
         lastFinalAttackPrompt = lastTransformResult?.prompt || latestMessageContent;
+
+        if (redactTrace) {
+          privateSessionId = getTargetSessionId(targetResponse) ?? privateSessionId;
+        } else if (targetResponse.sessionId) {
+          context.vars.sessionId = targetResponse.sessionId;
+        }
+
+        if (redactTrace) {
+          targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+          storedGraderResult = await gradeRedactionResponse(
+            targetPrompt,
+            targetResponse,
+            test,
+            storedGraderResults,
+          );
+          graderPassed = storedGraderResult?.pass;
+          if (!mediaRedactionFailed) {
+            redactionError = targetResponse.error;
+          }
+          mediaRedactionFailed ||= targetResponse.metadata?.redactionMediaOmitted === true;
+        }
 
         if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
           logger.debug(`Sleeping for ${targetProvider.delay}ms`);
@@ -653,11 +718,7 @@ export default class GoatProvider implements ApiProvider {
           }
         }
 
-        if (targetResponse.sessionId) {
-          context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
-          context.vars.sessionId = targetResponse.sessionId;
-        }
-        if (targetResponse.conversationEnded) {
+        if (targetResponse.conversationEnded && (!redactTrace || targetResponse.error)) {
           logger.info('[GOAT] Target ended conversation', {
             turn,
             reason: targetResponse.conversationEndReason,
@@ -678,7 +739,7 @@ export default class GoatProvider implements ApiProvider {
               promptImage: lastTransformResult?.image,
               output: endedOutput,
               outputAudio:
-                targetResponse.audio?.data && targetResponse.audio?.format
+                !redactTrace && targetResponse.audio?.data && targetResponse.audio?.format
                   ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
                   : undefined,
               inputVars: currentRenderInputVars,
@@ -690,6 +751,10 @@ export default class GoatProvider implements ApiProvider {
           break;
         }
         if (targetResponse.error) {
+          // Private error responses have already been inspected and accounted for above.
+          if (redactTrace) {
+            continue;
+          }
           throw new Error(`[GOAT] Target returned an error: ${targetResponse.error}`);
         }
         const hasTargetImages = Boolean(targetResponse.images?.length);
@@ -725,7 +790,7 @@ export default class GoatProvider implements ApiProvider {
           promptImage: lastTransformResult?.image,
           output: finalOutput,
           outputAudio:
-            targetResponse.audio?.data && targetResponse.audio?.format
+            !redactTrace && targetResponse.audio?.data && targetResponse.audio?.format
               ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
               : undefined,
           // Note: outputImage not tracked as ProviderResponse doesn't include image yet
@@ -747,7 +812,7 @@ export default class GoatProvider implements ApiProvider {
         lastTargetResponse = finalResponse;
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
-        if (test && assertToUse && grader && finalOutput) {
+        if (!redactTrace && test && assertToUse && grader && finalOutput) {
           // Build grading context with image outputs, tracing, and exfil tracking data.
           let gradingContext: RedteamGradingContext | undefined = {
             providerResponse: finalResponse,
@@ -858,14 +923,24 @@ export default class GoatProvider implements ApiProvider {
             break;
           }
         }
+        if (targetResponse.conversationEnded) {
+          stopReason = 'Target ended conversation';
+          break;
+        }
       } catch (error) {
         // Re-throw abort errors to properly cancel the operation
         if (error instanceof Error && error.name === 'AbortError') {
           logger.debug('[GOAT] Operation aborted');
           throw error;
         }
-        if (isRemoteMaterializationUpgradeError(error)) {
+        if (
+          error instanceof PrivateVerificationError ||
+          isRemoteMaterializationUpgradeError(error)
+        ) {
           throw error;
+        }
+        if (redactTrace) {
+          throw new PrivateVerificationError('Private target verification failed');
         }
         logger.error(
           `[GOAT] An error occurred in GOAT turn ${turn}.  The test will continue to the next turn in the conversation.`,
@@ -886,6 +961,7 @@ export default class GoatProvider implements ApiProvider {
     };
     return {
       output: reported.output,
+      ...(redactionError && { error: redactionError }),
       prompt: reported.prompt,
       metadata: {
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
@@ -899,11 +975,16 @@ export default class GoatProvider implements ApiProvider {
           flaggedTurn?.graderResult,
           storedGraderResult,
         ),
+        ...(mediaRedactionFailed && { redactionMediaOmitted: true }),
+        ...(redactTrace && {
+          storedGraderResults,
+          redactionContentOmitted: true,
+        }),
         traceSnapshots:
-          traceSnapshots.length > 0
+          !redactTrace && traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
-        sessionId: getSessionId(lastTargetResponse, context),
+        ...(!redactTrace && { sessionId: getSessionId(lastTargetResponse, context) }),
         ...(reported.transformDisplayVars && {
           transformDisplayVars: reported.transformDisplayVars,
         }),

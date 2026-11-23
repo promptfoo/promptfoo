@@ -5,6 +5,10 @@ import cliState from '../cliState';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import {
+  configRequiresTraceRedaction,
+  sanitizeCodingAgentVerifierInputs,
+} from '../util/verifierPrivacy';
 import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
 import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
@@ -136,13 +140,10 @@ export async function startOtlpReceiverIfNeeded(
     );
     acceptFormats = normalized.length > 0 ? normalized : [...DEFAULT_OTLP_ACCEPT_FORMATS];
     const redactAttributes = httpTracing.redactAttributes;
-    const tracePolicy: {
-      evaluationId: string;
-      commandToolNames?: string[];
-      redactAttributes?: string[];
-    } | null = evaluationId
+    const tracePolicy: OTLPReceiverTracePolicy | null = evaluationId
       ? {
           evaluationId,
+          ...(configRequiresTraceRedaction(testSuite) && { requireExistingTrace: true }),
           commandToolNames: testSuite.tracing?.commandToolNames,
           redactAttributes: testSuite.tracing?.otlp?.http?.redactAttributes,
         }
@@ -301,7 +302,12 @@ export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean
   const yamlConfigEnabled = testSuite?.tracing?.enabled === true;
   const envEnabled = getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
 
-  const result = metadataEnabled || yamlConfigEnabled || envEnabled;
+  // A sampled root can export the request outside this process before we project a result.
+  const result =
+    (metadataEnabled || yamlConfigEnabled || envEnabled) &&
+    !configRequiresTraceRedaction(test) &&
+    (test.options?.disableDefaultAsserts === true ||
+      !configRequiresTraceRedaction(testSuite?.defaultTest));
 
   logger.debug(
     `[EvaluatorTracing] isTracingEnabled check: metadata=${metadataEnabled}, yamlConfig=${yamlConfigEnabled}, env=${envEnabled}, result=${result}`,
@@ -337,7 +343,6 @@ export async function generateTraceContextIfNeeded(
 
   if (tracingEnabled) {
     logger.debug('[EvaluatorTracing] Tracing enabled for test case');
-    logger.debug(`[EvaluatorTracing] Test metadata: ${JSON.stringify(test.metadata)}`);
   }
 
   if (!tracingEnabled) {
@@ -406,7 +411,7 @@ export async function generateTraceContextIfNeeded(
         ...(executionMetadata.repeatIndex !== undefined && {
           repeatIndex: executionMetadata.repeatIndex,
         }),
-        vars: test.vars,
+        vars: sanitizeCodingAgentVerifierInputs(test).vars,
         commandToolNames: testSuite?.tracing?.commandToolNames,
         otlpHttpRedactAttributes: testSuite?.tracing?.otlp?.http?.redactAttributes,
       },

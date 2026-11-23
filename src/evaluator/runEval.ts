@@ -1,5 +1,9 @@
 import { LRUCache } from 'lru-cache';
-import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
+import {
+  checkFailedAgentResponse,
+  hasTraceAwareAssertions,
+  runAssertions,
+} from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
@@ -10,6 +14,13 @@ import logger from '../logger';
 import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers/agentWorkspace';
 import { providerRegistry } from '../providers/providerRegistry';
 import { maybeWrapMcpProviderForRedteam } from '../redteam/mcpTargetProvider';
+import {
+  hasProtectedReceiptFiles,
+  type snapshotReceiptSetup,
+  withMcpLedgerScope,
+  withProtectedReceiptScope,
+} from '../redteam/plugins/codingAgent/verifiers';
+import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLength';
 import { getSessionId } from '../redteam/util';
 import { createProviderRateLimitOptions, sleepWithAbort } from '../scheduler';
@@ -39,6 +50,7 @@ import { isAbortError } from '../util/fetch/errors';
 import { isCallerAbortError } from '../util/fetch/requestSignal';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { isPrivateEvaluation, withPrivateEvaluation } from '../util/privateEvaluation';
 import { getProviderIdentifier, sanitizeProviderIdForLog } from '../util/provider';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from '../util/templates';
 import { TokenUsageTracker } from '../util/tokenUsage';
@@ -47,6 +59,14 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
+import {
+  getAssertionLeaves,
+  getPrivateTargetContext,
+  getStrategyContext,
+  requiresTraceRedaction,
+  sanitizeRedactionResult,
+  TRACE_REDACTION_ASSERTIONS,
+} from '../util/traceRedaction';
 import { transform } from '../util/transform';
 import type winston from 'winston';
 
@@ -244,6 +264,7 @@ interface RenderedRunEvalPrompt {
 }
 
 interface ProviderCallResult {
+  hadCachedTarget: boolean;
   latencyMs: number;
   response: ProviderResponse;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
@@ -487,6 +508,7 @@ async function callProviderForRunEval({
 }): Promise<ProviderCallResult> {
   const startTime = performance.now();
   let response: ProviderResponse | undefined;
+  let hadCachedTarget = false;
   let providerInvoked = false;
   let providerFailed = false;
 
@@ -499,7 +521,7 @@ async function callProviderForRunEval({
         cached: false,
       };
     } else {
-      response = await callActiveProvider({
+      ({ response, hadCachedTarget } = await callActiveProvider({
         abortSignal,
         pauseSignal,
         evalId,
@@ -517,12 +539,17 @@ async function callProviderForRunEval({
         testSuite,
         traceContext,
         vars,
-      });
+      }));
     }
 
-    sanitizeResponseMetadata(response);
+    // The private response stays local until grading. JSON would discard
+    // the identity of verdicts from the in-process adaptive verifier.
+    if (!requiresTraceRedaction(test.assert)) {
+      sanitizeResponseMetadata(response);
+    }
 
     return {
+      hadCachedTarget,
       // Results store whole milliseconds. Shared results land in integer columns, and
       // servers reject fractional values.
       latencyMs: Math.round(performance.now() - startTime),
@@ -533,7 +560,11 @@ async function callProviderForRunEval({
     providerFailed = true;
     throw error;
   } finally {
-    if (providerInvoked && isExternalTraceProvider(testSuite?.tracing?.provider)) {
+    if (
+      providerInvoked &&
+      !isPrivateEvaluation() &&
+      isExternalTraceProvider(testSuite?.tracing?.provider)
+    ) {
       try {
         await collectExternalTraceAfterProviderCall({
           abortSignal,
@@ -654,7 +685,7 @@ async function callActiveProvider({
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
-}): Promise<ProviderResponse> {
+}): Promise<Pick<ProviderCallResult, 'response' | 'hadCachedTarget'>> {
   const originalProvider = maybeWrapMcpProviderForRedteam(provider, test);
   const cleanupOwner = isApiProvider(test.provider) ? test.provider : provider;
   const activeProvider =
@@ -663,18 +694,36 @@ async function callActiveProvider({
       : maybeWrapMcpProviderForRedteam(cleanupOwner, test);
   logger.debug(`Provider type: ${sanitizeProviderIdForLog(activeProvider.id())}`);
 
-  const callApiContext = buildCallApiContext({
+  const id = activeProvider.id();
+  const privateTest = requiresTraceRedaction(test.assert);
+  const adaptive = id.startsWith('promptfoo:redteam:');
+  invariant(
+    !privateTest || !adaptive || isAttackProvider(id) || id === 'promptfoo:redteam:iterative:image',
+    'This strategy cannot verify every private response.',
+  );
+  const context = buildCallApiContext({
     evalId,
     filters,
     originalProvider,
     promptForRender,
     repeatIndex,
     test,
+    vars,
     testIndex,
     traceContext,
-    vars,
   });
+  const callApiContext = privateTest
+    ? adaptive
+      ? getStrategyContext(context)
+      : getPrivateTargetContext(context)
+    : context;
   let completedResponse: ProviderResponse | undefined;
+  let hadCachedTarget = false;
+  // A wrapper may discard or combine turns. Keep evidence freshness separate
+  // from the aggregate response's request and token accounting.
+  const onTargetCacheStatus = (cached: boolean) => {
+    hadCachedTarget ||= cached;
+  };
   const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
   const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
     // A previous response belongs only to backoff until the next attempt starts.
@@ -702,6 +751,7 @@ async function callActiveProvider({
           return result;
         },
         abortSignal,
+        onTargetCacheStatus,
       );
     return withProviderCallExecutionContext(
       {
@@ -709,11 +759,12 @@ async function callActiveProvider({
         rateLimitRegistry,
         rateLimitProvider: activeProvider,
         onTargetResponse: (prompt, response) => {
+          onTargetCacheStatus(response.cached === true);
           completedTargets.push({ prompt, response });
         },
       },
       () =>
-        testSuite?.tracing
+        testSuite?.tracing && !isPrivateEvaluation()
           ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
           : invoke(),
     );
@@ -773,7 +824,7 @@ async function callActiveProvider({
 
   logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
   logger.debug(`Provider response cached property explicitly: ${response.cached}`);
-  return response;
+  return { response, hadCachedTarget };
 }
 
 function buildCallApiContext({
@@ -989,6 +1040,33 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
   TokenUsageTracker.getInstance().trackResponseUsage(trackingId, response);
 }
 
+/** Keep the cost of completed calls without retaining rejected output, metadata or raw evidence. */
+function rejectedEvidenceUsage(
+  provider: ApiProvider,
+  call: ProviderCallResult,
+  privateTest: boolean,
+) {
+  if (privateTest) {
+    return undefined;
+  }
+  const { cost, incurredCost, cached, tokenUsage, latencyMs } = normalizeCachedTargetResponse(
+    call.response,
+  );
+  const accounting = { cost, incurredCost, cached, tokenUsage };
+  const usage = createEmptyTokenUsage();
+  if (tokenUsage) {
+    accumulateResponseTokenUsage(usage, accounting);
+  }
+  trackProviderUsage(provider, accounting);
+  return {
+    cost,
+    incurredCost,
+    tokenUsage: usage,
+    response: accounting,
+    latencyMs: latencyMs ?? call.latencyMs,
+  };
+}
+
 async function applyRunEvalResponseOutcome({
   abortSignal,
   deferGrading,
@@ -1028,20 +1106,15 @@ async function applyRunEvalResponseOutcome({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }) {
-  if (response.error) {
-    ret.error = response.error;
+  if (response.error || response.output == null) {
+    ret.error = response.error || 'No output';
     ret.failureReason = ResultFailureReason.ERROR;
-    ret.success = false;
-    return;
-  }
-
-  if (response.output === null || response.output === undefined) {
-    // An absent provider result is an integration error, including in redteam
-    // scans. An intentional empty string still proceeds to the assertions.
     ret.success = false;
     ret.score = 0;
-    ret.error = 'No output';
-    ret.failureReason = ResultFailureReason.ERROR;
+    const finding = await checkFailedAgentResponse(test, response, getTraceId(traceContext));
+    if (finding) {
+      applyGradingResult(ret, finding);
+    }
     return;
   }
 
@@ -1203,6 +1276,11 @@ async function transformRunEvalResponse({
   processedResponse: ProviderResponse;
   providerTransformedOutput: ProviderResponse['output'];
 }> {
+  if (requiresTraceRedaction(test.assert)) {
+    // Only local checks see the original. Never persist binary content or call
+    // provider/test transforms before it has been verified.
+    return { processedResponse: response, providerTransformedOutput: response.output };
+  }
   const processedResponse = { ...response };
   if (provider.transform) {
     processedResponse.output = await transform(provider.transform, processedResponse.output, {
@@ -1302,7 +1380,26 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
-export async function runEvalInternal(
+export function runEvalInternal(
+  options: RunEvalOptions,
+  orchestration?: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> & {
+    setup?: ReturnType<typeof snapshotReceiptSetup>;
+  },
+): Promise<EvaluateResult[]> {
+  const privateTest = requiresTraceRedaction(options.test.assert);
+  const run = async () => {
+    const execute = () => runEvalForTest(options, orchestration);
+    return hasProtectedReceiptFiles(options.test)
+      ? withProtectedReceiptScope([options.test], execute, {
+          inherit: true,
+          setup: orchestration?.setup,
+        })
+      : execute();
+  };
+  return privateTest ? withPrivateEvaluation(run) : run();
+}
+
+async function runEvalForTest(
   {
     provider,
     prompt, // raw prompt
@@ -1329,6 +1426,7 @@ export async function runEvalInternal(
     abortSignal,
   },
 ): Promise<EvaluateResult[]> {
+  const privateTest = requiresTraceRedaction(test.assert);
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
     typeof provider.delay === 'number',
@@ -1357,11 +1455,26 @@ export async function runEvalInternal(
   let setup = state.setup;
   let latencyMs = 0;
   let providerCallCompleted = false;
+  let rejectedUsage: ReturnType<typeof rejectedEvidenceUsage>;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
   // The step's copy_working_dir workspace, removed once its assertions have run.
   let workspace: AgentWorkspace | undefined;
 
   try {
+    if (privateTest) {
+      invariant(
+        !provider.transform &&
+          !test.options?.transform &&
+          !test.options?.postprocess &&
+          !getAssertionLeaves(test.assert).some(
+            (a) =>
+              a.type === 'select-best' ||
+              a.type === 'max-score' ||
+              (a.transform && TRACE_REDACTION_ASSERTIONS.has(a.type.replace(/^not-/, ''))),
+          ),
+        'Private responses cannot be transformed or compared.',
+      );
+    }
     const rendered = await renderRunEvalPrompt({
       filters,
       isRedteam,
@@ -1382,22 +1495,23 @@ export async function runEvalInternal(
     }
     const stepWorkspace = workspace;
 
-    traceContext = test.providerOutput
-      ? null
-      : await generateTraceContextIfNeeded(
-          test,
-          evaluateOptions,
-          testIndex,
-          promptIndex,
-          testSuite,
-          {
-            providerId: (isApiProvider(test.provider) ? test.provider : provider).id(),
-            promptLabel: state.promptForRender.label,
-            repeatIndex,
-          },
-        );
+    traceContext =
+      test.providerOutput || privateTest
+        ? null
+        : await generateTraceContextIfNeeded(
+            test,
+            evaluateOptions,
+            testIndex,
+            promptIndex,
+            testSuite,
+            {
+              providerId: (isApiProvider(test.provider) ? test.provider : provider).id(),
+              promptLabel: state.promptForRender.label,
+              repeatIndex,
+            },
+          );
     const executionTraceContext = traceContext;
-    const runExecution = () =>
+    const runTestCase = (capture: (cached?: boolean) => void) =>
       withTestCaseSpan(
         executionTraceContext?.rootSpan,
         async () => {
@@ -1423,27 +1537,34 @@ export async function runEvalInternal(
             vars: state.vars,
           });
           providerCallCompleted = true;
+          try {
+            capture(providerCall.hadCachedTarget || providerCall.response.cached);
+          } catch (error) {
+            rejectedUsage = rejectedEvidenceUsage(provider, providerCall, privateTest);
+            throw error;
+          }
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
             response.metadata = { ...response.metadata, ...(await stepWorkspace.metadata()) };
           }
 
-          updateConversationHistory({
-            conversationKey: state.conversationKey,
-            conversations,
-            renderedJson: rendered.renderedJson,
-            renderedPrompt: rendered.renderedPrompt,
-            response,
-          });
+          if (!privateTest) {
+            updateConversationHistory({
+              conversationKey: state.conversationKey,
+              conversations,
+              renderedJson: rendered.renderedJson,
+              renderedPrompt: rendered.renderedPrompt,
+              response,
+            });
 
-          logger.debug('Evaluator response', {
-            responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
-          });
-          logger.debug(
-            `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
-          );
-
+            logger.debug('Evaluator response', {
+              responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
+            });
+            logger.debug(
+              `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
+            );
+          }
           await applyProviderDelayIfNeeded(provider, response, abortSignal);
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
@@ -1471,11 +1592,13 @@ export async function runEvalInternal(
 
           invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
-          trackProviderUsage(provider, response);
+          if (!privateTest) {
+            trackProviderUsage(provider, response);
+          }
           await applyRunEvalResponseOutcome({
             abortSignal,
             deferredGradingAbortSignal: orchestrationOptions.abortSignal,
-            deferGrading,
+            deferGrading: !privateTest && deferGrading,
             evalId,
             latencyMs,
             prompt,
@@ -1498,15 +1621,17 @@ export async function runEvalInternal(
             accumulateResponseTokenUsage(ret.tokenUsage, response);
           }
 
-          if (test.options?.storeOutputAs && ret.response?.output && registers) {
+          if (!privateTest && test.options?.storeOutputAs && ret.response?.output && registers) {
             // Save the output in a register for later use
             registers[test.options.storeOutputAs] = ret.response.output;
           }
 
-          return [ret];
+          return [privateTest ? sanitizeRedactionResult(ret) : ret];
         },
         (rows) => deferredGradingPromises.get(rows[0]),
       );
+    const runExecution = () =>
+      withMcpLedgerScope(test, omitEvalRuntimeVars(state.vars), runTestCase);
     const rows = executionTraceContext
       ? await withProviderCallTracingContext(
           {
@@ -1533,13 +1658,19 @@ export async function runEvalInternal(
       // Leave incomplete CLI-paused work eligible for resume instead of persisting an ERROR.
       return [];
     }
-    const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
-      error: err,
-      provider,
-      test,
-      promptIdx: promptIndex,
-      testIdx: testIndex,
-    });
+    const { errorWithStack, metadata, logContext } = privateTest
+      ? {
+          errorWithStack: 'Private provider error omitted.',
+          metadata: {},
+          logContext: { error: 'Private provider error omitted.' },
+        }
+      : buildProviderErrorContext({
+          error: err,
+          provider,
+          test,
+          promptIdx: promptIndex,
+          testIdx: testIndex,
+        });
 
     // Caller cancellation is expected; independent provider failures remain actionable.
     const cancelled = Boolean(abortSignal?.aborted) && isAbortError(err);
@@ -1547,26 +1678,26 @@ export async function runEvalInternal(
       logger.error('Provider call failed during eval', logContext);
     }
 
-    return [
-      {
-        ...setup,
-        // Exclude the __eval* runtime vars from the persisted error result.
-        vars: omitEvalRuntimeVars(setup.vars),
-        error: errorWithStack,
-        success: false,
-        failureReason: ResultFailureReason.ERROR,
-        score: 0,
-        namedScores: {},
-        latencyMs,
-        promptIdx: promptIndex,
-        ...(repeatGroupId !== undefined && { repeatGroupId, repeatIndex }),
-        testIdx: testIndex,
-        testCase: test,
-        promptId: prompt.id || '',
-        metadata,
-        ...getTraceLinkage(traceContext, evalId),
-      },
-    ];
+    const result: EvaluateResult = {
+      ...setup,
+      // Exclude the __eval* runtime vars from the persisted error result.
+      vars: omitEvalRuntimeVars(setup.vars),
+      error: errorWithStack,
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs,
+      ...rejectedUsage,
+      promptIdx: promptIndex,
+      ...(repeatGroupId !== undefined && { repeatGroupId, repeatIndex }),
+      testIdx: testIndex,
+      testCase: test,
+      promptId: prompt.id || '',
+      metadata,
+      ...getTraceLinkage(traceContext, evalId),
+    };
+    return [privateTest ? sanitizeRedactionResult(result) : result];
   } finally {
     await workspace?.remove();
   }

@@ -3,7 +3,6 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as blobs from '../../src/blobs';
-import { getTraceStore } from '../../src/tracing/store';
 import { writeOutput } from '../../src/util/index';
 import { createTempDir, mockProcessEnv, removeTempDir } from './utils';
 
@@ -44,6 +43,7 @@ describe('JSON export with improved error handling', () => {
         { raw: 'Test prompt 2', label: 'prompt2' },
       ],
       toEvaluateSummary: vi.fn(),
+      getTraces: vi.fn().mockResolvedValue([]),
       getResultsCount: vi.fn(),
     };
   });
@@ -141,7 +141,7 @@ describe('JSON export with improved error handling', () => {
     it('should embed blob bytes referenced only by exported traces', async () => {
       const hash = 'b'.repeat(64);
       const data = Buffer.from('portable trace image');
-      const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+      const traceSpy = vi.spyOn(mockEval, 'getTraces').mockResolvedValue([
         {
           traceId: 'trace-media-export',
           evaluationId: mockEval.id,

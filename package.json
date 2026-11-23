@@ -312,6 +312,7 @@
     "keyv": "^6.1.0",
     "keyv-file": "^5.3.3",
     "lru-cache": "^11.5.3",
+    "marked": "^16.4.2",
     "minimatch": "^11.0.8",
     "nunjucks": "^3.2.4",
     "openai": "^7.20.0",

@@ -30,6 +30,7 @@ import { TraceStore } from '../../src/tracing/store';
 import { ResultFailureReason } from '../../src/types/index';
 import { sha256 } from '../../src/util/createHash';
 import { createOutputData } from '../../src/util/output';
+import { createLegacyRedactionSummary } from '../factories/eval';
 import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -87,6 +88,7 @@ describe('importCommand', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     process.exitCode = undefined;
 
     // Clean up temp file if it exists
@@ -284,6 +286,64 @@ describe('importCommand', () => {
       expect(importedEval!.durationMs).toBe(4321);
       expect(importedEval!.generationDurationMs).toBe(123);
       expect(importedEval!.evaluationDurationMs).toBe(4198);
+    });
+
+    it('upgrades the original dataset when only an imported v3 result records privacy', async () => {
+      const marker = 'SYNTHETIC_PRIVATE_RESULT';
+      const data = JSON.parse(
+        fs.readFileSync(path.join(__dirname, '../__fixtures__/sample-export.json'), 'utf-8'),
+      );
+      data.results.results[0].testCase.metadata = { privatePrompts: true };
+      data.config.tests = [
+        { assert: [{ type: 'not-contains', value: marker }] },
+        { assert: [{ type: 'contains', value: 'public control' }] },
+      ];
+      const datasetId = sha256(JSON.stringify(data.config.tests));
+      const db = await getDb();
+      await db.run(
+        sql`INSERT INTO datasets (id, tests) VALUES (${datasetId}, ${JSON.stringify(data.config.tests)})`,
+      );
+      tempFilePath = path.join(__dirname, `temp-private-v3-${Date.now()}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify(data));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', tempFilePath]);
+      const saved = await Eval.findById(data.evalId);
+      expect(saved).toBeDefined();
+      const dataset = await db.get(sql`SELECT tests FROM datasets WHERE id = ${datasetId}`);
+      for (const value of [dataset, saved!.config]) {
+        expect(JSON.stringify(value)).not.toContain(marker);
+        expect(JSON.stringify(value)).toContain('not-contains');
+        expect(JSON.stringify(value)).not.toContain('public control');
+      }
+    });
+
+    it('drops unowned attachments and applies inherited privacy before a v3 import', async () => {
+      const marker = 'SYNTHETIC_IMPORT_RECEIPT';
+      const data = JSON.parse(
+        fs.readFileSync(path.join(__dirname, '../__fixtures__/sample-export.json'), 'utf-8'),
+      );
+      data.config.defaultTest = {
+        assert: [
+          { type: 'promptfoo:redteam:coding-agent:trace-redaction', value: { rawReceipt: marker } },
+        ],
+      };
+      data.results.prompts[0].label = marker;
+      data.results.results[0].response.output = marker;
+      data.vars = [marker];
+      data.runtimeOptions = { filterPattern: marker };
+      data.traces = [
+        { traceId: 'imported', testCaseId: 'unknown', metadata: { text: marker }, spans: [] },
+      ];
+      tempFilePath = path.join(__dirname, `temp-private-${Date.now()}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify(data));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', tempFilePath]);
+      const imported = await Eval.findById(data.evalId);
+      expect(imported).toBeDefined();
+      expect(imported!.vars).not.toContain(marker);
+      expect(JSON.stringify(imported!.runtimeOptions ?? {})).not.toContain(marker);
+      expect(JSON.stringify(await imported!.toEvaluateSummary())).not.toContain(marker);
+      expect(await new TraceStore().getTracesByEvaluation(data.evalId)).toEqual([]);
     });
 
     it('should import traces and attach them to the imported eval', async () => {
@@ -943,6 +1003,274 @@ describe('importCommand', () => {
       } finally {
         restoreEnv();
       }
+    });
+
+    it.each([false, true])(
+      'preserves empty legacy output slots during --force import (private=%s)',
+      async (privateRow) => {
+        const { id } = await Eval.create({ description: 'original' }, []);
+        const test = privateRow
+          ? { assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }] }
+          : {};
+        const table = {
+          head: { prompts: [{ raw: 'first' }, { raw: 'second' }], vars: [] },
+          body: [{ test, outputs: [null, { text: 'fixture response', pass: true }] }],
+        };
+        tempFilePath = path.join(__dirname, `temp-legacy-columns-${Date.now()}.json`);
+        fs.writeFileSync(
+          tempFilePath,
+          JSON.stringify({ id, config: {}, results: { version: 2, table, results: [] } }),
+        );
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        expect(process.exitCode).toBeUndefined();
+        const replacement = (await Eval.findById(id))!;
+        const { outputs } = (await replacement.getTable()).body[0];
+        expect(outputs).toHaveLength(2);
+        expect(outputs[0]).toBeNull();
+        expect(outputs[1].pass).toBe(true);
+        if (privateRow) {
+          const db = await getDb();
+          const stored = await db
+            .select()
+            .from(evalsTable)
+            .where(sql`${evalsTable.id} = ${id}`)
+            .get();
+          expect(JSON.stringify(stored)).not.toContain('fixture response');
+        } else {
+          expect(outputs[1].text).toBe('fixture response');
+        }
+      },
+    );
+
+    it.each(['legacy table', 'legacy config', 'v3 config'])(
+      'keeps the existing eval if the replacement %s cannot be sanitized',
+      async (invalidField) => {
+        const { id } = await Eval.create({ description: 'original' }, []);
+        const config =
+          invalidField === 'legacy table'
+            ? {}
+            : { metadata: { privatePrompts: true }, scenarios: 42 };
+        const results =
+          invalidField === 'v3 config'
+            ? { version: 3, results: [], prompts: [] }
+            : {
+                version: 2,
+                results: [],
+                table: { body: invalidField === 'legacy table' ? [{ outputs: 42 }] : [] },
+              };
+        tempFilePath = path.join(__dirname, `temp-force-projection-${Date.now()}.json`);
+        fs.writeFileSync(tempFilePath, JSON.stringify({ id, config, results }));
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        expect(process.exitCode).toBe(1);
+        expect((await Eval.findById(id))?.config.description).toBe('original');
+        expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
+      },
+    );
+
+    const prompt = { raw: 'Synthetic prompt' };
+    const validRow = {
+      prompt,
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      provider: { id: 'echo' },
+      success: true,
+      score: 1,
+    };
+
+    it('commits trace linkage and media permissions with a V3 replacement', async () => {
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'false');
+      const blobDir = createTempDir('promptfoo-import-references-');
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+      try {
+        const { id } = await Eval.create({}, []);
+        const store = new TraceStore();
+        const traceId = 'replacement-trace';
+        await store.createTrace({ traceId, evaluationId: id, testCaseId: 'old' });
+        const { ref } = await storeBlob(Buffer.from('original'), 'image/png', {
+          evalId: id,
+          kind: 'image',
+        });
+        const audio = Buffer.alloc(2048, 1);
+        const embedded = Buffer.from('embedded image');
+        const hash = sha256(embedded);
+        const response = {
+          output: `promptfoo://blob/${ref.hash}`,
+          audio: { format: 'wav', data: audio.toString('base64') },
+          metadata: { image: `promptfoo://blob/${hash}` },
+        };
+        const data = {
+          id,
+          config: {},
+          results: { version: 3, prompts: [prompt], results: [{ ...validRow, traceId, response }] },
+          traces: [
+            { traceId, testCaseId: 'new', spans: [{ spanId: 'span', name: 'new', startTime: 1 }] },
+          ],
+          blobAssets: [
+            {
+              hash,
+              mimeType: 'image/png',
+              sizeBytes: embedded.length,
+              data: embedded.toString('base64'),
+            },
+          ],
+        };
+        tempFilePath = path.join(blobDir, 'replacement.json');
+        fs.writeFileSync(tempFilePath, JSON.stringify({ ...data, author: {} }));
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        expect(process.exitCode).toBe(1);
+        expect(await getShareAuthorizedBlob(ref.hash, id)).not.toBeNull();
+        expect(await getShareAuthorizedBlob(sha256(audio), id)).toBeNull();
+        expect(await getShareAuthorizedBlob(hash, id)).toBeNull();
+
+        process.exitCode = undefined;
+        fs.writeFileSync(tempFilePath, JSON.stringify(data));
+        const retry = new Command();
+        importCommand(retry);
+        await retry.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        expect(process.exitCode).toBeUndefined();
+        const [row] = await EvalResult.findManyByEvalId(id);
+        expect(row.toEvaluateResult()).toMatchObject({ evaluationId: id, traceId });
+        expect((await store.getTrace(traceId))?.spans[0].name).toBe('new');
+        expect((await getShareAuthorizedBlob(sha256(audio), id))?.data).toEqual(audio);
+        expect((await getShareAuthorizedBlob(hash, id))?.data).toEqual(embedded);
+        // A copied URI does not inherit the old eval's permission to share it.
+        expect(await getShareAuthorizedBlob(ref.hash, id)).toBeNull();
+      } finally {
+        resetBlobStorageProvider();
+        removeTempDir(blobDir);
+      }
+    });
+
+    it.each([
+      ['null result', 'results', null],
+      ['missing provider', 'results', { ...validRow, provider: undefined }],
+      ['missing prompt', 'results', { ...validRow, prompt: {} }],
+      ['malformed image', 'results', { ...validRow, response: { images: [null] } }],
+      [
+        'malformed audio',
+        'results',
+        { ...validRow, response: { audio: { data: 'noop', format: 1 } } },
+      ],
+      ['null prompt', 'prompts', null],
+      ['invalid label', 'prompts', { label: { text: 'invalid' } }],
+      [
+        'oversized verifier',
+        'results',
+        {
+          ...validRow,
+          testCase: {
+            assert: [{ type: 'promptfoo:redteam:coding-agent:connector-parameter-exfil' }],
+          },
+          vars: { values: Array(100_001).fill(0) },
+        },
+      ],
+      [
+        'oversized persisted verifier',
+        'results',
+        {
+          ...validRow,
+          testCase: {
+            assert: [{ type: 'promptfoo:redteam:coding-agent:connector-parameter-exfil' }],
+            // Fits until the database supplies additional columns for the stored row.
+            vars: { values: Array(99_979).fill(0) },
+          },
+        },
+      ],
+    ] as const)(
+      'keeps the original rows on an invalid V3 replacement (%s)',
+      async (name, field, invalid) => {
+        vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'false');
+        const id = 'eval-import-preflight';
+        const results = { version: 3, prompts: [prompt], results: [validRow] };
+        tempFilePath = path.join(__dirname, `temp-v3-projection-${Date.now()}.json`);
+        fs.writeFileSync(
+          tempFilePath,
+          JSON.stringify({ id, config: { description: 'original' }, results }),
+        );
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', tempFilePath]);
+        expect(process.exitCode).toBeUndefined();
+        const [original] = await EvalResult.findManyByEvalId(id);
+
+        const incoming = { ...results, [field]: [...results[field], invalid] };
+        fs.writeFileSync(tempFilePath, JSON.stringify({ id, config: {}, results: incoming }));
+        const replacement = new Command();
+        importCommand(replacement);
+        await replacement.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+
+        expect(process.exitCode).toBe(1);
+        if (name.startsWith('oversized')) {
+          expect(logger.error).toHaveBeenCalledWith(
+            expect.stringContaining('Verifier input is too large'),
+          );
+        }
+        expect((await Eval.findById(id))?.config.description).toBe('original');
+        expect(await EvalResult.findManyByEvalId(id)).toEqual([original]);
+        expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      [2, { author: {} }],
+      [2, { config: { description: {} } }],
+      [3, { author: {} }],
+      [3, { config: { description: {} } }],
+      [3, { config: { tags: { category: { toString: 5 } } } }],
+      [
+        3,
+        {
+          traces: [
+            {
+              traceId: 'invalid',
+              testCaseId: 'test',
+              spans: [{ spanId: 'span', name: 'fixture', startTime: 1, statusMessage: {} }],
+            },
+          ],
+        },
+      ],
+    ] as const)('rolls back malformed V%s import fields (case %#)', async (version, invalid) => {
+      const { id } = await Eval.create({ description: 'original' }, []);
+      const results =
+        version === 3
+          ? { version, prompts: [prompt], results: [validRow] }
+          : { version, table: { body: [] }, results: [] };
+      tempFilePath = path.join(__dirname, `temp-force-binding-${Date.now()}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify({ id, config: {}, results, ...invalid }));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+      expect(process.exitCode).toBe(1);
+      expect((await Eval.findById(id))?.config.description).toBe('original');
+      expect(await new TraceStore().getTracesByEvaluation(id)).toEqual([]);
+      expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
+    });
+
+    it('redacts both result copies when importing legacy privacy checks', async () => {
+      const id = 'eval-legacy-privacy';
+      tempFilePath = path.join(__dirname, `temp-legacy-privacy-${Date.now()}.json`);
+      fs.writeFileSync(
+        tempFilePath,
+        JSON.stringify({
+          id,
+          author: 'PRIVATE_LEGACY_RECEIPT',
+          description: 'PRIVATE_LEGACY_RECEIPT',
+          config: { description: 'PRIVATE_LEGACY_RECEIPT' },
+          results: createLegacyRedactionSummary('promptfoo:redteam:coding-agent:trace-redaction'),
+        }),
+      );
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', tempFilePath]);
+      expect(process.exitCode).toBeUndefined();
+      const db = await getDb();
+      const stored = await db.select().from(evalsTable).where(sql`${evalsTable.id} = ${id}`).get();
+      expect(stored).toBeDefined();
+      expect(JSON.stringify(stored)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      expect(JSON.stringify(stored)).toContain('ordinary output');
+      const imported = (await Eval.findById(id))!;
+      expect((await imported.toEvaluateSummary()).version).toBe(2);
     });
 
     it('should import legacy table-backed eval exports', async () => {
@@ -1660,7 +1988,7 @@ describe('importCommand', () => {
       }
     });
 
-    it('should warn that the original eval was deleted when a --force replacement fails after deletion', async () => {
+    it('rolls back the original rows, traces and blob references when a replacement write fails', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
 
@@ -1668,10 +1996,25 @@ describe('importCommand', () => {
       await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
       expect(process.exitCode).toBeUndefined();
       expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(4);
+      const traceStore = new TraceStore();
+      await traceStore.createTrace({
+        traceId: 'original',
+        evaluationId: sampleData.evalId,
+        testCaseId: 'test',
+      });
+      await traceStore.addSpans('original', [
+        { spanId: 'span', name: 'original span', startTime: 1 },
+      ]);
+      const blobDir = createTempDir('promptfoo-import-rollback-');
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+      const { ref } = await storeBlob(Buffer.from('synthetic fixture'), 'image/png', {
+        evalId: sampleData.evalId,
+        kind: 'image',
+      });
 
       vi.clearAllMocks();
       process.exitCode = undefined;
-      // Fail after replaceExistingEval has already deleted the original eval.
+      // Fail after the replacement header has been inserted.
       const createSpy = vi
         .spyOn(EvalResult, 'createManyFromEvaluateResult')
         .mockRejectedValueOnce(new Error('result write failed'));
@@ -1682,15 +2025,16 @@ describe('importCommand', () => {
         await program2.parseAsync(['node', 'test', 'import', '--force', sampleFilePath]);
 
         expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('result write failed'));
-        expect(logger.error).toHaveBeenCalledWith(
-          expect.stringContaining('was deleted for a --force replacement'),
-        );
-        expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([sampleData.evalId]);
+        expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
+        expect(updateSignalFile).not.toHaveBeenCalled();
         expect(process.exitCode).toBe(1);
-        // The original results are gone — the disclosure tells the user why.
-        expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(0);
+        expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(4);
+        expect((await traceStore.getTrace('original'))?.spans[0].name).toBe('original span');
+        expect(await getShareAuthorizedBlob(ref.hash, sampleData.evalId)).not.toBeNull();
       } finally {
         createSpy.mockRestore();
+        resetBlobStorageProvider();
+        removeTempDir(blobDir);
       }
     });
 

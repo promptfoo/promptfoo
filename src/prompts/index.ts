@@ -134,9 +134,7 @@ async function processPrompt(
     const globbedPath = globSync(filePath.replace(/\\/g, '/'), {
       windowsPathsNoEscape: true,
     });
-    logger.debug(
-      `Expanded prompt ${prompt.raw} to ${filePath} and then to ${JSON.stringify(globbedPath)}`,
-    );
+    logger.debug(`Matched ${globbedPath.length} prompt file(s).`);
     const prompts: Prompt[] = [];
     for (const globbedFilePath of globbedPath) {
       // The match already includes the base, so resolve it before the base is applied again.
@@ -172,7 +170,7 @@ async function processPrompt(
     if (prompts.length > 0) {
       return prompts;
     }
-    logger.debug(`Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`);
+    logger.debug('No files matched the prompt. Using the literal string.');
     return processString(prompt);
   }
 
@@ -195,7 +193,6 @@ export async function readPrompts(
   labelBasePath?: string,
   sourceBasePaths?: readonly string[],
 ): Promise<Prompt[]> {
-  logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
   const prompts: Prompt[] = [];
   for (const [index, prompt] of normalizeInput(promptPathOrGlobs).entries()) {
     const sourceBasePath = sourceBasePaths?.[index];
@@ -233,10 +230,8 @@ export async function processPrompts(
         }
         try {
           return PromptSchema.parse(promptInput);
-        } catch (error) {
-          logger.warn(
-            `Prompt input is not a valid prompt schema: ${error}\nFalling back to serialized JSON as raw prompt.`,
-          );
+        } catch {
+          logger.warn('Invalid prompt schema. Using the serialized input.');
           return {
             raw: JSON.stringify(promptInput),
             label: JSON.stringify(promptInput),

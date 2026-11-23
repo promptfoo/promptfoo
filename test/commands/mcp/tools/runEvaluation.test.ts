@@ -149,6 +149,37 @@ describe('runEvaluation tool', () => {
     },
   );
 
+  it('omits protected prompt and provider labels from filtered results and errors', async () => {
+    const { resolveConfigs } = await import('../../../../src/util/config/load');
+    const { runDbMigrations } = await import('../../../../src/migrate');
+    await runDbMigrations();
+    const { handler } = await getRunEvaluationTool();
+    const marker = 'SYNTHETIC_FILTER_RECEIPT';
+    const suite = {
+      prompts: [{ label: marker, raw: 'Synthetic prompt' }],
+      providers: [{ id: () => marker, callApi: async () => ({ output: 'clean' }) }],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'promptfoo:redteam:coding-agent:trace-redaction' as const,
+              value: { rawReceipt: marker },
+            },
+          ],
+        },
+      ],
+    };
+    const resolved = { basePath: '.', config: { tests: suite.tests }, testSuite: suite };
+    vi.mocked(resolveConfigs).mockResolvedValueOnce(resolved).mockResolvedValueOnce(resolved);
+    const missing = await handler({ providerFilter: 'missing' });
+    expect(missing.isError).toBe(true);
+    expect(missing.content[0].text).not.toContain(marker);
+    const result = await handler({ providerFilter: marker });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).not.toContain(marker);
+    expect(JSON.parse(result.content[0].text).data.results.stats.successes).toBe(1);
+  });
+
   describe('result formatting', () => {
     const createSuccessfulEvaluation = (_: unknown, i: number) => ({
       testCase: { description: `test case ${i}`, assert: [] },

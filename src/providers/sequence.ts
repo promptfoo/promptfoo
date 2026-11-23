@@ -2,6 +2,7 @@ import logger from '../logger';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { providerRegistry } from './providerRegistry';
 
 import type {
   ApiProvider,
@@ -58,6 +59,7 @@ export class SequenceProvider implements ApiProvider {
       logger.debug(`Sequence provider sending input: ${renderedInput}`);
 
       const response = await context.originalProvider.callApi(renderedInput, context, options);
+      providerRegistry.reportTargetCacheStatus(response.cached === true);
 
       if (response.error) {
         return response;

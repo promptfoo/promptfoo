@@ -39,9 +39,20 @@ import {
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
+import { withPrivateEvaluation } from '../util/privateEvaluation';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
+import {
+  getAssertionLeaves,
+  getCapturedVerifierInputs,
+  getProtectedAssertionValue,
+  REDACTED_PROMPT,
+  requiresTraceRedaction,
+  sanitizeRedactionResult,
+  TRACE_REDACTION_ASSERTIONS,
+} from '../util/traceRedaction';
 import { transform } from '../util/transform';
+import { sanitizeCodingAgentVerifierInputs, sanitizeRedactionGrade } from '../util/verifierPrivacy';
 import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
@@ -172,7 +183,11 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     return assertion.assert.some(assertionMayNeedTraceContext);
   }
 
-  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
+  const baseType = getAssertionBaseType(assertion);
+  if (
+    baseType.startsWith('promptfoo:redteam:coding-agent:') ||
+    baseType.startsWith('promptfoo:redteam:harness:')
+  ) {
     return true;
   }
 
@@ -443,6 +458,28 @@ async function runAssertionInternal({
   traceData?: TraceData | null;
   claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
+  const privacyCheck = TRACE_REDACTION_ASSERTIONS.has(getAssertionBaseType(assertion));
+  if (privacyCheck) {
+    invariant(!assertion.transform, 'Local verifiers require the original response.');
+  } else if (requiresTraceRedaction(test.assert)) {
+    // A sibling grader can call a model or user code. Give it only the public
+    // placeholders and remove any copies of receipt literals in its own rubric.
+    const projected = sanitizeCodingAgentVerifierInputs(
+      { assertion, options: test.options },
+      { preservePaths: false, source: { test, captured: getCapturedVerifierInputs(test) } },
+    );
+    assertion = projected.assertion;
+    providerResponse = sanitizeRedactionResult({
+      response: providerResponse,
+      testCase: test,
+    }).response;
+    prompt = REDACTED_PROMPT;
+    vars = {};
+    test = { options: projected.options, metadata: { purpose: 'Assess the public report.' } };
+    provider = undefined;
+    traceId = undefined;
+    traceData = null;
+  }
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
 
@@ -490,7 +527,14 @@ async function runAssertionInternal({
 
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
-  let renderedValue = assertion.value;
+  let renderedValue = getProtectedAssertionValue(assertion);
+  if (/^promptfoo:redteam:(?:coding-agent|harness):/.test(getAssertionBaseType(assertion))) {
+    invariant(
+      typeof renderedValue !== 'string' ||
+        (!renderedValue.startsWith('file://') && !isPackagePath(renderedValue)),
+      'Verifier files must be static and captured before the target runs.',
+    );
+  }
   let valueFromScript: ValueFromScriptType;
   const scriptFailure = (reason: string): GradingResult =>
     applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
@@ -685,6 +729,20 @@ async function runAssertionInternal({
 export async function runAssertion(
   options: Parameters<typeof runAssertionInternal>[0],
 ): Promise<GradingResult> {
+  if (
+    requiresTraceRedaction(options.test.assert) ||
+    TRACE_REDACTION_ASSERTIONS.has(getAssertionBaseType(options.assertion))
+  ) {
+    return withPrivateEvaluation(async () => {
+      try {
+        return sanitizeRedactionGrade(
+          await runAssertionInternal({ ...options, traceId: undefined }),
+        );
+      } catch {
+        throw new Error('Error details omitted for trace/artifact redaction.');
+      }
+    });
+  }
   if (!options.traceId) {
     return runAssertionInternal(options);
   }
@@ -774,6 +832,8 @@ export async function runAssertions({
     return AssertionsResult.noAssertsResult();
   }
 
+  const privateTest = requiresTraceRedaction(test.assert);
+  let failedPrivacyCheck = false;
   const mainAssertResult = new AssertionsResult({
     threshold: test.threshold,
   });
@@ -809,7 +869,7 @@ export async function runAssertions({
     .flat();
 
   const shouldPreloadTrace =
-    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
+    !privateTest && !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
   let preloadedTraceData: TraceData | null | undefined;
   if (shouldPreloadTrace && traceId) {
     try {
@@ -866,10 +926,17 @@ export async function runAssertions({
       claimStoredGradingUsage,
     });
 
+    if (
+      privateTest &&
+      TRACE_REDACTION_ASSERTIONS.has(getAssertionBaseType(assertion)) &&
+      !result.pass
+    ) {
+      failedPrivacyCheck = true;
+    }
     assertResult.addResult({
       index,
       result,
-      metric: renderMetricName(assertion.metric, vars || test.vars || {}),
+      metric: privateTest ? undefined : renderMetricName(assertion.metric, vars || test.vars || {}),
       weight: assertion.weight,
     });
   };
@@ -900,12 +967,58 @@ export async function runAssertions({
     mainAssertResult.addResult({
       index,
       result,
-      metric: renderMetricName(metric, vars || test.vars || {}),
+      metric: privateTest ? undefined : renderMetricName(metric, vars || test.vars || {}),
       weight,
     });
   });
 
+  if (privateTest) {
+    const grade = sanitizeRedactionGrade(await mainAssertResult.testResult());
+    return failedPrivacyCheck ? { ...grade, pass: false, score: 0 } : grade;
+  }
   return mainAssertResult.testResult(assertScoringFunction);
+}
+
+// Failed or empty target responses can still leave locally verifiable evidence.
+// Never dispatch ordinary assertions, tracking or model grading for these rows.
+export async function checkFailedAgentResponse(
+  test: AtomicTestCase,
+  response: ProviderResponse,
+  traceId?: string,
+): Promise<GradingResult | undefined> {
+  const checks = getAssertionLeaves(test.assert).filter(
+    (assertion) =>
+      assertion.type.startsWith('promptfoo:redteam:coding-agent:') &&
+      !TRACE_REDACTION_ASSERTIONS.has(assertion.type),
+  );
+  if (!checks.length || requiresTraceRedaction(test.assert)) {
+    return undefined;
+  }
+  const { getGraderById } = await import('../redteam/graders');
+  const context = {
+    providerResponse: response,
+    traceData: traceId ? await loadTraceData(traceId) : undefined,
+  };
+  for (const assertion of checks) {
+    const grader = getGraderById(assertion.type);
+    const result = await grader?.getResult(
+      '',
+      coerceString(response.output ?? ''),
+      test,
+      undefined,
+      getProtectedAssertionValue(assertion),
+      undefined,
+      undefined,
+      context,
+    );
+    if (
+      result?.grade.metadata?.deterministicFailure === true &&
+      result.grade.metadata.codingAgentExploitStatus !== 'evidence_missing'
+    ) {
+      return { ...result.grade, pass: false, score: 0, assertion: { type: assertion.type } };
+    }
+  }
+  return undefined;
 }
 
 export async function runCompareAssertion(

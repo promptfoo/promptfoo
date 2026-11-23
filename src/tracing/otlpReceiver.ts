@@ -165,6 +165,8 @@ function resolveLogSpanName(attributes: Record<string, any>, bodyValue: unknown)
 type OTLPFormat = 'json' | 'protobuf';
 
 export interface OTLPReceiverTracePolicy {
+  /** Accept spans only for trace IDs already registered by the evaluator. */
+  requireExistingTrace?: boolean;
   evaluationId: string;
   /** Tool names whose tool-call spans should be normalized as command steps. */
   commandToolNames?: string[];
@@ -190,6 +192,7 @@ interface TraceInfo {
 type GroupedTraces = Map<string, { spans: SpanData[]; info: TraceInfo }>;
 
 interface RegisteredTracePolicy {
+  requireExistingTrace?: boolean;
   commandToolNames?: string[];
   redactAttributePatterns: string[];
 }
@@ -237,6 +240,7 @@ function normalizeCommandToolNames(commandToolNames?: string[]): string[] | unde
 
 function normalizeTracePolicy(policy: OTLPReceiverTracePolicy): RegisteredTracePolicy {
   return {
+    requireExistingTrace: policy.requireExistingTrace,
     commandToolNames: normalizeCommandToolNames(policy.commandToolNames),
     redactAttributePatterns: normalizeRedactAttributePatterns(policy.redactAttributes),
   };
@@ -580,6 +584,10 @@ export class OTLPReceiver {
 
   private async createTraceRecords(traces: GroupedTraces): Promise<void> {
     for (const [traceId, { info }] of traces) {
+      if (this.getRegisteredTracePolicy(info)?.requireExistingTrace) {
+        // Only public rows received an evaluator-created trace. addSpans rejects unknown IDs.
+        continue;
+      }
       if (!info.evaluationId || !info.testCaseId) {
         logger.debug(`[OtlpReceiver] Skipping trace record creation for unlinked trace ${traceId}`);
         continue;
@@ -621,6 +629,9 @@ export class OTLPReceiver {
     for (const [traceId, { spans, info }] of traces) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
       const redactAttributePatterns = await this.getRedactAttributePatterns(traceId, info);
+      if (!redactAttributePatterns) {
+        continue;
+      }
       const sanitized =
         redactAttributePatterns.length > 0
           ? spans.map((span) => this.redactSpan(span, redactAttributePatterns))
@@ -632,8 +643,17 @@ export class OTLPReceiver {
     }
   }
 
-  private async getRedactAttributePatterns(traceId: string, info?: TraceInfo): Promise<string[]> {
+  private async getRedactAttributePatterns(
+    traceId: string,
+    info?: TraceInfo,
+  ): Promise<string[] | null> {
     const metadata = await this.traceStore.getTraceMetadata(traceId);
+    if (
+      metadata?.privateForensicEvidence === true ||
+      (metadata === undefined && this.getRegisteredTracePolicy(info)?.requireExistingTrace)
+    ) {
+      return null;
+    }
     if (metadata === undefined) {
       return (
         this.getRegisteredTracePolicy(info)?.redactAttributePatterns ??

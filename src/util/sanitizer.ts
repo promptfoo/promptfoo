@@ -4,7 +4,14 @@
  */
 import deepEqual from 'fast-deep-equal';
 import safeStringify from 'fast-safe-stringify';
+import { isApiProvider } from '../types/providers';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider';
+import {
+  configRequiresTraceRedaction,
+  getAssertionLeaves,
+  REDACTED_PROMPT,
+  sanitizeCodingAgentVerifierInputs,
+} from './verifierRedaction';
 
 import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
 
@@ -13,6 +20,91 @@ const DUMMY_BASE = 'http://placeholder';
 const URL_REFERENCE = /^(?:[a-z][a-z0-9+.-]*:\/\/|\/[^?#]*[?#])/i;
 
 export const REDACTED = '[REDACTED]';
+
+export { sanitizeCodingAgentVerifierInputs } from './verifierRedaction';
+
+export function sanitizeConfigForPersistence(
+  config: Partial<UnifiedConfig>,
+): Partial<UnifiedConfig> {
+  const protectedSuite = configRequiresTraceRedaction(config);
+  const safe = sanitizeCodingAgentVerifierInputs(sanitizeTracingConfigForPersistence(config), {
+    source: config,
+    preservePaths: !protectedSuite,
+  });
+  if (!protectedSuite) {
+    return safe;
+  }
+
+  // Prompt templates are shared by all providers, before any rows have been rendered.
+  // File-backed receipts may be missing here, so field-name filtering is insufficient.
+  if (safe.prompts !== undefined) {
+    safe.prompts = Array.isArray(safe.prompts)
+      ? safe.prompts.map(() => REDACTED_PROMPT)
+      : [REDACTED_PROMPT];
+  }
+  Reflect.deleteProperty(safe, 'providerPromptMap');
+  const inherited = configRequiresTraceRedaction(config.defaultTest);
+  // Old imports can mark only the suite or refer to defaults we cannot open.
+  // In that case no inline test can prove its sibling expectations are public.
+  const unknownOwnership =
+    config.metadata?.privateTestCatalog === true ||
+    typeof config.defaultTest === 'string' ||
+    (!inherited && !configRequiresTraceRedaction([config.tests, config.scenarios]));
+  function omitPrivateInputs<T>(test: T, shared = false): T {
+    if (!test || typeof test !== 'object') {
+      return test;
+    }
+    const options = 'options' in test ? test.options : undefined;
+    const optedOut =
+      options &&
+      typeof options === 'object' &&
+      'disableDefaultAsserts' in options &&
+      options.disableDefaultAsserts === true;
+    if (
+      !shared &&
+      !unknownOwnership &&
+      (!inherited || optedOut) &&
+      !configRequiresTraceRedaction(test)
+    ) {
+      return test;
+    }
+    // Sibling expectations can repeat a file-backed receipt unavailable at save time.
+    // Mirror the type-only projection on private result rows and require live inputs for replay.
+    const copy = {
+      ...stripTestProviderPromptSelectors(test),
+      ...('vars' in test && { vars: {} }),
+      ...('assert' in test &&
+        Array.isArray(test.assert) && {
+          assert: getAssertionLeaves(test.assert).map(({ type }) => ({ type })),
+          privateVerifierInputsRedacted: true,
+        }),
+    };
+    Reflect.deleteProperty(copy, 'prompts');
+    Reflect.deleteProperty(copy, 'providerOutput');
+    return copy;
+  }
+  safe.providers = stripProviderPromptSelectors(safe.providers);
+  safe.defaultTest = omitPrivateInputs(safe.defaultTest, true);
+  if (Array.isArray(safe.tests)) {
+    safe.tests = safe.tests.map((test) => omitPrivateInputs(test));
+  }
+  if (safe.scenarios) {
+    safe.scenarios = safe.scenarios.map((scenario) => {
+      if (!scenario || typeof scenario !== 'object') {
+        return scenario;
+      }
+      const scenarioPrivate = configRequiresTraceRedaction(scenario.config);
+      return {
+        ...scenario,
+        config: scenario.config?.map((test) => omitPrivateInputs(test, true)),
+        tests: Array.isArray(scenario.tests)
+          ? scenario.tests.map((test) => omitPrivateInputs(test, scenarioPrivate))
+          : scenario.tests,
+      };
+    });
+  }
+  return safe;
+}
 
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
@@ -784,6 +876,100 @@ export function mapTestProviderRefs<T>(test: T, mapProvider: (provider: unknown)
   return project(test) as T;
 }
 
+/** Map only grading assertion providers and component results. */
+export function mapGradingResultProviderRefs<T>(
+  gradingResult: T,
+  mapProvider: (provider: unknown) => unknown,
+): T {
+  const visited = new WeakMap<object, Record<string, unknown>>();
+  const project = (value: unknown): unknown => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return value;
+    }
+    const result = value as Record<string, unknown>;
+    const previous = visited.get(result);
+    if (previous) {
+      return previous;
+    }
+    const projected = { ...result };
+    visited.set(result, projected);
+    if (result.assertion) {
+      projected.assertion = mapTestProviderRefs(result.assertion, mapProvider);
+    }
+    if (Array.isArray(result.componentResults)) {
+      projected.componentResults = result.componentResults.map(project);
+    }
+    return projected;
+  };
+  return project(gradingResult) as T;
+}
+
+/** Snapshot live provider references for replay without retaining runtime client state. */
+export function toSerializableProviderRef(provider: unknown): unknown {
+  if (isApiProvider(provider)) {
+    return {
+      id: provider.id(),
+      label: provider.label,
+      ...sanitizeObject(
+        {
+          config: provider.config,
+          transform: typeof provider.transform === 'string' ? provider.transform : undefined,
+          delay: provider.delay,
+          inputs: provider.inputs,
+        },
+        { context: 'provider options', sanitizeUrls: true, maxDepth: Number.POSITIVE_INFINITY },
+      ),
+      ...(provider.prompts && { prompts: [...provider.prompts] }),
+    };
+  }
+  if (Array.isArray(provider)) {
+    return provider.map(toSerializableProviderRef);
+  }
+  if (isProviderTypeMap(provider)) {
+    let serialized: Record<string, unknown> | undefined;
+    for (const type of GRADING_PROVIDER_TYPE_KEYS) {
+      if (isApiProvider(provider[type])) {
+        serialized ??= { ...provider };
+        serialized[type] = toSerializableProviderRef(provider[type]);
+      }
+    }
+    return serialized ?? provider;
+  }
+  return provider;
+}
+
+/** Snapshot live grading references before generic result serialization invokes provider toJSON. */
+export function snapshotResultProviderRefs<T extends object>(result: T): T {
+  const record = result as Record<string, unknown>;
+  const serializeProvider = (provider: unknown) => {
+    if (!isApiProvider(provider) && !isProviderTypeMap(provider)) {
+      return provider;
+    }
+    return sanitizeObject(toSerializableProviderRef(provider), {
+      context: 'grading provider',
+      sanitizeUrls: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+      throwOnError: true,
+    });
+  };
+  const projected: Record<string, unknown> = { ...record };
+  if (record.testCase) {
+    projected.testCase = mapTestProviderRefs(record.testCase, serializeProvider);
+  }
+  const prompt = record.prompt as { config?: { provider?: unknown } } | undefined;
+  const config = prompt?.config;
+  if (config?.provider !== undefined) {
+    projected.prompt = {
+      ...prompt,
+      config: { ...config, provider: serializeProvider(config.provider) },
+    };
+  }
+  if (record.gradingResult) {
+    projected.gradingResult = mapGradingResultProviderRefs(record.gradingResult, serializeProvider);
+  }
+  return projected as T;
+}
+
 /** Project only provider slots in a test or assertion (including sets). */
 export function stripTestProviderPromptSelectors<T>(test: T): T {
   return mapTestProviderRefs(test, stripProviderPromptSelectors);
@@ -799,7 +985,7 @@ export function sanitizeConfigForOutput(
     shouldStripResponseOutput?: boolean;
   } = {},
 ): Partial<UnifiedConfig> {
-  const safe = sanitizeTracingConfigForPersistence(config);
+  const safe = sanitizeConfigForPersistence(config);
   const { basePath, ...outputConfig } = safe;
   if (options.shouldStripPromptText) {
     // Classify live grading maps before serialization removes their provider methods.

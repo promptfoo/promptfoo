@@ -2,7 +2,14 @@ import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
-import { evalResultsTable, evalsTable, spansTable, tracesTable } from '../../src/database/tables';
+import {
+  datasetsTable,
+  evalResultsTable,
+  evalsTable,
+  promptsTable,
+  spansTable,
+  tracesTable,
+} from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
@@ -15,6 +22,7 @@ import Eval, {
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
+import { generateTraceContextIfNeeded } from '../../src/tracing/evaluatorTracing';
 import { TraceStore } from '../../src/tracing/store';
 import {
   type EvaluateResult,
@@ -22,6 +30,7 @@ import {
   type Prompt,
   ResultFailureReason,
 } from '../../src/types/index';
+import { sha256 } from '../../src/util/createHash';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
 import { redactAzureBlobSasTokens } from '../../src/util/sanitizer';
 import {
@@ -29,7 +38,11 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createLegacyRedactionSummary,
+} from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 import { createAccuracyFilter, createPassFailOptions } from '../factories/literalFixtures';
 
@@ -249,6 +262,201 @@ describe('evaluator', () => {
         'First result',
         'Second result',
       ]);
+    });
+
+    it.each([
+      'promptfoo:redteam:coding-agent:trace-redaction',
+      'promptfoo:redteam:harness:artifact-redaction',
+    ] as const)('sanitizes legacy privacy copies on read, write and save for %s', async (type) => {
+      const original = createLegacyRedactionSummary(type);
+      original.results[0].prompt.label = original.results[0].prompt.raw;
+      original.table.head.prompts[0].label = original.table.head.prompts[0].raw;
+      const snapshot = JSON.stringify(original);
+      const control = original.results[1];
+      const config = { prompts: [original.results[0].prompt.raw] };
+      const id = await writeResultsToDatabase(original, config);
+      const db = await getDb();
+      const stored = await db.select().from(evalsTable).where(eq(evalsTable.id, id)).get();
+      expect(JSON.stringify(stored)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      const evaluation = (await Eval.findById(id))!;
+      // Old database rows and callers can still supply unfiltered legacy data.
+      evaluation.oldResults = original;
+      const reads = [
+        await evaluation.getResults(),
+        await evaluation.getTable(),
+        evaluation.getPrompts(),
+        await evaluation.toEvaluateSummary(),
+        await evaluation.toResultsFile(),
+      ];
+      for (const read of reads) {
+        expect(JSON.stringify(read)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      }
+      const results = await evaluation.getResults();
+      expect(results[0]).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      });
+      expect(results[1]).toBe(control);
+      expect((await evaluation.getTable()).body[1]).toBe(original.table.body[1]);
+      await evaluation.save();
+      const saved = await db.select().from(evalsTable).where(eq(evalsTable.id, id)).get();
+      expect(JSON.stringify(saved)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      expect(JSON.stringify(original)).toBe(snapshot);
+    });
+
+    it.each([0, 1])(
+      'protects unused legacy prompt columns with %i completed rows',
+      async (count) => {
+        const marker = 'PRIVATE_UNUSED_PROMPT';
+        const original = createLegacyRedactionSummary(
+          'promptfoo:redteam:harness:artifact-redaction',
+        );
+        const config = { defaultTest: { assert: original.results[0].testCase.assert } };
+        original.results.length = count;
+        original.table.body.length = count;
+        const prompt = createCompletedPrompt(marker, { label: marker });
+        prompt.metrics!.namedScores[marker] = 1;
+        Object.assign(prompt.metrics!, { testErrorCount: marker });
+        original.table.head.vars[0] = marker;
+        Object.assign(original.stats, { cost: marker });
+        original.table.head.prompts.push(prompt);
+        Object.assign(original, { prompts: original.table.head.prompts });
+        const id = await writeResultsToDatabase(original, config);
+        const db = await getDb();
+        const stored = await db.select().from(evalsTable).where(eq(evalsTable.id, id)).get();
+        expect(JSON.stringify(stored)).not.toContain(marker);
+        const evaluation = (await Eval.findById(id))!;
+        evaluation.oldResults = original;
+        expect(evaluation.getPrompts()).toHaveLength(2);
+        expect((await evaluation.getTable()).head.vars).toEqual(['Variable 1', 'Variable 2']);
+        expect(JSON.stringify(await evaluation.toResultsFile())).not.toContain(marker);
+        expect(prompt.label).toBe(marker);
+      },
+    );
+
+    it.each(['result', 'table-test', 'table-output', 'default', 'marker', 'metadata'] as const)(
+      'inherits legacy privacy assertions from %s without changing caller data',
+      async (location) => {
+        const original = createLegacyRedactionSummary(
+          'promptfoo:redteam:coding-agent:trace-redaction',
+        );
+        const assert = original.results[0].testCase.assert;
+        original.results[0].testCase = { ...original.results[0].testCase, assert: [] };
+        original.table.body[0].test = { ...original.table.body[0].test, assert: [] };
+        const output = original.table.body[0].outputs[0];
+        output.testCase = { ...output.testCase, assert: [] };
+        if (location === 'result') {
+          original.results[0].testCase.assert = assert;
+        }
+        if (location === 'metadata') {
+          original.results[0].metadata = { pluginId: 'coding-agent:trace-redaction' };
+        }
+        if (location === 'table-test') {
+          original.table.body[0].test.assert = assert;
+        }
+        if (location === 'table-output') {
+          output.testCase.assert = assert;
+        }
+        const evaluation = new Eval(
+          location === 'default'
+            ? { defaultTest: { assert } }
+            : location === 'marker'
+              ? { metadata: { privatePrompts: true } }
+              : {},
+        );
+        evaluation.oldResults = original;
+        const snapshot = JSON.stringify(original);
+        const summary = await evaluation.toEvaluateSummary();
+        expect(JSON.stringify(summary)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+        expect(JSON.stringify(original)).toBe(snapshot);
+        if ('table' in summary) {
+          evaluation.oldResults = summary;
+          expect(await evaluation.toEvaluateSummary()).toEqual(summary);
+        }
+      },
+    );
+
+    it.each(['result', 'table-test', 'table-output'] as const)(
+      'honors disabled legacy default assertions recorded in %s',
+      async (location) => {
+        const original = createLegacyRedactionSummary(
+          'promptfoo:redteam:coding-agent:trace-redaction',
+        );
+        original.results = original.results.slice(0, 1);
+        original.table.body = original.table.body.slice(0, 1);
+        const result = original.results[0];
+        const row = original.table.body[0];
+        const output = row.outputs[0];
+        const config = { defaultTest: { assert: result.testCase.assert } };
+        result.testCase = { ...result.testCase, assert: [] };
+        row.test = { ...row.test, assert: [] };
+        output.testCase = { ...output.testCase, assert: [] };
+        const test =
+          location === 'result'
+            ? result.testCase
+            : location === 'table-test'
+              ? row.test
+              : output.testCase;
+        test.options = { disableDefaultAsserts: true };
+        const snapshot = JSON.stringify(original);
+        const evaluation = new Eval(config);
+        evaluation.oldResults = original;
+        expect((await evaluation.toEvaluateSummary()).results).toEqual(original.results);
+        expect((await evaluation.getTable()).body).toEqual(original.table.body);
+        const id = await writeResultsToDatabase(original, config);
+        const reloaded = (await Eval.findById(id))!;
+        expect(await reloaded.getResults()).toEqual(original.results);
+        expect((await reloaded.getTable()).body).toEqual(original.table.body);
+        expect(JSON.stringify(reloaded.getPrompts())).not.toContain('PRIVATE_LEGACY_RECEIPT');
+        expect(JSON.stringify(original)).toBe(snapshot);
+      },
+    );
+
+    it('retains explicit legacy privacy assertions when default assertions are disabled', async () => {
+      const original = createLegacyRedactionSummary(
+        'promptfoo:redteam:coding-agent:trace-redaction',
+      );
+      original.results[0].testCase.options = { disableDefaultAsserts: true };
+      const evaluation = new Eval({
+        defaultTest: { assert: [{ type: 'contains', value: 'public' }] },
+      });
+      evaluation.oldResults = original;
+      expect(JSON.stringify(await evaluation.toEvaluateSummary())).not.toContain(
+        'PRIVATE_LEGACY_RECEIPT',
+      );
+      expect((await evaluation.getResults())[0]).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      });
+    });
+
+    it('redacts legacy verifier inputs while retaining non-privacy target output', async () => {
+      const original = createLegacyRedactionSummary(
+        'promptfoo:redteam:coding-agent:repo-prompt-injection',
+      );
+      original.results[0].response!.output = 'ordinary target reply';
+      original.table.body[0].outputs[0].text = 'ordinary target reply';
+      original.table.body[0].outputs[0].audio = { data: 'ordinary audio' };
+      const evaluation = new Eval({});
+      evaluation.oldResults = original;
+      const result = (await evaluation.toEvaluateSummary()).results[0];
+      expect(JSON.stringify(result.testCase)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      expect(JSON.stringify(result.vars)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      expect(result.response?.output).toBe('ordinary target reply');
+      const row = (await evaluation.getTable()).body[0];
+      expect(JSON.stringify([row.test, row.vars, row.outputs[0].testCase])).not.toContain(
+        'PRIVATE_LEGACY_RECEIPT',
+      );
+      expect(row.outputs[0].text).toBe('ordinary target reply');
+      expect(row.outputs[0].audio?.data).toBe('ordinary audio');
+      const id = await writeResultsToDatabase(original, {});
+      const stored = (await Eval.findById(id))!;
+      expect(JSON.stringify(stored.oldResults?.results[0].testCase)).not.toContain(
+        'PRIVATE_LEGACY_RECEIPT',
+      );
+      expect(original.results[0].vars.rawReceipt).toBe('PRIVATE_LEGACY_RECEIPT');
     });
 
     it('keeps legacy result and summary reads on their existing path', async () => {
@@ -1619,6 +1827,338 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it.each(['metadata', 'grade'])(
+      'honors privacy ownership from an older %s in filters and trace reads',
+      async (location) => {
+        const marker = 'PRIVATE_METADATA_VALUE';
+        const evaluation = await Eval.create({}, []);
+        await evaluation.addResult(createEvaluateResult({ testIdx: 0, promptIdx: 0 }));
+        const db = await getDb();
+        await db
+          .update(evalResultsTable)
+          .set({
+            testCase: { vars: { [marker]: marker } },
+            metadata: {
+              ...(location === 'metadata' && { pluginId: 'harness:artifact-redaction' }),
+              diagnostic: marker,
+            },
+            gradingResult:
+              location === 'metadata'
+                ? null
+                : {
+                    pass: false,
+                    score: 0,
+                    reason: marker,
+                    assertion: { type: 'promptfoo:redteam:harness:artifact-redaction' },
+                  },
+          })
+          .where(eq(evalResultsTable.evalId, evaluation.id));
+        expect(await EvalQueries.getMetadataValuesFromEval(evaluation.id, 'diagnostic')).toEqual(
+          [],
+        );
+        expect(await EvalQueries.getMetadataKeysFromEval(evaluation.id)).toEqual([]);
+        expect(await EvalQueries.getVarsFromEval(evaluation.id)).toEqual([]);
+        expect(
+          await evaluation.isTracePrivate({
+            traceId: 'unmarked',
+            evaluationId: evaluation.id,
+            testCaseId: '0-0',
+            spans: [],
+          }),
+        ).toBe(true);
+        expect(JSON.stringify(await evaluation.getResults())).not.toContain(marker);
+      },
+    );
+
+    it('protects the prompt catalog before the first result and after reload', async () => {
+      const marker = 'PRIVATE_CATALOG_INPUT';
+      const prompt = createCompletedPrompt(marker, { label: 'label ' + marker, provider: marker });
+      prompt.metrics!.testPassCount = 2;
+      prompt.metrics!.namedScores[marker] = 1;
+      const config = { prompts: [marker], tests: 'file://tests.yaml' };
+      const evaluation = await Eval.create(config, [prompt], {
+        privatePrompts: true,
+        completedPrompts: [prompt],
+        vars: [marker],
+      });
+      const db = await getDb();
+      const first = await db
+        .select()
+        .from(evalsTable)
+        .where(eq(evalsTable.id, evaluation.id))
+        .get();
+      expect(first?.vars).toEqual([]);
+      await evaluation.addPrompts([prompt]);
+      evaluation.setVars([marker]);
+      await evaluation.save();
+      const stored = await db.select().from(evalsTable).where(eq(evalsTable.id, evaluation.id));
+      const catalog = await db
+        .select()
+        .from(promptsTable)
+        .where(eq(promptsTable.prompt, prompt.label));
+      expect(JSON.stringify(stored)).not.toContain(marker);
+      expect(catalog).toEqual([]);
+      expect(JSON.stringify(await evaluation.toResultsFile())).not.toContain(marker);
+      await db
+        .update(evalsTable)
+        .set({ vars: [marker] })
+        .where(eq(evalsTable.id, evaluation.id));
+      const reloaded = (await Eval.findById(evaluation.id))!;
+      expect(reloaded.vars).toEqual([]);
+      expect(JSON.stringify(await reloaded.toResultsFile())).not.toContain(marker);
+      expect(JSON.stringify(reloaded.getPrompts())).not.toContain(marker);
+      expect(reloaded.getStats().successes).toBe(2);
+      expect(
+        await reloaded.isTracePrivate({
+          traceId: 'orphan',
+          testCaseId: '0-0',
+          evaluationId: evaluation.id,
+          spans: [],
+        }),
+      ).toBe(true);
+      expect(config.prompts).toEqual([marker]);
+      expect(prompt.raw).toBe(marker);
+    });
+
+    it.each([
+      'promptfoo:redteam:coding-agent:trace-redaction',
+      'promptfoo:redteam:harness:artifact-redaction',
+    ] as const)('keeps forensic %s traces out of export and sharing', async (type) => {
+      const evaluation = await Eval.create({}, []);
+      const store = new TraceStore();
+      for (const [testIdx, traceId] of [
+        'private-trace',
+        'private-indexed',
+        'private-named',
+        'failed-private-trace',
+        'failed-private-indexed',
+        'ordinary-trace',
+      ].entries()) {
+        const result = createEvaluateResult({
+          testIdx,
+          traceId: [1, 2, 4].includes(testIdx) ? undefined : traceId,
+          testCase: {
+            assert: testIdx < 5 ? [{ type: 'assert-set', assert: [{ type }] }] : [],
+            metadata: testIdx === 2 ? { testCaseId: 'custom-private-case' } : {},
+          },
+        });
+        if (testIdx === 3 || testIdx === 4) {
+          evaluation.recordResultPersistenceFailure(result);
+        } else {
+          await evaluation.addResult(result);
+        }
+        await store.createTrace({
+          evaluationId: evaluation.id,
+          testCaseId: testIdx === 2 ? 'custom-private-case' : `${testIdx}-0`,
+          traceId,
+        });
+        await store.addSpans(traceId, [
+          {
+            spanId: traceId,
+            name: 'trace',
+            startTime: 1,
+            attributes: {
+              diagnostic: testIdx < 5 ? 'PRIVATE_FORENSIC_VALUE' : 'ordinary diagnostic',
+            },
+          },
+        ]);
+      }
+      expect((await evaluation.getTraces()).map((trace) => trace.traceId)).toEqual([
+        'ordinary-trace',
+      ]);
+      expect(JSON.stringify(await evaluation.toResultsFile())).not.toContain(
+        'PRIVATE_FORENSIC_VALUE',
+      );
+      expect(JSON.stringify(await store.getTrace('private-trace'))).toContain(
+        'PRIVATE_FORENSIC_VALUE',
+      );
+    });
+
+    it.each([
+      'promptfoo:redteam:coding-agent:trace-redaction',
+      'promptfoo:redteam:harness:artifact-redaction',
+    ] as const)(
+      'never starts an exportable trace for %s, even when the row fails',
+      async (type) => {
+        const evaluation = await Eval.create({}, []);
+        const testCase = {
+          assert: [{ type: 'assert-set' as const, assert: [{ type }] }],
+          vars: { prompt: 'PRIVATE_TRACE_INPUT' },
+          metadata: { evaluationId: evaluation.id, tracingEnabled: true },
+        };
+        expect(await generateTraceContextIfNeeded(testCase, {}, 0, 0)).toBeNull();
+        evaluation.recordResultPersistenceFailure(createEvaluateResult({ testCase }));
+        const db = await getDb();
+        expect(
+          await db.select().from(tracesTable).where(eq(tracesTable.evaluationId, evaluation.id)),
+        ).toEqual([]);
+        expect(JSON.stringify(await evaluation.getFailedResultsByTestIdx(0))).not.toContain(
+          'PRIVATE_TRACE_INPUT',
+        );
+      },
+    );
+
+    it.each([
+      { key: 'rawReceipt', existing: false },
+      { key: 'sensitiveValue', existing: false },
+      { key: 'expectedContent', existing: false },
+      { key: 'rawReceipt', existing: true },
+    ])(
+      'sanitizes $key in saved datasets while preserving identity (existing=$existing)',
+      async ({ key, existing }) => {
+        const secret = `PRIVATE_DATASET_RECEIPT_${key}_${existing}`;
+        const tests = [
+          {
+            assert: [
+              {
+                type: 'promptfoo:redteam:coding-agent:trace-redaction' as const,
+                value: { [key]: secret },
+              },
+            ],
+          },
+        ];
+        const datasetId = sha256(JSON.stringify(tests));
+        const db = await getDb();
+        if (existing) {
+          await db.insert(datasetsTable).values({ id: datasetId, tests, createdAt: 123 }).run();
+        }
+        const evaluation = await Eval.create({ tests }, []);
+        const dataset = await db
+          .select()
+          .from(datasetsTable)
+          .where(eq(datasetsTable.id, datasetId))
+          .get();
+        expect(dataset).toBeDefined();
+        expect(JSON.stringify(dataset?.tests)).not.toContain(secret);
+        if (existing) {
+          expect(dataset?.createdAt).toBe(123);
+        }
+        expect(evaluation.config.tests).toEqual(tests);
+        expect(JSON.stringify(evaluation.config.tests)).toContain(secret);
+      },
+    );
+
+    it.each([undefined, 'file://private-default.yaml'])(
+      'protects a row-only legacy verifier with unresolved defaults (%s)',
+      async (defaultTest) => {
+        const secret = 'PRIVATE_IMPORTED_SIBLING';
+        const config = {
+          defaultTest,
+          tests: [{ assert: [{ type: 'not-contains' as const, value: secret }] }],
+        };
+        const summary = createLegacyRedactionSummary(
+          'promptfoo:redteam:coding-agent:trace-redaction',
+        );
+        const id = await writeResultsToDatabase(summary, config);
+        const db = await getDb();
+        const dataset = await db
+          .select()
+          .from(datasetsTable)
+          .where(eq(datasetsTable.id, sha256(JSON.stringify(config.tests))))
+          .get();
+        const evaluation = await Eval.findById(id);
+        expect(dataset).toBeDefined();
+        expect(evaluation).toBeDefined();
+        for (const copy of [
+          dataset!.tests,
+          evaluation!.config,
+          (await evaluation!.toResultsFile()).config,
+        ]) {
+          expect(JSON.stringify(copy)).not.toContain(secret);
+          expect(JSON.stringify(copy)).not.toContain('private-default.yaml');
+        }
+        expect(config.tests[0].assert[0].value).toBe(secret);
+      },
+    );
+
+    it('does not treat expanded result indices as catalog positions', async () => {
+      const summary = createLegacyRedactionSummary(
+        'promptfoo:redteam:coding-agent:trace-redaction',
+      );
+      summary.results[0].testIdx = 2;
+      summary.table.body[0].testIdx = 2;
+      const config = {
+        tests: [
+          { options: { repeat: 2 } },
+          { assert: [{ type: 'not-contains' as const, value: 'PRIVATE_SIBLING' }] },
+          { assert: [{ type: 'contains' as const, value: 'unverified control' }] },
+        ],
+        scenarios: [
+          {
+            config: [{}],
+            tests: [{ assert: [{ type: 'equals' as const, value: 'PRIVATE_SIBLING' }] }],
+          },
+        ],
+      };
+      const id = await writeResultsToDatabase(summary, config);
+      const evaluation = await Eval.findById(id);
+      const saved = JSON.stringify(evaluation!.config);
+      expect(saved).not.toContain('PRIVATE_SIBLING');
+      expect(saved).not.toContain('unverified control');
+      expect(JSON.stringify(await evaluation!.getResults())).toContain('ordinary output');
+      expect(config.tests[1].assert![0].value).toBe('PRIVATE_SIBLING');
+    });
+
+    it('omits sibling assertions from private configs and datasets without reading receipts', async () => {
+      const secret = 'PRIVATE_SIBLING_RECEIPT';
+      const privacy = {
+        type: 'promptfoo:redteam:coding-agent:trace-redaction' as const,
+        value: { rawReceiptPath: 'local-receipt.txt' },
+      };
+      const sibling = { type: 'not-contains' as const, value: secret };
+      const publicTest = {
+        options: { disableDefaultAsserts: true },
+        assert: [{ type: 'contains' as const, value: 'public control' }],
+      };
+      const config = {
+        defaultTest: { assert: [privacy, sibling] },
+        tests: [{ assert: [{ type: 'assert-set' as const, assert: [sibling] }] }, publicTest],
+      };
+      const evaluation = await Eval.create(config, []);
+      const datasetId = sha256(JSON.stringify(config.tests));
+      const db = await getDb();
+      const dataset = await db
+        .select()
+        .from(datasetsTable)
+        .where(eq(datasetsTable.id, datasetId))
+        .get();
+      const persisted = await Eval.findById(evaluation.id);
+      const artifact = await evaluation.toResultsFile();
+      for (const projection of [dataset?.tests, persisted?.config, artifact.config]) {
+        expect(JSON.stringify(projection)).not.toContain(secret);
+        expect(JSON.stringify(projection)).toContain('public control');
+      }
+      expect(persisted?.config.defaultTest).toMatchObject({ privateVerifierInputsRedacted: true });
+      expect(evaluation.config.defaultTest).toEqual(config.defaultTest);
+      expect(sibling.value).toBe(secret);
+    });
+
+    it.each(['rawReceipt', 'sensitiveValue', 'expectedContent'])(
+      'keeps %s out of persisted and exported verifier configuration',
+      async (key) => {
+        const secret = 'protected fixture receipt';
+        const config = {
+          redteam: {
+            plugins: [
+              {
+                id: 'coding-agent:trace-redaction' as const,
+                config: { [key]: secret, rawReceiptPath: 'fixtures/receipt.txt' },
+              },
+            ],
+          },
+        };
+        const evaluation = await Eval.create(config, []);
+        const persisted = await Eval.findById(evaluation.id);
+        expect(JSON.stringify(persisted?.config)).not.toContain(secret);
+        expect(JSON.stringify((await evaluation.toResultsFile()).config)).not.toContain(secret);
+        expect(evaluation.config).toEqual(config);
+        expect(JSON.stringify(persisted?.config)).not.toContain('fixtures/receipt.txt');
+        expect(JSON.stringify(await evaluation.toResultsFile())).not.toContain(
+          'fixtures/receipt.txt',
+        );
+      },
+    );
+
     it('redacts gateway URL credentials from result files while preserving the live config', async () => {
       const gateway = 'https://gateway.example/v1?googleAccessToken=short-private-value';
       const evaluation = new Eval({
@@ -1743,6 +2283,59 @@ describe('evaluator', () => {
         searchableContent: 'searchable_content',
       });
     });
+
+    it.each([
+      'promptfoo:redteam:coding-agent:trace-redaction',
+      'promptfoo:redteam:harness:artifact-redaction',
+    ] as const)(
+      'redacts older private %s rows when paging without rewriting storage',
+      async (type) => {
+        const marker = 'PRIVATE_PAGED_RECEIPT';
+        const [original] = await EvalResult.findManyByEvalIdAndTestIndices(evalWithResults.id, [0]);
+        const db = await getDb();
+        await db
+          .update(evalResultsTable)
+          .set({
+            testCase: {
+              vars: { rawReceipt: marker },
+              assert: [{ type, value: { rawReceipt: marker } }],
+            },
+            prompt: { raw: marker, label: 'Public label' },
+            response: { output: marker, raw: marker },
+            error: marker,
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'Private response detected',
+              metadata: { renderedGradingPrompt: marker },
+            },
+            metadata: { reportText: marker },
+          })
+          .where(eq(evalResultsTable.id, original.id));
+        const stored = await db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.id, original.id))
+          .get();
+        const page = await evalWithResults.getTablePage({ testIndices: [0] });
+        expect(JSON.stringify(page)).not.toContain(marker);
+        expect(
+          await EvalQueries.getMetadataValuesFromEval(evalWithResults.id, 'reportText'),
+        ).not.toContain(marker);
+        expect(page.body[0].outputs[original.promptIdx]).toMatchObject({
+          id: original.id,
+          pass: original.success,
+          score: original.score,
+        });
+        expect(
+          await db
+            .select()
+            .from(evalResultsTable)
+            .where(eq(evalResultsTable.id, original.id))
+            .get(),
+        ).toEqual(stored);
+      },
+    );
 
     it('should return paginated results with default parameters', async () => {
       const result = await evalWithResults.getTablePage({ filters: [] });
@@ -2710,13 +3303,88 @@ describe('evaluator', () => {
   });
 
   describe('getTraces', () => {
-    beforeEach(() => {
-      vi.resetModules();
-    });
-
     afterEach(() => {
       vi.restoreAllMocks();
     });
+
+    it.each([false, true])(
+      'checks one trace without fetching all traces or result batches (persisted: %s)',
+      async (persisted) => {
+        const evaluation = persisted ? await Eval.create({}, []) : new Eval({});
+        const type = 'promptfoo:redteam:coding-agent:trace-redaction' as const;
+        const cases = [
+          {
+            traceId: 'private-by-trace',
+            testCaseId: 'other-case',
+            testIdx: 0,
+            testCase: { assert: [{ type }] },
+          },
+          { traceId: undefined, testCaseId: '1-0', testIdx: 1, testCase: { assert: [{ type }] } },
+          {
+            traceId: undefined,
+            testCaseId: 'custom-case',
+            testIdx: 2,
+            testCase: { assert: [{ type }], metadata: { testCaseId: 'custom-case' } },
+          },
+          {
+            traceId: undefined,
+            testCaseId: 'explicit-case',
+            testIdx: 3,
+            testCase: { id: 'explicit-case', assert: [{ type }] },
+          },
+          { traceId: 'public-trace', testCaseId: '4-0', testIdx: 4, testCase: { assert: [] } },
+        ];
+        for (const entry of cases) {
+          await evaluation.addResult(
+            createEvaluateResult({
+              traceId: entry.traceId,
+              testIdx: entry.testIdx,
+              testCase: entry.testCase,
+            }),
+          );
+        }
+        evaluation.recordResultPersistenceFailure(
+          createEvaluateResult({
+            traceId: 'failed-private-trace',
+            testIdx: 5,
+            testCase: { assert: [{ type }] },
+          }),
+        );
+        const batches = persisted ? vi.spyOn(evaluation, 'fetchResultsBatched') : undefined;
+        const bulk = vi.spyOn(evaluation, 'getTraces');
+        for (const entry of cases) {
+          expect(
+            await evaluation.isTracePrivate({
+              traceId: entry.traceId ?? `unlinked-${entry.testIdx}`,
+              evaluationId: evaluation.id,
+              testCaseId: entry.testCaseId,
+              spans: [],
+            }),
+          ).toBe(entry.testIdx < 4);
+        }
+        expect(
+          await evaluation.isTracePrivate({
+            traceId: 'failed-private-trace',
+            evaluationId: evaluation.id,
+            testCaseId: '5-0',
+            spans: [],
+          }),
+        ).toBe(true);
+        expect(
+          await evaluation.isTracePrivate({
+            traceId: 'flagged',
+            evaluationId: evaluation.id,
+            testCaseId: 'unlinked',
+            spans: [],
+            metadata: { privateForensicEvidence: true },
+          }),
+        ).toBe(true);
+        expect(bulk).not.toHaveBeenCalled();
+        if (batches) {
+          expect(batches).not.toHaveBeenCalled();
+        }
+      },
+    );
 
     it('should return traces with properly formatted data', async () => {
       const eval_ = await EvalFactory.create();
@@ -2739,20 +3407,11 @@ describe('evaluator', () => {
         },
       ];
 
-      const mockTraceStore = {
-        getTracesByEvaluation: vi.fn().mockResolvedValue(mockTraces),
-      };
+      const fetchTraces = vi
+        .spyOn(TraceStore.prototype, 'getTracesByEvaluation')
+        .mockResolvedValue(mockTraces);
 
-      vi.doMock('../../src/tracing/store', () => ({
-        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
-      }));
-
-      // Force reload the module to use the mock
-      vi.resetModules();
-      const { default: EvalReloaded } = await import('../../src/models/eval');
-      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
-
-      const traces = await evalInstance.getTraces();
+      const traces = await eval_.getTraces();
 
       expect(traces).toHaveLength(1);
       expect(traces[0]).toMatchObject({
@@ -2762,28 +3421,20 @@ describe('evaluator', () => {
         metadata: { test: 'value' },
       });
       expect(traces[0].spans).toHaveLength(1);
-      expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith(eval_.id);
+      expect(fetchTraces).toHaveBeenCalledWith(eval_.id);
     });
 
     it('should return empty array when no traces exist', async () => {
       const eval_ = await EvalFactory.create();
 
-      const mockTraceStore = {
-        getTracesByEvaluation: vi.fn().mockResolvedValue([]),
-      };
+      const fetchTraces = vi
+        .spyOn(TraceStore.prototype, 'getTracesByEvaluation')
+        .mockResolvedValue([]);
 
-      vi.doMock('../../src/tracing/store', () => ({
-        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
-      }));
-
-      vi.resetModules();
-      const { default: EvalReloaded } = await import('../../src/models/eval');
-      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
-
-      const traces = await evalInstance.getTraces();
+      const traces = await eval_.getTraces();
 
       expect(traces).toEqual([]);
-      expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith(eval_.id);
+      expect(fetchTraces).toHaveBeenCalledWith(eval_.id);
     });
 
     it('should handle spans with missing endTime', async () => {
@@ -2800,26 +3451,15 @@ describe('evaluator', () => {
               spanId: 'span-no-end',
               name: 'Incomplete Span',
               startTime: 1000000000,
-              endTime: null,
               statusCode: 0,
             },
           ],
         },
       ];
 
-      const mockTraceStore = {
-        getTracesByEvaluation: vi.fn().mockResolvedValue(mockTraces),
-      };
+      vi.spyOn(TraceStore.prototype, 'getTracesByEvaluation').mockResolvedValue(mockTraces);
 
-      vi.doMock('../../src/tracing/store', () => ({
-        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
-      }));
-
-      vi.resetModules();
-      const { default: EvalReloaded } = await import('../../src/models/eval');
-      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
-
-      const traces = await evalInstance.getTraces();
+      const traces = await eval_.getTraces();
 
       expect(traces).toHaveLength(1);
       expect(traces[0].spans[0]).toHaveProperty('spanId', 'span-no-end');
@@ -2860,45 +3500,29 @@ describe('evaluator', () => {
         },
       ];
 
-      const mockTraceStore = {
-        getTracesByEvaluation: vi.fn().mockResolvedValue(mockTraces),
-      };
+      vi.spyOn(TraceStore.prototype, 'getTracesByEvaluation').mockResolvedValue(mockTraces);
 
-      vi.doMock('../../src/tracing/store', () => ({
-        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
-      }));
-
-      vi.resetModules();
-      const { default: EvalReloaded } = await import('../../src/models/eval');
-      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
-
-      const traces = await evalInstance.getTraces();
+      const traces = await eval_.getTraces();
 
       expect(traces[0].spans).toHaveLength(3);
-      // Note: The actual status mapping logic may vary based on implementation
-      expect(traces[0].spans[0].spanId).toBe('span-ok');
-      expect(traces[0].spans[1].spanId).toBe('span-error');
-      expect(traces[0].spans[2].spanId).toBe('span-unset');
+      expect(traces[0].spans).toMatchObject([
+        { spanId: 'span-ok', status: { code: 'ok' } },
+        { spanId: 'span-error', status: { code: 'error' } },
+        { spanId: 'span-unset', status: { code: 'unset' } },
+      ]);
     });
 
     it('should handle errors gracefully and return empty array', async () => {
       const eval_ = await EvalFactory.create();
 
-      const mockTraceStore = {
-        getTracesByEvaluation: vi.fn().mockRejectedValue(new Error('Database error')),
-      };
+      vi.spyOn(TraceStore.prototype, 'getTracesByEvaluation').mockRejectedValue(
+        new Error('Database error'),
+      );
 
-      vi.doMock('../../src/tracing/store', () => ({
-        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
-      }));
-
-      vi.resetModules();
-      const { default: EvalReloaded } = await import('../../src/models/eval');
-      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
-
-      const traces = await evalInstance.getTraces();
+      const traces = await eval_.getTraces();
 
       expect(traces).toEqual([]);
+      await expect(eval_.getTraces({ throwOnError: true })).rejects.toThrow('Database error');
     });
   });
 

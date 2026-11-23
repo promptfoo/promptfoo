@@ -40,11 +40,26 @@ import {
 } from '../../util/fetch/responseHeadersObserver';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
+import { isPrivateEvaluation, withPrivateEvaluation } from '../../util/privateEvaluation';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateGradingResponseTokenUsage,
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
+import {
+  getAssertionLeaves,
+  getLocalStrategyTest,
+  getPrivateTargetContext,
+  getProtectedAssertionValue,
+  getRedactionOutcome,
+  REDACTED_PROMPT,
+  requiresTraceRedaction,
+  sanitizeRedactionGrade,
+  sanitizeRedactionGradingInputs,
+  sanitizeRedactionResult,
+  TRACE_REDACTION_ASSERTIONS,
+  TRUSTED_REDACTION_GRADER,
+} from '../../util/traceRedaction';
 import { TransformInputType, transform } from '../../util/transform';
 import {
   getGradingAssertionHash,
@@ -58,6 +73,7 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
+import type { RedteamGradingContext } from '../grading/types';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -519,6 +535,10 @@ function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): numb
   return configuredLimit;
 }
 
+// A session ID may equal a protected value. Return it only to the target
+// that issued it for this test, never on the strength of an input variable.
+const privateSessions = new WeakMap<AtomicTestCase, { provider: ApiProvider; id: string }>();
+
 /** Invoke a red-team target with the same tracing behavior across every strategy. */
 export function callTargetProvider(
   targetProvider: ApiProvider,
@@ -528,7 +548,37 @@ export function callTargetProvider(
 ): Promise<ProviderResponse> {
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
+  const test: AtomicTestCase | undefined = context?.test;
+  const privateCall = requiresTraceRedaction(test?.assert);
   const invoke = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
+    // The raw response and headers must stay inside the target / local verifier boundary.
+    // Neither diagnostics, response hooks nor trace callbacks may observe that evidence.
+    if (privateCall || isPrivateEvaluation()) {
+      return withPrivateEvaluation(async () => {
+        try {
+          invariant(privateCall && test && context, 'Missing private verification context');
+          const targetContext = getPrivateTargetContext(context);
+          const session = privateSessions.get(test);
+          if (session?.provider === targetProvider && session.id === context.vars.sessionId) {
+            targetContext.vars.sessionId = session.id;
+          }
+          const raw = await targetProvider.callApi(targetPrompt, targetContext, {
+            ...options,
+            onResponseHeaders: undefined,
+          });
+          if (typeof raw.sessionId === 'string' && raw.sessionId) {
+            privateSessions.set(test, { provider: targetProvider, id: raw.sessionId });
+          }
+          return await externalizeResponseForRedteamHistory(raw, context);
+        } catch (error) {
+          if (isTargetCallAbortError(error, options?.abortSignal)) {
+            options?.abortSignal?.throwIfAborted();
+            throw new DOMException('Private target request aborted', 'AbortError');
+          }
+          throw new PrivateVerificationError('Private target request failed');
+        }
+      });
+    }
     const targetOptions = onResponseHeaders
       ? {
           ...options,
@@ -618,8 +668,10 @@ export async function getTargetResponse(
     throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
     targetRespRaw = await callTargetProvider(targetProvider, targetPrompt, context, options);
   } catch (error) {
-    // Re-throw abort errors to properly cancel the operation
-    if (isTargetCallAbortError(error, options?.abortSignal)) {
+    if (
+      error instanceof PrivateVerificationError ||
+      isTargetCallAbortError(error, options?.abortSignal)
+    ) {
       throw error;
     }
     return preserveResponseHeadersObserverError(options?.onResponseHeaders, error, {
@@ -647,6 +699,10 @@ export async function getTargetResponse(
         throw error;
       }
     }
+  }
+  if (requiresTraceRedaction((context?.test as AtomicTestCase | undefined)?.assert)) {
+    // Do not spread the projected object. Its identity links it to local-only evidence.
+    return targetRespRaw as TargetResponse;
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   const hasOutput =
@@ -711,6 +767,90 @@ interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
   ) => Promise<TResult>;
 }
 
+const privateRedactionResponses = new WeakMap<ProviderResponse, ProviderResponse>();
+
+/** A session receipt goes only into the next target request. */
+export function getTargetSessionId(response: ProviderResponse) {
+  return (privateRedactionResponses.get(response) ?? response).sessionId;
+}
+
+export class PrivateVerificationError extends Error {}
+
+/** Grade every private target response before strategy control flow can discard it. */
+export async function gradeRedactionResponse(
+  prompt: string,
+  response: ProviderResponse,
+  test: AtomicTestCase | undefined,
+  results: Record<number, GradingResult>,
+): Promise<GradingResult | undefined> {
+  if (!test || !requiresTraceRedaction(test.assert)) {
+    return undefined;
+  }
+  if (response.cached) {
+    throw new PrivateVerificationError(
+      'Trace/artifact redaction requires a fresh target call; rerun with --no-cache',
+    );
+  }
+  if (response.metadata?.redactionMediaOmitted === true) {
+    return undefined;
+  }
+  // Only a verifier from the local registry may recover the original evidence.
+  // Invalid verification must stop the strategy, even after a previous turn passed.
+  try {
+    const { getGraderById } = await import('../graders');
+    const local = getLocalStrategyTest(test);
+    const original = privateRedactionResponses.get(response);
+    invariant(original && !original.metadata?.redactionContentOmitted, 'Missing private evidence');
+    const output =
+      typeof original.output === 'string'
+        ? original.output
+        : (safeJsonStringify(original.output) ?? '');
+    for (const [index, assertion] of getAssertionLeaves(local.assert).entries()) {
+      const type = assertion.type.replace(/^not-/, '');
+      if (!TRACE_REDACTION_ASSERTIONS.has(type)) {
+        continue;
+      }
+      const grader = getGraderById(type);
+      invariant(grader?.id === type, 'Missing local verifier');
+      const { grade } = await withPrivateEvaluation(() =>
+        grader.getResult(
+          prompt,
+          output,
+          local,
+          undefined,
+          getGraderAssertionValue(assertion),
+          undefined,
+          undefined,
+          { providerResponse: original },
+        ),
+      );
+      const verdict = sanitizeRedactionGrade(grade);
+      const { incomplete } = getRedactionOutcome(verdict);
+      const previous = results[index];
+      if (!previous || getRedactionOutcome(previous).pass || incomplete) {
+        results[index] = {
+          ...verdict,
+          ...(incomplete && { pass: false, score: 0 }),
+          assertion: Object.defineProperty({ type: assertion.type }, TRUSTED_REDACTION_GRADER, {
+            value: true,
+          }),
+        };
+      }
+    }
+  } catch {
+    throw new PrivateVerificationError('Private target verification failed');
+  }
+  const grades = Object.values(results);
+  const selected = grades.find((grade) => !getRedactionOutcome(grade).pass) ?? grades[0];
+  if (!selected?.assertion?.type.startsWith('not-')) {
+    return selected;
+  }
+  // Strategies use the configured polarity. Only the indexed original can be trusted
+  // for final verification, where the assertion applies its own inversion.
+  const { pass } = getRedactionOutcome(selected);
+  return sanitizeRedactionGrade({ ...selected, pass, score: pass ? 1 : 0 });
+}
+
 /** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
 export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   grader: TraceableRedteamGrader<TResult, TArgs>,
@@ -719,7 +859,42 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   test: AtomicTestCase,
   ...args: TArgs
 ): Promise<TResult> {
+  const context = args[args.length - 1] as RedteamGradingContext | undefined;
+  const privateCall = requiresTraceRedaction(test.assert);
+  if (privateCall) {
+    const response = sanitizeRedactionResult({
+      response: context?.providerResponse ?? { output },
+      testCase: test,
+    }).response;
+    prompt = REDACTED_PROMPT;
+    output = String(response.output ?? '');
+    if (context) {
+      args = [
+        ...args.slice(0, -1),
+        {
+          ...context,
+          providerResponse: response,
+          traceData: undefined,
+          traceContext: undefined,
+          traceSummary: undefined,
+        },
+      ] as TArgs;
+    }
+    const { gradingArguments, ...publicTest } = sanitizeRedactionGradingInputs(
+      grader.id,
+      { ...test, gradingArguments: args },
+      undefined,
+    ).test;
+    if (!Array.isArray(gradingArguments)) {
+      throw new PrivateVerificationError('Private grader inputs could not be projected');
+    }
+    test = publicTest;
+    args = gradingArguments;
+  }
   const invoke = () => grader.getResult(prompt, output, test, ...args);
+  if (privateCall) {
+    return withPrivateEvaluation(invoke);
+  }
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
     return invoke();
@@ -1026,12 +1201,32 @@ export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max tur
  */
 export async function externalizeResponseForRedteamHistory<T extends ProviderResponse>(
   response: T,
-  context?: { evalId?: string; testIdx?: number; promptIdx?: number },
+  context?: Pick<CallApiContextParams, 'evaluationId' | 'testIdx' | 'promptIdx' | 'test'>,
 ): Promise<T> {
+  const testCase = context?.test as AtomicTestCase | undefined;
+  if (requiresTraceRedaction(testCase?.assert)) {
+    if (privateRedactionResponses.has(response)) {
+      return response;
+    }
+    const sanitized = sanitizeRedactionResult({ response, testCase }).response;
+    if (sanitized.metadata?.redactionMediaOmitted === true) {
+      return {
+        ...sanitized,
+        error:
+          'Binary, image, audio, and video redaction cannot be verified; provide a text-only report.',
+      };
+    }
+    privateRedactionResponses.set(sanitized, response);
+    return sanitized;
+  }
   if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
     return response;
   }
-  const blobbed = await extractAndStoreBinaryData(response, context);
+  const blobbed = await extractAndStoreBinaryData(response, {
+    evalId: context?.evaluationId,
+    testIdx: context?.testIdx,
+    promptIdx: context?.promptIdx,
+  });
   return (blobbed as T) || response;
 }
 
@@ -1169,13 +1364,8 @@ export function buildGraderResultAssertion(
   assertToUse: AssertionOrSet | undefined,
   rubric: string | undefined,
 ): Assertion | undefined {
-  if (gradeAssertion) {
-    return { ...gradeAssertion, value: rubric };
-  }
-  if (isSingleAssertion(assertToUse)) {
-    return { ...assertToUse, value: rubric };
-  }
-  return undefined;
+  const assertion = gradeAssertion ?? (isSingleAssertion(assertToUse) ? assertToUse : undefined);
+  return assertion && { ...assertion, value: rubric };
 }
 
 export function getGraderAssertionValue(
@@ -1185,7 +1375,7 @@ export function getGraderAssertionValue(
     return undefined;
   }
 
-  return assertToUse.value;
+  return getProtectedAssertionValue(assertToUse);
 }
 
 export interface SuccessfulAttack {

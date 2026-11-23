@@ -71,6 +71,22 @@ describe('cache policy across module copies', () => {
     expect(second.isCacheEnabled()).toBe(true);
   });
 
+  it('keeps a private call isolated even if a provider re-enables caching', async () => {
+    const { first, second } = await loadCopies();
+    const { withPrivateEvaluation } = await import('../src/util/privateEvaluation');
+    const key = 'private-scope-case';
+    await first.getCache().set(key, 'public');
+    await withPrivateEvaluation(() =>
+      second.withCacheEnabled(true, async () => {
+        expect(first.isCacheEnabled()).toBe(false);
+        expect(await first.getCache().get(key)).toBeUndefined();
+        await first.getCache().set(key, 'private');
+      }),
+    );
+    expect(first.isCacheEnabled()).toBe(true);
+    expect(await first.getCache().get(key)).toBe('public');
+  });
+
   it('restores the enclosing policy after a nested scope throws', async () => {
     const { first, second } = await loadCopies();
     await first.withCacheEnabled(false, async () => {

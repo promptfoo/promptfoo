@@ -29,7 +29,13 @@ import {
 import { generateIdFromPrompt } from '../prompts/id';
 import { maybeEmitAzureOpenAiWarning } from '../providers/azure/warnings';
 import { providerRegistry } from '../providers/providerRegistry';
-import { isPromptfooSampleTarget } from '../providers/shared';
+import { isPromptfooSampleTarget, waitForPromiseWithAbort } from '../providers/shared';
+import {
+  hasProtectedReceiptFiles,
+  snapshotReceiptSetup,
+  withMcpLedgerScope,
+  withProtectedReceiptScope,
+} from '../redteam/plugins/codingAgent/verifiers';
 import { redteamProviderManager } from '../redteam/providers/shared';
 import { RateLimitRegistry } from '../scheduler';
 import { withProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
@@ -77,6 +83,7 @@ import invariant from '../util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from '../util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from '../util/namedMetrics';
 import { filterFiniteScores } from '../util/numeric';
+import { withPrivateEvaluation } from '../util/privateEvaluation';
 import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
 import {
   getProviderIdentifier,
@@ -106,7 +113,14 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
+import { requiresTraceRedaction, sanitizeRedactionResult } from '../util/traceRedaction';
 import { TransformInputType, transform } from '../util/transform';
+import {
+  configRequiresTraceRedaction,
+  getAssertionLeaves,
+  REDACTED_PROMPT,
+  sanitizeRedactionPrompt,
+} from '../util/verifierPrivacy';
 import { compileDerivedMetricFormula } from './derivedMetricFormula';
 import { PromptSuggestionsRejectedError } from './errors';
 import { getResultIndexKey } from './resultIndex';
@@ -233,7 +247,9 @@ function hasProviderGroupedAssertion(assertion: AssertionOrSet): boolean {
 }
 
 function shouldDeferGradingForTest(test: AtomicTestCase): boolean {
-  return Boolean(test.assert?.some(hasProviderGroupedAssertion));
+  return (
+    !requiresTraceRedaction(test.assert) && Boolean(test.assert?.some(hasProviderGroupedAssertion))
+  );
 }
 
 function logGroupedGradingStatus({
@@ -511,6 +527,28 @@ function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult
   }
 }
 
+const PRIVACY_SETUP_ERROR =
+  'Declare privacy checks in the initial configuration. Setup hooks cannot change which tests are protected. Public inputs may already have been saved.';
+
+// Persistence precedes beforeAll. Snapshot declarations by position so an in-place
+// change in a mixed suite cannot promote a previously public test or drop a check.
+function suitePrivacyLayout(suite: TestSuite) {
+  if (!configRequiresTraceRedaction(suite)) {
+    return undefined;
+  }
+  // In scenarios an explicit false can override an inherited opt-out.
+  const missingOptOut = suite.scenarios?.length ? null : false;
+  const declaration = (test: Pick<AtomicTestCase, 'assert' | 'options'>) => [
+    requiresTraceRedaction(test.assert),
+    test.options?.disableDefaultAsserts ?? missingOptOut,
+  ];
+  return JSON.stringify([
+    declaration(getDefaultTest(suite) ?? {}),
+    suite.tests?.map(declaration),
+    suite.scenarios?.map(({ config, tests }) => [config.map(declaration), tests?.map(declaration)]),
+  ]);
+}
+
 async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> {
   if (!testSuite.extensions?.length) {
     return testSuite;
@@ -538,7 +576,14 @@ async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> 
     testSuite = { ...testSuite, providerPromptMap: map };
   }
 
-  const { suite } = await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+  const run = () => runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+  const privacyLayout = suitePrivacyLayout(testSuite);
+  const { suite } = privacyLayout
+    ? await withPrivateEvaluation(run).catch(() => {
+        throw new Error('Private suite setup failed.');
+      })
+    : await run();
+  invariant(privacyLayout === suitePrivacyLayout(suite), PRIVACY_SETUP_ERROR);
   if (seededMap) {
     // Hooks may mutate legacy map arrays. Only changed entries override instance filters;
     // untouched seeds must not merge duplicate providers or exclude newly added prompts.
@@ -572,6 +617,10 @@ async function maybeAddGeneratedPrompts(
     return true;
   }
 
+  invariant(
+    !configRequiresTraceRedaction(testSuite),
+    'Prompt suggestions are unavailable for private tests.',
+  );
   // Library callers bypass CLI/config schema validation, so re-clamp here.
   const rawCount = options.suggestionsCount ?? 1;
   let requestedCount = Number.isInteger(rawCount) && rawCount >= 1 ? rawCount : 1;
@@ -747,7 +796,7 @@ type PreparedPromptRecovery = {
   providerOrdinals?: number[];
 };
 
-const clonePromptConfig = Clone({ circles: true });
+const cloneSettings = Clone({ circles: true });
 
 function copyPromptDefinition(prompt: Prompt): Prompt {
   return {
@@ -756,7 +805,7 @@ function copyPromptDefinition(prompt: Prompt): Prompt {
     label: prompt.label,
     display: prompt.display,
     template: prompt.template,
-    config: clonePromptConfig(prompt.config),
+    config: cloneSettings(prompt.config),
     ...(prompt.function && { function: prompt.function }),
   };
 }
@@ -1090,6 +1139,12 @@ async function prepareTestVariables(
     }
 
     await applyInputTransform(testCase, inputTransformDefault);
+    if (
+      requiresTraceRedaction(testCase.assert) ||
+      requiresTraceRedaction(getDefaultTest(testSuite)?.assert)
+    ) {
+      continue;
+    }
     for (const varName of Object.keys(testCase.vars)) {
       varNames.add(varName);
     }
@@ -1210,6 +1265,9 @@ async function prepareTestCaseForEval(
     testCase.assertScoringFunction || defaultTest?.assertScoringFunction;
   testCase.providers = testCase.providers ?? defaultTest?.providers;
 
+  if (requiresTraceRedaction(testCase.assert)) {
+    testCase.assertScoringFunction = undefined;
+  }
   if (typeof testCase.assertScoringFunction === 'string') {
     const { filePath: resolvedPath, functionName } = parseFileUrl(testCase.assertScoringFunction);
     testCase.assertScoringFunction = await loadFunction<ScoringFunction>({
@@ -1560,6 +1618,16 @@ function markComparisonRows(
   rowsWithMaxScoreAssertion: Set<number>,
 ) {
   for (const evalOption of runEvalOptions) {
+    if (
+      requiresTraceRedaction(evalOption.test.assert) &&
+      getAssertionLeaves(evalOption.test.assert).some(
+        (a) => a.type === 'select-best' || a.type === 'max-score',
+      )
+    ) {
+      throw new Error(
+        'select-best and max-score cannot compare responses omitted for trace/artifact redaction.',
+      );
+    }
     if (evalOption.test.assert?.some((a) => a.type === 'select-best')) {
       rowsWithSelectBestAssertion.add(evalOption.testIdx);
     }
@@ -2143,6 +2211,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private privateSuite = false;
+  private receiptHookTimedOut = false;
   private readonly comparisonProviders = new Map<string, ComparisonProviders>();
   private readonly currentResultKeys = new Set<string>();
   private readonly retryErrorResultIds = new Set(
@@ -2298,11 +2368,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   // that never stream) to override stale entries in the recovery merge.
   private trackFinalJsonlResult(row: TResult | EvaluateResult): void {
     if (this.fileWriters.length > 0 && this.store.resultPersistenceFailed) {
-      this.store.recordFinalResult(this.store.toEvaluateResult(row));
+      this.store.recordFinalResult(sanitizeRedactionResult(this.store.toEvaluateResult(row)));
     }
   }
 
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
+    row = sanitizeRedactionResult(row);
     this.currentResultKeys.add(getResultIndexKey(row));
     setComparisonError(row);
     if (row.testCase.assert?.some((assertion) => assertion.type === 'select-best')) {
@@ -2368,7 +2439,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       });
     }
 
-    if (derivedMetrics) {
+    if (derivedMetrics && !this.privateSuite) {
       updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount);
     }
 
@@ -2444,10 +2515,29 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite: TestSuite;
     },
   ) {
-    const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
-      test: evalStep.test,
-    });
-    evalStep.test = beforeEachOut.test;
+    const hooks = testSuite.extensions;
+    const privateTest = requiresTraceRedaction(evalStep.test.assert);
+    const setup =
+      hooks?.length && hasProtectedReceiptFiles(evalStep.test)
+        ? snapshotReceiptSetup(evalStep.test)
+        : undefined;
+    // Suite-wide snapshots protect existing files. Run setup next to the
+    // target so the next hook cannot reset its workspace or session first.
+    const test =
+      (privateTest || setup) && hooks?.length ? cloneSettings(evalStep.test) : evalStep.test;
+    const run = () => runExtensionHook(hooks, 'beforeEach', { test });
+    const hook =
+      privateTest || setup
+        ? withPrivateEvaluation(run).catch(() => {
+            throw new Error('Private test setup failed.');
+          })
+        : hooks?.length
+          ? withMcpLedgerScope(test, test.vars ?? {}, run)
+          : run();
+    // Ordinary cancellations must reach runEvalInternal to record their resume status.
+    const prepared = setup ? await waitForPromiseWithAbort(hook, evalStep.abortSignal) : await hook;
+    invariant(privateTest === requiresTraceRedaction(prepared.test.assert), PRIVACY_SETUP_ERROR);
+    evalStep.test = prepared.test;
 
     const rows = await runEvalInternal(
       {
@@ -2455,7 +2545,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         deferGrading,
         providerCallQueue: deferGrading ? providerCallQueue : undefined,
       },
-      { abortSignal: deferredGradingAbortSignal, pauseSignal: this.options.pauseSignal },
+      { abortSignal: deferredGradingAbortSignal, pauseSignal: this.options.pauseSignal, setup },
     );
     onRowsReady?.();
     return rows;
@@ -2482,7 +2572,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       // Apply afterEach hook mutations before persisting. Pass a shallow copy
       // so in-place mutations don't corrupt the row on hook failure.
-      if (context.testSuite.extensions?.length) {
+      if (context.testSuite.extensions?.length && requiresTraceRedaction(evalStep.test.assert)) {
+        // A result hook may observe the public verdict but cannot override it.
+        const result = sanitizeRedactionResult(row);
+        try {
+          await runExtensionHook(context.testSuite.extensions, 'afterEach', {
+            test: result.testCase,
+            result,
+          });
+        } catch {
+          logger.warn('Private result hook failed.');
+        }
+      } else if (context.testSuite.extensions?.length) {
         try {
           const originalMetadata = row.metadata;
           const originalResponseMetadata = row.response?.metadata;
@@ -2592,6 +2693,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
     const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
+    if (this.receiptHookTimedOut) {
+      await this.addEvalStepTimeoutResult(
+        evalStep,
+        index,
+        timeoutMs,
+        new Error('Receipt setup timed out.'),
+        context,
+      );
+      return;
+    }
 
     if (timeoutMs <= 0) {
       return await this.processEvalStep(
@@ -2644,7 +2755,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (!didTimeout) {
         throw error;
       }
-      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      // A timed-out hook may still be writing a shared receipt.
+      this.receiptHookTimedOut ||= Boolean(
+        context.testSuite.extensions?.length && hasProtectedReceiptFiles(evalStep.test),
+      );
+      await this.addEvalStepTimeoutResult(evalStepWithSignal, index, timeoutMs, error, context);
     } finally {
       evalStep.test = evalStepWithSignal.test;
       clearEvalStepTimeout();
@@ -2668,7 +2783,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       error,
     );
     this.trackFinalJsonlResult(timeoutResult);
-    await this.store.appendResult(timeoutResult);
+    await this.store.appendResult(sanitizeRedactionResult(timeoutResult));
     this.stats.errors++;
 
     const { metrics } = context.prompts[evalStep.promptIdx];
@@ -2823,7 +2938,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     try {
       for (const evalStep of groupedRunEvalOptions) {
         checkAbort();
-        logWebUiEvalStepStart(isWebUI, processingContext, evalStep);
+        logWebUiEvalStepStart(isWebUI && !this.privateSuite, processingContext, evalStep);
         const idx = evalStepIndexMap.get(evalStep)!;
         const shouldDeferEvalStepGrading = shouldDeferGradingForTest(evalStep.test);
         const rows =
@@ -2943,7 +3058,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     let lastPromptsFlush = 0;
     for (const evalStep of serialRunEvalOptions) {
       checkAbort();
-      logWebUiEvalStepStart(isWebUI, processingContext, evalStep);
+      logWebUiEvalStepStart(isWebUI && !this.privateSuite, processingContext, evalStep);
       const idx = evalStepIndexMap.get(evalStep)!;
       await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
       processedIndices.add(idx);
@@ -3660,7 +3775,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     varNames: Set<string>;
     vars: Set<string>;
   }) {
-    await this.store.appendPrompts(prompts);
     cleanupProgressReporters(progressBarManager, ciProgressReporter);
 
     if (globalTimeout) {
@@ -3676,6 +3790,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       });
     }
 
+    // A private prompt catalog copies metrics. Include any timeout rows in that snapshot.
+    await this.store.appendPrompts(prompts);
     this.store.setVars(Array.from(vars));
     await this.runAfterAllExtensions(testSuite);
     this.recordEvalTelemetry({
@@ -3716,7 +3832,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const evalStep = runEvalOptions[i];
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
       this.trackFinalJsonlResult(timeoutResult);
-      await this.store.appendResult(timeoutResult);
+      await this.store.appendResult(sanitizeRedactionResult(timeoutResult));
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {
@@ -3732,14 +3848,21 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     const allResults = await this.store.readResults();
-    const resultsForExtension = allResults.map((result) => this.store.toEvaluateResult(result));
+    const resultsForExtension = allResults.map((result) =>
+      sanitizeRedactionResult(this.store.toEvaluateResult(result)),
+    );
+    const prompts = this.privateSuite
+      ? this.store.prompts.map(sanitizeRedactionPrompt)
+      : this.store.prompts;
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
-      prompts: this.store.prompts,
+      prompts,
       results: resultsForExtension,
-      suite: testSuite,
+      suite: this.privateSuite
+        ? { prompts, providers: [], tests: resultsForExtension.map((r) => r.testCase) }
+        : testSuite,
       evalId: this.store.id,
-      config: this.store.config,
+      config: this.privateSuite ? { metadata: { privatePrompts: true } } : this.store.config,
     });
   }
 
@@ -3768,6 +3891,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }) {
     const totalEvalTimeMs = Date.now() - startTime;
     this.store.setDurationMs(totalEvalTimeMs);
+    if (this.privateSuite) {
+      return;
+    }
 
     const assertionStats = getAssertionTelemetryStats(prompts, assertionTypes);
     const avgLatencyMs = getAverageLatencyMs(this.store.results);
@@ -3872,6 +3998,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite = { ...testSuite, prompts: recovery.hookPrompts };
     }
     testSuite = await runBeforeAllExtensions(testSuite);
+    this.privateSuite =
+      configRequiresTraceRedaction(testSuite) || configRequiresTraceRedaction(this.store.config);
     const derivedMetrics = prepareDerivedMetrics(testSuite.derivedMetrics);
     if (
       !restorePromptColumns &&
@@ -3889,6 +4017,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       tests,
       recovery,
     );
+    if (this.privateSuite) {
+      // Runtime columns retain the originals for the intended target. The store
+      // only needs a public catalog and the live counters shared with these rows.
+      for (let i = 0; i < prompts.length; i++) {
+        prompts[i] = { ...sanitizeRedactionPrompt(prompts[i]), metrics: prompts[i].metrics };
+      }
+    }
     await this.store.appendPrompts(prompts);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
@@ -3928,7 +4063,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       providers: runEvalOptions.map((evalOption) => evalOption.provider),
       tests,
     });
-    concurrency = concurrencySettings.concurrency;
+    const receiptHooks = Boolean(
+      testSuite.extensions?.length &&
+        runEvalOptions.some((step) => hasProtectedReceiptFiles(step.test)),
+    );
+    concurrency = receiptHooks ? 1 : concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
 
     const processingContext: EvalProcessingContext = {
@@ -3969,6 +4108,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
+      if (this.privateSuite) {
+        // Even public steps retain references to other tests in their suite.
+        evalStep = {
+          testIdx: evalStep.testIdx,
+          promptIdx: evalStep.promptIdx,
+          repeatIndex: evalStep.repeatIndex,
+          isRedteam: evalStep.isRedteam,
+          delay: 0,
+          test: {},
+          prompt: { raw: REDACTED_PROMPT, label: REDACTED_PROMPT },
+          provider: {
+            id: () => 'private',
+            callApi: async () => ({ error: 'Private target omitted.' }),
+          },
+        };
+      }
       if (originalProgressCallback) {
         originalProgressCallback(completed, total, index, evalStep, metrics);
       }
@@ -4010,7 +4165,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
     const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
     const shouldGroupGradingByProvider =
-      concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
+      concurrency === 1 && !receiptHooks && !hasEvalStepTimeout && !usesConversationVar;
 
     // Print info messages before starting progress bar
     if (!this.options.silent) {
@@ -4038,24 +4193,28 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       progressBarManager.installLogInterceptor();
     }
 
-    const interruptedEval = await this.executeEvalSteps({
-      checkAbort,
-      ciProgressReporter,
-      combinedAbortSignal,
-      concurrentRunEvalOptions,
-      evalStepIndexMap,
-      globalTimeout,
-      groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
-      isEvalTimedOut: isTimedOut,
-      isWebUI,
-      maxEvalTimeMs,
-      processingContext,
-      processedIndices,
-      progressBarManager,
-      prompts,
-      serialRunEvalOptions,
-      shouldGroupGradingByProvider,
-    });
+    const interruptedEval = await withProtectedReceiptScope(
+      runEvalOptions.map((step) => step.test),
+      () =>
+        this.executeEvalSteps({
+          checkAbort,
+          ciProgressReporter,
+          combinedAbortSignal,
+          concurrentRunEvalOptions,
+          evalStepIndexMap,
+          globalTimeout,
+          groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
+          isEvalTimedOut: isTimedOut,
+          isWebUI,
+          maxEvalTimeMs,
+          processingContext,
+          processedIndices,
+          progressBarManager,
+          prompts,
+          serialRunEvalOptions,
+          shouldGroupGradingByProvider,
+        }),
+    );
     if (interruptedEval) {
       return interruptedEval;
     }

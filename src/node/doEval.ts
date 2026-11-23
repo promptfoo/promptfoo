@@ -61,6 +61,7 @@ import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { isUuid } from '../util/uuid';
+import { configRequiresTraceRedaction } from '../util/verifierPrivacy';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
@@ -884,7 +885,11 @@ async function doEvalWithEnv(
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions })
+        ? await Eval.create(config, testSuite.prompts, {
+            ...(configRequiresTraceRedaction(testSuite) && { privatePrompts: true }),
+            author,
+            runtimeOptions,
+          })
         : new Eval(config, { author, runtimeOptions });
 
     // Graceful pause support via Ctrl+C (only when writing to database)

@@ -37,8 +37,62 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
+import { sanitizeRedactionResult } from '../util/verifierPrivacy';
 import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
+
+import type { BlobContext } from '../blobs';
+
+/** Externalize only projected responses, before opening the batch transaction. */
+export async function prepareBatchResult(
+  input: EvaluateResult,
+  evalId: string,
+  deferReference?: BlobContext['deferReference'],
+): Promise<EvaluateResult> {
+  const result = serializeResultProviderRefs(input);
+  const response = isBlobStorageEnabled()
+    ? await extractAndStoreBinaryData(result.response, {
+        evalId,
+        testIdx: result.testIdx,
+        promptIdx: result.promptIdx,
+        deferReference,
+      })
+    : result.response;
+  return { ...result, response: response ?? undefined };
+}
+
+/** Prepare a result for batch writes after serializing its provider references. */
+function sanitizeBatchResultForDb(result: EvaluateResult) {
+  // See `createFromEvaluateResult` for why `testCase` and `prompt` go
+  // through the credential-redacting sanitizer while the other fields
+  // stay on the lighter `sanitizeForDb`. Trace and repeat linkage travel inside
+  // metadata; strip the top-level fields so the DB write only carries known-schema columns.
+  const {
+    traceId: _traceId,
+    evaluationId: _evaluationId,
+    repeatIndex: _repeatIndex,
+    repeatGroupId: _repeatGroupId,
+    ...rest
+  } = result;
+  return {
+    ...rest,
+    testCase: sanitizeForDbWithSecrets(result.testCase),
+    prompt: sanitizeForDbWithSecrets(result.prompt),
+    ...redactSensitiveResultFieldsForDb({
+      response: sanitizeForDb(result.response),
+      gradingResult: sanitizeForDb(result.gradingResult),
+      metadata: sanitizeForDb(
+        persistTraceMetadata(
+          persistRepeatMetadata(result.metadata, result.repeatIndex, result.repeatGroupId),
+          result.traceId,
+          result.evaluationId,
+        ),
+      ),
+    }),
+    namedScores: sanitizeForDb(result.namedScores),
+    provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
+  };
+}
 
 export default class EvalResult {
   static async createFromEvaluateResult(
@@ -46,6 +100,7 @@ export default class EvalResult {
     result: EvaluateResult,
     opts?: { persist: boolean },
   ) {
+    result = serializeResultProviderRefs(result);
     const persist = opts?.persist == null ? true : opts.persist;
     const {
       prompt,
@@ -64,7 +119,7 @@ export default class EvalResult {
       evaluationId,
       repeatIndex,
       repeatGroupId,
-    } = serializeResultProviderRefs(result);
+    } = result;
 
     // Persist trace and repeat linkage inside a private metadata namespace so they
     // survive EvalResult round-trips without a Drizzle schema migration.
@@ -125,55 +180,25 @@ export default class EvalResult {
     return new EvalResult(args);
   }
 
-  static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
+  static async createManyFromEvaluateResult(
+    results: EvaluateResult[],
+    evalId: string,
+    options?: { mediaPrepared?: boolean },
+  ) {
     const db = await getDb();
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
-    for (const result of results) {
-      const processedResponse = isBlobStorageEnabled()
-        ? await extractAndStoreBinaryData(result.response, {
-            evalId,
-            testIdx: result.testIdx,
-            promptIdx: result.promptIdx,
-          })
-        : result.response;
-      processedResults.push({
-        ...serializeResultProviderRefs(result),
-        response: processedResponse ?? undefined,
-      });
+    for (const input of results) {
+      processedResults.push(
+        options?.mediaPrepared
+          ? serializeResultProviderRefs(input)
+          : await prepareBatchResult(input, evalId),
+      );
     }
 
     await db.transaction(async (tx) => {
       for (const result of processedResults) {
-        // See `createFromEvaluateResult` for why `testCase` and `prompt` go
-        // through the credential-redacting sanitizer while the other fields
-        // stay on the lighter `sanitizeForDb`. Trace and repeat linkage travel inside
-        // metadata; strip the top-level fields so the DB write only carries known-schema columns.
-        const {
-          traceId: _traceId,
-          evaluationId: _evaluationId,
-          repeatIndex: _repeatIndex,
-          repeatGroupId: _repeatGroupId,
-          ...rest
-        } = result;
-        const sanitizedResult = {
-          ...rest,
-          testCase: sanitizeForDbWithSecrets(result.testCase),
-          prompt: sanitizeForDbWithSecrets(result.prompt),
-          ...redactSensitiveResultFieldsForDb({
-            response: sanitizeForDb(result.response),
-            gradingResult: sanitizeForDb(result.gradingResult),
-            metadata: sanitizeForDb(
-              persistTraceMetadata(
-                persistRepeatMetadata(result.metadata, result.repeatIndex, result.repeatGroupId),
-                result.traceId,
-                result.evaluationId,
-              ),
-            ),
-          }),
-          namedScores: sanitizeForDb(result.namedScores),
-          provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
-        };
+        const sanitizedResult = sanitizeBatchResultForDb(result);
         const dbResult = await tx
           .insert(evalResultsTable)
           .values({ ...sanitizedResult, evalId, id: crypto.randomUUID() })
@@ -351,8 +376,10 @@ export default class EvalResult {
     failureReason: ResultFailureReason | number;
     persisted?: boolean;
   }) {
+    const { evalId, persisted } = opts;
+    opts = sanitizeRedactionResult(opts);
     this.id = opts.id;
-    this.evalId = opts.evalId;
+    this.evalId = evalId;
 
     this.promptIdx = opts.promptIdx;
     this.testIdx = opts.testIdx;
@@ -378,7 +405,7 @@ export default class EvalResult {
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
-    this.persisted = opts.persisted || false;
+    this.persisted = persisted || false;
     this.pluginId = opts.testCase.metadata?.pluginId;
   }
 
@@ -397,10 +424,13 @@ export default class EvalResult {
     } = serializeResultProviderRefs(this);
     const persistedValues = {
       ...rest,
-      error: this.error ?? null,
+      evalId: this.evalId,
+      error: rest.error ?? null,
+      cost: rest.cost ?? null,
+      latencyMs: rest.latencyMs ?? null,
       gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
       metadata: persistTraceMetadata(
-        persistRepeatMetadata(this.metadata, this.repeatIndex, this.repeatGroupId),
+        persistRepeatMetadata(rest.metadata, this.repeatIndex, this.repeatGroupId),
         this.traceId,
         this.evaluationId,
       ),
@@ -429,14 +459,16 @@ export default class EvalResult {
       shouldStripMetadata,
     } = stripFlags;
 
-    const response = projectProviderResponse(this.response, {
+    // Check ownership before optional output stripping can remove the only privacy marker.
+    const row = sanitizeRedactionResult(this);
+    const response = projectProviderResponse(row.response, {
       stripMetadata: shouldStripMetadata,
       stripOutput: shouldStripResponseOutput,
     });
 
-    const prompt = projectPrompt(this.prompt, shouldStripPromptText);
+    const prompt = projectPrompt(row.prompt, shouldStripPromptText);
 
-    const testCase = projectTestCase(this.testCase, {
+    const testCase = projectTestCase(row.testCase, {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
       stripOutput: shouldStripResponseOutput,
@@ -446,54 +478,54 @@ export default class EvalResult {
     // request even when it reports no token usage, and a grading result counts as one
     // assertion request (with its tokens folded in when present).
     const tokenUsage = createEmptyTokenUsage();
-    if (this.response) {
-      accumulateResponseTokenUsage(tokenUsage, this.response);
+    if (row.response) {
+      accumulateResponseTokenUsage(tokenUsage, row.response);
     }
-    if (this.gradingResult) {
-      accumulateGradingTokenUsage(tokenUsage, this.gradingResult.tokensUsed, {
-        cached: this.gradingResult.metadata?.cachedResponse,
+    if (row.gradingResult) {
+      accumulateGradingTokenUsage(tokenUsage, row.gradingResult.tokensUsed, {
+        cached: row.gradingResult.metadata?.cachedResponse,
       });
     }
 
     return {
-      cost: this.cost,
-      ...(this.response?.incurredCost !== undefined && {
-        incurredCost: this.response.incurredCost,
+      cost: row.cost,
+      ...(row.response?.incurredCost !== undefined && {
+        incurredCost: row.response.incurredCost,
       }),
-      description: this.description || undefined,
-      error: this.error || undefined,
+      description: row.description || undefined,
+      error: row.error || undefined,
       gradingResult: shouldStripGradingResult
         ? null
-        : projectGradingResult(this.gradingResult, shouldStripPromptText),
-      id: this.id,
-      latencyMs: this.latencyMs,
-      namedScores: this.namedScores,
+        : projectGradingResult(row.gradingResult, shouldStripPromptText),
+      id: row.id,
+      latencyMs: row.latencyMs,
+      namedScores: row.namedScores,
       prompt,
-      promptId: this.promptId,
-      promptIdx: this.promptIdx,
-      ...(this.traceId ? { traceId: this.traceId } : {}),
-      ...(this.evaluationId ? { evaluationId: this.evaluationId } : {}),
-      ...(this.repeatGroupId !== undefined && {
-        repeatGroupId: this.repeatGroupId,
-        repeatIndex: this.repeatIndex,
+      promptId: row.promptId,
+      promptIdx: row.promptIdx,
+      ...(row.traceId ? { traceId: row.traceId } : {}),
+      ...(row.evaluationId ? { evaluationId: row.evaluationId } : {}),
+      ...(row.repeatGroupId !== undefined && {
+        repeatGroupId: row.repeatGroupId,
+        repeatIndex: row.repeatIndex,
       }),
-      provider: { id: this.provider.id, label: this.provider.label },
+      provider: { id: row.provider.id, label: row.provider.label },
       response,
-      score: this.score,
-      success: this.success,
+      score: row.score,
+      success: row.success,
       testCase,
-      testIdx: this.testIdx,
-      tokenUsage,
-      vars: shouldStripTestVars ? {} : this.testCase.vars || {},
+      testIdx: row.testIdx,
+      tokenUsage: row.testCase.metadata?.privatePrompts === true ? undefined : tokenUsage,
+      vars: testCase.vars || {},
       metadata: shouldStripMetadata
         ? {}
         : projectOutputMetadata(
-            this.metadata,
+            row.metadata,
             shouldStripResponseOutput,
-            this.response?.metadata,
-            this.testCase.metadata,
+            row.response?.metadata,
+            row.testCase.metadata,
           ),
-      failureReason: this.failureReason,
+      failureReason: row.failureReason,
     };
   }
 }
@@ -503,7 +535,9 @@ export function asEvaluateResult(
   result: EvalResult | EvaluateResult,
   stripFlags = getStripFlags(),
 ): EvaluateResult {
-  return 'toEvaluateResult' in result ? result.toEvaluateResult(stripFlags) : result;
+  return 'toEvaluateResult' in result
+    ? result.toEvaluateResult(stripFlags)
+    : sanitizeRedactionResult(result);
 }
 
 export { getResultIndexKey } from '../evaluator/resultIndex';

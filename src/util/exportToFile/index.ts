@@ -1,9 +1,11 @@
 import { getTableCellMedia, getTableCellText } from '../../presentation/evalTableCells';
+import { sanitizeRedactionResult } from '../verifierPrivacy';
 
 import type EvalResult from '../../models/evalResult';
 import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
 
 export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
+  result = sanitizeRedactionResult(result);
   const resultText = getTableCellText(result);
   return {
     ...result,
@@ -21,22 +23,23 @@ export function convertTestResultsToTableRow(
   results: EvalResult[],
   varsForHeader: string[],
 ): EvaluateTableRow {
+  const first = sanitizeRedactionResult(results[0]);
   const row = {
-    description: results[0].description || undefined,
+    description: first.description || undefined,
     outputs: [] as EvaluateTableRow['outputs'],
     vars: Object.values(varsForHeader).map((varName) => {
       // For sessionId, check metadata first if not in testCase.vars
       // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
       // Single-turn strategies store a single sessionId in metadata.sessionId
       if (varName === 'sessionId') {
-        const sessionIdFromVars = results[0].testCase.vars?.sessionId;
+        const sessionIdFromVars = first.testCase.vars?.sessionId;
         if (sessionIdFromVars != null && sessionIdFromVars !== '') {
           return typeof sessionIdFromVars === 'string'
             ? sessionIdFromVars
             : JSON.stringify(sessionIdFromVars);
         }
         // Check metadata.sessionIds array first (multi-turn strategies)
-        const metadataSessionIds = results[0].metadata?.sessionIds;
+        const metadataSessionIds = first.metadata?.sessionIds;
         if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
           return metadataSessionIds
             .filter((id) => id != null && id !== '')
@@ -44,7 +47,7 @@ export function convertTestResultsToTableRow(
             .join('\n');
         }
         // Fall back to metadata.sessionId (single-turn strategies)
-        const metadataSessionId = results[0].metadata?.sessionId;
+        const metadataSessionId = first.metadata?.sessionId;
         if (metadataSessionId != null) {
           return typeof metadataSessionId === 'string'
             ? metadataSessionId
@@ -52,14 +55,14 @@ export function convertTestResultsToTableRow(
         }
         return '';
       }
-      const varValue = results[0].testCase.vars?.[varName] ?? '';
+      const varValue = first.testCase.vars?.[varName] ?? '';
       if (typeof varValue === 'string') {
         return varValue;
       }
       return JSON.stringify(varValue);
     }),
-    test: results[0].testCase,
-    testIdx: results[0].testIdx,
+    test: first.testCase,
+    testIdx: first.testIdx,
   };
 
   for (const result of results) {

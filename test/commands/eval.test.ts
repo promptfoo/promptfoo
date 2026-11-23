@@ -58,7 +58,7 @@ import { calculateRepeatStability } from '../../src/util/eval/repeatStability';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
-import { createEvaluateResult } from '../factories/eval';
+import { createEvaluateResult, createEvaluateSummaryV2 } from '../factories/eval';
 import { mockProcessEnv } from '../util/utils';
 
 import type EvalResult from '../../src/models/evalResult';
@@ -153,6 +153,9 @@ vi.mock('../../src/database/index', async (importOriginal) => {
     insert: vi.fn(() => ({
       values: vi.fn(() => ({
         onConflictDoNothing: vi.fn(() => ({
+          run: vi.fn(),
+        })),
+        onConflictDoUpdate: vi.fn(() => ({
           run: vi.fn(),
         })),
         run: vi.fn(),
@@ -2085,7 +2088,11 @@ describe('evalCommand', () => {
         provider: 'echo',
         metrics: { ...createDefaultPromptMetrics(), testCacheHitCount: count },
       }));
-      vi.spyOn(record, 'useOldResults').mockReturnValue(oldResults);
+      if (oldResults) {
+        record.oldResults = createEvaluateSummaryV2({
+          table: { head: { prompts: record.prompts, vars: [] }, body: [] },
+        });
+      }
       const fetch = vi.spyOn(record, 'fetchResultsBatched');
 
       await doEval(

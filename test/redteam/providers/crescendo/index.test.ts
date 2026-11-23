@@ -13,6 +13,7 @@ import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
 import * as traceContext from '../../../../src/tracing/traceContext';
 import { isResponseHeadersObserverErrorResponse } from '../../../../src/util/fetch/responseHeadersObserver';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+import { TRUSTED_REDACTION_GRADER } from '../../../../src/util/traceRedaction';
 import { createFailingGrader, createPassingGrader } from '../../../factories/mockGrader';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
@@ -21,6 +22,7 @@ import {
   createSelectedToolErrorTarget,
 } from '../../../util/selectedToolErrorTarget';
 
+import type { TargetResponse } from '../../../../src/redteam/providers/shared';
 import type { AtomicTestCase, GradingResult } from '../../../../src/types/index';
 import type { ProviderResponse } from '../../../../src/types/providers';
 
@@ -168,6 +170,236 @@ describe('CrescendoProvider', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'rejects a cached response after a fresh %s grade',
+    async (pluginId) => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 3,
+        maxBacktracks: 0,
+        stateful: true,
+        redteamProvider: mockRedTeamProvider,
+      });
+      vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+        generatedQuestion: 'Inspect report',
+      });
+      vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
+      const getResult = vi
+        .fn()
+        .mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' });
+      mockGetGraderById.mockReturnValue({ id: `promptfoo:redteam:${pluginId}`, getResult });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: 'Clean report' })
+        .mockResolvedValueOnce({ output: 'Clean cached report', cached: true });
+      await expect(
+        provider.callApi('Inspect report', {
+          originalProvider: mockTargetProvider,
+          vars: { objective: 'Inspect report' },
+          prompt: { raw: 'Inspect report', label: 'fixture' },
+          test: { vars: {}, assert: [{ type: `promptfoo:redteam:${pluginId}` }] } as AtomicTestCase,
+        }),
+      ).rejects.toThrow('requires a fresh target call');
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(getResult).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('keeps concurrent private sessions with their own attack', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 2,
+      maxBacktracks: 0,
+      stateful: true,
+      redteamProvider: mockRedTeamProvider,
+    });
+    vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+      generatedQuestion: 'Inspect report',
+    });
+    vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
+    mockGetGraderById.mockReturnValue({
+      id: 'promptfoo:redteam:coding-agent:trace-redaction',
+      getResult: vi.fn().mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' }),
+    });
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sessions: Record<string, unknown[]> = { first: [], second: [] };
+    mockTargetProvider.callApi.mockImplementation(async (_prompt, context) => {
+      const run = String(context?.vars.run);
+      sessions[run].push(context?.vars.sessionId);
+      if (sessions.first.length && sessions.second.length) {
+        release();
+      }
+      await ready;
+      return { output: 'Clean report', sessionId: `PRIVATE_SESSION_${run}` };
+    });
+    const results = await Promise.all(
+      ['first', 'second'].map((run) => {
+        const context = {
+          originalProvider: mockTargetProvider,
+          vars: { objective: 'Inspect report', run },
+          prompt: { raw: 'Inspect report', label: 'fixture' },
+          test: {
+            vars: {},
+            assert: [
+              {
+                type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                value: { rawReceipt: 'SYNTHETIC_PROTECTED_RECEIPT_8964' },
+              },
+            ],
+          },
+        };
+        return provider.callApi('Inspect report', context);
+      }),
+    );
+    expect(sessions.first).toEqual([undefined, 'PRIVATE_SESSION_first']);
+    expect(sessions.second).toEqual([undefined, 'PRIVATE_SESSION_second']);
+    expect(JSON.stringify(results)).not.toContain('PRIVATE_SESSION_');
+  });
+
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      ['normal', 'ending', 'unblocking'].map((mode) => ({ pluginId, mode })),
+    ),
+  )(
+    'grades every nested privacy receipt on $mode responses for $pluginId',
+    async ({ pluginId, mode }) => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        maxBacktracks: 0,
+        stateful: true,
+        redteamProvider: mockRedTeamProvider,
+      });
+      vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+        generatedQuestion: 'Inspect report',
+      });
+      vi.mocked(tryUnblocking).mockResolvedValue(
+        mode === 'unblocking'
+          ? { success: true, unblockingPrompt: 'Continue report' }
+          : { success: false },
+      );
+      const getResult = vi.fn(async (_prompt, output, _test, _provider, value) => ({
+        grade: { pass: !output.includes(value), score: output.includes(value) ? 0 : 1 },
+        rubric: 'Privacy',
+      }));
+      mockGetGraderById.mockReturnValue({ id: `promptfoo:redteam:${pluginId}`, getResult });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'PRIVATE_NESTED_RECEIPT',
+        conversationEnded: mode !== 'normal',
+      });
+      if (mode === 'unblocking') {
+        mockTargetProvider.callApi.mockResolvedValueOnce({ output: 'Clean first report' });
+      }
+      const result = await provider.callApi('Inspect report', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'Inspect report' },
+        prompt: { raw: 'Inspect report', label: 'fixture' },
+        test: {
+          vars: {},
+          metadata: { pluginId },
+          assert: [
+            { type: 'contains', value: 'report' },
+            {
+              type: 'assert-set',
+              assert: [
+                { type: `promptfoo:redteam:${pluginId}`, value: 'ABSENT_RECEIPT' },
+                {
+                  type: 'assert-set',
+                  assert: [
+                    { type: `promptfoo:redteam:${pluginId}`, value: 'PRIVATE_NESTED_RECEIPT' },
+                  ],
+                },
+              ],
+            },
+          ],
+        } as AtomicTestCase,
+      });
+      expect(getResult).toHaveBeenCalledTimes(mode === 'unblocking' ? 4 : 2);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(mode === 'unblocking' ? 2 : 1);
+      expect(result.metadata?.storedGraderResults).toMatchObject({
+        1: { pass: true },
+        2: { pass: false },
+      });
+      expect(result.metadata?.redactionContentOmitted).toBe(true);
+      expect(
+        Object.getOwnPropertyDescriptor(
+          result.metadata?.storedGraderResults?.[2].assertion ?? {},
+          TRUSTED_REDACTION_GRADER,
+        )?.value,
+      ).toBe(true);
+      expect(JSON.stringify(result)).not.toContain('PRIVATE_NESTED_RECEIPT');
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'keeps %s sessions private through normal and unblocking turns',
+    async (pluginId) => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+
+        maxTurns: 2,
+        maxBacktracks: 0,
+        stateful: true,
+        redteamProvider: mockRedTeamProvider,
+      });
+      const privatePrompt = 'Inspect PRIVATE_PROMPT_RECEIPT';
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: privatePrompt,
+          rationaleBehindJailbreak: '',
+          lastResponseSummary: '',
+        }),
+      });
+      const debug = vi.spyOn(logger, 'debug');
+      vi.mocked(tryUnblocking)
+        .mockResolvedValue({ success: false })
+        .mockResolvedValueOnce({ success: true, unblockingPrompt: privatePrompt });
+      mockGetGraderById.mockReturnValue({
+        id: `promptfoo:redteam:${pluginId}`,
+        getResult: vi
+          .fn()
+          .mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean report' }),
+      });
+      const receivedSessions: unknown[] = [];
+      let calls = 0;
+      mockTargetProvider.callApi.mockImplementation(async (_prompt, targetContext) => {
+        receivedSessions.push(targetContext?.vars.sessionId);
+        return { output: 'Clean report', sessionId: `PRIVATE_SESSION_${++calls}` };
+      });
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: privatePrompt },
+        prompt: { raw: 'Inspect report', label: 'fixture' },
+        test: { vars: {}, assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+      };
+      const first = await provider.callApi('Inspect report', context);
+      expect(receivedSessions).toEqual([undefined, 'PRIVATE_SESSION_1', 'PRIVATE_SESSION_2']);
+      const second = await provider.callApi('Inspect report', context);
+      expect(receivedSessions).toEqual([
+        undefined,
+        'PRIVATE_SESSION_1',
+        'PRIVATE_SESSION_2',
+        undefined,
+        'PRIVATE_SESSION_4',
+      ]);
+      expect(
+        JSON.stringify([
+          first,
+          second,
+          context.vars,
+          mockRedTeamProvider.callApi.mock.calls,
+          mockScoringProvider.callApi.mock.calls,
+          vi.mocked(tryUnblocking).mock.calls,
+        ]),
+      ).not.toContain('PRIVATE_SESSION_');
+      expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+      expect(JSON.stringify(debug.mock.calls)).not.toContain('PRIVATE_PROMPT_RECEIPT');
+      debug.mockRestore();
+    },
+  );
+
   it('should initialize with default config values', () => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',
@@ -184,6 +416,91 @@ describe('CrescendoProvider', () => {
     expect(provider.config.stateful).toBe(true);
     expect(provider.config.continueAfterSuccess).toBe(false);
   });
+
+  it.each([
+    ['coding-agent:trace-redaction', false],
+    ['harness:artifact-redaction', false],
+    ['coding-agent:trace-redaction', true],
+    ['harness:artifact-redaction', true],
+  ] as const)(
+    'keeps %s forensic traces out of the attacker and returned snapshots',
+    async (pluginId, assertionSet) => {
+      const canary = 'PRIVATE_CRESCENDO_FORENSIC_TRACE';
+      const test: AtomicTestCase = {
+        assert: [
+          { type: 'promptfoo:redteam:contracts' },
+          assertionSet
+            ? { type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}` }] }
+            : { type: `promptfoo:redteam:${pluginId}` },
+        ],
+        metadata: { pluginId: 'contracts', purpose: 'Fixture' },
+      };
+      const fetchTrace = vi.spyOn(traceContext, 'fetchTraceContext').mockResolvedValue({
+        traceId: 'trace',
+        spans: [
+          {
+            spanId: 'span',
+            name: canary,
+            kind: 'client',
+            startTime: 0,
+            attributes: {},
+            status: { code: 'ok' },
+            depth: 0,
+            events: [],
+          },
+        ],
+        insights: [canary],
+        fetchedAt: 0,
+      });
+      mockGetGraderById.mockReturnValue({
+        id: `promptfoo:redteam:${pluginId}`,
+        getResult: vi
+          .fn()
+          .mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Public report' }),
+      });
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'Inspect report',
+          rationaleBehindJailbreak: 'Fixture',
+          lastResponseSummary: 'Public report',
+        }),
+      });
+      const targetResponse: TargetResponse = {
+        output: 'Public report',
+        image: { data: canary + '_IMAGE', format: 'png' },
+        audio: { data: canary + '_AUDIO', format: 'wav' },
+      };
+      mockTargetProvider.callApi
+        .mockResolvedValue({ output: 'Clean report' })
+        .mockResolvedValueOnce(targetResponse);
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 2,
+        maxBacktracks: 0,
+        redteamProvider: mockRedTeamProvider,
+        tracing: { enabled: true },
+      });
+      vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+      vi.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+        value: false,
+        metadata: 0,
+        rationale: 'Continue',
+      });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'Inspect report' },
+        prompt: { raw: '{{objective}}', label: 'test' },
+        test,
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      });
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(fetchTrace).not.toHaveBeenCalled();
+      expect(JSON.stringify(mockRedTeamProvider.callApi.mock.calls)).not.toContain(canary);
+      expect(JSON.stringify(result.metadata)).not.toContain(canary);
+      expect(result.error).toMatch(/audio.*redaction.*verified/i);
+      expect(result.metadata?.redactionMediaOmitted).toBe(true);
+    },
+  );
 
   it('should support backwards compatibility with maxRounds', () => {
     const provider = new CrescendoProvider({

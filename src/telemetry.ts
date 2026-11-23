@@ -6,6 +6,7 @@ import { getEnvBool, getEnvString, isCI } from './envars';
 import { getUserAuthInfo, getUserId } from './globalConfig/accounts';
 import logger from './logger';
 import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
+import { isPrivateEvaluation } from './util/privateEvaluation';
 import type { PostHog } from 'posthog-node';
 
 import type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
@@ -120,6 +121,9 @@ export class Telemetry {
   }
 
   record(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    if (isPrivateEvaluation()) {
+      return;
+    }
     this.initialize();
     if (this.disabled) {
       this.recordTelemetryDisabled();

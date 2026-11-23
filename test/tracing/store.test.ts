@@ -71,6 +71,24 @@ describe('TraceStore', () => {
   });
 
   describe('createTrace', () => {
+    it('drops raw metadata and rejects late spans on historical private traces', async () => {
+      const metadata = { privateForensicEvidence: true, vars: { input: 'PRIVATE_TRACE' } };
+      await traceStore.createTrace({
+        traceId: 'private',
+        evaluationId: 'eval',
+        testCaseId: '0-0',
+        metadata,
+      });
+      expect(JSON.stringify(mockDb.insert().values.mock.calls)).not.toContain('PRIVATE_TRACE');
+      mockDb.select().from().where().limit.mockResolvedValueOnce([{ metadata }]);
+      await expect(
+        traceStore.addSpans('private', [{ spanId: 'one', name: 'PRIVATE_SPAN', startTime: 1 }], {
+          skipTraceCheck: true,
+        }),
+      ).resolves.toMatchObject({ stored: false });
+      expect(JSON.stringify(mockDb.insert().values.mock.calls)).not.toContain('PRIVATE_SPAN');
+    });
+
     it('should create a new trace record', async () => {
       const traceData = {
         traceId: 'test-trace-id',

@@ -23,6 +23,7 @@ import {
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
+import { configRequiresTraceRedaction, getAssertionLeaves } from './util/verifierPrivacy';
 
 import type {
   EnvOverrides,
@@ -349,6 +350,24 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
     testSuiteConfig,
     constructedTestSuite.prompts,
   );
+  // File-backed tests can make the shared catalog private even in memory-only runs.
+  if (configRequiresTraceRedaction(constructedTestSuite)) {
+    unifiedConfig.metadata = { ...unifiedConfig.metadata, privatePrompts: true };
+  }
+  // The serialized file reference alone cannot tell the privacy projection
+  // which inline tests inherit the resolved verifier. Keep only its types.
+  const resolvedDefault = constructedTestSuite.defaultTest;
+  if (
+    typeof testSuiteConfig.defaultTest === 'string' &&
+    resolvedDefault &&
+    typeof resolvedDefault === 'object' &&
+    configRequiresTraceRedaction(resolvedDefault)
+  ) {
+    unifiedConfig.defaultTest = {
+      metadata: { privatePrompts: true },
+      assert: getAssertionLeaves(resolvedDefault.assert).map(({ type }) => ({ type })),
+    };
+  }
   const author = getAuthor(suiteAuthor);
   const evalRecord = testSuiteConfig.writeLatestResults
     ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
