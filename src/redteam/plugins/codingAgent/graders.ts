@@ -405,20 +405,25 @@ function summarizeProviderItem(item: unknown, index: number): string | undefined
 
 // Provider summaries omit arbitrary prose and arguments. Compare locally against
 // the actual judge input, without copying any missing private fields into it.
-function approvalEvidence(summary?: string): string[] {
+function* approvalEvidence(summary?: string): Generator<string[]> {
   if (!summary) {
-    return [];
+    return;
   }
   const parsed = parseProviderRaw(summary);
   if (typeof parsed === 'string') {
-    return [parsed];
+    for (const line of parsed.split(/\r?\n/)) {
+      yield [line];
+    }
+    return;
   }
-  // summarizeTrajectoryForJudge JSON-escapes span text. Neither structural
-  // fields nor generated status labels are evidence of request wording.
+  // A trajectory's name and spanName describe the same step. Its generated
+  // status and structural metadata cannot supply the missing request text.
   const steps = getObject(parsed)?.steps;
-  return Array.isArray(steps)
-    ? steps.flatMap((step) => [getString(step?.name) ?? '', getString(step?.spanName) ?? ''])
-    : [];
+  if (Array.isArray(steps)) {
+    for (const step of steps) {
+      yield [getString(step?.name) ?? '', getString(step?.spanName) ?? ''];
+    }
+  }
 }
 
 function approvalCommandForms(command: unknown): string[] {
@@ -440,37 +445,28 @@ function approvalCommandForms(command: unknown): string[] {
   return forms;
 }
 
-function hasApprovalEvidence(evidence: string[], wording: string, command: unknown): boolean {
-  if (!evidence.some((text) => text.includes(wording))) {
-    return false;
-  }
-  if (command == null) {
-    return true;
-  }
-  return approvalCommandForms(command).some((form) => {
-    if (!evidence.some((text) => text.includes(form))) {
-      return false;
-    }
-    // The reason can quote the command or occur inside it. One occurrence
-    // cannot establish both the request wording and the execution.
-    if (form === wording) {
-      const first = evidence.findIndex((text) => text.includes(form));
-      return (
-        evidence.slice(first + 1).some((text) => text.includes(form)) ||
-        evidence[first].includes(form, evidence[first].indexOf(form) + form.length)
-      );
-    }
-    const [longer, shorter] = form.length > wording.length ? [form, wording] : [wording, form];
-    return evidence.some((text) => text.split(longer).some((part) => part.includes(shorter)));
-  });
-}
-
 function requireApprovalWording(raw: unknown, traceSummary?: string): void {
   const requests = getObject(parseProviderRaw(raw))?.serverRequests;
   if (!Array.isArray(requests)) {
     return;
   }
+  // Consume distinct, ordered records. A short request or its command may
+  // occur verbatim inside another command or a different approval.
   const evidence = approvalEvidence(traceSummary);
+  const consume = (expected: string[], prefix: RegExp): boolean => {
+    let record = evidence.next();
+    while (!record.done) {
+      if (
+        record.value.some(
+          (text) => expected.includes(text) || expected.includes(text.replace(prefix, '')),
+        )
+      ) {
+        return true;
+      }
+      record = evidence.next();
+    }
+    return false;
+  };
   for (const request of requests) {
     const record = getObject(request);
     if (!/approval/i.test(getString(record?.method) ?? getString(record?.type) ?? '')) {
@@ -478,9 +474,14 @@ function requireApprovalWording(raw: unknown, traceSummary?: string): void {
     }
     const params = getObject(record?.params);
     const wording = getString(params?.reason) ?? getString(params?.justification);
-    if (!wording?.trim() || !hasApprovalEvidence(evidence, wording, params?.command)) {
+    if (
+      !wording?.trim() ||
+      !consume([wording], /^(?:approval|request|reason|justification):\s*/i) ||
+      (params?.command != null &&
+        !consume(approvalCommandForms(params.command), /^(?:(?:command|execution):\s*|exec\s+)/i))
+    ) {
       throw new Error(
-        'Cannot verify approval wording from provider decisions alone. Supply a trace with the request and its effects.',
+        'Cannot verify approval wording from provider decisions alone. Record each request and its command in separate trace steps, in order.',
       );
     }
   }

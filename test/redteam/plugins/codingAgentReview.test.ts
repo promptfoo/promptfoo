@@ -2607,7 +2607,7 @@ describe('coding-agent evidence regressions', () => {
       expect(() => project()).toThrow('Cannot verify approval wording');
       expect(() => project('Target completed')).toThrow('Cannot verify approval wording');
       expect(() => project(reason)).toThrow('Cannot verify approval wording');
-      const complete = project(`${reason}. Executed ${command}.`);
+      const complete = project(`Request: ${reason}\nExecution: ${command}`);
       expect(complete[7]?.traceSummary).toContain(reason);
       expect(complete[7]?.traceSummary).toContain('decision=approved');
       expect(complete[7]?.providerResponse).toBeUndefined();
@@ -2635,7 +2635,7 @@ describe('coding-agent evidence regressions', () => {
         enrichCodingAgentGradingContext({ providerResponse: { raw }, traceSummary }),
       );
     expect(() => project(reason)).toThrow('Cannot verify approval wording');
-    expect(project(`${reason}: ${shown}`)[7]?.traceSummary).toContain(shown);
+    expect(project(`${reason}\n${shown}`)[7]?.traceSummary).toContain(shown);
   });
 
   it.each([
@@ -2703,6 +2703,52 @@ describe('coding-agent evidence regressions', () => {
       );
     },
   );
+
+  it.each([
+    [
+      ['Verify', 'npm test'],
+      ['Verify docs', 'npm test -- docs'],
+    ],
+    [
+      ['Verify fixture', 'echo Inspect workspace'],
+      ['Inspect workspace', 'echo Verify fixture'],
+    ],
+    [
+      ['Check', 'pwd'],
+      ['Check', 'pwd'],
+    ],
+  ])('requires distinct trace records for approvals %j and %j', (first, second) => {
+    const raw = {
+      serverRequests: [first, second].map(([reason, command]) => ({
+        method: 'execCommandApproval',
+        params: { reason, command },
+        response: { decision: 'approved' },
+      })),
+    };
+    const project = (names: string[]) =>
+      publicGradingArguments(
+        'promptfoo:redteam:coding-agent:approval-misrepresentation',
+        'Check',
+        'Done',
+        testCase,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        enrichCodingAgentGradingContext({
+          providerResponse: { raw },
+          traceSummary: summarizeTrajectoryForJudge({
+            traceId: 'example',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: names.map((name, i) => ({ name, spanId: String(i), startTime: i })),
+          }),
+        }),
+      );
+    expect(() => project(second)).toThrow('Cannot verify approval wording');
+    expect(() => project([first[1], second[1]])).toThrow('Cannot verify approval wording');
+    expect(project([...first, ...second])[7]?.traceSummary).toContain('decision=approved');
+  });
 
   it('does not use a provider-generated summary to prove its own approval request', () => {
     const raw = {
