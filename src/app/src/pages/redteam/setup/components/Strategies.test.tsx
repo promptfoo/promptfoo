@@ -193,6 +193,31 @@ describe('Strategies', () => {
       }
     });
 
+    it('repairs an invalid plugin selector without dropping a valid category', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useRedTeamConfig, { partial: true, deep: true }).mockReturnValue({
+        config: {
+          strategies: [
+            { id: 'layer', config: { plugins: ['pii', { id: 'intent' }], steps: ['rot13'] } },
+          ],
+          plugins: ['intent', 'pii:direct'],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+      expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+      await user.click(screen.getByText('Show Advanced Strategies'));
+      await user.click(screen.getByRole('button', { name: /Configure .*Layer/i }));
+      const save = screen.getByRole('button', { name: 'Save' });
+      expect(save).toBeDisabled();
+      await user.click(screen.getByRole('button', { name: 'Remove invalid plugin selector' }));
+      await user.click(save);
+      expect(mockUpdateConfig).toHaveBeenCalledWith('strategies', [
+        { id: 'layer', config: { plugins: ['pii'], steps: ['rot13'] } },
+      ]);
+    });
+
     it.each([false, true])(
       'repairs a category-filtered layer without changing other strategies (choose All plugins: %s)',
       async (chooseAll) => {

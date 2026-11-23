@@ -12,7 +12,7 @@ describe('StrategyConfigDialog', () => {
     vi.clearAllMocks();
   });
 
-  it('should correctly filter layerPlugins when using the stable empty array for selectedPlugins', async () => {
+  it('requires an explicit choice to target all plugins after selecting Specific plugins only', async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <StrategyConfigDialog
@@ -38,6 +38,8 @@ describe('StrategyConfigDialog', () => {
     await user.keyboard('{Enter}');
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
+    expect(saveButton).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'All plugins' }));
     await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
@@ -1061,6 +1063,31 @@ describe('StrategyConfigDialog', () => {
         steps: ['base64'],
       });
     });
+
+    it.each([{ plugins: null }, { plugins: 'pii' }, { plugins: [' '] }])(
+      'does not silently widen malformed plugin targeting $plugins',
+      async ({ plugins }) => {
+        const user = userEvent.setup();
+        renderWithProviders(
+          <StrategyConfigDialog
+            open
+            strategy="layer"
+            config={{ steps: ['rot13'], plugins: plugins as unknown as string[] }}
+            selectedPlugins={['intent']}
+            onClose={mockOnClose}
+            onSave={mockOnSave}
+            strategyData={null}
+          />,
+        );
+        const save = screen.getByRole('button', { name: 'Save' });
+        expect(save).toBeDisabled();
+        await user.click(screen.getByRole('button', { name: 'Remove invalid plugin selector' }));
+        expect(save).toBeDisabled();
+        await user.click(screen.getByRole('button', { name: 'All plugins' }));
+        await user.click(save);
+        expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['rot13'] });
+      },
+    );
 
     it('round-trips mixed plugin selectors and lets the user remove just one', async () => {
       const user = userEvent.setup();

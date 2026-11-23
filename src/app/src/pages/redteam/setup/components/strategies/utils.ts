@@ -15,6 +15,17 @@ export function getStrategyId(strategy: RedteamStrategy): string {
 // Strategies that require configuration before they can be used
 export const STRATEGIES_REQUIRING_CONFIG = ['layer', 'custom'];
 
+// Keep malformed selectors visible for explicit removal. Dropping them can widen the target.
+export function getLayerPluginSelectors(plugins: unknown): string[] {
+  if (plugins === undefined) {
+    return [];
+  }
+  if (!Array.isArray(plugins)) {
+    return [''];
+  }
+  return plugins.map((plugin) => (typeof plugin === 'string' && plugin.trim() ? plugin : ''));
+}
+
 /** The editor also requires at least one step, available strategies, and text for custom steps. */
 export function getLayerConfigError(
   steps: unknown,
@@ -68,6 +79,7 @@ export function isStrategyConfigured(
   if (strategyId === 'layer') {
     return (
       typeof strategy !== 'string' &&
+      !getLayerPluginSelectors(strategy.config?.plugins).includes('') &&
       !getLayerConfigError(strategy.config?.steps, isStrategyDisabled)
     );
   }

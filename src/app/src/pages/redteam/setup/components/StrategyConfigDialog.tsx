@@ -36,6 +36,7 @@ import {
 import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
 import {
   getLayerConfigError,
+  getLayerPluginSelectors,
   isStrategyConfigured,
   STRATEGIES_REQUIRING_CONFIG,
 } from './strategies/utils';
@@ -107,19 +108,28 @@ export default function StrategyConfigDialog({
     Array.isArray(config.steps) ? config.steps : [],
   );
   const [newStep, setNewStep] = React.useState<string>('');
-  const [layerPlugins, setLayerPlugins] = React.useState<string[]>(config.plugins || []);
+  const [layerPlugins, setLayerPlugins] = React.useState(() =>
+    getLayerPluginSelectors(config.plugins),
+  );
   // Plugin targeting: 'all' or 'specific'
   const [pluginTargeting, setPluginTargeting] = React.useState<'all' | 'specific'>(
-    config.plugins && config.plugins.length > 0 ? 'specific' : 'all',
+    layerPlugins.length > 0 ? 'specific' : 'all',
   );
 
   const availablePlugins = selectedPlugins;
 
   const stepIds = React.useMemo(() => steps.map(getStepId), [steps]);
-  const layerError = React.useMemo(
-    () => getLayerConfigError(steps, isStrategyDisabled),
-    [steps, isStrategyDisabled],
-  );
+  const layerError = React.useMemo(() => {
+    if (pluginTargeting === 'specific') {
+      if (layerPlugins.includes('')) {
+        return 'Remove invalid plugin selectors or choose All plugins.';
+      }
+      if (layerPlugins.length === 0) {
+        return 'Select a plugin or choose All plugins.';
+      }
+    }
+    return getLayerConfigError(steps, isStrategyDisabled);
+  }, [steps, isStrategyDisabled, pluginTargeting, layerPlugins]);
   const lastStep = stepIds[stepIds.length - 1];
   const isTerminal = lastStep !== undefined && isTerminalLayerStep(lastStep);
 
@@ -232,7 +242,7 @@ export default function StrategyConfigDialog({
       setSteps(Array.isArray(nextConfig.steps) ? nextConfig.steps : []);
 
       // Imported selectors can target categories or plugins outside the current selection.
-      const plugins = nextConfig.plugins ?? [];
+      const plugins = getLayerPluginSelectors(nextConfig.plugins);
       setLayerPlugins(plugins);
       setPluginTargeting(plugins.length > 0 ? 'specific' : 'all');
     } else {
@@ -333,6 +343,9 @@ export default function StrategyConfigDialog({
       }
       onSave(strategy, localConfig);
     } else if (strategy === 'layer') {
+      if (layerError) {
+        return;
+      }
       const layerConfig: Partial<StrategyConfig> = {
         ...localConfig,
       };
@@ -358,8 +371,8 @@ export default function StrategyConfigDialog({
     onClose();
   };
 
-  const handleRemovePlugin = (pluginToRemove: string) => {
-    setLayerPlugins((prev) => prev.filter((p) => p !== pluginToRemove));
+  const handleRemovePlugin = (index: number) => {
+    setLayerPlugins((prev) => prev.filter((_, i) => i !== index));
   };
 
   const renderBasicStrategyConfig = () => (
@@ -1008,13 +1021,13 @@ export default function StrategyConfigDialog({
           </Select>
           {layerPlugins.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {layerPlugins.map((plugin) => (
-                <Badge key={plugin} variant="secondary" className="gap-1 pr-1">
-                  {plugin}
+              {layerPlugins.map((plugin, index) => (
+                <Badge key={`${index}:${plugin}`} variant="secondary" className="gap-1 pr-1">
+                  {plugin || 'Invalid plugin selector'}
                   <button
                     type="button"
-                    aria-label={`Remove ${plugin}`}
-                    onClick={() => handleRemovePlugin(plugin)}
+                    aria-label={`Remove ${plugin || 'invalid plugin selector'}`}
+                    onClick={() => handleRemovePlugin(index)}
                     className="rounded-full p-0.5 hover:bg-muted"
                   >
                     <X className="size-3" />
