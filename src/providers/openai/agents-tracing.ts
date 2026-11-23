@@ -20,6 +20,12 @@ const OTLP_SPAN_KIND_CLIENT = 3;
 const MAX_STRUCTURED_ATTRIBUTE_BYTES = 64 * 1024;
 const MAX_STRUCTURED_ATTRIBUTE_DEPTH = 32;
 const MAX_STRUCTURED_ATTRIBUTE_NODES = 10_000;
+const PRIVATE_JWK_FIELDS = new Map([
+  ['RSA', ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth']],
+  ['EC', ['d']],
+  ['OKP', ['d']],
+  ['oct', ['k']],
+]);
 const TRACE_LINKAGE_ATTRIBUTE_KEYS = new Set(['evaluation.id', 'test.case.id']);
 const losslessJson = JSON as typeof JSON & {
   rawJSON?: (source: string) => unknown;
@@ -1012,11 +1018,18 @@ function argumentRedactor(context?: AttributeContext, native = false) {
 }
 
 function hasCredentialNamedPayload(value: string): boolean {
-  for (const [, quotedName, unquotedName] of value.matchAll(
-    /^content-disposition:[^\r\n]*?\bname\s*=\s*(?:["']([^"'\r\n]*)["']|([^\s;]+))/gim,
+  // MIME continuations start with a space or tab. Never cross the empty
+  // line separating a part's headers from its body.
+  for (const [header] of value.matchAll(
+    /^content-disposition:[^\r\n]*(?:\r?\n[ \t][^\r\n]*)*/gim,
   )) {
-    if (isCredentialAttributeKey(quotedName ?? unquotedName)) {
-      return true;
+    const unfolded = header.replace(/\r?\n[ \t]+/g, ' ');
+    for (const [, quoted, unquoted] of unfolded.matchAll(
+      /\bname\s*=\s*(?:["']([^"']*)["']|([^\s;]+))/gi,
+    )) {
+      if (isCredentialAttributeKey(quoted ?? unquoted)) {
+        return true;
+      }
     }
   }
   // Never cross another '<'. Quoted attributes can contain '>' and span lines.
@@ -1197,7 +1210,7 @@ function literalKeySegment(key: string): string {
 
 // Check TOML table paths and static object properties without interpreting their values.
 function hasCredentialTable(value: string): boolean {
-  if (!/[:=]/.test(value) || !/^[ \t\uFEFF]*\[|[:=][\s(]*[[{]|\bvalues?\b/im.test(value)) {
+  if (!/[:=]/.test(value) || !/\{|^[ \t\uFEFF]*\[|[:=][\s(]*\[|\b(?:values?|kty)\b/im.test(value)) {
     return false;
   }
   // TOML literal strings and JavaScript disagree about escaped apostrophes.
@@ -1216,6 +1229,26 @@ function hasCredentialLabel(names: string): boolean {
   }
   for (const [, label] of names.matchAll(/\b(?:name|key)[:=]\s*([\w.\\-]+)/gi)) {
     if (isCredentialAttributeKey(label, 'headers')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// In source text a private parameter may precede its JWK type. Scan normalized
+// names twice and withhold ambiguous records without interpreting their values.
+function hasPrivateJwk(names: string): boolean {
+  if (!names.includes('kty')) {
+    return false;
+  }
+  const fields = new Set<string>();
+  for (const [, type] of names.matchAll(/\bkty[:=]\s*(\w+)/g)) {
+    for (const field of PRIVATE_JWK_FIELDS.get(type) ?? []) {
+      fields.add(field);
+    }
+  }
+  for (const [, field] of names.matchAll(/\b(\w+)[:=]/g)) {
+    if (fields.has(field)) {
       return true;
     }
   }
@@ -1241,7 +1274,7 @@ function hasCredentialPath(value: string): boolean {
     .replace(/(\S)\s+([.:=])/g, '$1$2')
     .replace(/\.[ \t]+/g, '.')
     .replace(/\[\s*([\w$.\\-]+)\s*\](?=[ \t]*[[.:=])/g, '.$1');
-  if (hasCredentialLabel(names)) {
+  if (hasCredentialLabel(names) || hasPrivateJwk(names)) {
     return true;
   }
   // A header resets the prefix. Inline tables and arrays inherit it.
@@ -1532,12 +1565,9 @@ function isCredentialParameter(source: StructuredValue, key: string, context?: C
         isCredentialAttributeKey(name, context),
     );
   }
-  if (source.kty === 'RSA') {
-    return ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth'].includes(key);
-  }
-  return source.kty === 'EC' || source.kty === 'OKP'
-    ? key === 'd'
-    : source.kty === 'oct' && key === 'k';
+  return (
+    typeof source.kty === 'string' && PRIVATE_JWK_FIELDS.get(source.kty)?.includes(key) === true
+  );
 }
 
 function isJwe(value: unknown, budget: { remaining: number }): boolean {

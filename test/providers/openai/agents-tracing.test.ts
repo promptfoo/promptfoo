@@ -1744,6 +1744,62 @@ describe('OTLPTracingExporter', () => {
     },
   );
 
+  it.each(formats)(
+    'withholds credential parts in folded multipart headers in %s',
+    async (format) => {
+      const publicPart = 'Content-Disposition: form-data;\r\n name="region"\r\n\r\nwest';
+      const payload = await exportSpans(format, [
+        {
+          spanData: {
+            type: 'function',
+            name: 'http',
+            input: publicPart,
+            output: 'Content-Disposition: form-data;\r\n name="password"\r\n\r\nopaque/value',
+          },
+          traceMetadata: {
+            multiple:
+              publicPart +
+              '\r\n--form\r\nContent-Disposition: form-data;\r\n\tname=\r\n "api_key"\r\n\r\nopaque/multiple',
+            duplicate:
+              'Content-Disposition: form-data; name=region;\n name=token\n\nopaque/duplicate',
+          },
+        },
+      ]);
+      expect(getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0])).toMatchObject({
+        'tool.arguments': publicPart,
+        'tool.output': '<redacted>',
+        'trace.metadata.multiple': '<redacted>',
+        'trace.metadata.duplicate': '<redacted>',
+      });
+    },
+  );
+
+  it.each(formats)('withholds private JWK literals in tool source text in %s', async (format) => {
+    const sensitive = [
+      "export const jwk = { kty: 'oct', k: 'opaque/symmetric' };",
+      "const jwk = { d: 'opaque/exponent', kty: 'RSA', e: 'AQAB' };",
+      "({ kty: 'RSA', oth: [{ r: 'opaque/prime' }] })",
+      "const keys = [{ kty:// type\n 'EC', ['d']: 'opaque/scalar' }];",
+      String.raw`{ 'kt\u0079': 'OKP', '\x64': 'opaque/private' }`,
+      String.raw`Object.freeze({ k: 'opaque/wrapped', kt\u0079: 'oct' })`,
+    ];
+    const publicText = [
+      "export const jwk = { kty: 'RSA', n: 'shown', e: 'AQAB' };",
+      "const jwk = { kty: 'EC', x: 'shown', y: 'public' };",
+      "const point = { k: 'shown', d: 'day', p: 1, q: 2 };",
+    ];
+    const payload = await exportSpans(
+      format,
+      [...sensitive, ...publicText].map((output) => ({
+        spanData: { type: 'function', name: 'read_file', output },
+      })),
+    );
+    const values = payload.resourceSpans[0].scopeSpans[0].spans.map(
+      (span: unknown) => getAttributes(span)['tool.output'],
+    );
+    expect(values).toEqual([...sensitive.map(() => '<redacted>'), ...publicText]);
+  });
+
   it.each(formats)('checks credential siblings before flattening records in %s', async (format) => {
     const records = [
       { kty: 'oct', k: 'opaque', kid: 'visible' },
