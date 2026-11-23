@@ -180,15 +180,21 @@ function scrubOutputForHistory(output: string): string {
 }
 
 function confirmReportedInput(
-  reported: unknown,
+  reported: TargetResponse['prompt'],
   generated: string,
   submitted: string,
   statefulText: boolean,
 ): string | undefined {
-  if (typeof reported !== 'string' || !reported.trim()) {
+  const message = Array.isArray(reported) ? reported.at(-1) : undefined;
+  const text = message?.role === 'user' ? message.content : reported;
+  if (typeof text !== 'string' || !text.trim()) {
     return undefined;
   }
-  const directMatch = reported === submitted || reported === generated ? reported : undefined;
+  // When a user message contains the entire request, any JSON inside it is literal text.
+  if (message && text === submitted) {
+    return text;
+  }
+  const directMatch = text === submitted || text === generated ? text : undefined;
   if (!statefulText || !submitted.trimStart().startsWith('[')) {
     return directMatch;
   }
@@ -214,9 +220,7 @@ function confirmReportedInput(
   ) {
     return undefined;
   }
-  return reported === last.content ||
-    reported === submitted ||
-    reported === JSON.stringify(messages)
+  return text === last.content || reported === submitted || reported === JSON.stringify(messages)
     ? last.content
     : undefined;
 }
@@ -820,10 +824,9 @@ export class HydraProvider implements ApiProvider {
       const chat = Array.isArray(reported)
         ? reported.filter((message) => message?.role !== 'system')
         : undefined;
-      const last = chat?.[chat.length - 1];
       const statefulText = this.stateful && !lastTransformResult;
       const confirmedInput = confirmReportedInput(
-        last?.role === 'user' ? last.content : reported,
+        reported,
         currentPrompt,
         finalTargetPrompt,
         statefulText,

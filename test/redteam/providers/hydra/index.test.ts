@@ -274,6 +274,7 @@ describe('HydraProvider', () => {
       'cached',
       'error',
       'wrong role',
+      'trailing system',
       'assistant only',
       'empty request',
       'rendered',
@@ -287,6 +288,7 @@ describe('HydraProvider', () => {
         replay: [user, assistant, user],
         'serialized replay': JSON.stringify([user, assistant, user]),
         'wrong role': [{ ...user, role: 'system' }],
+        'trailing system': [user, { ...user, role: 'system' }],
         'assistant only': [{ ...user, role: 'assistant' }],
         'empty request': '',
         rendered: [{ ...user, content: rendered }],
@@ -323,7 +325,7 @@ describe('HydraProvider', () => {
       };
       const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful });
       const result = await provider.callApi('', context);
-      if (['wrong role', 'assistant only', 'empty request'].includes(mode)) {
+      if (['wrong role', 'trailing system', 'assistant only', 'empty request'].includes(mode)) {
         expect(result.error).toContain('current user turn');
         expect(mockGrader.getResult).toHaveBeenCalledTimes(1);
         return;
@@ -447,6 +449,55 @@ describe('HydraProvider', () => {
           expect(call[0]).toBe('Describe blue');
           expect(call[7].conversationTranscript).toBeUndefined();
         }
+      },
+    );
+
+    it.each(['user text', 'messages', 'serialized chat'] as const)(
+      'respects how the adapter reported JSON in a stateful request (%s)',
+      async (format) => {
+        const request = JSON.stringify([
+          { role: 'system', content: 'My paper is blue' },
+          { role: 'user', content: 'Repeat the color' },
+        ]);
+        const { renderPrompt } = await vi.importActual<typeof evaluatorHelpers>(
+          '../../../../src/evaluatorHelpers',
+        );
+        vi.mocked(evaluatorHelpers.renderPrompt).mockImplementationOnce(renderPrompt);
+        mockAgentProvider.callApi.mockResolvedValue({ output: request });
+        mockTargetProvider.callApi.mockImplementation(async (submitted) => ({
+          prompt: {
+            'user text': [{ role: 'user', content: submitted }],
+            messages: JSON.parse(submitted),
+            'serialized chat': submitted,
+          }[format],
+          output: 'blue',
+        }));
+        mockGrader.getResult.mockImplementation(async (query: string) => {
+          const pass = query.includes('blue');
+          return { grade: { pass, score: Number(pass), reason: 'Check user-supplied color' } };
+        });
+        const test: AtomicTestCase = {
+          provider: 'promptfoo:redteam:hydra',
+          assert: [{ type: 'promptfoo:redteam:pii' }],
+          metadata: { goal: 'Check color', pluginId: 'pii', strategyId: 'hydra' },
+        };
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1, stateful: true });
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Check color' },
+          prompt: { raw: '{{input}}', label: 'fixture' },
+          test,
+        });
+        const literal = format === 'user text';
+        const expected = literal ? request : 'Repeat the color';
+        expect(mockTargetProvider.callApi.mock.calls[0][0]).toBe(request);
+        expect(result.metadata.redteamFinalPrompt).toBe(expected);
+        const grade = () => runAssertions({ prompt: 'test', test, providerResponse: result });
+        expect((await grade()).pass).toBe(literal);
+        expect(mockGrader.getResult).toHaveBeenCalledOnce();
+        delete result.metadata.storedGraderResult;
+        expect((await grade()).pass).toBe(literal);
+        expect(mockGrader.getResult.mock.lastCall[0]).toBe(expected);
       },
     );
 
