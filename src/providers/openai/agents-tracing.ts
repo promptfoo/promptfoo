@@ -991,10 +991,10 @@ function isPrivateCurlHeader(header: string, tail?: string) {
   }
   // A flattened header may split before its colon, scheme or credential.
   // Check each prefix so the following URL cannot hide an opaque token.
-  const words = (colon < 0 ? tail.replace(/^\s*:/, '') : tail).matchAll(/[^\s;&|]+|[;&|]/g);
+  const words = (colon < 0 ? tail.replace(/^\s*:/, '') : tail).matchAll(/[^\s;&|<>]+|[;&|<>]/g);
   for (let i = 0; i < 2; i++) {
     const fragment = words.next().value?.[0];
-    if (!fragment || /^[;&|]$/.test(fragment)) {
+    if (!fragment || /^[;&|<>]$/.test(fragment)) {
       break;
     }
     value += ' ' + unquoteShellWord(fragment);
@@ -1007,9 +1007,6 @@ function isPrivateCurlHeader(header: string, tail?: string) {
 
 function argumentRedactor(context?: AttributeContext, command?: string) {
   const native = command === undefined;
-  // In redirects such as 2>&1 and >|file, a shell operator does not end the
-  // command. Keep curl's stricter option checks throughout ambiguous text.
-  const reliableSeparators = command !== undefined && !/[<>][&|]|&>|<</.test(command);
   let mode: 'start' | 'unknown' | 'operands' | 'curl' | 'expanded' =
     context === 'operands' || context === 'curl' ? context : 'start';
   let next: 'credential' | 'header' | undefined;
@@ -1021,6 +1018,10 @@ function argumentRedactor(context?: AttributeContext, command?: string) {
     // Only native argv or a complete quoted operand establishes an end.
     const raw = word.startsWith(prefix) ? word.slice(prefix.length) : word;
     const intact = native || /^(?:"(?:[^"\\]|\\[\s\S])*"|'[^']*')$/.test(raw);
+    if (!intact && raw !== '<redacted>' && /[<>]/.test(raw)) {
+      // An adjoining redirect can disguise an otherwise opaque header value.
+      redact.ambiguous = true;
+    }
     if (!isPrivateCurlHeader(arg.slice(prefix.length), intact ? undefined : command?.slice(end))) {
       return;
     }
@@ -1062,21 +1063,38 @@ function argumentRedactor(context?: AttributeContext, command?: string) {
     next = header ? 'header' : 'credential';
   }
 
-  function argument(word: unknown, end = 0) {
-    const operand = next;
-    next = undefined;
+  function endsCommand(word: unknown, end: number) {
+    if (typeof word !== 'string' || !/^[;&|\r\n]+$/.test(word)) {
+      return false;
+    }
     // In native argv, even a standalone shell operator can be a literal
     // operand. Never let it clear an active credential context.
-    if (
-      typeof word === 'string' &&
-      /^[;&|\r\n]+$/.test(word) &&
-      (reliableSeparators || (!operand && mode !== 'expanded' && mode !== 'curl'))
-    ) {
+    if (command === undefined) {
+      return !next && mode !== 'expanded' && mode !== 'curl';
+    }
+    // Only the operator in 2>&1, <&1, >|file or &>file belongs to a redirect.
+    // Later separators must restore the next program's option semantics.
+    return !(
+      ((word === '&' || word === '|') && /[<>]/.test(command[end - 2] ?? '')) ||
+      (word === '&' && command[end] === '>')
+    );
+  }
+
+  function argument(word: unknown, end = 0) {
+    if (endsCommand(word, end)) {
+      next = undefined;
       mode = 'start';
       property = false;
       return;
     }
+    const operand = next;
+    next = undefined;
     if (operand === 'credential' || mode === 'expanded') {
+      // A preceding option may itself have been literal data. Mask this word
+      // but still protect any operand it introduces (e.g. curl -d -u -H).
+      if (operand === 'credential' && typeof word === 'string') {
+        redactOption(word, unquoteShellWord(word), false, end);
+      }
       return '<redacted>';
     }
     if (typeof word !== 'string') {

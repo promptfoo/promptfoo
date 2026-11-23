@@ -971,6 +971,34 @@ describe('OTLPTracingExporter', () => {
     expect(attributes.ordinary).toBe(ordinary);
   });
 
+  it.each(formats)('resets curl options after real command separators in %s', async (format) => {
+    const publicChain = 'curl example.test 2>&1 && git push -u origin main';
+    const { attributes } = await exportCustomData(format, {
+      cmd: 'curl example.test 2>&1; wget -b --password opaque/value example.test',
+      publicChain,
+    });
+    expect(attributes.cmd).toBe(
+      'curl example.test 2>&1; wget -b --password <redacted> example.test',
+    );
+    expect(attributes.command).toBe(attributes.cmd);
+    expect(attributes.publicChain).toBe(publicChain);
+  });
+
+  it.each(formats)('screens ambiguous curl header operands in %s', async (format) => {
+    const suffix = 'opaque'.repeat(12);
+    const { attributes } = await exportCustomData(format, {
+      cmd: ['curl', '-d', '-u', '-H', 'Service-Key: opaque/value', 'https://host'],
+      adjacent: "curl -H'X-Example: " + suffix + "'>out https://host",
+      flat: 'curl -H X-Example: ' + suffix + '>out https://host',
+      publicHeader: 'curl -H "X-Example: a > b" https://host',
+    });
+    expect(attributes.cmd).toEqual(
+      wireStrings('curl', '-d', '-u', '<redacted>', '<redacted>', 'https://host'),
+    );
+    expect(attributes).toMatchObject(redacted('adjacent', 'flat'));
+    expect(attributes.publicHeader).toBe('curl -H "X-Example: a > b" https://host');
+  });
+
   it.each(formats)('masks curl header operands in native arguments in %s', async (format) => {
     const argv = ['curl', '-sSHAuthorization:opaque/value', '-HIdempotency-Key:shown'];
     const native = await exportCustomData(format, {
