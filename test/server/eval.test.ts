@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { generateIdFromPrompt } from '../../src/models/prompt';
 import { createApp } from '../../src/server/server';
 import { ResultFailureReason } from '../../src/types';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
@@ -72,6 +73,31 @@ describe('eval routes', () => {
       expect(response.body.output).toBe('edited replay');
     },
   );
+
+  it('checks the authored prompt ID even when several definitions share a label hash', async () => {
+    const original = { id: 'question-1', label: 'Readable', raw: 'First question' };
+    const other = { ...original, id: 'question-2', raw: 'Different question' };
+    const hash = generateIdFromPrompt(original);
+    const request = async (selector: string, prompts = [other, original]) => {
+      const saved = await Eval.create(
+        { providers: [{ id: 'echo', prompts: [selector] }], prompts },
+        prompts,
+        { completedPrompts: [{ ...original, id: hash, provider: 'echo' }] },
+      );
+      testEvalIds.add(saved.id);
+      return api
+        .post('/api/eval/replay')
+        .send({ evaluationId: saved.id, promptIndex: 0, prompt: 'edited' });
+    };
+    expect((await request(original.id)).body.output).toBe('edited');
+    expect((await request('question-*')).status).toBe(200);
+    expect((await request(other.id)).status).toBe(400);
+    expect((await request(hash)).status).toBe(400);
+    expect((await request(hash, [])).status).toBe(400);
+    const ambiguous = [original, { ...original, id: 'another-id' }];
+    expect((await request(original.id, ambiguous)).status).toBe(400);
+    expect((await request(original.label, ambiguous)).status).toBe(200);
+  });
 
   it('sends a replay only to the HTTP destination bound by the saved suite', async () => {
     const requests: { url?: string; authorization?: string; tenant?: string | string[] }[] = [];

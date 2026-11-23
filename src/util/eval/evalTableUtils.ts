@@ -1,6 +1,6 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import { ResultFailureReason } from '../../types/index';
-import { isPromptAllowed } from '../promptMatching';
+import { isPromptAllowed, promptIdentityCandidates } from '../promptMatching';
 import { getPersistedProviderFilterOptions } from './filterProviders';
 
 import type Eval from '../../models/eval';
@@ -21,6 +21,30 @@ export type TablePageResult = {
   head: { prompts: Prompt[]; vars: string[] };
   body: EvaluateTableRow[];
 };
+
+// Completed columns replace the authored ID with a hash. Use the same snapshot
+// identity as resume, without opening files or rendering prompt definitions.
+function matchesReplayPrompts(
+  columns: CompletedPrompt[],
+  definitions: Eval['config']['prompts'],
+  selectors: string[],
+) {
+  const prompts = Array.isArray(definitions) ? definitions : [];
+  const identities = promptIdentityCandidates(
+    prompts.map((entry) => {
+      if (typeof entry === 'string') {
+        return { raw: entry, label: entry };
+      }
+      const raw = entry.raw ?? entry.id ?? '';
+      return { id: entry.id, raw, label: entry.label ?? raw };
+    }),
+  );
+  return columns.some(({ id, raw, label }) => {
+    const ids = identities.get(JSON.stringify([id, raw, label]));
+    const authoredId = ids?.size === 1 ? ids.values().next().value : undefined;
+    return isPromptAllowed({ id: authoredId, raw, label }, selectors);
+  });
+}
 
 /** Recover the original column and its provider/prompt filters before replacing the prompt. */
 export function getReplayColumn(eval_: Eval, promptIndex?: number) {
@@ -43,7 +67,7 @@ export function getReplayColumn(eval_: Eval, promptIndex?: number) {
     !filter || filter.test(id) || Boolean(label && filter.test(label));
   const prompts = promptIndex === undefined ? columns : [columns[promptIndex]];
   const allowsPrompts = (selectors?: string[]) =>
-    selectors === undefined || prompts.some((prompt) => isPromptAllowed(prompt, selectors));
+    selectors === undefined || matchesReplayPrompts(prompts, eval_.config.prompts, selectors);
   return { name, groups, unique, allowsProvider, allowsPrompts };
 }
 

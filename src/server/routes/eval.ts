@@ -688,7 +688,12 @@ function replayEnvValue(template: string, env: ProviderOptions['env'], allowAmbi
 }
 
 // An environment-selected provider can only replay a local echo without operational options.
-function replayEcho(path: string, env: ProviderOptions['env'], options?: ProviderOptions) {
+function replayEcho(
+  path: string,
+  env: ProviderOptions['env'],
+  corroborated: boolean,
+  options?: ProviderOptions,
+) {
   const alias = options?.id === path ? undefined : options?.id;
   const dynamic = [alias, options?.label].some(
     (v) => v !== undefined && (typeof v !== 'string' || TEMPLATE_MARKER.test(v)),
@@ -698,7 +703,10 @@ function replayEcho(path: string, env: ProviderOptions['env'], options?: Provide
       !['id', 'label', 'env', 'prompts'].includes(k) &&
       !(k === 'config' && isDeepStrictEqual(options?.config, {})),
   );
-  if (dynamic || extra || replayEnvValue(path, env, true) !== 'echo') {
+  // An ID override can survive a change of provider. Only a saved environment
+  // binding can identify that target, even if the override itself is "echo".
+  const allowAmbient = corroborated && alias === undefined;
+  if (dynamic || extra || replayEnvValue(path, env, allowAmbient) !== 'echo') {
     throw new Error('Cannot identify the replay provider safely');
   }
   return { id: alias ?? 'echo', ...(options?.label && { label: options.label }) };
@@ -720,6 +728,7 @@ function prepareReplayCandidate<T>(
   column: string | undefined,
   suiteEnv: ProviderOptions['env'],
   singleSource: boolean,
+  corroboratedEcho = false,
 ) {
   const ref = normalizeProviderRef(provider);
   if (ref.kind !== 'options' && ref.kind !== 'map' && ref.kind !== 'named') {
@@ -742,7 +751,7 @@ function prepareReplayCandidate<T>(
     throw new Error('Cannot identify the replay provider safely');
   }
   if (TEMPLATE_MARKER.test(path)) {
-    options = replayEcho(path, env, options);
+    options = replayEcho(path, env, corroboratedEcho, options);
     path = 'echo';
   } else if (ref.kind === 'named' && !isCloudProvider(path)) {
     // A bare string has no saved prompt filters. Wrapping it would override the native ID.
@@ -881,7 +890,7 @@ function replaySources(eval_: Eval, allowsProvider: (id: string, label?: string)
   return { singleSource, mutableIdentity, resolved };
 }
 
-async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
+async function selectReplayProvider(eval_: Eval, promptIndex?: number, recordedId?: string | null) {
   const { name, groups, unique, allowsProvider, allowsPrompts } = getReplayColumn(
     eval_,
     promptIndex,
@@ -898,7 +907,16 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
   }
   let selected;
   for (const [index, { provider, fromFile, ref }] of resolved.entries()) {
-    const candidate = prepareReplayCandidate(provider, name, eval_.config.env, singleSource);
+    const nativeGroup = complete ? groups[index] : undefined;
+    const corroboratedEcho =
+      recordedId === 'echo' || (!ref.label && (name ?? nativeGroup) === 'echo');
+    const candidate = prepareReplayCandidate(
+      provider,
+      name,
+      eval_.config.env,
+      singleSource,
+      corroboratedEcho,
+    );
     if (candidate === undefined) {
       continue;
     }
@@ -906,7 +924,7 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
       normalizeProviderRef(candidate),
       name,
       unique,
-      complete ? groups[index] : undefined,
+      nativeGroup,
       eval_.config.env,
     );
     if (match) {
@@ -929,12 +947,10 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
   return { ...selected, id };
 }
 
-async function verifySavedReplayTarget(
-  eval_: Eval,
+function verifySavedReplayTarget(
+  saved: Awaited<ReturnType<typeof EvalQueries.getReplayTarget>>,
   selection: Awaited<ReturnType<typeof selectReplayProvider>>,
-  promptIndex?: number,
 ) {
-  const saved = await EvalQueries.getReplayTarget(eval_.id, promptIndex);
   // Cloud and file definitions can keep their labels after changing providers.
   // Without a recorded runtime ID their original target cannot be established.
   if (!saved) {
@@ -982,13 +998,14 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
 
     let selected;
     try {
-      selected = await selectReplayProvider(eval_, promptIndex);
+      const saved = await EvalQueries.getReplayTarget(eval_.id, promptIndex);
+      selected = await selectReplayProvider(eval_, promptIndex, saved?.id);
       const replayError = getReplayProviderError(selected.target);
       if (replayError) {
         res.status(400).json({ error: replayError });
         return;
       }
-      await verifySavedReplayTarget(eval_, selected, promptIndex);
+      verifySavedReplayTarget(saved, selected);
     } catch (error) {
       sendError(
         res,

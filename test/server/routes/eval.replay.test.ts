@@ -227,6 +227,45 @@ describe('POST /api/eval/replay provider boundary', () => {
     });
   });
 
+  it.each(['benchmark', 'echo'])(
+    'requires a saved binding when ID %s hides the original provider',
+    async (id) => {
+      const providers = [{ '{{ env.TARGET }}': { id } }];
+      const [original] = await loadApiProviders(providers, {
+        env: { TARGET: 'openai:chat:gpt-4o' },
+      });
+      expect(original.id()).toBe(id);
+      vi.stubEnv('TARGET', 'echo');
+      try {
+        storedConfig(providers, undefined, [id]);
+        expect((await replay()).status).toBe(400);
+        recordedTarget(original.id());
+        expect((await replay(0, 0)).status).toBe(400);
+        expect(evaluate).not.toHaveBeenCalled();
+
+        storedConfig(providers, undefined, [id], { TARGET: 'echo' });
+        expect((await replay(0, 0)).status).toBe(200);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  it('requires an unmasked saved ID for an ambient selector behind a display label', async () => {
+    vi.stubEnv('TARGET', 'echo');
+    try {
+      storedConfig([{ id: '{{ env.TARGET }}', label: 'Saved' }]);
+      expect((await replay(0, 0)).status).toBe(400);
+      recordedTarget('openai:codex-security');
+      expect((await replay(0, 0)).status).toBe(400);
+      expect(evaluate).not.toHaveBeenCalled();
+      recordedTarget('echo');
+      expect((await replay(0, 0)).status).toBe(200);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('accepts an empty config and binds a templated label to the saved column', async () => {
     vi.stubEnv('REPLAY_LABEL', 'Local echo');
     try {

@@ -77,7 +77,11 @@ import invariant from '../util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from '../util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from '../util/namedMetrics';
 import { filterFiniteScores } from '../util/numeric';
-import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
+import {
+  getProviderPromptOverride,
+  isPromptAllowed,
+  promptIdentityCandidates,
+} from '../util/promptMatching';
 import {
   getProviderIdentifier,
   isAnthropicProvider,
@@ -724,17 +728,6 @@ function canRestoreSavedText(prompts: Prompt[], savedPrompts: CompletedPrompt[])
     (saved) =>
       !callableRaw.has(saved.raw) && !callableLabels.has(saved.label) && textRaw.has(saved.raw),
   );
-}
-
-function promptIdentityCandidates(prompts: Prompt[]): Map<string, Set<string | undefined>> {
-  const identities = new Map<string, Set<string | undefined>>();
-  for (const prompt of prompts) {
-    const key = JSON.stringify([generateIdFromPrompt(prompt), prompt.raw, prompt.label]);
-    const ids = identities.get(key) ?? new Set<string | undefined>();
-    ids.add(prompt.id);
-    identities.set(key, ids);
-  }
-  return identities;
 }
 
 type PreparedPromptRecovery = {
