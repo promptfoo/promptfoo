@@ -258,6 +258,7 @@ describe('dependency ownership report', () => {
     write('src/keep.ts', "import 'shared';");
     for (const file of [
       'src/ignored/index.ts',
+      'src/{ignored,keep}.ts',
       'src/app/src/excluded/index.ts',
       'tools/ignored/index.ts',
       'dist/src/ignored/index.d.ts',
@@ -268,6 +269,7 @@ describe('dependency ownership report', () => {
       ...config,
       ignoredRoots: [
         './src/ignored/',
+        'src/{ignored,keep}.ts',
         'src/app/src/excluded',
         'tools/../tools/ignored',
         'dist/src/ignored',
@@ -348,6 +350,21 @@ describe('dependency ownership report', () => {
       layers: [...config.layers, { name: 'lib', roots: ['lib/[id]'], allowedDependencies: [] }],
     });
     expect(report.undeclaredUsages.map((item) => item.dependency)).toEqual(['real']);
+  });
+
+  it('treats brace expressions in configured directory and file roots literally', () => {
+    write('lib/{id,name}/index.ts', "import 'literal-dir';");
+    write('lib/id/index.ts', "import 'expanded-dir';");
+    write('lib/{1..2}.ts', "import 'literal-file';");
+    write('lib/2.ts', "import 'expanded-file';");
+    const report = reportDependencyOwnership(root, {
+      ...config,
+      layers: [{ name: 'lib', roots: ['lib/{id,name}', 'lib/{1..2}.ts'], allowedDependencies: [] }],
+    });
+    expect(report.undeclaredUsages.map((item) => item.dependency)).toEqual([
+      'literal-dir',
+      'literal-file',
+    ]);
   });
 
   it('records leading AMD dependency directives', () => {
