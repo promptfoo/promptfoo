@@ -1023,7 +1023,7 @@ function hasReplayOverrides(eval_: Eval, saved: ReplaySelection['saved'], prompt
   return overridden(defaultTest) || Boolean(Array.isArray(tests) && tests.some(overridden));
 }
 
-function verifySavedReplayTarget(selection: ReplaySelection) {
+function assertMatchesSavedTarget(selection: ReplaySelection) {
   const { saved } = selection;
   // Cloud and file definitions can keep their labels after changing providers.
   // Without a recorded runtime ID their original target cannot be established.
@@ -1098,7 +1098,7 @@ function matchesRecordedSettings(
 
 // Runtime results omit provider controls such as transform. Only saved inline
 // overrides can supply those controls, even when the underlying provider is local.
-function verifyMutableControls({ fromFile, ref, cloud }: ReplaySelection) {
+function assertAllowedReplayControls({ fromFile, ref, cloud }: ReplaySelection) {
   const allowed = new Set(['id', 'label', 'config', 'env', 'prompts']);
   if (cloud && !fromFile) {
     for (const key of ['transform', 'delay', 'inputs'] as const) {
@@ -1146,14 +1146,14 @@ function bindReplaySetting(value: string, env: ProviderOptions['env']) {
 // Outside the request body, an explicit setting can change the destination
 // (including an auxiliary session or token URL). Inspect only literal saved
 // environment bindings. Never run templates or read ambient values here.
-function verifyReplayBindings(value: unknown, env: ProviderOptions['env']) {
+function assertSavedReplayBindings(value: unknown, env: ProviderOptions['env']) {
   if (typeof value === 'string' && TEMPLATE_MARKER.test(value)) {
     if (TEMPLATE_MARKER.test(bindReplaySetting(value, env))) {
       throw new Error('Cannot verify provider template');
     }
   } else if (value && typeof value === 'object') {
     for (const child of Object.values(value)) {
-      verifyReplayBindings(child, env);
+      assertSavedReplayBindings(child, env);
     }
   }
 }
@@ -1186,7 +1186,7 @@ function replayEndpointAliases(path: string) {
 
 // A model ID omits the endpoint. Even if no gateway is configured today,
 // one may have been set in the original process and removed since then.
-function verifyModelEndpoint(
+function assertSavedModelEndpoint(
   path: string,
   settings: Record<string, unknown>,
   env: ProviderOptions['env'],
@@ -1206,7 +1206,7 @@ function verifyModelEndpoint(
   }
 }
 
-function verifyReplayDestination(target: ProviderRefDescriptor, suiteEnv: ProviderOptions['env']) {
+function assertReplayDestination(target: ProviderRefDescriptor, suiteEnv: ProviderOptions['env']) {
   if (!('loadProviderPath' in target) || target.loadProviderPath === 'echo') {
     return;
   }
@@ -1228,7 +1228,7 @@ function verifyReplayDestination(target: ProviderRefDescriptor, suiteEnv: Provid
     ) {
       throw new Error('Cannot distinguish a saved model ID from a provider selector');
     }
-    verifyModelEndpoint(target.loadProviderPath, settings, env);
+    assertSavedModelEndpoint(target.loadProviderPath, settings, env);
   }
   if (transport === 'http' && settings.request != null) {
     // Raw HTTP takes its destination from the request line and Host header,
@@ -1246,7 +1246,7 @@ function verifyReplayDestination(target: ProviderRefDescriptor, suiteEnv: Provid
     }
     delete settings.request;
   }
-  verifyReplayBindings(settings, env);
+  assertSavedReplayBindings(settings, env);
 }
 
 function hasStaticReplayRoute(path: string, config: Record<string, unknown>) {
@@ -1285,14 +1285,14 @@ function prepareReplaySettings(
   suiteEnv?: ProviderOptions['env'],
 ) {
   const { fromFile, cloud, target, saved } = selection;
-  verifyReplayDestination(target, suiteEnv);
+  assertReplayDestination(target, suiteEnv);
   if (!fromFile && !cloud) {
     return selection.candidate;
   }
   if (target.kind !== 'options') {
     throw new Error('Cannot verify mutable provider settings');
   }
-  verifyMutableControls(selection);
+  assertAllowedReplayControls(selection);
   const path = target.loadProviderPath;
   let candidate = selection.candidate;
   let config = target.loadOptions.config;
@@ -1348,6 +1348,10 @@ function validReplayInput(prompt: string, variables: Record<string, unknown> = {
   );
 }
 
+// Edit & Replay is intentionally unthrottled so local viewer users can compare
+// successive edits across columns from the same address. The saved provider
+// checks do not authenticate the caller. Restrict viewer access to trusted
+// users because each replay can incur provider costs.
 evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = EvalSchemas.Replay.Request.safeParse(req.body);
   if (!bodyResult.success) {
@@ -1384,7 +1388,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
         res.status(400).json({ error: replayError });
         return;
       }
-      verifySavedReplayTarget(selected);
+      assertMatchesSavedTarget(selected);
       if (hasReplayOverrides(eval_, selected.saved, promptIndex)) {
         throw new Error('Prompt-only replay cannot preserve saved provider overrides');
       }
