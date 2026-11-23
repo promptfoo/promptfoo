@@ -143,42 +143,61 @@ describe('materializeMcpToolCallRemote', () => {
     );
   });
 
-  it('retains reported usage from a terminal HTTP rate-limit response', async () => {
-    vi.mocked(getEnvString).mockImplementation((key) =>
-      key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
-    );
+  describe('single HTTP attempt', () => {
     const tokenUsage = { total: 9, prompt: 7, completion: 2, numRequests: 1 };
-    vi.mocked(fetchWithCache).mockRejectedValue(
-      new HttpRateLimitError({ status: 429, body: { tokenUsage } }),
-    );
-    await expect(
-      materializeMcpToolCallRemote({ tools: [searchCompaniesTool], value: 'Find companies' }),
-    ).rejects.toMatchObject({ tokenUsage });
-  });
+    const materialize = () =>
+      materializeMcpToolCallRemote({ tools: [searchCompaniesTool], value: 'Find companies' });
 
-  it.each([500, 503])(
-    'retains billed HTTP %s usage when 5xx retries are enabled',
-    async (status) => {
+    beforeEach(async () => {
       vi.mocked(getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_RETRY_5XX');
       vi.mocked(getEnvString).mockImplementation((key) =>
         key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
       );
       const cache = await vi.importActual<typeof import('../../src/cache')>('../../src/cache');
       vi.mocked(fetchWithCache).mockImplementationOnce(cache.fetchWithCache);
-      const tokenUsage = { total: 9, prompt: 7, completion: 2, numRequests: 1 };
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('uses a successful response that exhausted the remaining quota', async () => {
+      const result = { tool: 'search_companies', args: { query: 'clean energy' } };
       const request = vi
         .spyOn(globalThis, 'fetch')
-        .mockResolvedValue(Response.json({ tokenUsage }, { status }));
-      try {
-        await expect(
-          materializeMcpToolCallRemote({ tools: [searchCompaniesTool], value: 'Find companies' }),
-        ).rejects.toMatchObject({ message: expect.stringContaining(String(status)), tokenUsage });
-        expect(request).toHaveBeenCalledTimes(1);
-      } finally {
-        request.mockRestore();
-      }
-    },
-  );
+        .mockResolvedValue(
+          Response.json({ result, tokenUsage }, { headers: { 'X-RateLimit-Remaining': '0' } }),
+        );
+
+      await expect(materialize()).resolves.toMatchObject({
+        prompt: JSON.stringify(result),
+        tokenUsage,
+      });
+      expect(request).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      { status: 429, remaining: '0', cause: HttpRateLimitError },
+      { status: 500, remaining: '1', cause: Error },
+      { status: 503, remaining: '0', cause: Error },
+    ])('retains billed HTTP $status usage', async ({ status, remaining, cause }) => {
+      const request = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(
+          Response.json(
+            { tokenUsage },
+            { status, headers: { 'X-RateLimit-Remaining': remaining } },
+          ),
+        );
+
+      await expect(materialize()).rejects.toMatchObject({
+        cause: expect.any(cause),
+        message: expect.stringContaining(String(status)),
+        tokenUsage,
+      });
+      expect(request).toHaveBeenCalledTimes(1);
+    });
+  });
 
   it('returns undefined when remote generation is explicitly disabled', async () => {
     vi.mocked(getEnvBool).mockImplementation(

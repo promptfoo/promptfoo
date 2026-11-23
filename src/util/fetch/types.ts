@@ -21,8 +21,8 @@ export interface FetchOptions extends RequestInit {
    */
   disableTransientRetries?: boolean;
 
-  /** Let fetchWithRetries return the server error body even when PROMPTFOO_RETRY_5XX is set. */
-  disable5xxRetries?: boolean;
+  /** With zero retries, return non-429 responses intact. HTTP 429 still raises HttpRateLimitError. */
+  preserveSingleAttemptResponse?: boolean;
 
   /**
    * Skip automatic injection of the saved Cloud auth header (and cloud task

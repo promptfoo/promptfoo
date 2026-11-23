@@ -816,12 +816,11 @@ export async function fetchWithRetries(
         timeout,
       );
 
-      if (
-        !options.disable5xxRetries &&
-        getEnvBool('PROMPTFOO_RETRY_5XX') &&
-        response.status >= 500 &&
-        response.status < 600
-      ) {
+      if (options.preserveSingleAttemptResponse && maxRetries === 0 && response.status !== 429) {
+        return response;
+      }
+
+      if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
