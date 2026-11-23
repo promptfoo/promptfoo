@@ -562,6 +562,10 @@ describe('OTLPTracingExporter', () => {
       const ordinary = 'const cache = { pattern: /[}]/, key: "shown" };';
       const { attributes } = await exportCustomData(format, {
         indexed: 'cfg.api[0].key = "opaque/index";',
+        bigint: 'cfg.api[1n].key = "opaqueBigInt";',
+        integer: 'cfg.api[.0].key = "opaqueInteger";',
+        grouped: 'cfg.api[(0x10)].key = "opaqueGrouped";',
+        signed: 'cfg.private[-0][+1].key = "opaqueSigned";',
         nested: 'cfg.private[0x10][1].key = "opaque/nested";',
         escaped: String.raw`cfg["pass\word"] = "opaque/identity";`,
         privateField: 'class Client { #api = {key: "opaque/private"}; }',
@@ -569,10 +573,12 @@ describe('OTLPTracingExporter', () => {
         brace: 'const api = { pattern: /[}]/, key: "opaque/brace" };',
         ordinary,
         list: 'cfg.cache[0].key = "shown";',
+        publicIndex: 'cfg.cache[1n].key = "shown";',
         oversized: 'const cache = { pattern: /#/, items: [' + '0,'.repeat(5_001) + '] };',
       });
       expect(attributes.ordinary).toBe(ordinary);
       expect(attributes.list).toBe('cfg.cache[0].key = "shown";');
+      expect(attributes.publicIndex).toBe('cfg.cache[1n].key = "shown";');
       expect(attributes.oversized).toBe('<redacted>');
     },
   );

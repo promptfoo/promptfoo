@@ -1097,7 +1097,7 @@ function literalBoundaryCheck(value: string) {
 // contain arbitrary braces or comment markers. Tokenize without evaluating
 // the source. Only use this alternate reading to withhold, never to export.
 function javascriptPropertyText(value: string): string {
-  if (!/[[{]/.test(value) || !/[#\\/]|\[\s*\d/.test(value)) {
+  if (!/[[{]/.test(value) || !/[#\\/]|\[\s*[\d.(+-]/.test(value)) {
     return value;
   }
   let text = '';
@@ -1132,8 +1132,10 @@ function javascriptPropertyText(value: string): string {
         /^[\w.$-]+$/.test(literal)
       ) {
         spelling = literal;
-      } else if (token.type === tokTypes.num && Number.isSafeInteger(literal)) {
-        spelling = String(literal);
+      } else if (token.type === tokTypes.num) {
+        // Only the qualifier matters here. Normalize numeric literals so even
+        // BigInt and exponent spellings can be skipped as property indices.
+        spelling = '0';
       } else {
         continue;
       }
@@ -1172,7 +1174,7 @@ function checkCredentialAssignments(value: string): string {
   }
   const joined = source
     .replace(SOURCE_LITERALS, (token) => (/^[()/]/.test(token) ? ' ' : token))
-    .replace(/\[\s*["'`]?\d+["'`]?\s*\]/g, '');
+    .replace(/\[\s*(?:[+-]\s*)?["'`]?\d+["'`]?\s*\]/g, '');
   if (
     joined !== masked &&
     (hasCredentialTable(joined) || maskAssignedLiterals(joined, true) !== joined)
