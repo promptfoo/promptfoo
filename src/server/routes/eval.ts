@@ -24,6 +24,7 @@ import {
   generateEvalCsv,
   getEvalTableOutputPromptLocationsBySize,
   getEvalTablePromptStrippedPayload,
+  getReplayColumn,
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
@@ -647,7 +648,7 @@ function readReplayProviders(path: string, basePath?: string) {
     replayFileData(config?.url);
     const localSettings = typeof config === 'object' && !isCloudProvider(ref.loadProviderPath);
     replayFileData(config, localSettings ? (path) => path : undefined);
-    return ref.loadOptions;
+    return ref;
   });
 }
 
@@ -848,55 +849,55 @@ async function matchReplayTarget(
   return { target, cloud };
 }
 
-async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
+function replaySources(eval_: Eval, allowsProvider: (id: string, label?: string) => boolean) {
   const providers = eval_.config.providers ?? [];
   const sources = Array.isArray(providers) ? providers : [providers];
-  const columns = promptIndex === undefined ? [] : eval_.getPrompts();
-  const name = promptIndex === undefined ? undefined : columns[promptIndex]?.provider;
-  if (promptIndex === undefined ? sources.length !== 1 : !name) {
+  let mutableIdentity = false;
+  const resolved = sources
+    .flatMap((source) => {
+      const ref = normalizeProviderRef(source);
+      if (ref.kind !== 'file') {
+        mutableIdentity ||=
+          'loadProviderPath' in ref &&
+          isCloudProvider(ref.loadProviderPath) &&
+          (!ref.label || TEMPLATE_MARKER.test(ref.label));
+        return [{ provider: source, fromFile: false, ref }];
+      }
+      try {
+        const entries = readReplayProviders(ref.loadProviderPath, eval_.config.basePath);
+        mutableIdentity = true;
+        return entries.map((entry) => ({
+          provider: entry.loadOptions,
+          fromFile: true,
+          ref: entry,
+        }));
+      } catch {
+        // A missing file could own the column even if a remaining label matches.
+        throw new Error('Cannot inspect the replay provider file safely');
+      }
+    })
+    .filter(({ ref }) => allowsProvider(ref.id, ref.label));
+  const singleSource = sources.length === 1 && resolved.length === 1;
+  return { singleSource, mutableIdentity, resolved };
+}
+
+async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
+  const { name, groups, unique, allowsProvider, allowsPrompts } = getReplayColumn(
+    eval_,
+    promptIndex,
+  );
+  const { singleSource, mutableIdentity, resolved } = replaySources(eval_, allowsProvider);
+  if (promptIndex === undefined && !singleSource) {
     throw new Error('Ambiguous replay request');
   }
-  const unique = !!name && columns.every((col, i) => i === promptIndex || col.provider !== name);
-  let missingFile = false;
-  let mutableIdentity = false;
-  const resolved = sources.flatMap((source) => {
-    const ref = normalizeProviderRef(source);
-    if (ref.kind !== 'file') {
-      mutableIdentity ||=
-        'loadProviderPath' in ref &&
-        isCloudProvider(ref.loadProviderPath) &&
-        (!ref.label || TEMPLATE_MARKER.test(ref.label));
-      return [{ provider: source, fromFile: false }];
-    }
-    try {
-      const entries = readReplayProviders(ref.loadProviderPath, eval_.config.basePath);
-      mutableIdentity = true;
-      return entries.map((provider) => ({ provider, fromFile: true }));
-    } catch (error) {
-      // An unavailable file cannot supply a target. Require one positive column match below.
-      if (unique && (error as NodeJS.ErrnoException).code === 'ENOENT') {
-        missingFile = true;
-        return [];
-      }
-      throw new Error('Cannot inspect the replay provider file safely');
-    }
-  });
-  const singleSource = sources.length === 1 && resolved.length === 1;
-  // buildLivePromptColumns emits contiguous prompt groups in provider order.
-  // Filters can omit sources, and adjacent equal IDs can hide a second provider.
-  const groups = columns
-    .filter((entry, index) => !index || entry.provider !== columns[index - 1].provider)
-    .map((entry) => entry.provider);
-  const complete =
-    !missingFile && groups.length === resolved.length && new Set(groups).size === groups.length;
+  const complete = groups.length === resolved.length && new Set(groups).size === groups.length;
   // Cloud and file labels can change since the evaluation. Never use their
   // current values alone to distinguish targets or fall back to another one.
-  const requireOrder = mutableIdentity && !singleSource;
-  if (requireOrder && !complete) {
+  if (mutableIdentity && !complete) {
     throw new Error('Ambiguous replay request');
   }
   let selected;
-  for (const [index, { provider, fromFile }] of resolved.entries()) {
+  for (const [index, { provider, fromFile, ref }] of resolved.entries()) {
     const candidate = prepareReplayCandidate(provider, name, eval_.config.env, singleSource);
     if (candidate === undefined) {
       continue;
@@ -909,16 +910,52 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
       eval_.config.env,
     );
     if (match) {
-      if (selected || (requireOrder && groups[index] !== name)) {
+      if (selected || (name && mutableIdentity && groups[index] !== name)) {
         throw new Error('Ambiguous replay request');
       }
-      selected = { candidate, fromFile, ...match };
+      selected = { candidate, fromFile, ref, ...match };
     }
   }
   if (!selected) {
     throw new Error('No matching replay provider');
   }
-  return selected;
+  const id = replayProviderId(selected.target) ?? selected.target.id;
+  const selectors =
+    ('loadOptions' in selected.ref ? selected.ref.loadOptions.prompts : undefined) ??
+    selected.cloud?.provider.prompts;
+  if (!allowsProvider(id, selected.target.label) || !allowsPrompts(selectors)) {
+    throw new Error('Provider excluded from the original evaluation');
+  }
+  return { ...selected, id };
+}
+
+async function verifySavedReplayTarget(
+  eval_: Eval,
+  selection: Awaited<ReturnType<typeof selectReplayProvider>>,
+  promptIndex?: number,
+) {
+  const saved = await EvalQueries.getReplayTarget(eval_.id, promptIndex);
+  // Cloud and file definitions can keep their labels after changing providers.
+  // Without a recorded runtime ID their original target cannot be established.
+  if (!saved) {
+    if (selection.fromFile || selection.cloud) {
+      throw new Error('No recorded provider for mutable replay target');
+    }
+    return;
+  }
+  if (saved.scanner || saved.id !== selection.id) {
+    throw new Error('Cannot verify the original replay provider');
+  }
+  if (saved.linkedTargetId) {
+    const linked = isCloudProvider(saved.linkedTargetId)
+      ? getCloudDatabaseId(saved.linkedTargetId)
+      : saved.linkedTargetId;
+    const localLink =
+      'loadOptions' in selection.target && selection.target.loadOptions.config?.linkedTargetId;
+    if (selection.cloud ? linked !== selection.cloud.id : saved.linkedTargetId !== localLink) {
+      throw new Error('Cloud target changed since evaluation');
+    }
+  }
 }
 
 evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> => {
@@ -946,6 +983,12 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     let selected;
     try {
       selected = await selectReplayProvider(eval_, promptIndex);
+      const replayError = getReplayProviderError(selected.target);
+      if (replayError) {
+        res.status(400).json({ error: replayError });
+        return;
+      }
+      await verifySavedReplayTarget(eval_, selected, promptIndex);
     } catch (error) {
       sendError(
         res,
@@ -957,11 +1000,6 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     }
 
     const { cloud, target } = selected;
-    const replayError = getReplayProviderError(target);
-    if (replayError) {
-      res.status(400).json({ error: replayError });
-      return;
-    }
     let candidate = selected.candidate;
     if (selected.fromFile && !cloud && target.kind === 'options' && target.loadOptions.config) {
       // Only the approved provider may read its settings. Never render paths

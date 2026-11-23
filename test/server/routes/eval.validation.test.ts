@@ -314,7 +314,9 @@ describe('Eval Routes - Zod Validation', () => {
         expected: [{ id: 'promptfoo://provider/saved-target', prompts: ['Replay'] }],
       },
       {
-        providers: [{ 'promptfoo://provider/saved-target': { id: 'local-alias', prompts: [] } }],
+        providers: [
+          { 'promptfoo://provider/saved-target': { id: 'local-alias', prompts: ['first'] } },
+        ],
         expected: [
           { 'promptfoo://provider/saved-target': { id: 'local-alias', prompts: ['Replay'] } },
         ],
@@ -324,7 +326,15 @@ describe('Eval Routes - Zod Validation', () => {
       async ({ providers, expected }) => {
         const before = structuredClone(providers);
         vi.mocked(getProviderFromCloud).mockResolvedValue({ id: 'echo' });
-        mockFindById.mockResolvedValue({ config: { providers } });
+        mockedEvalQueries.getReplayTarget.mockResolvedValue({
+          id: 'echo',
+          linkedTargetId: null,
+          scanner: 0,
+        });
+        mockFindById.mockResolvedValue({
+          getPrompts: () => [{ label: 'first', provider: 'echo' }],
+          config: { providers },
+        });
         vi.mocked(evaluateWithSource).mockResolvedValue({
           toEvaluateSummary: async () => ({ results: [{ response: { output: 'Hello World' } }] }),
         } as unknown as Eval);
@@ -362,10 +372,15 @@ describe('Eval Routes - Zod Validation', () => {
         writeFileSync(path.join(directory, 'settings.json'), JSON.stringify({ greeting: 'Hello' }));
         writeFileSync(
           path.join(directory, 'echo.cjs'),
-          "module.exports = class { id() { return 'replay-echo'; } async callApi(prompt) { return { output: prompt }; } };",
+          "module.exports = class { id() { return './echo.cjs'; } async callApi(prompt) { return { output: prompt }; } };",
         );
+        mockedEvalQueries.getReplayTarget.mockResolvedValue({
+          id: './echo.cjs',
+          linkedTargetId: null,
+          scanner: 0,
+        });
         mockFindById.mockResolvedValue({
-          getPrompts: () => providers.map(({ label }) => ({ provider: label })),
+          getPrompts: () => providers.map(({ label }) => ({ provider: label, label: 'first' })),
           config: {
             providers:
               referenceKind === 'relative' ? 'file://./providers.json' : `file://${providerPath}`,

@@ -9,7 +9,7 @@ vi.mock('../../../src/node', () => ({ evaluateWithSource: vi.fn() }));
 vi.mock('../../../src/globalConfig/accounts');
 
 import { cloudConfig } from '../../../src/globalConfig/cloud';
-import Eval from '../../../src/models/eval';
+import Eval, { EvalQueries } from '../../../src/models/eval';
 import { evaluateWithSource } from '../../../src/node';
 import { loadApiProviders } from '../../../src/providers/index';
 import { createApp } from '../../../src/server/server';
@@ -50,13 +50,19 @@ describe('POST /api/eval/replay provider boundary', () => {
       .mockImplementation(async () => Response.json({ config }));
   }
 
+  function recordedTarget(id: string, scanner = 0, linkedTargetId: string | null = null) {
+    vi.mocked(EvalQueries.getReplayTarget).mockResolvedValue({ id, scanner, linkedTargetId });
+  }
+
   function storedConfig(
     providers: unknown,
     basePath?: string,
     columnProviders?: string[],
     env?: Record<string, string>,
+    providerFilter?: string,
   ) {
     vi.mocked(Eval.findById).mockResolvedValue({
+      runtimeOptions: { providerFilter },
       getPrompts: () =>
         (
           columnProviders ??
@@ -64,7 +70,7 @@ describe('POST /api/eval/replay provider boundary', () => {
             const ref = normalizeProviderRef(provider);
             return ref.label || ref.id;
           })
-        ).map((provider) => ({ provider })),
+        ).map((provider) => ({ provider, label: 'original' })),
       config: {
         basePath,
         env,
@@ -348,6 +354,7 @@ describe('POST /api/eval/replay provider boundary', () => {
   );
 
   it('resolves relative provider files from the saved config base path', async () => {
+    recordedTarget('echo');
     await fs.writeFile(path.join(directory, 'target.json'), JSON.stringify({ id: 'echo' }));
     storedConfig(['file://target.json'], directory);
     expect((await replay()).status).toBe(200);
@@ -366,6 +373,7 @@ describe('POST /api/eval/replay provider boundary', () => {
   ])(
     'permits ordinary provider aliases when selection is unambiguous: %j',
     async (provider, expected) => {
+      recordedTarget(normalizeProviderRef(provider).id);
       storedConfig([provider]);
       expect((await replay()).status).toBe(200);
       expect(evaluate.mock.calls[0][0].providers).toEqual([expected]);
@@ -483,17 +491,35 @@ describe('POST /api/eval/replay provider boundary', () => {
     expect(evaluate.mock.calls[0][0].providers).toMatchObject([{ [a]: { id: b } }]);
   });
 
-  it('resolves a provider-scoped label even if an unrelated provider file is missing', async () => {
+  it('does not redirect a disappeared scanner file to another source with the same label', async () => {
+    const file = path.join(directory, 'providers.json');
+    await fs.writeFile(file, JSON.stringify({ id: 'openai:codex-security', label: 'Saved' }));
+    const other = { id: 'https://other.invalid', label: 'Saved', config: { body: '{{prompt}}' } };
     storedConfig(
-      [
-        `file://${path.join(directory, 'missing.json')}`,
-        { id: 'echo', label: '{{ env.DISPLAY }}', env: { DISPLAY: 'Baseline' } },
-      ],
+      [`file://${file}`, other],
       undefined,
-      ['Baseline'],
+      ['Saved'],
+      undefined,
+      '^openai:codex-security$',
     );
+    await fs.unlink(file);
+    expect((await replay(0, 0)).status).toBe(400);
+    storedConfig([`file://${file}`, { ...other, prompts: [] }], undefined, ['Saved']);
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('checks the original prompt selectors and stored provider filter before replay', async () => {
+    const provider = { id: 'echo', label: 'Saved' };
+    for (const prompts of [[], ['unrelated']]) {
+      storedConfig([{ ...provider, prompts }]);
+      expect((await replay(0, 0)).status).toBe(400);
+    }
+    storedConfig([provider], undefined, ['Saved'], undefined, '^other$');
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+    storedConfig([{ ...provider, prompts: ['orig*'] }], undefined, ['Saved'], undefined, '^echo$');
     expect((await replay(0, 0)).status).toBe(200);
-    expect(evaluate.mock.calls[0][0].providers).toMatchObject([{ id: 'echo', label: 'Baseline' }]);
   });
 
   it('rejects ambiguous provider identities instead of guessing a target', async () => {
@@ -516,6 +542,7 @@ describe('POST /api/eval/replay provider boundary', () => {
   });
 
   it('passes the inspected ordinary file config to evaluation instead of rereading its path', async () => {
+    recordedTarget('echo');
     const provider = { id: 'echo', config: { prefix: 'example' } };
     const file = path.join(directory, 'provider.json');
     await fs.writeFile(file, JSON.stringify(provider));
@@ -547,6 +574,7 @@ describe('POST /api/eval/replay provider boundary', () => {
   );
 
   it('refuses to redirect a saved column when file-backed labels change', async () => {
+    recordedTarget('https://other.invalid');
     const file = path.join(directory, 'targets.json');
     await fs.writeFile(
       file,
@@ -557,10 +585,15 @@ describe('POST /api/eval/replay provider boundary', () => {
     );
     storedConfig([`file://${file}`], directory, ['First', 'Second']);
     expect((await replay(0, 0)).status).toBe(400);
+    // Shrinking to one entry must not turn a mixed evaluation into a sole source.
+    await fs.writeFile(file, JSON.stringify({ id: 'https://other.invalid', label: 'First' }));
+    expect((await replay(0, 0)).status).toBe(400);
+    expect((await replay()).status).toBe(400);
     expect(evaluate).not.toHaveBeenCalled();
   });
 
   it('supports plain YAML provider arrays with saved environment labels', async () => {
+    recordedTarget('echo');
     await fs.writeFile(
       path.join(directory, 'providers.yml'),
       '- id: echo\n  label: "{{ env.NAME }}"\n- id: openai:codex-security\n  config:\n    settings: file://private.json\n',
@@ -597,6 +630,7 @@ describe('POST /api/eval/replay provider boundary', () => {
   it.each([false, true])(
     'replays a saved cloud target with local overrides: %s',
     async (localOverride) => {
+      recordedTarget('echo', 0, 'promptfoo://provider/target');
       const cloudFetch = mockCloudProvider({
         id: 'echo',
         label: 'Cloud target',
@@ -608,7 +642,7 @@ describe('POST /api/eval/replay provider boundary', () => {
             'promptfoo://provider/target': {
               id: 'local-alias',
               label: 'Local target',
-              prompts: [],
+              prompts: ['original'],
               transform: 'output + " local"',
             },
           }
@@ -638,19 +672,19 @@ describe('POST /api/eval/replay provider boundary', () => {
       const id = 'https://fallback.invalid';
       const original = 'https://original.invalid';
       mockCloudProvider({ id, label: 'Remote label', config: { url: original, body: {} } });
-      storedConfig([{ id: 'promptfoo://provider/target', label: '', config: { url } }], undefined, [
-        url || id,
-        original,
-        'Remote label',
-      ]);
+      const providers = [{ id: 'promptfoo://provider/target', label: '', config: { url } }];
+      recordedTarget(url || id);
+      storedConfig(providers, undefined, [url || id]);
       evaluate.mockImplementationOnce(async (suite) => {
         const [loaded] = await loadApiProviders(suite.providers);
         expect(loaded.label || loaded.id()).toBe(url || id);
         return { toEvaluateSummary: async () => ({ results: [] }) } as unknown as Eval;
       });
       expect((await replay(0, 0)).status).toBe(200);
-      expect((await replay(0, 1)).status).toBe(400);
-      expect((await replay(0, 2)).status).toBe(400);
+      for (const wrong of [original, 'Remote label']) {
+        storedConfig(providers, undefined, [wrong]);
+        expect((await replay(0, 0)).status).toBe(400);
+      }
       expect(evaluate).toHaveBeenCalledTimes(1);
     },
   );
@@ -674,6 +708,7 @@ describe('POST /api/eval/replay provider boundary', () => {
     const loaded = await loadApiProviders(providers, { env });
     const columns = loaded.map((provider) => provider.label || provider.id());
     expect(columns).toEqual(['west', 'east']);
+    recordedTarget(loaded[0].id());
     storedConfig(providers, undefined, columns, env);
     lookup.mockClear();
     evaluate.mockImplementationOnce(async (suite) => {
@@ -710,6 +745,7 @@ describe('POST /api/eval/replay provider boundary', () => {
   });
 
   it('honors entry overrides for an inherited Cloud label and HTTP URL', async () => {
+    recordedTarget('https://local.invalid');
     const label = '{{ env.AWS_REGION }}';
     const url = '{{ env.OPENAI_BASE_URL }}';
     const env = { AWS_REGION: 'suite', OPENAI_BASE_URL: 'https://suite.invalid' };
@@ -732,6 +768,28 @@ describe('POST /api/eval/replay provider boundary', () => {
     });
     expect((await replay(0, 0)).status).toBe(200);
     expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a changed Cloud identity, including scanner results under ordinary aliases', async () => {
+    mockCloudProvider({ id: 'echo', label: 'Saved' });
+    storedConfig(['promptfoo://provider/target'], undefined, ['Saved']);
+    recordedTarget('openai:codex-security');
+    expect((await replay(0, 0)).status).toBe(400);
+    recordedTarget('echo', 1);
+    expect((await replay(0, 0)).status).toBe(400);
+    recordedTarget('echo', 0, 'promptfoo://provider/other');
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('preserves an ordinary provider’s explicit Cloud link but rejects a removed one', async () => {
+    const linkedTargetId = 'promptfoo://provider/target';
+    recordedTarget('echo', 0, linkedTargetId);
+    storedConfig(['echo']);
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+    storedConfig([{ id: 'echo', config: { linkedTargetId } }]);
+    expect((await replay(0, 0)).status).toBe(200);
   });
 
   it('skips an unavailable cloud target only for an identifiable, unrelated column', async () => {

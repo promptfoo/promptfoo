@@ -1,5 +1,7 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import { ResultFailureReason } from '../../types/index';
+import { isPromptAllowed } from '../promptMatching';
+import { getPersistedProviderFilterOptions } from './filterProviders';
 
 import type Eval from '../../models/eval';
 import type {
@@ -19,6 +21,31 @@ export type TablePageResult = {
   head: { prompts: Prompt[]; vars: string[] };
   body: EvaluateTableRow[];
 };
+
+/** Recover the original column and its provider/prompt filters before replacing the prompt. */
+export function getReplayColumn(eval_: Eval, promptIndex?: number) {
+  const columns = eval_.getPrompts();
+  const name = promptIndex === undefined ? undefined : columns[promptIndex]?.provider;
+  if (promptIndex !== undefined && !name) {
+    throw new Error('Missing replay column');
+  }
+  const unique = !!name && columns.every((col, i) => i === promptIndex || col.provider !== name);
+  // buildLivePromptColumns emits contiguous prompt groups in provider order.
+  // Filters can omit sources, and adjacent equal IDs can hide a second provider.
+  const groups = columns
+    .filter((entry, index) => !index || entry.provider !== columns[index - 1].provider)
+    .map((entry) => entry.provider);
+  const { filterProviders } = getPersistedProviderFilterOptions(
+    eval_.runtimeOptions?.providerFilter,
+  );
+  const filter = filterProviders && new RegExp(filterProviders);
+  const allowsProvider = (id: string, label?: string) =>
+    !filter || filter.test(id) || Boolean(label && filter.test(label));
+  const prompts = promptIndex === undefined ? columns : [columns[promptIndex]];
+  const allowsPrompts = (selectors?: string[]) =>
+    selectors === undefined || prompts.some((prompt) => isPromptAllowed(prompt, selectors));
+  return { name, groups, unique, allowsProvider, allowsPrompts };
+}
 
 /**
  * Options for generating CSV from an evaluation.

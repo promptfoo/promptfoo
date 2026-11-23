@@ -1,11 +1,15 @@
 import { once } from 'node:events';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
+import { ResultFailureReason } from '../../src/types';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
@@ -121,6 +125,67 @@ describe('eval routes', () => {
     ]);
     expect(JSON.stringify(response.body)).not.toContain('suite-fixture');
     expect(response.body.output).toBe('edited replay');
+  });
+
+  it('binds mutable file targets to the persisted result even when the label stays the same', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'promptfoo-replay-'));
+    onTestFinished(() => rm(directory, { force: true, recursive: true }));
+    const requests: string[] = [];
+    const target = createServer((req, res) => {
+      requests.push(req.url!);
+      req.pipe(res);
+    }).listen(0, '127.0.0.1');
+    await once(target, 'listening');
+    onTestFinished(() => new Promise<void>((resolve) => target.close(() => resolve())));
+    const address = target.address();
+    invariant(address && typeof address !== 'string', 'Expected a loopback listener');
+    const base = `http://127.0.0.1:${address.port}`;
+    const file = join(directory, 'providers.json');
+    const update = (url: string) =>
+      writeFile(
+        file,
+        JSON.stringify({
+          id: 'http',
+          label: 'Saved',
+          config: { url, method: 'POST', body: '{{prompt}}' },
+        }),
+      );
+    const prompt = { label: 'question', raw: 'original' };
+    const saved = await Eval.create({ providers: [`file://${file}`] }, [prompt], {
+      completedPrompts: [{ ...prompt, provider: 'Saved' }],
+    });
+    testEvalIds.add(saved.id);
+    const request = (promptIndex?: number) =>
+      api
+        .post('/api/eval/replay')
+        .send({ evaluationId: saved.id, promptIndex, testIndex: 99, prompt: 'edited' });
+    await update(base + '/saved');
+    expect((await request(0)).status).toBe(400); // No recorded identity yet.
+    const original = {
+      promptIdx: 0,
+      testIdx: 0,
+      prompt,
+      promptId: 'question',
+      testCase: {},
+      vars: {},
+      provider: { id: base + '/saved', label: 'Saved' },
+      success: true,
+      score: 1,
+      latencyMs: 1,
+      failureReason: ResultFailureReason.NONE,
+      namedScores: {},
+      cost: 0,
+    };
+    await saved.addResult(original);
+    expect((await request(0)).body.output).toBe('edited');
+    await update(base + '/other');
+    expect((await request(0)).status).toBe(400);
+    expect((await request()).status).toBe(400);
+    // A conflicting scanner result anywhere in the column also blocks a replay.
+    await update(base + '/saved');
+    await saved.addResult({ ...original, testIdx: 1, metadata: { codexSecurity: {} } });
+    expect((await request(0)).status).toBe(400);
+    expect(requests).toEqual(['/saved']);
   });
 
   function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {

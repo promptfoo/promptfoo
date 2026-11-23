@@ -208,6 +208,33 @@ export function combineFilterConditions(
 }
 
 export class EvalQueries {
+  // Replays address a prompt column, not a test row. Read only its routing
+  // evidence and detect conflicts without loading responses or credentials.
+  static async getReplayTarget(evalId: string, promptIdx?: number) {
+    const db = await getDb();
+    const rows = await db
+      .selectDistinct({
+        id: sql<string | null>`json_extract(${evalResultsTable.provider}, '$.id')`,
+        linkedTargetId: sql<
+          string | null
+        >`json_extract(${evalResultsTable.provider}, '$.config.linkedTargetId')`,
+        scanner: sql<number>`json_type(${evalResultsTable.metadata}, '$.codexSecurity') IS 'object'
+          OR json_type(${evalResultsTable.metadata}, '$.codexSecurityReplay') IS 'object'`,
+      })
+      .from(evalResultsTable)
+      .where(
+        and(
+          eq(evalResultsTable.evalId, evalId),
+          promptIdx === undefined ? undefined : eq(evalResultsTable.promptIdx, promptIdx),
+        ),
+      )
+      .limit(2);
+    if (rows.length > 1) {
+      throw new Error('Conflicting providers in saved results');
+    }
+    return rows.at(0);
+  }
+
   static async getVarsFromEvals(evals: Eval[]) {
     const db = await getDb();
 
