@@ -341,6 +341,59 @@ describe('OTLPTracingExporter', () => {
   });
 
   it.each(formats)(
+    'withholds TOML credential tables and preserves public tables in %s',
+    async (format) => {
+      const publicTables = [
+        'service = {api = {region = "west"}, cache = { key = "visible" }}',
+        '[api]\nregion = "west"',
+        '[cache]\nkey = "visible"',
+        '[token.count]\ntotal = 12',
+      ].join('\n');
+      const { attributes } = await exportCustomData(format, {
+        dotted: '[private.keys]\nprod = "opaque/prod"',
+        poetry: '[pypi-token] # publishing\npypi = "pypi-opaque"',
+        split: '[service.private]\n# key stored below\n"keys".stage = "opaque/split"',
+        quoted: String.raw`[[service . "pri\U00000076ate" . 'keys']]` + '\nname = "opaque/array"',
+        inline: 'service.credentials = {prod={value="first"},stage={value="opaque/other"}}',
+        nested: 'private = { info = { region = "west" }, keys = {stage = "opaque/nested"} }',
+        array: 'service.api = [{name = "}", key = "opaque/array"}]',
+        multiline: '[api]\nnote = """\n[cache]\n"""\nkey = "opaque/real"',
+        rows: '[api]\nrows = [\n["cache"]\n]\nkey = "opaque/real"',
+        brace: 'password = { local = "}", remote = "opaque/remainder" }',
+        settings: '[app]\npassword = "opaque/pwd"\nregion = "west"',
+        publicTables,
+      });
+      expect(attributes).toMatchObject(
+        redacted(
+          'dotted',
+          'poetry',
+          'split',
+          'quoted',
+          'inline',
+          'nested',
+          'array',
+          'multiline',
+          'rows',
+          'brace',
+        ),
+      );
+      expect(attributes.settings).toBe('[app]\npassword = "<redacted>"\nregion = "west"');
+      expect(attributes.publicTables).toBe(publicTables);
+    },
+  );
+
+  it.each(formats)('bounds expansion of repeated TOML table prefixes in %s', async (format) => {
+    const prefix = '[' + 'group.'.repeat(200) + 'api]';
+    const rows = Array.from({ length: 60 }, (_, i) => 'item' + i + ' = 0');
+    const { attributes } = await exportCustomData(format, {
+      large: [prefix, ...rows].join('\n'),
+      small: [prefix, rows[0]].join('\n'),
+    });
+    expect(attributes.large).toBe('<redacted>');
+    expect(attributes.small).toBe([prefix, rows[0]].join('\n'));
+  });
+
+  it.each(formats)(
     'withholds ambiguous TOML endings before another credential in %s',
     async (format) => {
       const next = "\npassword = 'opaque/adjacent'";
@@ -412,6 +465,25 @@ describe('OTLPTracingExporter', () => {
         ),
       );
       expect(attributes.ordinary).toBe('const cacheKey = /* note */ `visible`;');
+    },
+  );
+
+  it.each(formats)(
+    'ignores quoted comment markers before JavaScript credentials in %s',
+    async (format) => {
+      const compound = 'cfg["private"] /* note */ ["key"] = "opaque/compound";';
+      const prefix = 'const files = "src/*";\n';
+      const ordinary = prefix + 'cfg["cache"] /* note */ ["key"] = "visible";';
+      const { attributes } = await exportCustomData(format, {
+        host: 'const path = "//host"; ' + compound,
+        glob: prefix + compound,
+        escaped: String.raw`const files = 'a\'src/*'; ` + compound,
+        template: 'const glob = `src/*`; ' + compound,
+        suffix: prefix + 'const apiKey = "first" /* join */ + "opaque/suffix";',
+        ordinary,
+      });
+      expect(attributes).toMatchObject(redacted('host', 'glob', 'escaped', 'template', 'suffix'));
+      expect(attributes.ordinary).toBe(ordinary);
     },
   );
 

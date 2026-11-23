@@ -1068,11 +1068,20 @@ function redactCredentialLiterals(value: string): string {
   if (!/[="'`]/.test(value)) {
     return value;
   }
+  if (hasCredentialTable(value)) {
+    return '<redacted>';
+  }
   const masked = maskAssignedLiterals(value);
+  if (!/\/[*/]/.test(masked)) {
+    return masked;
+  }
   // JavaScript comments can split a key, an assignment, or a template tag.
-  // Check for additional credentials without comments, but never export this
-  // interpretation: the same characters can be data in another format.
-  const joined = masked.replace(/\/\*[\s\S]*?(?:\*\/|$)|(?<!:)\/\/[^\r\n\u2028\u2029]*/g, ' ');
+  // Skip quoted paths and globs so they cannot hide subsequent assignments.
+  // Only use this alternate reading to decide whether to withhold the field.
+  const joined = masked.replace(
+    /(?<!\\)(["'`])(?:\\[\s\S]|(?!\1)[^\\])*\1|\/\*[\s\S]*?(?:\*\/|$)|(?<!:)\/\/[^\r\n\u2028\u2029]*/g,
+    (token, quote) => (quote ? token : ' '),
+  );
   return joined !== masked && maskAssignedLiterals(joined) !== joined ? '<redacted>' : masked;
 }
 
@@ -1084,7 +1093,68 @@ function literalKeySegment(key: string): string {
     .replace(/\\u\{0*([\da-fA-F]{1,4})\}/g, (_, hex: string) => '\\u' + hex.padStart(4, '0'));
 }
 
+// Check TOML table paths without rewriting the file or interpreting its values.
+function hasCredentialTable(value: string): boolean {
+  if (!value.includes('=') || !/^[ \t\uFEFF]*\[|=\s*[[{]/m.test(value)) {
+    return false;
+  }
+  // Ignore structural characters in strings and comments. A multiline
+  // description can contain an apparent table header or closing brace.
+  const names = value.replace(
+    /#[^\r\n]*|(?<!\\)"""(?:\\[\s\S]|(?!""")[^\\])*"{3,5}|'''[\s\S]*?'{3,5}|(?<!\\)"(?:\\.|[^"\\\r\n])*"|'[^'\r\n]*'/g,
+    (token) =>
+      token.startsWith('#') || token.startsWith('"""') || token.startsWith("'''")
+        ? ''
+        : literalKeySegment(token.slice(1, -1)).replace(/[^\w.\\-]/g, '_'),
+  );
+  // A header resets the prefix. Inline tables and arrays inherit it.
+  const entries =
+    /^[ \t]*\[\[?([\w.\\\t -]+)\]\]?[ \t]*$|(?:^|(?<=[{,]))([\w.\\\t -]+)=[ \t]*([[{]?)|([[\]{}])/gm;
+  const parents: string[] = [];
+  let path = '';
+  let remaining = MAX_STRUCTURED_ATTRIBUTE_BYTES;
+  for (const [, header, key, open, bracket] of names.trimStart().matchAll(entries)) {
+    if (header !== undefined) {
+      if (parents.length) {
+        continue; // A complete array element such as ["label"] is not a header.
+      }
+      path = header.replace(/[ \t]/g, '');
+      if (isCredentialAttributeKey(path)) {
+        return true;
+      }
+    } else if (key !== undefined) {
+      // Bound the work of checking long or deeply nested paths across rows.
+      remaining -= path.length;
+      const name = key.replace(/[ \t]/g, '');
+      const qualified = path ? path + '.' + name : name;
+      // Standalone credential names already have scalar redaction below.
+      if (
+        remaining < 0 ||
+        (path && isCredentialAttributeKey(qualified) && !isCredentialAttributeKey(name))
+      ) {
+        return true;
+      }
+      if (open) {
+        parents.push(path);
+        path = qualified;
+      }
+    } else if (bracket === '{' || bracket === '[') {
+      parents.push(path);
+    } else {
+      path = parents.pop() ?? '';
+    }
+  }
+  return false;
+}
+
 function isAmbiguousAssignment(value: string, start: number): boolean {
+  if (value[start] === '{') {
+    // Only a flat brace-delimited ODBC value can use the scalar masker.
+    // A TOML inline table can contain nested or quoted closing braces.
+    const flat = /\{(?:}}|[^{}"'\r\n])*}(?=[ \t]*(?:;|$))/y;
+    flat.lastIndex = start;
+    return !flat.test(value);
+  }
   return (
     value[start] === '[' ||
     value[start] === '(' ||
