@@ -728,6 +728,11 @@ function traceAttributeEvidenceSource(
     return 'agent-response';
   }
 
+  // Process attributes can come from the resource shared by every span. Only
+  // local command projection can link them to an executed command.
+  if (/^process[._]/.test(normalizedAttributeName)) {
+    return undefined;
+  }
   if (
     normalizedAttributeName === 'codex.command' ||
     normalizedAttributeName.includes('command.line') ||

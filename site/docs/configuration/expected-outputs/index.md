@@ -27,6 +27,8 @@ When no final strategy prompt is available, a provider-reported chat array witho
 
 [Red team assertions with trace spans enabled for grading](/docs/tracing/#red-team-tracing) receive fresh grading. A standalone refusal cannot bypass the judge for SSRF, COPPA, FERPA, Wordplay, Aegis or BeaverTails when these spans are present. During a traced evaluation, a cached target turn in a sequence, simulated conversation, or red team strategy triggers an error because the replay lacks fresh evidence. The result retains the reported usage and cost. When a red team assertion opts out of trace grading, another assertion's use of the trace does not require a live target response for that red team check.
 
+Coding-agent assertions check executed commands locally. Host process metadata on a message or search span is insufficient evidence of execution.
+
 For [data-exfil red team assertions](/docs/red-team/plugins/data-exfil#grading), valid page tracking can supply deterministic evidence of exfiltration. Missing or malformed tracking identifiers leave model grading in place and do not automatically pass the test.
 
 In machine learning, "Accuracy" is a metric that measures the proportion of correct predictions made by a model out of the total number of predictions. With `promptfoo`, accuracy is defined as the proportion of prompts that produce the expected or desired output.

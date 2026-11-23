@@ -216,41 +216,30 @@ function extractToolArgs(span: TraceSpan): unknown {
   return undefined;
 }
 
-function extractCommand(
-  span: TraceSpan,
-  toolName = extractToolName(span),
-  getToolArgs = () => extractToolArgs(span),
-  commandToolNames = resolveCommandToolNames(undefined),
-  preferSpanCommands = false,
-): string | undefined {
-  const attributes = span.attributes || {};
-
+function commandAttribute(attributes: Record<string, unknown>, local: boolean): string | undefined {
   const directMatch = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
   if (directMatch) {
     return directMatch;
   }
 
-  let processCommand: string | undefined;
   for (const [key, value] of Object.entries(attributes)) {
     if (
       typeof value !== 'string' ||
       !value.trim() ||
       !/command/i.test(key) ||
       /output|result/i.test(key) ||
-      EXIT_CODE_ATTRIBUTE.test(key)
+      EXIT_CODE_ATTRIBUTE.test(key) ||
+      (local && /^process[._]/i.test(key))
     ) {
       continue;
     }
-
-    // Resource attributes can describe the host on every span, including shell tools.
-    if (!preferSpanCommands || !key.startsWith('process.')) {
-      return value.trim();
-    }
-    processCommand ??= value.trim();
+    return value.trim();
   }
+  return undefined;
+}
 
-  const toolArgs = getToolArgs();
-  if (isCommandToolName(toolName, commandToolNames) && toolArgs && typeof toolArgs === 'object') {
+function commandFromToolArgs(toolArgs: unknown): string | undefined {
+  if (toolArgs && typeof toolArgs === 'object') {
     const args = toolArgs as Record<string, unknown>;
     const commandSource =
       args.cmd === undefined
@@ -274,12 +263,58 @@ function extractCommand(
       }
     }
   }
+  return undefined;
+}
 
-  if (span.name.startsWith('exec ')) {
-    return span.name.slice('exec '.length).trim();
+function extractCommand(
+  span: TraceSpan,
+  toolName: string | undefined,
+  getToolArgs: () => unknown,
+  commandToolNames: ReadonlySet<string>,
+  local: boolean,
+): string | undefined {
+  const attributes = span.attributes || {};
+  const attribute = commandAttribute(attributes, local);
+  if (!local && attribute) {
+    return attribute;
+  }
+  const tool = isCommandToolName(toolName, commandToolNames)
+    ? commandFromToolArgs(getToolArgs())
+    : undefined;
+  const named = span.name.startsWith('exec ') ? span.name.slice('exec '.length).trim() : undefined;
+  if (!local) {
+    return tool ?? named;
   }
 
-  return processCommand;
+  const lines = Object.keys(attributes)
+    .filter((key) => !/^process[._]/i.test(key) && /(?:^|[._])command[._]line$/i.test(key))
+    .map((key) => getFirstStringAttribute(attributes, [key]));
+  const codex = getFirstStringAttribute(attributes, ['codex.command']);
+  const command = getFirstStringAttribute(attributes, ['command']);
+  const actions = [codex, ...lines, command, tool, named];
+  // Full span commands outrank short labels. A recorded shell input or command
+  // line is an action even when the executable takes no arguments.
+  const action =
+    actions.find((value) => value && /\s/.test(value)) ?? tool ?? lines.find(Boolean) ?? codex;
+  if (action) {
+    return action;
+  }
+
+  // OTLP resources can attach the host process to every span. It can expand
+  // a matching executable label, but cannot establish a command by itself.
+  const label = attribute ?? named;
+  const processLine = getFirstStringAttribute(attributes, [
+    'process.command_line',
+    'process.command.line',
+  ]);
+  if (label && processLine) {
+    const executable = /^(?:"([^"]+)"|'([^']+)')/.exec(processLine);
+    const path = executable?.[1] ?? executable?.[2] ?? getCommandExecutable(processLine);
+    if (path === label || path?.split(/[\\/]/).at(-1) === label) {
+      return processLine;
+    }
+  }
+  return label;
 }
 
 function extractSearchQuery(span: TraceSpan): string | undefined {
@@ -521,19 +556,6 @@ export function summarizeTrajectoryForJudge(trace: TraceData): string {
   return formatTrajectorySummary(extractTrajectorySteps(trace), trace.traceId);
 }
 
-/** Expand a bare executable only when the process line describes that same command. */
-function localCommand(step: TrajectoryStep): string {
-  const line = getFirstStringAttribute(step.attributes, ['process.command_line']);
-  if (line) {
-    const executable = /^(?:"([^"]+)"|'([^']+)')/.exec(line);
-    const path = executable?.[1] ?? executable?.[2] ?? getCommandExecutable(line);
-    if (path === step.name || path?.split(/[\\/]/).at(-1) === step.name) {
-      return line;
-    }
-  }
-  return step.name;
-}
-
 /** Only deterministic coding-agent checks may inspect full command arguments. */
 export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
   const localSpans = codingAgent && getLocalEvaluatorSpans();
@@ -550,7 +572,7 @@ export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
     });
     trace = { ...trace, spans };
   }
-  const steps = extractTrajectorySteps(trace, codingAgent);
+  const steps = extractTrajectorySteps(trace, true);
   const localTraceActions = codingAgent
     ? steps.flatMap((step, index) => {
         if (step.type === 'message' || step.type === 'reasoning') {
@@ -564,7 +586,7 @@ export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
           !Object.entries(step.attributes ?? {}).some(
             ([key, value]) => EXIT_CODE_ATTRIBUTE.test(key) && value !== 0 && value !== '0',
           );
-        const confirmedCommand = completedCommand ? localCommand(step) : undefined;
+        const confirmedCommand = completedCommand ? step.name : undefined;
         return [{ step: index + 1, confirmedCommand }];
       })
     : undefined;
