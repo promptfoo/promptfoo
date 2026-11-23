@@ -830,7 +830,11 @@ function splitResourceUri(uri: string): [string, string] {
 
 // Resolve only in-memory IDs, with the same URI rules as validation (including URNs).
 let schemaResolver: Ajv['opts']['uriResolver'] | undefined;
+const UNPAIRED_SURROGATE = /\p{Surrogate}/u;
 function schemaResourceId(path: string, base: string): string {
+  if (UNPAIRED_SURROGATE.test(path)) {
+    return REDACTED;
+  }
   if (!path) {
     return base;
   }
@@ -856,8 +860,12 @@ type SchemaPointer = { raw: string; name: string }[];
 
 // An absent pointer may be an anchor. A malformed pointer has no safe target.
 function localSchemaPointer(ref: string): SchemaPointer | undefined | null {
+  if (UNPAIRED_SURROGATE.test(ref)) {
+    return null;
+  }
   try {
-    if (/^#%2f/i.test(ref)) {
+    const encoded = /^#%2f/i.test(ref);
+    if (encoded) {
       ref = decodeURIComponent(ref);
     }
     if (ref === '#') {
@@ -874,26 +882,21 @@ function localSchemaPointer(ref: string): SchemaPointer | undefined | null {
     // A literal URL is a single trailing key. Locate only the scheme so a
     // malformed suffix cannot trigger another scan at each embedded scheme.
     const scheme = ref.search(/\/[a-z][a-z0-9+.-]*:\/\//i);
-    if (scheme !== -1) {
-      ref = ref.slice(0, scheme + 1) + pointerToken(ref.slice(scheme + 1));
-    }
+    const head = scheme < 0 ? ref : ref.slice(0, scheme + 1);
+    const tail = scheme < 0 ? '' : pointerToken(ref.slice(scheme + 1));
+    // A decoded fragment's percent signs are literal. Do not decode them twice.
+    ref = (encoded ? head.replaceAll('%', '%25') : head) + tail;
+    return ref
+      .slice(2)
+      .split('/')
+      .map((raw) => ({
+        raw,
+        name: decodeURIComponent(raw).replace(/~1/g, '/').replace(/~0/g, '~'),
+      }));
   } catch {
-    // Invalid percent escapes or lone surrogates have no unambiguous URI
-    // spelling. Never restore the raw suffix or guess a different key.
+    // An undecodable key may hide credentials behind encoded delimiters.
     return null;
   }
-  return ref
-    .slice(2)
-    .split('/')
-    .map((raw) => {
-      let name = raw;
-      try {
-        name = decodeURIComponent(raw);
-      } catch {
-        // Invalid URI escapes can still contain credentials.
-      }
-      return { raw, name: name.replace(/~1/g, '/').replace(/~0/g, '~') };
-    });
 }
 
 // Distinct resource IDs can become identical after scrubbing a query. Reserve
@@ -962,6 +965,9 @@ function projectedJsonText(text: string, parsed: unknown, safe: string): string 
 // Names are identifiers, even when they look like encoded data. Preserve
 // their spelling unless sanitization removes an actual credential.
 function safeSchemaName(name: string): string {
+  if (UNPAIRED_SURROGATE.test(name)) {
+    return REDACTED;
+  }
   const trimmed = name.trim();
   if (trimmed !== name) {
     const safe = safeSchemaName(trimmed);
@@ -1280,7 +1286,10 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
     uris.add(ref);
     uris.add(id);
     const resource = ids.get(id);
-    if (id === REDACTED || resource === null) {
+    if (id === REDACTED) {
+      return REDACTED;
+    }
+    if (resource === null) {
       return root;
     }
     const anchor = ids.get(id + fragment);
@@ -1459,6 +1468,10 @@ function sanitizeSchemaUri(
   base?: string,
 ): string {
   const [path, fragment] = splitSchemaUri(value);
+  const pointer = localSchemaPointer(fragment);
+  if (UNPAIRED_SURROGATE.test(path) || pointer === null) {
+    return REDACTED;
+  }
   // Preserve relative paths and scrub their queries without resolving them against a base.
   let safePath = path.startsWith('//')
     ? sanitizeUrl(`https:${path}`).replace(/^https:/, '')
@@ -1475,10 +1488,6 @@ function sanitizeSchemaUri(
   const identifier = (name: string, sensitive = false) =>
     index.renamed.get(name) ?? (sensitive || safeSchemaName(name) !== name ? REDACTED_ID : name);
   safePath = projectPath(safePath, identifier);
-  const pointer = localSchemaPointer(fragment);
-  if (pointer === null) {
-    return REDACTED;
-  }
   if (!pointer) {
     const name = decodeSchemaName(fragment.slice(1));
     const safe = identifier(name);

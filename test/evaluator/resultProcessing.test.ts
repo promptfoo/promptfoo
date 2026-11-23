@@ -57,9 +57,16 @@ describe('model-independent result processing', () => {
     }
   });
 
-  it.each(['\ud800', '\n\udfff'])('redacts unencodable URL pointers in saved rows (%j)', (tail) => {
-    const name = `https://example.test/${tail}?token=opaque`;
-    const ref = '#/$defs/' + name;
+  it.each([
+    ['https://example.test/\ud800?token=opaque'],
+    ['https://example.test/\n\udfff?token=opaque'],
+    ['doc\ud800?token=opaque'],
+    ['doc\ud800?token=opaque', 'doc\ud800?token=opaque#field'],
+    [
+      'https://example.test/bad%zz?token=opaque',
+      '#/$defs/https%3A~1~1example.test~1bad%zz%3Ftoken%3Dopaque',
+    ],
+  ])('redacts malformed URL references in saved rows (%j)', (name, ref = '#/$defs/' + name) => {
     const value = {
       type: 'object',
       '[REDACTED]': true,
@@ -79,7 +86,7 @@ describe('model-independent result processing', () => {
     expect(projectResultSchemas(safe)).toEqual(safe);
   });
 
-  it.each(['#/[REDACTED]', '#%2F$defs%2Fbad%zz'])(
+  it.each(['#/[REDACTED]', '#%2F$defs%2Fbad%zz', '#/$defs/bad%zz'])(
     'does not resolve an ambiguous environment pointer to a literal marker (%s)',
     ($ref) => {
       const value = {

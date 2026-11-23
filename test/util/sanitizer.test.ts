@@ -1050,6 +1050,34 @@ describe('sanitizeConfigForOutput', () => {
     expect(validate({ alias: 'wrong' })).toBe(false);
   });
 
+  it('decodes an escaped percent sign once and preserves valid Unicode keys', () => {
+    const name = '%41🧪';
+    const value = {
+      type: 'object',
+      $defs: { [name]: { type: 'number' }, 'A🧪': { type: 'string' } },
+      properties: { alias: { $ref: '#' + encodeURIComponent('/$defs/' + name) } },
+    };
+    const safe = projectAssertionSchemas({ type: 'is-json', value }).value;
+    expect(safe.$defs).toEqual(value.$defs);
+    const validate = new Ajv().compile(safe);
+    expect(validate({ alias: 1 })).toBe(true);
+    expect(validate({ alias: 'wrong' })).toBe(false);
+  });
+
+  it('safely renames a pattern containing an escaped lone surrogate and its pointer', () => {
+    const pattern = String.raw`^doc\uD800\?token=opaque$`;
+    const value = {
+      type: 'object',
+      patternProperties: { [pattern]: { type: 'number' } },
+      properties: { alias: { $ref: '#/patternProperties/' + encodeURIComponent(pattern) } },
+    };
+    const safe = projectAssertionSchemas({ type: 'is-json', value }).value;
+    expect(JSON.stringify(safe)).not.toContain('opaque');
+    const validate = new Ajv().compile(safe);
+    expect(validate({ alias: 1 })).toBe(true);
+    expect(validate({ alias: 'wrong' })).toBe(false);
+  });
+
   it('updates name lists and local pointers when URL names collide', () => {
     const authored = 'https://example.test/data?token=private-value';
     const existing = 'https://example.test/data?token=%5BREDACTED%5D';
