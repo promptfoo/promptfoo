@@ -1791,6 +1791,8 @@ describe('OTLPTracingExporter', () => {
       String.raw`Object.freeze({ k: 'opaque/wrapped', kt\u0079: 'oct' })`,
       "const s = `JWK: ${JSON.stringify({ kty: 'oct', k: 'opaque/template' })}`;",
       "```js\nconst jwk = { kty: /* type */ 'RSA', d: 'opaque/fenced' };\n```",
+      "```js\nconst jwk = { kty: 'oct', [('k')]: 'opaque/index' };\n```",
+      "```js\nconst jwk = { [(('kty'))]: 'RSA', [( /* field */ 'd' )]: 'opaque/group' };\n```",
       String.raw`const example = "const jwk = { \"kty\": \"oct\", \"k\": \"opaque/quoted\" }";`,
     ];
     const publicText = [
@@ -1798,6 +1800,7 @@ describe('OTLPTracingExporter', () => {
       "const jwk = { kty: 'EC', x: 'shown', y: 'public' };",
       "const point = { k: 'shown', d: 'day', p: 1, q: 2 };",
       "```js\nconst jwk = { kty: 'RSA', n: 'shown', e: 'AQAB' };\n```",
+      "```js\nconst jwk = { [(('kty'))]: 'RSA', [('n')]: 'shown', e: 'AQAB' };\n```",
     ];
     const payload = await exportSpans(
       format,

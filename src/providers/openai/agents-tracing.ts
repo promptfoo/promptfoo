@@ -1222,8 +1222,9 @@ function hasCredentialTable(value: string): boolean {
   // TOML literal strings and JavaScript disagree about escaped apostrophes.
   // Check both readings so neither can hide a neighboring property.
   return (
-    // A containing string or Markdown fence can hide a complete literal object.
-    hasPrivateJwk(literalKeySegment(value).replace(/[\\"'`\]]/g, '')) ||
+    // Inside strings and Markdown fences, strip closing group and index
+    // delimiters so static names such as [('k')] still precede their colon.
+    hasPrivateJwk(literalKeySegment(value).replace(/[\\"'`)\]]/g, '')) ||
     hasCredentialPath(value) ||
     (value.includes("\\'") && hasCredentialPath(value.replace(/\\'/g, '_')))
   );
