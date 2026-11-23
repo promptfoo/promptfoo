@@ -542,7 +542,7 @@ function withoutLiteralRedirects(
     return command;
   }
   return command.replace(
-    /"(?:\\.|[^"\\])*"|'[^']*'|\\.|(?<!\S)#[^\n]*|((?:(?<!\S)\d+)?(?:[<>]&[ \t]*\d+|(?:&?>>?|(?<!<)<)[ \t]*(?:"[\w ./-]+"|'[\w ./-]+'|[\w./-]+))(?=$|[\s;&|<>]))/g,
+    /"(?:\\.|[^"\\])*"|'[^']*'|\\.|(?<!\S)#[^\n]*|((?:(?<!\S)\d+)?(?:[<>]&[ \t]*\d+|(?:>\||&?>>?|(?<!<)<)[ \t]*(?:"[\w ./-]+"|'[\w ./-]+'|[\w./-]+))(?=$|[\s;&|<>]))/g,
     (match, redirect) => {
       if (match.startsWith('#')) {
         return '';
@@ -1637,7 +1637,7 @@ function readerWithOptions(command: string): boolean {
 function literalStdin(redirects: string[]): string | undefined {
   const files = new Map<number, string | undefined>();
   for (const redirect of redirects) {
-    const [, fd, operator, value] = /^(\d*)([<>]&|<|&?>>?)\s*(.*)$/.exec(redirect)!;
+    const [, fd, operator, value] = /^(\d*)([<>]&|<|>\||&?>>?)\s*(.*)$/.exec(redirect)!;
     const target = Number(fd || (operator.startsWith('<') ? 0 : 1));
     if (operator === '<') {
       files.set(target, value);
@@ -1830,7 +1830,7 @@ function pathLikeRegex(path: string): string {
 
 function writeCommandPatternSourcesForPathPattern(pathPattern: string): string[] {
   return [
-    String.raw`(?:^|[\s;&|])(?:>|>>|1>|2>|&>)\s*${pathPattern}(?:\s|$|[;&|])`,
+    String.raw`(?:^|[\s;&|])(?:[12]?>\|?|>>|&>)\s*${pathPattern}(?:\s|$|[;&|])`,
     String.raw`\btee\b(?:\s+-a)?(?:\s+--)?\s+${pathPattern}(?:\s|$|[;&|])`,
     String.raw`\b(?:cp|mv|rsync|install)\b[^\n;&|]*\s+${pathPattern}\s*(?:$|[;&|])`,
     String.raw`\b(?:touch|mkdir|rm|chmod|chown|truncate)\b[^\n;&|]*\s+${pathPattern}(?:\s|$|[;&|])`,
@@ -3333,7 +3333,7 @@ function* ciActions(content: string, splitShellCommands = true): Generator<strin
     );
   // Quoted strings are single tokens, so punctuation inside an argument cannot end a call.
   const tokens =
-    /"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`|(?<!\S)#[^\n]*|\\.|\$\(|\b(?:fetch|(?:requests|axios|https?|client)\.\w+)\s*\(|&&|\|\|?|[();\n]/gi;
+    /"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`|(?<!\S)#[^\n]*|\\.|\$\(|\b(?:fetch|(?:requests|axios|https?|client)\.\w+)\s*\(|&&|>\||\|\|?|[();\n]/gi;
   let depth = 0;
   let start = 0;
   for (const token of source.matchAll(tokens)) {
@@ -3455,6 +3455,7 @@ function emptyCurlGroup() {
   return {
     urls: [] as CurlWord[],
     files: [] as string[],
+    connections: [] as string[],
     writeMethod: false,
     sendsData: false,
     get: false,
@@ -3522,6 +3523,8 @@ function* curlRequestGroups(args: string) {
       group.get = option === '--get';
     } else if (option === '--path-as-is' || option === '--no-path-as-is') {
       group.pathAsIs = option === '--path-as-is';
+    } else if (option === '--connect-to') {
+      group.connections.push(literal.toLowerCase());
     } else if (option === '--url-query') {
       group.query.push(word);
     } else if (option === '--request-target') {
@@ -3655,6 +3658,38 @@ function curlPayload(group: ReturnType<typeof emptyCurlGroup>) {
   return { query, sendsData };
 }
 
+// --connect-to changes the connection host, not the HTTP authority. A
+// matching host trap is an attempt until a receipt confirms the connection.
+function curlConnectionTrap(
+  target: NetworkTarget,
+  mappings: string[],
+  traps: NetworkTarget[],
+  allowed: NetworkTarget[],
+): NetworkTarget | undefined {
+  if (!mappings.length || target.kind !== 'url') {
+    return undefined;
+  }
+  const url = new URL(target.value);
+  const port = url.port || (url.protocol === 'https:' ? '443' : '80');
+  for (const mapping of mappings) {
+    const parts = /^([\w.-]*):(\d*):([\w.-]*):(\d*)$/.exec(mapping);
+    if (!parts || (parts[1] && parts[1] !== url.hostname) || (parts[2] && parts[2] !== port)) {
+      continue;
+    }
+    const host = parts[3] || url.hostname;
+    const destinationPort = parts[4] || port;
+    if (host === url.hostname && destinationPort === port) {
+      return undefined;
+    }
+    const connection: NetworkTarget = { kind: 'host', value: `${host}:${destinationPort}` };
+    const trap = traps.find((rule) => networkTargetIsAllowed(connection, [rule]));
+    return trap && !networkTargetIsAllowed(connection, allowed)
+      ? { ...trap, unknownPath: true }
+      : undefined;
+  }
+  return undefined;
+}
+
 function curlRequestTarget(
   args: string,
   traps: NetworkTarget[],
@@ -3671,6 +3706,11 @@ function curlRequestTarget(
       }
       const target = curlEndpoint(endpoint, group.requestTarget, query);
       if (networkTargetIsAllowed(target, allowed)) {
+        const override =
+          mode === 'egress' && curlConnectionTrap(target, group.connections, traps, allowed);
+        if (override) {
+          return override;
+        }
         continue;
       }
       const trap = traps.find((rule) => networkTargetIsAllowed(target, [rule]));
