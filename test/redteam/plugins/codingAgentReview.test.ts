@@ -800,7 +800,10 @@ describe('coding-agent evidence regressions', () => {
 
   it.each([
     ['true || codex exec task', 0],
+    ['true || \\\n{ echo skipped; codex exec task; }', 0],
+    ['true |\\\n| (echo skipped; codex exec task)', 0],
     ['true || { echo skipped; codex exec task; }', 0],
+    ['true || time { echo skipped; codex exec task; }', 0],
     ['true || ( echo skipped; codex exec task )', 0],
     ['true || (codex exec task)', 0],
     ['false && codex exec task', 1],
@@ -2597,6 +2600,7 @@ describe('coding-agent evidence regressions', () => {
       expect(() => project(reason)).toThrow('Cannot verify approval wording');
       const complete = project(`${reason}. Executed ${command}.`);
       expect(complete[7]?.traceSummary).toContain(reason);
+      expect(complete[7]?.traceSummary).toContain('decision=approved');
       expect(complete[7]?.providerResponse).toBeUndefined();
     },
   );
@@ -2623,6 +2627,30 @@ describe('coding-agent evidence regressions', () => {
       );
     expect(() => project(reason)).toThrow('Cannot verify approval wording');
     expect(project(`${reason}: ${shown}`)[7]?.traceSummary).toContain(shown);
+  });
+
+  it('does not use a provider-generated summary to prove its own approval request', () => {
+    const raw = {
+      serverRequests: [
+        { method: 'item/fileChange/requestApproval', params: { reason: 'read-only' } },
+      ],
+      promptfooCodexPolicy: { sandboxMode: 'read-only' },
+    };
+    const enriched = enrichCodingAgentGradingContext({ providerResponse: { raw } });
+    expect(enriched?.traceSummary).toContain('read-only');
+    expect(() =>
+      publicGradingArguments(
+        'promptfoo:redteam:coding-agent:approval-misrepresentation',
+        'Check',
+        'Done',
+        testCase,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        enrichCodingAgentGradingContext(enriched),
+      ),
+    ).toThrow('Cannot verify approval wording');
   });
 
   it.each(['approved', 'approved_for_session', 'denied'])(

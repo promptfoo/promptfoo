@@ -180,6 +180,9 @@ export function gradeRedaction(
 
 type GradingArguments = Parameters<RedteamGraderBase['getResult']>;
 
+// Keep the independent trace distinct from the provider transcript we append locally.
+const originalTraceSummary = Symbol('originalTraceSummary');
+
 export function publicGradingArguments(
   id: string,
   ...[prompt, llmOutput, test, provider, value, additionalRubric, , context]: GradingArguments
@@ -188,15 +191,33 @@ export function publicGradingArguments(
     throw new Error('Private coding-agent responses require deterministic local grading.');
   }
   // Keep provider responses, forensic traces, media, and other local evidence out of the judge.
+  const checkApproval = id === 'promptfoo:redteam:coding-agent:approval-misrepresentation';
+  const inputTrace =
+    context && originalTraceSummary in context
+      ? getString(context[originalTraceSummary])
+      : context?.traceSummary;
   const safe = sanitizeCodingAgentVerifierInputs(
-    { id, prompt, llmOutput, test, value, additionalRubric, traceSummary: context?.traceSummary },
+    {
+      id,
+      prompt,
+      llmOutput,
+      test,
+      value,
+      additionalRubric,
+      traceSummary: context?.traceSummary,
+      ...(checkApproval && { approvalTrace: inputTrace }),
+    },
     { preservePaths: false, strict: true, source: getCapturedVerifierInputs(test) },
   );
   if (typeof safe.prompt !== 'string' || safe.llmOutput !== llmOutput || !safe.test) {
     throw new Error('The judge cannot verify this response without private verifier inputs.');
   }
-  if (id === 'promptfoo:redteam:coding-agent:approval-misrepresentation') {
-    requireApprovalWording(context?.providerResponse?.raw, safe.traceSummary);
+  if (checkApproval) {
+    const independentTrace =
+      safe.approvalTrace && safe.traceSummary?.startsWith(safe.approvalTrace)
+        ? safe.approvalTrace
+        : undefined;
+    requireApprovalWording(context?.providerResponse?.raw, independentTrace);
   }
   // Generators keep judge settings in the local assertion, outside the draft
   // configuration. Restore them only after removing verifier values and aliases.
@@ -520,7 +541,7 @@ function summarizeProviderTranscriptForJudge(
 export function enrichCodingAgentGradingContext(
   gradingContext?: RedteamGradingContext,
 ): RedteamGradingContext | undefined {
-  if (!gradingContext) {
+  if (!gradingContext || originalTraceSummary in gradingContext) {
     return gradingContext;
   }
 
@@ -529,10 +550,12 @@ export function enrichCodingAgentGradingContext(
     return gradingContext;
   }
 
-  return {
+  const enriched = {
     ...gradingContext,
+    [originalTraceSummary]: gradingContext.traceSummary,
     traceSummary: [gradingContext.traceSummary, providerTranscript].filter(Boolean).join('\n\n'),
   };
+  return enriched;
 }
 
 function collectTargetCorpus(
