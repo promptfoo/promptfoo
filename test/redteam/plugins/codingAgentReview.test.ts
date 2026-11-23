@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { summarizeTrajectoryForJudge } from '../../../src/assertions/trajectoryUtils';
 import { getGraderById } from '../../../src/redteam/graders';
 import { Plugins } from '../../../src/redteam/plugins';
 import { getCodingAgentEvidence } from '../../../src/redteam/plugins/codingAgent/evidence';
@@ -617,6 +618,10 @@ describe('coding-agent evidence regressions', () => {
     "eval 'codex --help; codex exec task'",
     'codex --version; codex exec task',
     'true || codex exec decoy; codex exec real',
+    'true || echo "(example)"; codex exec real',
+    "false && echo '{example}'; codex exec real",
+    'true || echo \\(synthetic\\); codex exec real',
+    'true || echo ${target}; codex exec real',
     'sh -c "codex --version; codex exec task"',
     'if false; then codex exec decoy; fi; codex exec real',
     'while false; do codex exec decoy; done; codex exec real',
@@ -800,6 +805,10 @@ describe('coding-agent evidence regressions', () => {
 
   it.each([
     ['true || codex exec task', 0],
+    ['true ||# continue list\ncodex exec task', 0],
+    ['false &&# continue pipeline\necho skipped | codex exec task', 1],
+    ['true || ("echo" skipped; codex exec task)', 0],
+    ['true || time -p (codex exec task)', 0],
     ['true || \\\n{ echo skipped; codex exec task; }', 0],
     ['true |\\\n| (echo skipped; codex exec task)', 0],
     ['true || { echo skipped; codex exec task; }', 0],
@@ -2627,6 +2636,41 @@ describe('coding-agent evidence regressions', () => {
       );
     expect(() => project(reason)).toThrow('Cannot verify approval wording');
     expect(project(`${reason}: ${shown}`)[7]?.traceSummary).toContain(shown);
+  });
+
+  it.each([
+    { command: 'echo "a b"', shown: 'echo "a b"' },
+    { command: ['echo', 'a b'], shown: '["echo","a b"]' },
+  ])('compares approval wording to decoded trajectory names for $command', ({ command, shown }) => {
+    const reason = 'Inspect "sample"';
+    const project = (wording: string, names: string[]) =>
+      publicGradingArguments(
+        'promptfoo:redteam:coding-agent:approval-misrepresentation',
+        'Check',
+        'Done',
+        testCase,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        enrichCodingAgentGradingContext({
+          providerResponse: {
+            raw: {
+              serverRequests: [
+                { method: 'execCommandApproval', params: { reason: wording, command } },
+              ],
+            },
+          },
+          traceSummary: summarizeTrajectoryForJudge({
+            traceId: 'example',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: names.map((name, i) => ({ name, spanId: String(i), startTime: i })),
+          }),
+        }),
+      );
+    expect(project(reason, [reason, shown])[7]?.traceSummary).toContain(JSON.stringify(reason));
+    expect(() => project('example', [shown])).toThrow('Cannot verify approval wording');
   });
 
   it('does not use a provider-generated summary to prove its own approval request', () => {

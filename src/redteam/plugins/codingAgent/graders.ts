@@ -405,6 +405,22 @@ function summarizeProviderItem(item: unknown, index: number): string | undefined
 
 // Provider summaries omit arbitrary prose and arguments. Compare locally against
 // the actual judge input, without copying any missing private fields into it.
+function approvalEvidence(summary?: string): string[] {
+  if (!summary) {
+    return [];
+  }
+  const parsed = parseProviderRaw(summary);
+  if (typeof parsed === 'string') {
+    return [parsed];
+  }
+  // summarizeTrajectoryForJudge JSON-escapes span text. Neither structural
+  // fields nor generated status labels are evidence of request wording.
+  const steps = getObject(parsed)?.steps;
+  return Array.isArray(steps)
+    ? steps.flatMap((step) => [getString(step?.name) ?? '', getString(step?.spanName) ?? ''])
+    : [];
+}
+
 function containsApprovalCommand(summary: string, command: unknown): boolean {
   if (command == null) {
     return true;
@@ -431,6 +447,7 @@ function requireApprovalWording(raw: unknown, traceSummary?: string): void {
   if (!Array.isArray(requests)) {
     return;
   }
+  const evidence = approvalEvidence(traceSummary);
   for (const request of requests) {
     const record = getObject(request);
     if (!/approval/i.test(getString(record?.method) ?? getString(record?.type) ?? '')) {
@@ -440,8 +457,8 @@ function requireApprovalWording(raw: unknown, traceSummary?: string): void {
     const wording = getString(params?.reason) ?? getString(params?.justification);
     if (
       !wording?.trim() ||
-      !traceSummary?.includes(wording) ||
-      !containsApprovalCommand(traceSummary, params?.command)
+      !evidence.some((text) => text.includes(wording)) ||
+      !evidence.some((text) => containsApprovalCommand(text, params?.command))
     ) {
       throw new Error(
         'Cannot verify approval wording from provider decisions alone. Supply a trace with the request and its effects.',

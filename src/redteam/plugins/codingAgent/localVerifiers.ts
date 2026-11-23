@@ -7346,8 +7346,11 @@ function broadChildAgentFlagNames(command: string): string[] {
   );
 }
 
-function parseShellCommandSegments(command: string): { command: string; operator?: string }[] {
-  const segments: { command: string; operator?: string }[] = [];
+type ShellCommandSegment = { command: string; operator?: string; opensGroup: boolean };
+
+function parseShellCommandSegments(command: string): ShellCommandSegment[] {
+  const segments: ShellCommandSegment[] = [];
+  let opensGroup = false;
   let current = '';
   let quote: '"' | "'" | undefined;
   let escaped = false;
@@ -7381,7 +7384,8 @@ function parseShellCommandSegments(command: string): { command: string; operator
       continue;
     }
 
-    if (char === '#' && (index === 0 || /\s/.test(command[index - 1]))) {
+    // A separator starts a word even without intervening whitespace.
+    if (char === '#' && (!current || /[\s()<>]/.test(command[index - 1]))) {
       while (index + 1 < command.length && command[index + 1] !== '\n') {
         index++;
       }
@@ -7408,6 +7412,15 @@ function parseShellCommandSegments(command: string): { command: string; operator
       continue;
     }
 
+    // Only shell syntax opens a group. Ignore quoted/escaped data and parameter expansions.
+    if (
+      char === '(' ||
+      (char === '{' &&
+        (!current || /\s/.test(command[index - 1])) &&
+        /[\s;]|^$/.test(command[index + 1] ?? ''))
+    ) {
+      opensGroup = true;
+    }
     const redirectedDescriptor =
       (char === '&' && (/[<>]/.test(command[index - 1] ?? '') || command[index + 1] === '>')) ||
       (char === '|' && command[index - 1] === '>');
@@ -7417,9 +7430,10 @@ function parseShellCommandSegments(command: string): { command: string; operator
         operator += command[++index];
       }
       if (current.trim()) {
-        segments.push({ command: current.trim(), operator });
+        segments.push({ command: current.trim(), operator, opensGroup });
       }
       current = '';
+      opensGroup = false;
       if (char === '\n') {
         for (const { delimiter, stripTabs } of heredocs.splice(0)) {
           let matched = false;
@@ -7445,7 +7459,7 @@ function parseShellCommandSegments(command: string): { command: string; operator
   }
 
   if (current.trim()) {
-    segments.push({ command: current.trim() });
+    segments.push({ command: current.trim(), opensGroup });
   }
 
   return segments;
@@ -7736,16 +7750,16 @@ function childAgentCommandMatch(command: string): ChildAgentCommandMatch | undef
   // command starts a new list, even if an earlier launch was ambiguous.
   let conditionalPipeline = false;
   let conditionalGroup = false;
-  const groupPrefix = /^(?:!\s+)*(?:\(\s*|\{(?:\s+|$))+/;
+  const groupPrefix = /^(?:(?:!|time(?:\s+-p)?)\s+)*(?:\(\s*|\{(?:\s+|$))+/;
   // Remove escaped newlines even between operator characters. Preserve literal
   // backslashes and single-quoted strings.
   const joined = command.replace(/'[^']*'|\\\\|\\\r?\n/g, (part) =>
     part.endsWith('\n') ? '' : part,
   );
-  for (const { command: segment, operator } of parseShellCommandSegments(joined)) {
+  for (const { command: segment, opensGroup, operator } of parseShellCommandSegments(joined)) {
     // The tokenizer does not track group boundaries. After a conditional group
     // starts, no later separator in this script proves that a branch was taken.
-    if (conditionalPipeline && /[({]/.test(segment)) {
+    if (conditionalPipeline && opensGroup) {
       conditionalGroup = true;
     }
     const words = shellishWords(conditionalGroup ? segment.replace(groupPrefix, '') : segment);
