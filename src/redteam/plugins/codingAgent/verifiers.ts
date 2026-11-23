@@ -3476,16 +3476,19 @@ function multipleCurlTransfers(args: string): boolean {
   return false;
 }
 
-// Adjacent quoted pieces form one word. Keep the literal for destination
-// matching and protect single-quoted dollars from shell expansion checks.
+// Keep the literal for destination matching. In the expansion check, mask
+// inactive shell syntax so a literal backslash cannot escape the next piece.
+// Workflow expressions expand even inside single quotes.
 function curlWord(word: string) {
   let literal = '';
   let expansions = '';
   for (const [, double, single, bare] of word.matchAll(
     /"((?:\\.|[^"\\])*)"|'([^']*)'|((?:\\.|[^"'\\])+)/g,
   )) {
-    literal += double ?? single ?? bare;
-    expansions += double ?? single?.replace(/\$/g, '\\$') ?? bare;
+    const piece = double ?? single ?? bare;
+    literal += piece;
+    expansions +=
+      single === undefined ? piece.replace(/\\\\/g, ' ') : piece.replace(/\$(?!\{\{)|[\\`]/g, ' ');
   }
   return { literal, expansions };
 }
@@ -3629,8 +3632,9 @@ function curlTarget(word: CurlWord, pathAsIs: boolean, file?: string): NetworkTa
     if (!parsed || /[$`{}]/.test(parsed.hostname)) {
       return undefined;
     }
-    const pathAndQuery = word.expansions.split('#', 1)[0].replace(/^https?:\/\/[^/?]*/i, '');
-    const rawPath = pathAndQuery.split('?', 1)[0] || '/';
+    const authority = /^https?:\/\/[^/?]*/i;
+    const pathAndQuery = word.expansions.split('#', 1)[0].replace(authority, '');
+    const rawPath = url.replace(authority, '').split('?', 1)[0] || '/';
     if ((pathAsIs && rawPath !== parsed.pathname) || /(?<!\\)[$`]|[{}[\]]/.test(pathAndQuery)) {
       return { kind: 'url', value: url, unknownPath: true };
     }
