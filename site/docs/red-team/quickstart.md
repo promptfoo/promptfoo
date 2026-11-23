@@ -68,11 +68,11 @@ The command opens red team setup in your browser. Start a new scan in chat or ch
 
 ### Provide application details
 
-Start with your app, your endpoint or a question. The agent asks follow-up questions and drafts a Promptfoo configuration as you talk. **Your messages and the full draft go to Promptfoo Cloud.** Use environment variable names for keys and leave out private records.
+Start with your app, your endpoint or a question. The agent can look up the config schema for your installed version of Promptfoo and fix validation errors as you talk. **Your messages and the draft go to Promptfoo Cloud.** Leave out private records and use variable names for production keys.
 
 > Our bot looks up orders and issues refunds. Customers should only see their own orders. Only managers can approve refunds. Test each of those twice.
 
-You can ask why the agent chose a test or change the plan. For example, ask for a multi-turn attack in two languages or compare staging with a second target. Your installed version of Promptfoo validates each draft and asks the agent to fix configuration errors.
+Ask why the agent chose a test or change the plan. For example, ask for a multi-turn attack in two languages or compare staging with a second target.
 
 To try it without your own app, select **Try the demo app** and send the suggested message. You can test the connection or go straight to **Review setup**. The scan starts only when you select **Run Now**.
 
@@ -82,17 +82,19 @@ Describe your API or paste a cURL example with credentials and private data remo
 
 > Our support bot listens at localhost:3555/chat. It works like OpenAI, but needs a key in a header.
 
-Tell the agent which headers your app expects. If it needs more than one key, name the variable for each header.
+Tell the agent which headers your app expects. You can give it the name of a variable set on the machine running Promptfoo.
 
 > Use X-Secret-Key from SUPPORT_BOT_TOKEN and X-Client-Token from CLIENT_TOKEN. Leave out the model name.
 
-Set those variables where Promptfoo runs. For a demo, you can also say `the key is "demo-value"`. Chat masks the value and uses it for the selected header without environment setup. Downloaded YAML includes that literal value. To send credentials from chat, use HTTPS or a loopback address like localhost and set `redirect: error` to keep keys at the intended destination.
+You can also supply a value directly. For example, `Use X-Secret-Key. The key is "demo-value".` The browser replaces recognized keys with placeholders before sending the message to Cloud. Masking free text is best effort. **Downloaded YAML includes the supplied value.** For credentialed requests, use HTTPS or a loopback address like localhost.
 
-1. Check the URL, method and headers. If you have multiple targets, choose one. Select **Test connection** to send one “Hello” from your local server. This makes a real request, so choose a system you have permission to test.
-2. Check the result in the conversation. Promptfoo checks for a nonempty reply and reports the status and possible reply fields to the agent. If a setting needs to change, the agent can propose a correction. Check the change and select **Test connection** again to verify it.
-3. Select **Review setup** to see the configuration before saving YAML or running the scan. [Learn what data leaves your machine](/docs/red-team/troubleshooting/data-handling/).
+Ask in chat when you're ready to send a real request. Only test systems you have permission to contact.
 
-**Test connection** appears for HTTP requests Promptfoo can reproduce safely, including JSON requests with multiple headers. Typing in chat never sends a request to your target.
+> Try the connection. If you picked the wrong reply field, fix it and try again.
+
+Promptfoo sends “Hello” from your local server and shows each result in the conversation. The agent can fix and retest a failed connection up to twice at the same endpoint. If the request times out, Promptfoo stops because your app may already have received it. You can also select **Test connection** to send a single request.
+
+Select **Review setup** to check the configuration before saving YAML or running the scan. [Learn what data leaves your machine](/docs/red-team/troubleshooting/data-handling/).
 
 To scan a **model directly**, give its ID, such as `ollama:chat:llama3` or `openai:gpt-4o-mini`. This skips your app’s instructions and tools.
 

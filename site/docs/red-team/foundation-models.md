@@ -101,7 +101,7 @@ You can also run a foundation model scan locally. Initiate a Promptfoo redteam i
 promptfoo redteam init
 ```
 
-When the [setup agent](/docs/red-team/quickstart/#initialize-the-project) asks where to send tests, enter a model ID such as `openai:gpt-4o-mini` or `ollama:chat:llama3`. For more providers and settings, choose manual setup.
+Give the [setup agent](/docs/red-team/quickstart/#initialize-the-project) your provider and model, such as `openai:gpt-4o-mini` or `ollama:chat:llama3`, and describe the settings you want. You can review the full config and save it as YAML.
 
 <div style={{ textAlign: 'center' }}>
     <img src="/img/redteammodel-local.png" style={{ width: '90%', height: 'auto' }} />
