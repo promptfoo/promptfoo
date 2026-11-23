@@ -172,13 +172,13 @@ describe('OTLPTracingExporter', () => {
     'redacts Stripe secret and restricted keys in %s tool output and errors',
     async (format) => {
       const suffix = 'opaque'.repeat(4);
-      const publicText = `pk_live_${'x'.repeat(24)} task_test_results`;
+      const publicText = `pk_live_${'x'.repeat(24)} task_test_results sk_organization`;
       const payload = await exportSpans(format, [
         {
           spanData: {
             type: 'function',
             name: 'lookup',
-            output: `Found sk_live_${suffix}, rk_test_${suffix} and ${publicText}`,
+            output: `Found sk_live_${suffix}, rk_test_opaque and ${publicText}`,
           },
           error: new Error(`Rejected sk_test_${suffix} and rk_live_${suffix}`),
         },
@@ -190,6 +190,25 @@ describe('OTLPTracingExporter', () => {
       expect(span.status.message).toBe('Rejected <redacted> and <redacted>');
     },
   );
+
+  it.each(formats)('redacts formatted and organization Stripe keys in %s', async (format) => {
+    const suffix = 'opaque'.repeat(4);
+    const payload = await exportSpans(format, [
+      {
+        spanData: {
+          type: 'function',
+          name: 'lookup',
+          output: `Found \u001b[32msk_live_${suffix}\u001b[0m, sk_org_${suffix} and sk_org${suffix}`,
+        },
+        error: new Error(`Rejected _rk_live_${suffix}_ in {"log":"retry\\nsk_org_live_${suffix}"}`),
+      },
+    ]);
+    const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+    expect(getAttributes(span)['tool.output']).toBe(
+      'Found \u001b[32m<redacted>\u001b[0m, <redacted> and <redacted>',
+    );
+    expect(span.status.message).toBe('Rejected _<redacted>_ in {"log":"retry\\n<redacted>"}');
+  });
 
   it.each(formats)(
     'redacts standalone authorization values and encoded form credentials in %s',
