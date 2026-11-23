@@ -360,6 +360,8 @@ describe('OTLPTracingExporter', () => {
         path: String.raw`private = {path = 'C:\keys\', key = 'opaque/value'}`,
         array: 'service.api = [{name = "}", key = "opaque/array"}]',
         multiline: '[api]\nnote = """\n[cache]\n"""\nkey = "opaque/real"',
+        description: 'note = """public"""\n[api]\nkey = "opaque/first"',
+        descriptionLiteral: "note = '''public'''\n[credentials]\nregion = 'opaque/second'",
         rows: '[api]\nrows = [\n["cache"]\n]\nkey = "opaque/real"',
         brace: 'password = { local = "}", remote = "opaque/remainder" }',
         settings: '[app]\npassword = "opaque/pwd"\nregion = "west"',
@@ -377,6 +379,8 @@ describe('OTLPTracingExporter', () => {
           'path',
           'array',
           'multiline',
+          'description',
+          'descriptionLiteral',
           'rows',
           'brace',
         ),
@@ -396,6 +400,28 @@ describe('OTLPTracingExporter', () => {
     expect(attributes.large).toBe('<redacted>');
     expect(attributes.small).toBe([prefix, rows[0]].join('\n'));
   });
+
+  it.each(formats)(
+    'never consumes another credential after a quoted assignment label in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(format, {
+        description: `note = "apiKey = '"\napiKey = 'opaque/next'`,
+        label: 'label = "Password: "\npassword = "opaque/next"',
+        table: `config = { note = "apiKey = '", apiKey = 'opaque/inline' }`,
+        path: String.raw`config = { path = 'C:\folder\', note = 'password=', password = 'opaque/next' }`,
+        adjacent: 'const note = "password="; const password = "opaque/next";',
+        property: `const note = "password='"; cfg["apiKey"] = 'opaque/next';`,
+        comment: "/* password = ' */ cfg.password = 'opaque/next';",
+        ordinary: 'label = "Example: "\nregion = "public"',
+        unambiguous: '[app]\npassword = "opaque=="\nregion = "public"',
+      });
+      expect(attributes).toMatchObject(
+        redacted('description', 'label', 'table', 'path', 'adjacent', 'property', 'comment'),
+      );
+      expect(attributes.ordinary).toBe('label = "Example: "\nregion = "public"');
+      expect(attributes.unambiguous).toBe('[app]\npassword = "<redacted>"\nregion = "public"');
+    },
+  );
 
   it.each(formats)(
     'withholds ambiguous TOML endings before another credential in %s',
@@ -484,6 +510,12 @@ describe('OTLPTracingExporter', () => {
       spaced: 'const cfg = { api: /* note */ { key: "opaque/comment" } };',
       member: 'cfg["api"] = { ["key"]: "opaque/member" };',
       split: 'const cfg = { ["private"]\n:\n{ key\n:\n"opaque/split" }};',
+      grouped: 'const cfg = { api: (({ key: "opaque/grouped" })) };',
+      target: '(cfg.api) = { key: "opaque/target" };',
+      staticKey: 'cfg[("private")][("key")] = "opaque/member";',
+      guarded: 'if (ready) config.api ??= ({ key: "opaque/default" });',
+      logical: 'cfg["private"] ||= { \u00a0key: "opaque/logical" };',
+      publicDefault: 'if (ready) cfg.cache ??= ({ key: "shown" });',
       declaration: 'const api = { label: `# info`, key: "opaque/key" };',
       quoted: String.raw`const api = { note: 'don\'t close }', key: 'opaque/value' };`,
       api: JSON.stringify({ key: 'opaque/root', status: 'ok' }),
@@ -492,6 +524,7 @@ describe('OTLPTracingExporter', () => {
       ordinary,
     });
     expect(attributes.ordinary).toBe(ordinary);
+    expect(attributes.publicDefault).toBe('if (ready) cfg.cache ??= ({ key: "shown" });');
     expect(JSON.parse(attributes.api as string)).toEqual({ key: '<redacted>', status: 'ok' });
     for (const field of [attributes.native, attributes.serialized]) {
       expect(JSON.parse(field as string)).toEqual({

@@ -1068,6 +1068,27 @@ function credentialLiteralEnd(value: string, start: number, delimiter: string): 
   return delimiter === '"' || delimiter === "'" ? value.length : -1;
 }
 
+const SOURCE_LITERALS =
+  /(?<!\\)"""(?:\\[\s\S]|(?!""")[^\\])*"{3,5}|'''[\s\S]*?'{3,5}|(?<!\\)(["'])(?:\\(?:\r\n|[\s\S])|(?!\1)[^\\\r\n])*\1|(?<!\\)`(?:\\[\s\S]|[^`\\])*`|\/\*[\s\S]*?(?:\*\/|$)|(?<!:)\/\/[^\r\n\u2028\u2029]*|#[^\r\n]*|[()]/g;
+
+// A label such as "password=" can look like an assignment starting at its
+// closing quote. Never let a mask starting inside one literal or comment
+// consume the next field. Advance the independent cursor only once per token.
+function literalBoundaryCheck(value: string) {
+  const spans = value.matchAll(SOURCE_LITERALS);
+  let span = spans.next();
+  return (start: number, end: number) => {
+    while (!span.done) {
+      const limit = span.value.index + span.value[0].length;
+      if (limit > start) {
+        return span.value.index < start && limit < end;
+      }
+      span = spans.next();
+    }
+    return false;
+  };
+}
+
 function redactCredentialLiterals(value: string): string {
   if (!/[:="'`]/.test(value)) {
     return value;
@@ -1076,16 +1097,13 @@ function redactCredentialLiterals(value: string): string {
     return '<redacted>';
   }
   const masked = maskAssignedLiterals(value);
-  if (!/\/[*/]/.test(masked)) {
+  if (!/\/[*/]|[()]/.test(masked)) {
     return masked;
   }
-  // JavaScript comments can split a key, an assignment, or a template tag.
+  // Comments and grouping can split a static key, assignment, or template tag.
   // Skip quoted paths and globs so they cannot hide subsequent assignments.
   // Only use this alternate reading to decide whether to withhold the field.
-  const joined = masked.replace(
-    /(?<!\\)(["'`])(?:\\[\s\S]|(?!\1)[^\\])*\1|\/\*[\s\S]*?(?:\*\/|$)|(?<!:)\/\/[^\r\n\u2028\u2029]*/g,
-    (token, quote) => (quote ? token : ' '),
-  );
+  const joined = masked.replace(SOURCE_LITERALS, (token) => (/^[()/]/.test(token) ? ' ' : token));
   if (
     joined !== masked &&
     (hasCredentialTable(joined) || maskAssignedLiterals(joined) !== joined)
@@ -1108,7 +1126,7 @@ function literalKeySegment(key: string): string {
 
 // Check TOML table paths and static object properties without interpreting their values.
 function hasCredentialTable(value: string): boolean {
-  if (!/[:=]/.test(value) || !/^[ \t\uFEFF]*\[|[:=]\s*[[{]/m.test(value)) {
+  if (!/[:=]/.test(value) || !/^[ \t\uFEFF]*\[|[:=][\s(]*[[{]/m.test(value)) {
     return false;
   }
   // TOML literal strings and JavaScript disagree about escaped apostrophes.
@@ -1126,18 +1144,23 @@ function hasCredentialPath(value: string): boolean {
     .replace(
       /#[^\r\n]*|(?<!\\)"""(?:\\[\s\S]|(?!""")[^\\])*"{3,5}|'''[\s\S]*?'{3,5}|(?<!\\)"(?:\\(?:\r\n|[\s\S])|[^"\\\r\n])*"|'(?:\\\r?\n|\\\r|[^'\r\n])*'|(?<!\\)`(?:\\[\s\S]|[^`\\])*`|\\u(?:\{[\da-fA-F]+\}|[\da-fA-F]{4})/g,
       (token) => {
-        if (token.startsWith('#') || token.startsWith('"""') || token.startsWith("'''")) {
+        if (token.startsWith('#')) {
           return '';
+        }
+        if (token.startsWith('"""') || token.startsWith("'''")) {
+          return '_'; // Keep a value before the next table's opening bracket.
         }
         const key = token.startsWith('\\') ? token : token.slice(1, -1);
         return literalKeySegment(key).replace(/[^\w.\\-]/g, '_') || '_';
       },
     )
-    .replace(/(\S)\s+([:=])/g, '$1$2')
+    .replace(/(?:\?\?|\|\||&&|\+)=/g, '=')
+    .replace(/(\S)\s+([.:=])/g, '$1$2')
+    .replace(/\.[ \t]+/g, '.')
     .replace(/\[\s*([\w$.\\-]+)\s*\](?=[ \t]*[[.:=])/g, '.$1');
   // A header resets the prefix. Inline tables and arrays inherit it.
   const entries =
-    /^[ \t]*\[\[?([\w.\\\t -]+)\]\]?[ \t]*$|(?:^|(?<=[{,;]))([\w$.\\\t -]+)[:=]\s*([[{]?)|([[\]{}])/gm;
+    /^[ \t]*\[\[?([\w.\\\t -]+)\]\]?[ \t]*$|(?<![\w$.\\-])([\w$.\\-]+)[:=][\s(]*([[{]?)|([[\]{}])/gm;
   const parents: string[] = [];
   let path = '';
   let remaining = MAX_STRUCTURED_ATTRIBUTE_BYTES;
@@ -1153,15 +1176,11 @@ function hasCredentialPath(value: string): boolean {
     } else if (key !== undefined) {
       // Bound the work of checking long or deeply nested paths across rows.
       remaining -= path.length;
-      const name = key
-        .trimStart()
-        .replace(/^(?:export\s+)?(?:const|let|var)\s+/, '')
-        .replace(/[ \t]/g, '');
-      const qualified = path ? path + '.' + name : name;
+      const qualified = path ? path + '.' + key : key;
       // Standalone credential names already have scalar redaction below.
       if (
         remaining < 0 ||
-        (path && isCredentialAttributeKey(qualified) && !isCredentialAttributeKey(name))
+        (path && isCredentialAttributeKey(qualified) && !isCredentialAttributeKey(key))
       ) {
         return true;
       }
@@ -1209,6 +1228,7 @@ function maskAssignedLiterals(value: string): string {
   const continuation = /\s*(?:\+|\?\?|\|\||&&)/y;
   const delimiters = ['"""', "'''", '"', "'", '`'];
   const hasTemplate = value.includes('`');
+  const crossesBoundary = literalBoundaryCheck(value);
   const parts: string[] = [];
   let next = -1;
   let qualified = false;
@@ -1234,7 +1254,7 @@ function maskAssignedLiterals(value: string): string {
     if (!isCredentialAttributeKey(parts.join('.'))) {
       continue;
     }
-    if (operator.startsWith('/')) {
+    if (match.index < copied || operator.startsWith('/')) {
       return '<redacted>';
     }
     // A simple tag such as String.raw can precede a JavaScript template.
@@ -1250,12 +1270,13 @@ function maskAssignedLiterals(value: string): string {
     }
     const end = credentialLiteralEnd(value, start, delimiter);
     continuation.lastIndex = end;
-    if (end === -1 || continuation.test(value)) {
+    if (end === -1 || crossesBoundary(start, end) || continuation.test(value)) {
       return '<redacted>';
     }
     result += value.slice(copied, start) + delimiter + '<redacted>' + delimiter;
     copied = end;
-    segments.lastIndex = end;
+    // Continue looking for keys from the previous operator. A conflicting
+    // interpretation of an earlier quote can make two assignments overlap.
   }
   return result + value.slice(copied);
 }
