@@ -305,7 +305,11 @@ describe('isStrategyConfigured', () => {
       const strategy: RedteamStrategy = {
         id: 'layer',
         config: {
-          steps: [{ id: 'custom:example' }, 'file://transform.ts', 'base64'],
+          steps: [
+            { id: 'custom:example', config: { strategyText: 'Say hello' } },
+            'file://transform.ts',
+            'base64',
+          ],
         },
       };
       expect(isStrategyConfigured('layer', strategy)).toBe(true);

@@ -30,8 +30,8 @@ vi.mock('@app/hooks/useApiHealth', () => ({
 }));
 vi.mock('@app/hooks/useTelemetry');
 vi.mock('@app/hooks/useToast');
-vi.mock('./StrategyConfigDialog', () => ({
-  default: () => <div data-testid="strategy-config-dialog">Strategy Config Dialog</div>,
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: () => ({ data: { isEnabled: false } }),
 }));
 
 const mockUpdateConfig = vi.fn();
@@ -170,6 +170,8 @@ describe('Strategies', () => {
       { steps: ['unknown-id'], remote: true, valid: false },
       { steps: [{ id: 'base64', config: 'bad' }], remote: true, valid: false },
       { steps: ['authoritative-markup-injection', 'base64'], remote: true, valid: false },
+      { steps: ['custom'], remote: true, valid: false },
+      { steps: [{ id: 'custom:greeting' }], remote: true, valid: false },
       { steps: ['best-of-n'], remote: false, valid: false },
       { steps: ['best-of-n'], remote: true, valid: true },
       { steps: ['base64', 'rot13'], remote: false, valid: true },
@@ -189,6 +191,33 @@ describe('Strategies', () => {
       } else {
         expect(next).toBeDisabled();
       }
+    });
+
+    it('opens the layer that needs repair and preserves the other labelled layer on Save', async () => {
+      const user = userEvent.setup();
+      const first = { id: 'layer', config: { label: 'A', steps: ['base64'] } };
+      const second = { id: 'layer', config: { label: 'B', steps: ['best-of-n', 'rot13'] } };
+      vi.mocked(useRedTeamConfig, { partial: true, deep: true }).mockReturnValue({
+        config: { strategies: [first, second], plugins: [], numTests: 5 },
+        updateConfig: mockUpdateConfig,
+      });
+      vi.mocked(useApiHealth, { partial: true }).mockReturnValue({
+        data: { status: 'disabled', message: '' },
+      });
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+      await user.click(screen.getByText('Show Advanced Strategies'));
+      await user.click(screen.getByRole('button', { name: /Configure .*Layer/i }));
+      const save = screen.getByRole('button', { name: 'Save' });
+      expect(save).toBeDisabled();
+      expect(screen.getByText(/unavailable strategy "best-of-n"/)).toBeInTheDocument();
+      await user.click(screen.getAllByLabelText('delete step')[0]);
+      await user.click(save);
+      expect(mockUpdateConfig).toHaveBeenCalledWith('strategies', [
+        first,
+        { id: 'layer', config: { label: 'B', steps: ['rot13'] } },
+      ]);
     });
   });
 

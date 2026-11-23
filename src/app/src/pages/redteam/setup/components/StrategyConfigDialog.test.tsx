@@ -1354,11 +1354,21 @@ describe('StrategyConfigDialog', () => {
     it.each(['best-of-n', 'custom', 'custom:example'])(
       'excludes incompatible providers after %s',
       async (id) => {
-        renderLayer([{ id }]);
+        renderLayer(id === 'best-of-n' ? [id] : [{ id, config: { strategyText: 'Say hello' } }]);
+        expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
         await userEvent.click(screen.getByRole('combobox'));
         expect(screen.queryByRole('option', { name: 'indirect-web-pwn' })).not.toBeInTheDocument();
         expect(screen.queryByRole('option', { name: 'jailbreak:hydra' })).not.toBeInTheDocument();
         expect(screen.getByRole('option', { name: 'base64' })).toBeInTheDocument();
+      },
+    );
+
+    it.each(['custom', { id: 'custom:example', config: { strategyText: ' ' } }])(
+      'requires strategy text before saving imported step %j',
+      (step) => {
+        renderLayer([step]);
+        expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+        expect(screen.getByText(/strategyText/)).toBeInTheDocument();
       },
     );
 

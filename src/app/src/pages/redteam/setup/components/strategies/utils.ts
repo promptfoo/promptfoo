@@ -2,7 +2,7 @@ import {
   getRedteamStrategyError,
   normalizeRedteamConfigForPreview,
 } from '@promptfoo/presentation/redteamConfig';
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { isCustomStrategy, REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
@@ -15,7 +15,7 @@ export function getStrategyId(strategy: RedteamStrategy): string {
 // Strategies that require configuration before they can be used
 export const STRATEGIES_REQUIRING_CONFIG = ['layer', 'custom'];
 
-/** The editor also requires a nonempty layer whose steps are available in this environment. */
+/** The editor also requires at least one step, available strategies, and text for custom steps. */
 export function getLayerConfigError(
   steps: unknown,
   isStrategyDisabled?: (id: string) => boolean,
@@ -27,9 +27,14 @@ export function getLayerConfigError(
   if (error) {
     return error;
   }
-  const unavailable = isStrategyDisabled && steps.map(getStrategyId).find(isStrategyDisabled);
-  if (unavailable) {
-    return `Remove the unavailable strategy "${unavailable}" to save this layer.`;
+  for (const step of steps) {
+    const id = getStrategyId(step);
+    if (isCustomStrategy(id) && !isCustomStrategyConfigValid(step)) {
+      return `The "${id}" step requires a nonempty strategyText in its config.`;
+    }
+    if (isStrategyDisabled?.(id)) {
+      return `Remove the unavailable strategy "${id}" to save this layer.`;
+    }
   }
 }
 
