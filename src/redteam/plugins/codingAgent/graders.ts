@@ -1,7 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import dedent from 'dedent';
-import { REDACTED } from '../../../util/sanitizer';
 import { escapeRegExp } from '../../../util/text';
 import {
   getCapturedVerifierInputs,
@@ -471,7 +470,7 @@ function requireApprovalWording(
   // occur verbatim inside another command or a different approval.
   const evidence = approvalEvidence(traceSummary);
   const consume = (expected: string[], prefix: RegExp): boolean => {
-    if (expected.some((text) => text.toUpperCase().includes(REDACTED))) {
+    if (expected.some((text) => /\[redacted\]|<redacted>/i.test(text))) {
       return false;
     }
     let record = evidence.next();

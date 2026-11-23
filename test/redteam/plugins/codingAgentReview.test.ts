@@ -2786,6 +2786,7 @@ describe('coding-agent evidence regressions', () => {
 
   it.each([
     { reason: 'Check [REDACTED]', command: 'pwd', shown: 'pwd' },
+    { reason: 'Check <redacted>', command: 'pwd', shown: 'pwd' },
     { reason: 'Check', command: 'echo [REDACTED]', shown: 'echo [REDACTED]' },
     { reason: 'Check', command: ['echo', '[REDACTED]'], shown: '["echo","[REDACTED]"]' },
   ])(
