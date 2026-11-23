@@ -439,6 +439,35 @@ describe('eval routes', () => {
     expect(replay.status).toBe(400);
   });
 
+  it('refuses an unverifiable Azure destination even when no environment was saved', async () => {
+    const { calls, first, other } = await replayTargets();
+    vi.stubEnv('AZURE_API_KEY', 'synthetic-azure-key');
+    vi.stubEnv('AZURE_API_BASE_URL', 'http://' + first);
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    const saved = await evaluateWithSource(
+      {
+        providers: [{ id: 'azure:chat:fixture' }],
+        prompts: ['original'],
+        tests: [{ vars: {} }],
+        writeLatestResults: true,
+        sharing: false,
+      },
+      { cache: false, showProgressBar: false, eventSource: 'library' },
+    );
+    testEvalIds.add(saved.id);
+    expect(calls.splice(0).map(({ host }) => host)).toEqual([first]);
+    vi.stubEnv('AZURE_API_BASE_URL', 'http://' + other);
+    const response = await api.post('/api/eval/replay').send({
+      evaluationId: saved.id,
+      promptIndex: 0,
+      prompt: 'edited',
+    });
+    expect(calls).toEqual([]);
+    expect(response.status).toBe(400);
+  });
+
   it('does not reload a live Responses instance as Chat using its display ID', async () => {
     const { calls, first, other } = await replayTargets();
     const providers = await loadApiProviders(['openai:responses:gpt-4.1', 'echo'], {

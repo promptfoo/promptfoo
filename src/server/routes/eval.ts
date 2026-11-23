@@ -13,6 +13,7 @@ import {
   getNamedOpenAiTextId,
   getProviderEndpointAliases,
   getSafeProviderId,
+  isPackagePath,
   isWebSocketProviderPath,
 } from '../../providers/index';
 import { EvalSchemas } from '../../types/api/eval';
@@ -1166,6 +1167,11 @@ function verifyModelEndpoint(
     : path.startsWith('anthropic:')
       ? ['ANTHROPIC_BASE_URL']
       : getProviderEndpointAliases(path);
+  // An unknown transport can read an ambient destination even without any
+  // saved settings. Its unchanged display ID is insufficient evidence.
+  if (!aliases.length) {
+    throw new Error('Unknown model destination');
+  }
   const explicit = getNamedOpenAiTextId(path) && (settings.apiHost || settings.apiBaseUrl);
   if (explicit) {
     return; // Explicit templates are checked against saved bindings below.
@@ -1314,12 +1320,15 @@ function validReplayInput(prompt: string, variables: Record<string, unknown> = {
     !TEMPLATE_MARKER.test(value) &&
     !/\\u00(?:7b|25|23)|^(?:file|exec|portkey|langfuse|helicone):/i.test(value.trimStart());
   for (const [name, value] of Object.entries(variables)) {
-    if (
-      name === 'env' ||
-      name.startsWith('__') ||
-      Object.hasOwn(Object.prototype, name) ||
-      (typeof value === 'string' ? !literal(value) : value !== null && typeof value === 'object')
-    ) {
+    if (name === 'env' || name.startsWith('__') || Object.hasOwn(Object.prototype, name)) {
+      return false;
+    }
+    // renderPrompt loads variable sources even when the prompt never references them.
+    if (typeof value === 'string') {
+      if (!literal(value) || isPackagePath(value.trimStart())) {
+        return false;
+      }
+    } else if (value !== null && typeof value === 'object') {
       return false;
     }
   }

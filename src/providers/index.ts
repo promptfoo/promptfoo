@@ -572,6 +572,7 @@ export function getProviderIds(providerPaths: ProvidersConfig): string[] {
 }
 
 export { EchoProvider } from './echo';
+export { isPackagePath } from './packageParser';
 export { getSafeProviderId } from './providerLogging';
 export {
   getNamedOpenAiTextId,

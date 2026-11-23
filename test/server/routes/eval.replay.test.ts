@@ -102,6 +102,23 @@ describe('POST /api/eval/replay provider boundary', () => {
     });
 
   it.each([
+    ['{{ question }}', 'package:fixture:source'],
+    ['edited', 'package:fixture:source'],
+    ['edited', ' \npackage:@scope/fixture:exports.source'],
+  ])('rejects a package variable before provider lookup for %s', async (prompt, question) => {
+    storedConfig(['echo']);
+    const response = await api.post('/api/eval/replay').send({
+      evaluationId: 'stored-eval',
+      promptIndex: 0,
+      prompt,
+      variables: { question },
+    });
+    expect(response.status).toBe(400);
+    expect(Eval.findById).not.toHaveBeenCalled();
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it.each([
     'openai:codex-security',
     'openai:codex-security:model',
     { id: 'openai:codex-security', label: 'Custom label' },
@@ -211,6 +228,17 @@ describe('POST /api/eval/replay provider boundary', () => {
     recordedTarget(id);
     expect((await replay(0, 0)).status).toBe(400);
     expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('refuses an unknown transport only when its column is selected', async () => {
+    const id = 'azure:chat:fixture';
+    storedConfig([{ id }, 'echo']);
+    recordedTarget(id);
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+    recordedTarget('echo');
+    expect((await replay(0, 1)).status).toBe(200);
+    expect(evaluate.mock.calls[0][0].providers).toEqual(['echo']);
   });
 
   it('rejects overlapping named OpenAI endpoints and shorthand IDs', async () => {
