@@ -350,17 +350,19 @@ describe('native red team setup', () => {
       expect(mockedDoRedteamRun).not.toHaveBeenCalled();
     });
 
-    it('passes the requested probe message separately from the scan config', async () => {
-      const testPrompt = 'Can you check my order?';
-      mockedFetchWithProxy.mockResolvedValueOnce(
-        Response.json({ message: 'Testing', testTarget: 0, testPrompt }),
-      );
-      const result = await ask({ config, testContext: { ...testContext, customPrompt: true } });
-      expect(result.body).toMatchObject({ testTarget: 0, testPrompt });
-      expect(result.body.config).toBeUndefined();
-      expect(sent(0).testContext.customPrompt).toBe(true);
-      expect(mockedDoRedteamRun).not.toHaveBeenCalled();
-    });
+    it.each(['Can you check my order?', ''])(
+      'passes probe input %j separately from the scan config',
+      async (testPrompt) => {
+        mockedFetchWithProxy.mockResolvedValueOnce(
+          Response.json({ message: 'Testing', testTarget: 0, testPrompt }),
+        );
+        const result = await ask({ config, testContext: { ...testContext, customPrompt: true } });
+        expect(result.body).toMatchObject({ testTarget: 0, testPrompt });
+        expect(result.body.config).toBeUndefined();
+        expect(sent(0).testContext.customPrompt).toBe(true);
+        expect(mockedDoRedteamRun).not.toHaveBeenCalled();
+      },
+    );
 
     it.each([
       { testContext },

@@ -301,7 +301,7 @@ function SetupActions({
           id="connection-test-disclosure"
           className="mt-1.5 max-h-[12dvh] overflow-auto text-xs text-muted-foreground wrap-anywhere"
         >
-          Sends one {selected.method} to {selected.url}
+          The Test connection button sends one {selected.method} to {selected.url}
           {headers.length > 0 && ' using ' + headers.join(', ')}. Uses “Hello” for{' '}
           <code>{'{{prompt}}'}</code> if present.
         </p>

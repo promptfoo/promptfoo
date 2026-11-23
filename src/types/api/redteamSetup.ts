@@ -388,7 +388,7 @@ export const HostedSetupReplySchema = z.strictObject({
   message: z.string().trim().min(1).max(4000),
   config: SetupConfigSchema.optional(),
   testTarget: z.int().nonnegative().optional(),
-  testPrompt: z.string().min(1).max(16000).optional(),
+  testPrompt: z.string().max(16000).optional(),
 });
 
 export const RedteamSetupReplySchema = HostedSetupReplySchema.extend({

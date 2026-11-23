@@ -4951,7 +4951,7 @@
                     "message": { "type": "string", "minLength": 1, "maxLength": 4000 },
                     "config": { "type": "object", "additionalProperties": {} },
                     "testTarget": { "type": "integer", "minimum": 0 },
-                    "testPrompt": { "type": "string", "minLength": 1, "maxLength": 16000 },
+                    "testPrompt": { "type": "string", "maxLength": 16000 },
                     "runnable": { "type": "boolean" },
                     "runIssue": { "type": "string" },
                     "testableTargets": {
@@ -5237,7 +5237,7 @@
                     "type": "object",
                     "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 16000 }
                   },
-                  "testPrompt": { "type": "string", "minLength": 1, "maxLength": 16000 }
+                  "testPrompt": { "type": "string", "maxLength": 16000 }
                 },
                 "required": ["id", "config"],
                 "additionalProperties": false
