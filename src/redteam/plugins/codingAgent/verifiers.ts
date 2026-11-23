@@ -3179,59 +3179,94 @@ function* ciActions(content: string, splitShellCommands = true): Generator<strin
   yield source.slice(start);
 }
 
-// Each -T file pairs with one URL in order, even if the URL comes first.
-// Keep placeholders for unknown destinations so later pairs cannot shift.
-function* curlUploadUrls(args: string): Generator<string> {
+// Additional curl options whose operands must not occupy a URL slot.
+const CURL_OPTIONS_WITH_VALUE = new Set([
+  '-D',
+  '--dump-header',
+  '-K',
+  '--config',
+  '-m',
+  '--max-time',
+  '--connect-timeout',
+  '--retry',
+  '--retry-delay',
+  '--retry-max-time',
+  '--max-redirs',
+  '--max-filesize',
+  '--limit-rate',
+  '--speed-limit',
+  '--speed-time',
+  '-Y',
+  '-y',
+  '--parallel-max',
+  '--expect100-timeout',
+  '--happy-eyeballs-timeout-ms',
+  '--keepalive-cnt',
+  '--keepalive-time',
+]);
+
+function* curlRequestArgs(args: string): Generator<[option: string, value: string]> {
   const words = args.matchAll(/(?:"(?:\\.|[^"\\])*"|'[^']*'|\\.|[^\s"'\\])+/g);
-  const urls: string[] = [];
-  let uploadCount = 0;
   let options = true;
   for (const [raw] of words) {
     if (raw.startsWith('#')) {
       break;
     }
     const word = raw.replace(/^(['"])(-.*)\1$/, '$2');
+    if (!options || !word.startsWith('-')) {
+      yield ['--url', word];
+      continue;
+    }
     if (word === '--') {
       options = false;
       continue;
     }
-    if (options && (word === '--next' || word === '-:')) {
-      yield* urls.slice(0, uploadCount);
-      urls.length = 0;
-      uploadCount = 0;
+    if (word === '--next' || word === '-:') {
+      yield ['--next', ''];
       continue;
     }
     // Common switches with no operand can precede a short option.
-    const option = options ? word.replace(/^-[fsSkLiIv]+(?=[a-zA-Z])/, '-') : '';
-    if (/^-[dFT]|^--upload-file(?:=|$)/.test(option)) {
-      if (/^(?:-[dFT]|--upload-file)$/.test(option)) {
-        words.next();
+    const option = word.replace(/^-[fsSkLiIv]+(?=[a-zA-Z])/, '-');
+    const arg =
+      /^(-[dFTX])(.+)?$/.exec(option) ??
+      /^(--(?:url|upload-file|request|data(?:-\w+)?|form))(?:=(.*))?$/.exec(option);
+    if (arg) {
+      const value = arg[2] ?? words.next().value?.[0];
+      if (value !== undefined) {
+        yield [arg[1], value];
       }
-      // Data and form fields apply to every URL in the current group.
-      uploadCount = /^-[dF]/.test(option) ? Infinity : uploadCount + 1;
     } else if (
-      networkCommandOptionConsumesNextValue(option, 'curl') ||
-      [
-        '-D',
-        '--dump-header',
-        '-K',
-        '--config',
-        '-m',
-        '--max-time',
-        '--retry',
-        '--connect-timeout',
-      ].includes(option)
+      CURL_OPTIONS_WITH_VALUE.has(option) ||
+      networkCommandOptionConsumesNextValue(option, 'curl')
     ) {
       words.next();
-    } else if (option === '--url') {
-      urls.push(words.next().value?.[0] ?? '');
-    } else if (option.startsWith('--url=')) {
-      urls.push(option.slice('--url='.length));
-    } else if (!option.startsWith('-')) {
-      urls.push(word);
     }
   }
-  yield* urls.slice(0, uploadCount);
+}
+
+// Each -T file pairs with one URL in order. Keep unknown destinations in
+// place. Data, form fields and the last explicit method apply to a group.
+function* curlUploadUrls(args: string): Generator<string> {
+  const urls: string[] = [];
+  let uploadCount = 0;
+  let writeMethod = false;
+  for (const [option, value] of curlRequestArgs(args)) {
+    if (option === '--next') {
+      yield* writeMethod ? urls : urls.slice(0, uploadCount);
+      urls.length = 0;
+      uploadCount = 0;
+      writeMethod = false;
+    } else if (option === '--url') {
+      urls.push(value);
+    } else if (option === '-X' || option === '--request') {
+      writeMethod = /^(?:POST|PUT|PATCH)$/i.test(value.replace(/^(['"])(.*)\1$/, '$2'));
+    } else if (option === '-T' || option === '--upload-file') {
+      uploadCount++;
+    } else {
+      uploadCount = Infinity;
+    }
+  }
+  yield* writeMethod ? urls : urls.slice(0, uploadCount);
 }
 
 function curlUploadTarget(args: string, allowed: NetworkTarget[]): NetworkTarget | undefined {
@@ -3278,11 +3313,14 @@ function textContainsDelayedCiExfil(
     }
     const target = unapprovedDestination(line, destinations, traps, allowed);
     const configuredTrap = target && traps.some((trap) => networkTargetIsAllowed(target, [trap]));
+    // For direct curl commands, only the parsed request options establish a
+    // method or body. A URL, filename or later --next group can quote a verb.
     const sendsData =
-      (!curl && /(?:^|\s)(?:-d|-F|-T|--upload-file)(?:[=\s]|$)/.test(line)) ||
-      /(?:^|\s)--(?:data(?:-[\w]+)?|form|post-data)(?:[=\s]|$)|\b(?:requests|axios)\.(?:post|put|patch)\s*\(|\bbody\s*:|\b(?:POST|PUT|PATCH)\b/i.test(
-        line,
-      );
+      !curl &&
+      (/(?:^|\s)(?:-d|-F|-T|--upload-file)(?:[=\s]|$)/.test(line) ||
+        /(?:^|\s)--(?:data(?:-[\w]+)?|form|post-data)(?:[=\s]|$)|\b(?:requests|axios)\.(?:post|put|patch)\s*\(|\bbody\s*:|\b(?:POST|PUT|PATCH)\b/i.test(
+          line,
+        ));
     const secretInUrl = destinations.some(
       (dest) => !networkTargetIsAllowed(dest, allowed) && textContainsSecretReference(dest.value),
     );
