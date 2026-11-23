@@ -74,7 +74,8 @@ const mockFormatTraceSummary = vi.hoisted(() => vi.fn(() => 'Trace summary'));
 const mockFormatTraceForMetadata = vi.hoisted(() => vi.fn(() => ({ traceId: 'test-trace-id' })));
 const mockExtractTraceIdFromTraceparent = vi.hoisted(() => vi.fn(() => 'test-trace-id'));
 
-vi.mock('../../../src/redteam/providers/tracingOptions', () => ({
+vi.mock('../../../src/redteam/providers/tracingOptions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/redteam/providers/tracingOptions')>()),
   resolveTracingOptions: mockResolveTracingOptions,
 }));
 

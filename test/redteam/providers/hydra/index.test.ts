@@ -102,7 +102,8 @@ vi.mock('../../../../src/redteam/shared/runtimeTransform', async (importOriginal
 });
 
 // Tracing module mocks
-vi.mock('../../../../src/redteam/providers/tracingOptions', () => ({
+vi.mock('../../../../src/redteam/providers/tracingOptions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/redteam/providers/tracingOptions')>()),
   resolveTracingOptions: mockResolveTracingOptions,
 }));
 
