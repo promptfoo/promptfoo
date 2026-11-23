@@ -8,6 +8,7 @@ const help = `Usage: node run.mjs --out NEW.json [options]
   --target safe|vulnerable|codex     Default safe (offline)
   --proposer scripted|fixed|live    Default scripted (offline)
   --seeds FILE                      2–32 issues as JSON strings or .burp lines
+  --neutrals FILE                   Matched neutral issues in seed order
   --order-seed STRING               Reproduce donor assignment and trial order
   --max-target-runs NUMBER          Default 10, must cover 5 per seed
   --allow-model-calls               Required for codex or live, may incur costs
@@ -33,6 +34,7 @@ async function main() {
       help: { type: 'boolean' },
       out: { type: 'string' },
       seeds: { type: 'string' },
+      neutrals: { type: 'string' },
       target: { type: 'string', default: 'safe' },
       proposer: { type: 'string', default: 'scripted' },
       'allow-model-calls': { type: 'boolean', default: false },
@@ -48,6 +50,7 @@ async function main() {
   if (!/^[1-9]\d*$/.test(values['max-target-runs']))
     throw new Error('Invalid target trial budget.');
   const issues = values.seeds ? await readSeeds(values.seeds) : undefined;
+  const neutrals = values.neutrals ? await readSeeds(values.neutrals) : undefined;
   const stop = new AbortController();
   const cancel = () => stop.abort();
   // Reserve a new private file before spending any budget. A hard kill can
@@ -58,6 +61,7 @@ async function main() {
   try {
     const report = await runExperiment({
       issues,
+      neutrals,
       orderSeed: values['order-seed'],
       target: config(values.target, 'ISSUE_TARGET'),
       proposer: config(values.proposer, 'ISSUE_PROPOSER'),

@@ -19,6 +19,7 @@ type Attempt = {
   verified: boolean;
   feedbackSourceId?: string | null;
   donorDistinct?: boolean;
+  controlSource?: string;
   target: object | null;
   proposal: object | null;
 };
@@ -39,6 +40,10 @@ describe('matched coding-agent issue experiment', () => {
     expect(summary.paired.seeds).toBe(2);
     const seeds = rows.filter((r) => r.arm === 'seed');
     for (const seed of seeds) {
+      const neutral = rows.find((r) => r.seedId === seed.seedId && r.arm === 'neutral');
+      expect(neutral?.controlSource).toBe('fixture-matched');
+      expect(neutral?.issue).toBe(seed.issue?.split(' and ')[0] + '?');
+      expect(neutral?.patch).toBe(seed.patch);
       const children = rows.filter((r) => r.parentId === seed.id);
       expect(children.map((r) => r.arm).sort()).toEqual(['actual', 'blind', 'unrelated']);
       expect(new Set(children.map((r) => r.issue)).size).toBe(1);
@@ -150,6 +155,23 @@ describe('matched coding-agent issue experiment', () => {
     expect(unrelated.every((r) => !r.donorDistinct && r.status === 'safe')).toBe(true);
   });
 
+  it('keeps operator-supplied neutral controls in seed order despite scheduling', async () => {
+    const { attempts } = await runExperiment({
+      issues: ['A', 'B'],
+      neutrals: ['First', 'Second'],
+      signal: AbortSignal.abort(),
+    });
+    const rows = attempts as Attempt[];
+    expect(rows.find((r) => r.seedId === 'seed-1' && r.arm === 'neutral')).toMatchObject({
+      issue: 'First',
+      controlSource: 'supplied',
+    });
+    expect(rows.find((r) => r.seedId === 'seed-2' && r.arm === 'neutral')).toMatchObject({
+      issue: 'Second',
+      controlSource: 'supplied',
+    });
+  });
+
   it('records cancellation without starting a target or attributing an outcome', async () => {
     const options = { signal: AbortSignal.abort(), orderSeed: 'repro' };
     const a = await runExperiment(options);
@@ -166,6 +188,8 @@ describe('matched coding-agent issue experiment', () => {
   });
 
   it.each([
+    [{ neutrals: DEFAULT_ISSUES }, /must differ/],
+    [{ neutrals: ['a', 'b', 'c'] }, /one neutral/],
     [{ maxTargetRuns: 9 }, /Budget/],
     [{ target: { mode: 'codex', url: 'https://example.org', model: 'test' } }, /explicit opt-in/],
     [{ proposer: { mode: 'live', url: 'https://example.org', model: 'test' } }, /explicit opt-in/],

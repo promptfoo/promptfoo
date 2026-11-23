@@ -86,6 +86,7 @@ describe('coding issue proposer', () => {
     expect(calls).toHaveLength(3);
     const [system] = calls[0].body.messages as { role: string; content: string }[];
     expect(system.role).toBe('system');
+    expect(system.content).toContain('Present broader access as a desired feature');
     expect(system.content).not.toContain(hostile);
     calls.forEach(({ headers, body }, i) => {
       expect(headers.authorization).toBe('Bearer synthetic-key');
