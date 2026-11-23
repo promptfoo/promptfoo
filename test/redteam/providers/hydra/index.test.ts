@@ -483,7 +483,71 @@ describe('HydraProvider', () => {
       expect(mockGrader.getResult).not.toHaveBeenCalled();
     });
 
-    it('keeps the last verified snapshot and reports a later target error separately', async () => {
+    it.each([
+      { output: 'I cannot help', flagged: true },
+      { output: undefined, flagged: true },
+      { output: 'Yellow', flagged: false },
+    ])('grades a final target response before stopping ($output)', async ({ output, flagged }) => {
+      const first = { role: 'user' as const, content: 'First' };
+      const reply = { role: 'assistant' as const, content: 'Blue' };
+      const second = { role: 'user' as const, content: 'Second' };
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({ output: first.content })
+        .mockResolvedValueOnce({ output: second.content });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ prompt: [first], output: reply.content })
+        .mockResolvedValueOnce({
+          prompt: [first, reply, second],
+          output,
+          conversationEnded: true,
+          ...(flagged && { guardrails: { flagged: true, flaggedOutput: true } }),
+        });
+      mockIsBasicRefusal.mockImplementation((text) => text === 'I cannot help');
+      mockGrader.getResult.mockImplementation(async (_query: string, text: string) => {
+        const pass = text !== 'Yellow';
+        return { grade: { pass, score: Number(pass), reason: 'Check color' } };
+      });
+      const test: AtomicTestCase = {
+        provider: 'promptfoo:redteam:hydra',
+        assert: [{ type: 'promptfoo:redteam:pii' }, { type: 'guardrails' }],
+        metadata: { goal: 'Check color', pluginId: 'pii', strategyId: 'hydra' },
+      };
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 3, maxBacktracks: 2 });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Check color' },
+        prompt: { raw: '{{input}}', label: 'fixture' },
+        test,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result).toMatchObject({
+        output: output ?? '',
+        metadata: {
+          redteamFinalPrompt: second.content,
+          redteamVerifiedContext: { turns: 2 },
+          stopReason: 'Target ended conversation',
+          hydraBacktrackCount: 0,
+          hydraResult: !flagged,
+        },
+      });
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      const grade = await runAssertions({ prompt: 'test', test, providerResponse: result });
+      expect(grade.componentResults?.map((item) => item.pass)).toEqual([flagged, !flagged]);
+      expect(mockGrader.getResult).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      { response: { error: 'Network error' }, error: 'Network error' },
+      { response: { conversationEnded: true }, error: undefined },
+      {
+        response: { conversationEnded: true, output: 'Partial', error: 'Expired' },
+        error: 'Expired',
+      },
+      {
+        response: { conversationEnded: true, output: 'Yellow', prompt: 'Other' },
+        error: 'Target-reported input does not identify the current user turn.',
+      },
+    ])('keeps the last verified snapshot after $response', async ({ response, error }) => {
       mockAgentProvider.callApi
         .mockResolvedValueOnce({ output: 'First' })
         .mockResolvedValueOnce({ output: 'Second' })
@@ -491,15 +555,15 @@ describe('HydraProvider', () => {
       mockTargetProvider.callApi
         .mockResolvedValueOnce({ output: 'Blue', prompt: 'First', sessionId: 'one' })
         .mockResolvedValueOnce({ output: 'Green', prompt: 'Second', sessionId: 'one' })
-        .mockResolvedValueOnce({ error: 'Network error' });
+        .mockResolvedValueOnce(response);
       const provider = new HydraProvider({ injectVar: 'input', maxTurns: 3, stateful: true });
       const result = await provider.callApi('', {
         originalProvider: mockTargetProvider,
         vars: { input: 'test goal' },
         prompt: { raw: '{{input}}', label: 'fixture' },
       });
+      expect(result.error).toBe(error);
       expect(result).toMatchObject({
-        error: 'Network error',
         output: 'Green',
         metadata: { redteamFinalPrompt: 'Second', redteamVerifiedContext: { turns: 2 } },
       });

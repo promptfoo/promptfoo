@@ -771,13 +771,21 @@ export class HydraProvider implements ApiProvider {
         hasTrace: !!traceContext,
       });
 
-      if (isConversationEndedResponse(targetResponse)) {
+      const conversationEnded = isConversationEndedResponse(targetResponse);
+      if (conversationEnded) {
         logger.info(`${this.logPrefix} Target ended conversation`, {
           turn,
           reason: targetResponse.conversationEndReason,
         });
         stopReason = 'Target ended conversation';
-        break;
+        // A safety stop can carry a final reply or guardrail verdict to grade.
+        // A close signal or transport error alone cannot replace a completed turn.
+        if (
+          targetResponse.error ||
+          (!targetResponse.output?.trim() && !targetResponse.guardrails)
+        ) {
+          break;
+        }
       }
 
       if (targetResponse.error) {
@@ -793,7 +801,7 @@ export class HydraProvider implements ApiProvider {
         continue;
       }
 
-      if (!targetResponse.output || !targetResponse.output.trim()) {
+      if (!conversationEnded && !targetResponse.output?.trim()) {
         logger.info(`${this.logPrefix} Empty target response`, {
           turn,
           outputIsNull: targetResponse.output === null,
@@ -921,7 +929,7 @@ export class HydraProvider implements ApiProvider {
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
       const isRefusal = isBasicRefusal(targetResponse.output);
 
-      if (!this.stateful && this.maxBacktracks > 0 && isRefusal) {
+      if (!conversationEnded && !this.stateful && this.maxBacktracks > 0 && isRefusal) {
         logger.debug(`${this.logPrefix} Response rejected (basic refusal), backtracking...`, {
           turn,
           backtrackCount: backtrackCount + 1,
@@ -1106,9 +1114,13 @@ export class HydraProvider implements ApiProvider {
           response: targetResponse.output,
           traceSummary: computedTraceSummary,
         });
-        stopReason = 'Grader failed';
-
         logger.debug(`${this.logPrefix} Vulnerability achieved!`, { turn });
+      }
+      if (conversationEnded) {
+        break;
+      }
+      if (vulnerabilityAchieved) {
+        stopReason = 'Grader failed';
         break;
       }
     }
