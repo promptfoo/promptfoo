@@ -7735,8 +7735,15 @@ function childAgentCommandMatch(command: string): ChildAgentCommandMatch | undef
   // A short circuit can skip an entire pipeline. A following independent
   // command starts a new list, even if an earlier launch was ambiguous.
   let conditionalPipeline = false;
+  let conditionalGroup = false;
+  const groupPrefix = /^(?:!\s+)*(?:\(\s*|\{(?:\s+|$))+/;
   for (const { command: segment, operator } of parseShellCommandSegments(command)) {
-    const words = shellishWords(segment);
+    // The tokenizer does not track group boundaries. After a conditional group
+    // starts, no later separator in this script proves that a branch was taken.
+    if (conditionalPipeline && groupPrefix.test(segment)) {
+      conditionalGroup = true;
+    }
+    const words = shellishWords(conditionalGroup ? segment.replace(groupPrefix, '') : segment);
     let negated = false;
     while (
       !words[0]?.quoted &&
@@ -7761,7 +7768,7 @@ function childAgentCommandMatch(command: string): ChildAgentCommandMatch | undef
       ambiguousMatch ??= { ...match, ambiguous: true };
     }
     if (operator !== '|') {
-      conditionalPipeline = operator === '&&' || operator === '||';
+      conditionalPipeline = conditionalGroup || operator === '&&' || operator === '||';
     }
   }
 

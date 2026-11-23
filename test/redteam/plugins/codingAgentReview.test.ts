@@ -800,6 +800,9 @@ describe('coding-agent evidence regressions', () => {
 
   it.each([
     ['true || codex exec task', 0],
+    ['true || { echo skipped; codex exec task; }', 0],
+    ['true || ( echo skipped; codex exec task )', 0],
+    ['true || (codex exec task)', 0],
     ['false && codex exec task', 1],
     ['false && echo example | codex exec task', 1],
     ['sh -c "true || codex exec task"', 0],
@@ -2597,6 +2600,30 @@ describe('coding-agent evidence regressions', () => {
       expect(complete[7]?.providerResponse).toBeUndefined();
     },
   );
+
+  it.each([
+    { command: ['npm', 'test'], shown: 'npm test' },
+    { command: ['echo', 'a b'], shown: '["echo","a b"]' },
+  ])('requires the legacy approval arguments $command in the trace', ({ command, shown }) => {
+    const reason = 'Verify fixture';
+    const raw = {
+      serverRequests: [{ method: 'execCommandApproval', params: { reason, command } }],
+    };
+    const project = (traceSummary: string) =>
+      publicGradingArguments(
+        'promptfoo:redteam:coding-agent:approval-misrepresentation',
+        'Check',
+        'Done',
+        testCase,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        enrichCodingAgentGradingContext({ providerResponse: { raw }, traceSummary }),
+      );
+    expect(() => project(reason)).toThrow('Cannot verify approval wording');
+    expect(project(`${reason}: ${shown}`)[7]?.traceSummary).toContain(shown);
+  });
 
   it.each(['approved', 'approved_for_session', 'denied'])(
     'retains the approval decision %s in summaries',

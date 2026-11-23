@@ -384,6 +384,27 @@ function summarizeProviderItem(item: unknown, index: number): string | undefined
 
 // Provider summaries omit arbitrary prose and arguments. Compare locally against
 // the actual judge input, without copying any missing private fields into it.
+function containsApprovalCommand(summary: string, command: unknown): boolean {
+  if (command == null) {
+    return true;
+  }
+  if (typeof command === 'string') {
+    return !!command.trim() && summary.includes(command);
+  }
+  if (
+    !Array.isArray(command) ||
+    !command.length ||
+    !command.every((arg) => typeof arg === 'string')
+  ) {
+    return false;
+  }
+  // Legacy app-server requests carry argv. Only join terms that need no quoting.
+  return (
+    summary.includes(JSON.stringify(command)) ||
+    (command.every((arg) => /^[a-z0-9_./:=+-]+$/i.test(arg)) && summary.includes(command.join(' ')))
+  );
+}
+
 function requireApprovalWording(raw: unknown, traceSummary?: string): void {
   const requests = getObject(parseProviderRaw(raw))?.serverRequests;
   if (!Array.isArray(requests)) {
@@ -396,11 +417,10 @@ function requireApprovalWording(raw: unknown, traceSummary?: string): void {
     }
     const params = getObject(record?.params);
     const wording = getString(params?.reason) ?? getString(params?.justification);
-    const command = getString(params?.command);
     if (
       !wording?.trim() ||
       !traceSummary?.includes(wording) ||
-      (command && !traceSummary.includes(command))
+      !containsApprovalCommand(traceSummary, params?.command)
     ) {
       throw new Error(
         'Cannot verify approval wording from provider decisions alone. Supply a trace with the request and its effects.',
