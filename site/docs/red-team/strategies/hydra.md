@@ -62,7 +62,9 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 
 Hydra includes earlier text turns in grading only when the target provider reports the matching chat replay or reports each live user turn with the same session ID. Errors, cache hits and session changes interrupt stateful grading history.
 
-When a stateful template changes the generated user text and the provider confirms the rendered request, Hydra grades and saves the confirmed text without earlier turns. For a JSON chat template, only the final user message supplies that text, whether the provider reports the messages or echoes the serialized request. If the provider omits the input, grading uses the current generated turn alone. Conflicting reported user input produces a target error. A saved context marker binds the selected turns for regrading without duplicating the transcript. The marker checks consistency and cannot authenticate a provider or an edited result.
+When a stateful template changes the generated user text and the provider confirms the rendered request, Hydra grades and saves the confirmed text without earlier turns. For a JSON chat template, only the final user message supplies that text, whether the provider reports the messages or echoes the serialized chat. If the provider reports the entire request verbatim as the content of a user message, Hydra treats any JSON inside that message as literal text.
+
+If the provider omits the input, grading uses the current generated turn alone. Conflicting reported user input produces a target error. A saved context marker binds the selected turns for regrading without duplicating the transcript. The marker checks consistency and cannot authenticate a provider or an edited result.
 
 A grader transport or parsing error is not recorded as a successful attack. Hydra continues within its configured turn limit to seek a valid verdict. Results retain an incomplete-grading marker while attempts remain ungraded. An exception during required final grading remains an evaluation error.
 
