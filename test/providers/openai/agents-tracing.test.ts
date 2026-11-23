@@ -897,11 +897,29 @@ describe('OTLPTracingExporter', () => {
       flattenedGroup: 'curl -sSHAuthorization:Bearer opaque/lost-quotes',
       publicCommand,
     });
-    expect(attributes.cmd).toBe('curl -H<redacted> https://host');
+    expect(attributes.cmd).toBe('<redacted>');
     expect(attributes.command).toBe(attributes.cmd);
     expect(attributes.grouped).toBe('curl -fsSLH<redacted> https://host');
     expect(attributes.proxy).toBe('curl --proxy-header=<redacted> https://host');
     expect(attributes.publicCommand).toBe(publicCommand);
+  });
+
+  it.each(formats)('withholds curl headers with ambiguous boundaries in %s', async (format) => {
+    const { attributes } = await exportCustomData(format, {
+      cmd: 'curl -H Authorization:Negotiate opaque/ticket https://host',
+      attached: 'curl -sSHAuthorization:NTLM opaque/ticket',
+      spaced: 'curl -HAuthorization :opaque/value',
+      custom: 'curl --proxy-header=Proxy-Authorization:Custom opaque/ticket',
+      cookies: 'curl -H Cookie:first=one; second=opaque/cookie',
+      partial: 'curl -H"Cookie:"first=one; second=opaque/cookie',
+      escaped: 'curl -HCookie:first=one\\; second=opaque/cookie',
+      embedded: 'curl -HAuthorization:one\\ curl; second=opaque/tail',
+      intact: 'curl -H"Cookie:first=one; second=opaque/cookie" https://host',
+    });
+    expect(attributes).toMatchObject(
+      redacted('cmd', 'command', 'attached', 'custom', 'cookies', 'partial', 'escaped', 'embedded'),
+    );
+    expect(attributes.intact).toBe('curl -H<redacted> https://host');
   });
 
   it.each(formats)('masks curl header operands in native arguments in %s', async (format) => {
