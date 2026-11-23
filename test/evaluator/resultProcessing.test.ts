@@ -42,6 +42,7 @@ describe('model-independent result processing', () => {
     for (const error of [
       'data/password must match pattern "^opaque$"',
       'SyntaxError: Invalid regular expression: /[opaque/u: Unterminated character class',
+      'Error: invalid anchor "quoted"\nBearer opaque %FF"',
       "data must have required property 'https://example.test/?token=opaque'",
       'YAMLException: bad indentation (2:11)\n\n 2 | password: opaque',
       'bad indentation (2:11)\n\n 2 | password: opaque',

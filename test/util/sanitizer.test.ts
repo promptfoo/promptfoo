@@ -600,6 +600,24 @@ describe('assertion schema projection', () => {
     expect(validate({ item: 'x' })).toBe(false);
   });
 
+  it('keeps Windows placeholders distinct in public literals and masks credential values', () => {
+    const choices = ['%DATE%', '%CD%'];
+    const value = {
+      type: 'object',
+      properties: {
+        command: { enum: choices, default: choices[0] },
+        password: { enum: choices },
+      },
+    };
+    const safe = project(value);
+    expect(safe.properties.command).toEqual(value.properties.command);
+    expect(safe.properties.password.enum).toEqual(['[REDACTED]']);
+    const validate = new Ajv().compile(safe);
+    for (const command of choices) {
+      expect(validate({ command })).toBe(true);
+    }
+  });
+
   it('deduplicates masked enum values by JSON equality and redirects shifted pointers', () => {
     const value = {
       type: 'object',

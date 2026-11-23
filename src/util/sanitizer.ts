@@ -1610,6 +1610,11 @@ export class SchemaDiagnostics {
   }
 
   private sanitizeCompilationError(message: string): string {
+    // AJV quotes an invalid $anchor or $dynamicAnchor without escaping it.
+    // The rejected value can span lines and may be absent from older schemas.
+    if (message.includes('invalid anchor "')) {
+      return 'Invalid JSON Schema anchor';
+    }
     if (message.includes('Invalid regular expression: /')) {
       message = message.replace(
         /(Invalid regular expression: \/)(.*)(\/[a-z]*: )/s,
@@ -1766,6 +1771,11 @@ function schemaDataProjector(context?: {
     const renamed = context?.names.get(value);
     if (renamed !== undefined) {
       return renamed;
+    }
+    // Complete Windows environment placeholders in public literals are
+    // ordinary text. Their first two letters can look like an encoded byte.
+    if ((key === '' || SCHEMA_LITERALS.has(key)) && /^%[a-z_]\w*%$/i.test(value)) {
+      return value;
     }
     const parsed = jsonData(value);
     if (parsed) {

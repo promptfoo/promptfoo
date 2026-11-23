@@ -101,6 +101,8 @@ describe('json utilities', () => {
     it.each([
       { properties: { password: { type: 'string', pattern: '[opaque' } } },
       { $ref: 'https://example.test/missing?token=opaque' },
+      { $defs: { item: { $anchor: 'Bearer opaque %FF' } } },
+      { $defs: { item: { $dynamicAnchor: '"\nBearer opaque %FF' } } },
       { type: 'string', format: 'https://example.test/?token=opaque' },
       {
         properties: { 'https://example.test/?token=opaque': { type: 'string', format: 'unknown' } },
