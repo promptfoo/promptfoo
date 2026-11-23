@@ -602,19 +602,26 @@ describe('assertion schema projection', () => {
 
   it('keeps Windows placeholders distinct in public literals and masks credential values', () => {
     const choices = ['%DATE%', '%CD%'];
+    const sample = { cmd: choices[0], password: choices[1] };
     const value = {
       type: 'object',
       properties: {
         command: { enum: choices, default: choices[0] },
+        nested: { enum: choices.map((cmd) => ({ cmd })) },
         password: { enum: choices },
       },
+      examples: [sample, JSON.stringify(sample)],
     };
     const safe = project(value);
+    expect(JSON.parse(project(JSON.stringify(value)))).toEqual(safe);
     expect(safe.properties.command).toEqual(value.properties.command);
+    expect(safe.properties.nested).toEqual(value.properties.nested);
     expect(safe.properties.password.enum).toEqual(['[REDACTED]']);
+    const masked = { ...sample, password: '[REDACTED]' };
+    expect(safe.examples).toEqual([masked, JSON.stringify(masked)]);
     const validate = new Ajv().compile(safe);
     for (const command of choices) {
-      expect(validate({ command })).toBe(true);
+      expect(validate({ command, nested: { cmd: command } })).toBe(true);
     }
   });
 

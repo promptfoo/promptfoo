@@ -1772,17 +1772,14 @@ function schemaDataProjector(context?: {
     if (renamed !== undefined) {
       return renamed;
     }
-    // Complete Windows environment placeholders in public literals are
-    // ordinary text. Their first two letters can look like an encoded byte.
-    if ((key === '' || SCHEMA_LITERALS.has(key)) && /^%[a-z_]\w*%$/i.test(value)) {
-      return value;
-    }
     const parsed = jsonData(value);
     if (parsed) {
       const safe = JSON.stringify(projectData(parsed, key));
       return projectedJsonText(value, parsed, safe);
     }
-    const safeName = safeSchemaName(value);
+    // A Windows placeholder can look like an encoded byte. Preserve its
+    // spelling while still applying field-level sanitization below.
+    const safeName = /^%[a-z_]\w*%$/i.test(value) ? value : safeSchemaName(value);
     if (safeName !== value) {
       return safeName;
     }
