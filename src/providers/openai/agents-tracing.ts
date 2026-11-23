@@ -1024,10 +1024,16 @@ function hasCredentialNamedPayload(value: string): boolean {
     /^content-disposition:[^\r\n]*(?:\r?\n[ \t][^\r\n]*)*/gim,
   )) {
     const unfolded = header.replace(/\r?\n[ \t]+/g, ' ');
-    for (const [, quoted, unquoted] of unfolded.matchAll(
-      /\bname\s*=\s*(?:["']([^"']*)["']|([^\s;]+))/gi,
+    // Consume complete parameters. A quoted filename can itself contain
+    // semicolons, escaped quotes or the text "name=".
+    for (const [, parameter, double, single, bare] of unfolded.matchAll(
+      /[;\s]([^\s;=]+)\s*=\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^\s;]+))/g,
     )) {
-      if (isCredentialAttributeKey(quoted ?? unquoted)) {
+      const name = double ?? single ?? bare;
+      if (
+        parameter.toLowerCase() === 'name' &&
+        (isCredentialAttributeKey(name) || isCredentialAttributeKey(name.replace(/\\(.)/g, '$1')))
+      ) {
         return true;
       }
     }
@@ -1199,7 +1205,7 @@ function checkCredentialAssignments(value: string): string {
 
 function literalKeySegment(key: string): string {
   // Resolve static TOML and JavaScript key spellings before classification.
-  // Do this only within a key, never across a comment or value delimiter.
+  // Use decoded spellings only to detect sensitive fields.
   return key
     .replace(/\\(?:\r\n|[\r\n\u2028\u2029])/g, '')
     .replace(
@@ -1216,6 +1222,8 @@ function hasCredentialTable(value: string): boolean {
   // TOML literal strings and JavaScript disagree about escaped apostrophes.
   // Check both readings so neither can hide a neighboring property.
   return (
+    // A containing string or Markdown fence can hide a complete literal object.
+    hasPrivateJwk(literalKeySegment(value).replace(/[\\"'`\]]/g, '')) ||
     hasCredentialPath(value) ||
     (value.includes("\\'") && hasCredentialPath(value.replace(/\\'/g, '_')))
   );
@@ -1235,19 +1243,20 @@ function hasCredentialLabel(names: string): boolean {
   return false;
 }
 
-// In source text a private parameter may precede its JWK type. Scan normalized
-// names twice and withhold ambiguous records without interpreting their values.
+// Comments and quoting can separate a JWK label from its type or parameters.
+// Withhold ambiguous text containing all three. The field set stays bounded
+// by the known private parameters even for a large key set.
 function hasPrivateJwk(names: string): boolean {
-  if (!names.includes('kty')) {
+  if (!/\bkty\s*(?:[:=]|\/[*/])/.test(names)) {
     return false;
   }
   const fields = new Set<string>();
-  for (const [, type] of names.matchAll(/\bkty[:=]\s*(\w+)/g)) {
+  for (const [type] of names.matchAll(/\w+/g)) {
     for (const field of PRIVATE_JWK_FIELDS.get(type) ?? []) {
       fields.add(field);
     }
   }
-  for (const [, field] of names.matchAll(/\b(\w+)[:=]/g)) {
+  for (const [, field] of names.matchAll(/\b(\w+)\s*(?:[:=]|\/[*/])/g)) {
     if (fields.has(field)) {
       return true;
     }

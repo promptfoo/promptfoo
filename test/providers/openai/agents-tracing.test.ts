@@ -1762,6 +1762,10 @@ describe('OTLPTracingExporter', () => {
               '\r\n--form\r\nContent-Disposition: form-data;\r\n\tname=\r\n "api_key"\r\n\r\nopaque/multiple',
             duplicate:
               'Content-Disposition: form-data; name=region;\n name=token\n\nopaque/duplicate',
+            filename:
+              'Content-Disposition: form-data; filename="name=";\r\n name="password"\r\n\r\nopaque/file',
+            ordinary:
+              'Content-Disposition: form-data; filename="name=";\r\n name="region"\r\n\r\nwest',
           },
         },
       ]);
@@ -1770,6 +1774,9 @@ describe('OTLPTracingExporter', () => {
         'tool.output': '<redacted>',
         'trace.metadata.multiple': '<redacted>',
         'trace.metadata.duplicate': '<redacted>',
+        'trace.metadata.filename': '<redacted>',
+        'trace.metadata.ordinary':
+          'Content-Disposition: form-data; filename="name=";\r\n name="region"\r\n\r\nwest',
       });
     },
   );
@@ -1782,11 +1789,15 @@ describe('OTLPTracingExporter', () => {
       "const keys = [{ kty:// type\n 'EC', ['d']: 'opaque/scalar' }];",
       String.raw`{ 'kt\u0079': 'OKP', '\x64': 'opaque/private' }`,
       String.raw`Object.freeze({ k: 'opaque/wrapped', kt\u0079: 'oct' })`,
+      "const s = `JWK: ${JSON.stringify({ kty: 'oct', k: 'opaque/template' })}`;",
+      "```js\nconst jwk = { kty: /* type */ 'RSA', d: 'opaque/fenced' };\n```",
+      String.raw`const example = "const jwk = { \"kty\": \"oct\", \"k\": \"opaque/quoted\" }";`,
     ];
     const publicText = [
       "export const jwk = { kty: 'RSA', n: 'shown', e: 'AQAB' };",
       "const jwk = { kty: 'EC', x: 'shown', y: 'public' };",
       "const point = { k: 'shown', d: 'day', p: 1, q: 2 };",
+      "```js\nconst jwk = { kty: 'RSA', n: 'shown', e: 'AQAB' };\n```",
     ];
     const payload = await exportSpans(
       format,
