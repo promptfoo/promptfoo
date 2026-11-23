@@ -3487,8 +3487,14 @@ function curlWord(word: string) {
   )) {
     const piece = double ?? single ?? bare;
     literal += piece;
-    expansions +=
-      single === undefined ? piece.replace(/\\\\/g, ' ') : piece.replace(/\$(?!\{\{)|[\\`]/g, ' ');
+    if (single === undefined) {
+      // A trailing dollar is literal. An unbraced variable's name ends
+      // here even when the next piece starts with a word character.
+      const active = piece.replace(/\\\\|\$$/g, ' ');
+      expansions += /\$\w+$/.test(active) ? active + ' ' : active;
+    } else {
+      expansions += piece.replace(/\$(?!\{\{)|[\\`]/g, ' ');
+    }
   }
   return { literal, expansions };
 }
