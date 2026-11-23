@@ -348,7 +348,7 @@ describe('evaluateOptions behavior', () => {
           { config: [watchConfigPath], table: false, write: false, watch: true },
           {},
           undefined,
-          { timeoutMs: callerTimeoutMs, eventSource: 'mcp' },
+          { timeoutMs: callerTimeoutMs, defaultTimeoutMs: 30000, eventSource: 'mcp' },
         );
         expect(evaluateMock.mock.calls.at(-1)?.[2].timeoutMs).toBe(callerTimeoutMs ?? 1000);
 
@@ -360,6 +360,10 @@ describe('evaluateOptions behavior', () => {
 
         expect(evaluateMock).toHaveBeenCalledTimes(2);
         expect(evaluateMock.mock.calls.at(-1)?.[2].timeoutMs).toBe(callerTimeoutMs ?? 60000);
+
+        fs.writeFileSync(watchConfigPath, yaml.dump({ ...watchConfig, evaluateOptions: {} }));
+        await onChange(watchConfigPath);
+        expect(evaluateMock.mock.calls.at(-1)?.[2].timeoutMs).toBe(callerTimeoutMs ?? 30000);
       },
     );
   });

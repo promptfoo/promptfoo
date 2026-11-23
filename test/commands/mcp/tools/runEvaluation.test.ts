@@ -81,13 +81,7 @@ describe('runEvaluation tool', () => {
 
   it.each([undefined, 7500])('forwards the per-test timeout (%s)', async (timeoutMs) => {
     const { doEval } = await import('../../../../src/node/doEval');
-    const { registerRunEvaluationTool } = await import(
-      '../../../../src/commands/mcp/tools/runEvaluation'
-    );
-    const tool = vi.fn();
-    registerRunEvaluationTool({ tool } as unknown as McpServer);
-    const handler = tool.mock.calls[0][2];
-
+    const { handler } = await getRunEvaluationTool();
     const result = await handler({ timeoutMs });
 
     expect(result.isError).toBe(false);
@@ -95,7 +89,7 @@ describe('runEvaluation tool', () => {
       expect.anything(),
       {},
       'promptfooconfig.yaml',
-      expect.objectContaining({ timeoutMs: timeoutMs ?? 30000, eventSource: 'mcp' }),
+      expect.objectContaining({ timeoutMs, defaultTimeoutMs: 30000, eventSource: 'mcp' }),
     );
   });
 
@@ -114,15 +108,13 @@ describe('runEvaluation tool', () => {
     { resultOffset: 0.5 },
     { promptFilter: [] },
     { providerFilter: [] },
+    { promptFilter: '' },
+    { providerFilter: '   ' },
+    { promptFilter: ['Hello', ' \t'] },
+    { providerFilter: ['Target', ''] },
   ])('rejects invalid counts or selections: %j', async (args) => {
-    const { registerRunEvaluationTool } = await import(
-      '../../../../src/commands/mcp/tools/runEvaluation'
-    );
-    const tool = vi.fn();
-    registerRunEvaluationTool({ tool } as unknown as McpServer);
-    const schema = z.object(tool.mock.calls[0][1]);
-
-    expect(schema.safeParse(args).success).toBe(false);
+    const { schema } = await getRunEvaluationTool();
+    expect(z.object(schema).safeParse(args).success).toBe(false);
   });
 
   it.each([
@@ -131,14 +123,10 @@ describe('runEvaluation tool', () => {
     { testCaseIndices: { start: 0, end: 2 } },
     { maxConcurrency: 2, repeat: 2, resultLimit: 1, resultOffset: 0 },
     { promptFilter: ['0', '2'], providerFilter: ['echo'] },
+    { promptFilter: [' hello .*'], providerFilter: ' target ' },
   ])('accepts supported counts and selections: %j', async (args) => {
-    const { registerRunEvaluationTool } = await import(
-      '../../../../src/commands/mcp/tools/runEvaluation'
-    );
-    const tool = vi.fn();
-    registerRunEvaluationTool({ tool } as unknown as McpServer);
-
-    expect(z.object(tool.mock.calls[0][1]).safeParse(args).success).toBe(true);
+    const { schema } = await getRunEvaluationTool();
+    expect(z.object(schema).parse(args)).toMatchObject(args);
   });
 
   it.each([false, true])(
@@ -171,6 +159,7 @@ describe('runEvaluation tool', () => {
           JSON.stringify({
             prompts: ['{{topic}}'],
             providers: ['anthropic:messages:claude-sonnet-5', 'echo'],
+            evaluateOptions: { timeoutMs: 12500 },
             tests: [
               {
                 vars: { topic: 'offline fixture' },
@@ -195,6 +184,7 @@ describe('runEvaluation tool', () => {
         expect(result.isError).toBe(false);
         expect(response.success).toBe(true);
         expect(response.data.configuration.providers.ids).toEqual(expectedProviders);
+        expect(response.data.configuration.options.timeoutMs).toBe(12500);
         expect(response.data.results.stats).toMatchObject({
           successes: expectedProviders.length,
           failures: 0,
