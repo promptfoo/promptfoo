@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import path from 'path';
 
-import { globSync, hasMagic } from 'glob';
+import { globSync, hasMagic } from 'glob/raw';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
@@ -55,8 +55,8 @@ vi.mock('fs/promises', async () => {
   };
 });
 
-vi.mock('glob', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('glob')>()),
+vi.mock('glob/raw', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('glob/raw')>()),
   globSync: vi.fn(),
 }));
 
