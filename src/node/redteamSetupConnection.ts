@@ -228,12 +228,25 @@ function credentialGrant(
   origin: string,
   transfer: boolean,
 ) {
-  // An old message naming multiple destinations cannot authorize a new
-  // pairing. Require a fresh assignment to one destination for a transfer.
-  if (
-    !transfer &&
-    turns.some((turn, i) => origins[i].has(origin) && namesVariable(turn, variable))
-  ) {
+  // A list of URLs and keys is not permission to send every key to every
+  // origin. Accept separate, single-origin assignments within a multiline turn.
+  const paired = turns.some((turn, i) => {
+    if ((transfer && i !== turns.length - 1) || !origins[i].has(origin)) {
+      return false;
+    }
+    if (origins[i].size === 1) {
+      return namesVariable(turn, variable);
+    }
+    return turn.split('\n').some((line) => {
+      const urls = endpoints(line);
+      return (
+        urls.length > 0 &&
+        urls.every((url) => url.origin === origin) &&
+        namesVariable(line, variable)
+      );
+    });
+  });
+  if (paired) {
     return true;
   }
   const index = turns.map((turn) => namesVariable(turn, variable)).lastIndexOf(true);
@@ -300,7 +313,7 @@ function httpIssue(
     const transfer = priorOrigins ? !priorOrigins.has(url.origin) : changedOrigin;
     if (!credentialGrant(turns, origins, variable, url.origin, transfer)) {
       return repair(
-        'Ask the user to name the endpoint URL and its environment variable together. Never guess or transfer a credential to a different origin.',
+        'Ask which credential goes to which endpoint URL. For multiple origins, ask for one URL and its credential reference per line or message. Never guess or transfer a credential to a different origin.',
       );
     }
   }

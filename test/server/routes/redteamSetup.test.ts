@@ -414,7 +414,7 @@ describe('native red team setup', () => {
       const turns = [
         {
           role: 'user',
-          content: 'Use LOCAL_CHAT_KEY at ' + target.config.url + ' and STAGING_KEY at ' + url,
+          content: 'Use LOCAL_CHAT_KEY at ' + target.config.url + '\nSTAGING_KEY at ' + url,
         },
         { role: 'user', content: 'Test staging.' },
       ];
@@ -422,10 +422,16 @@ describe('native red team setup', () => {
         ...prior,
         targets: [target, { ...target, config: { ...target.config, url } }],
       };
+      // Even a first draft cannot send the first target's credential to staging.
+      respond(shared, 1);
+      respond(prior);
+      const initial = await ask({ testContext, messages: turns });
+      expect(initial.body.testTarget).toBeUndefined();
+      expect(initial.body.config).toEqual(prior);
       respond(shared, 1);
       respond(prior);
       const result = await ask({ testContext, config: prior, messages: turns });
-      expect(sent(1).validationError).toContain('transfer a credential');
+      expect(sent(3).validationError).toContain('transfer a credential');
       expect(result.body.testTarget).toBeUndefined();
       expect(result.body.config).toEqual(prior);
 

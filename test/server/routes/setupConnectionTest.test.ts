@@ -784,9 +784,9 @@ describe('native target validation and permission to execute', () => {
     ).toBeUndefined();
   });
 
-  it('allows one message to authorize several destinations, without extending a grant to another turn’s host', () => {
+  it('requires individual grants when sharing keys across destinations', () => {
     const second = 'https://second.example/chat';
-    const both = [url + ' and ' + second + ' both use APP_KEY and APP_TOKEN'];
+    const both = [url + ' APP_KEY APP_TOKEN\n' + second + ' APP_KEY APP_TOKEN'];
     expect(targetExecutionIssue(auth, both)).toBeUndefined();
     expect(
       targetExecutionIssue({ ...auth, config: { ...auth.config, url: second } }, both),
@@ -797,6 +797,21 @@ describe('native target validation and permission to execute', () => {
         target.url,
       ]),
     ).toMatchObject({ repairable: true });
+  });
+
+  it('never grants every key to every origin named in the initial message', () => {
+    const other = 'https://staging.example/chat';
+    const prod = {
+      ...auth,
+      config: { ...auth.config, headers: { Authorization: 'Bearer {{env.PROD_KEY}}' } },
+    };
+    const swapped = { ...prod, config: { ...prod.config, url: other } };
+    const ambiguous = ['Use PROD_KEY at ' + url + ' and STAGING_KEY at ' + other];
+    expect(targetExecutionIssue(swapped, ambiguous)).toMatchObject({ repairable: true });
+    expect(targetExecutionIssue(swapped, [...ambiguous, 'Test staging.'])).toBeDefined();
+    const identified = [...ambiguous, url + ' PROD_KEY\n' + other + ' STAGING_KEY'];
+    expect(targetExecutionIssue(prod, identified)).toBeUndefined();
+    expect(targetExecutionIssue(swapped, identified)).toBeDefined();
   });
 
   it('refuses dynamic destinations and nested credential references', () => {
