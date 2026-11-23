@@ -80,7 +80,7 @@ export const operatorFilterFn = (
     return true;
   }
 
-  const { operator, value } = filterValue as { operator: string; value: string | string[] };
+  const { operator, value } = filterValue as { operator: string; value: unknown };
 
   const hasValue = Array.isArray(value) ? value.length > 0 : Boolean(value);
   if (!hasValue) {
@@ -168,7 +168,7 @@ export function getHeaderFilterState<TData>(column: Column<TData, unknown>): Hea
 
   const { operator, value } = filterValue as {
     operator?: string;
-    value?: string | string[];
+    value?: unknown;
   };
 
   if (isSelectFilter) {
@@ -929,7 +929,7 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
         })();
 
         const rawValue = isRawObjectValue
-          ? (filterValue as { value?: string | string[] }).value
+          ? (filterValue as { value?: unknown }).value
           : filterValue;
 
         const hasValue = hasFilterValue(rawValue);
