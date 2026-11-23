@@ -297,6 +297,78 @@ describe('OTLPTracingExporter', () => {
     },
   );
 
+  it.each(formats)('redacts short standalone authorization values in %s', async (format) => {
+    const payload = await exportSpans(format, [
+      {
+        spanData: { type: 'function', name: 'lookup', output: 'Basic dTpw' },
+        error: new Error('\u00a0bEaReR\tx'),
+        traceMetadata: { plan: 'Basic plan', method: 'Bearer', prose: 'Use Bearer authentication' },
+      },
+    ]);
+    const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+    expect(getAttributes(span)).toMatchObject({
+      'tool.output': '<redacted>',
+      'trace.metadata.plan': 'Basic plan',
+      'trace.metadata.method': 'Bearer',
+      'trace.metadata.prose': 'Use Bearer authentication',
+    });
+    expect(span.status.message).toBe('<redacted>');
+  });
+
+  it.each(formats)('classifies complete dotted TOML keys in %s', async (format) => {
+    const output = [
+      '"api"."key" = "opaque/value"',
+      `service . 'private' . key = 'opaque/second'`,
+      'api. "keys" = """opaque "third"\nopaque/value"""',
+      String.raw`"\u0061pi"."\U0000006Bey" = "opaque/escaped"`,
+      String.raw`"\x61pi".key = 'opaque/byte'`,
+      '"cache"."key" = "visible"',
+      "'token' . count = 12",
+    ].join('\n');
+    const payload = await exportSpans(format, [
+      {
+        spanData: { type: 'function', name: 'read_file', output },
+        error: new Error(`"api".keys = ["opaque/first", "opaque/second"]`),
+      },
+    ]);
+    const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+    expect(getAttributes(span)['tool.output']).toContain('"api"."key" = "<redacted>"');
+    expect(getAttributes(span)['tool.output']).toContain('"cache"."key" = "visible"');
+    expect(getAttributes(span)['tool.output']).toContain("'token' . count = 12");
+    expect(span.status.message).toBe('<redacted>');
+  });
+
+  it('preserves long dotted names without an assignment', async () => {
+    const path = '"name".'.repeat(6000) + '"item"';
+    const { attributes } = await exportCustomData('json', { path });
+    expect(attributes.path).toBe(path);
+  });
+
+  it.each(formats)(
+    'masks complete JavaScript credential template literals in %s',
+    async (format) => {
+      const output = 'const password = `\nopaque/value\n`; const note = `public text`;';
+      const payload = await exportSpans(format, [
+        {
+          spanData: { type: 'function', name: 'read_file', output },
+          error: new Error('let apiKey = `first \\` opaque second`; keep();'),
+          traceMetadata: {
+            nested: 'const password = `a ${f(`opaque`)} opaque`;',
+            truncated: 'const apiKey = `first\nopaque',
+            tagged: 'const privateKey = String.raw`opaque\nopaque`; keep();',
+          },
+        },
+      ]);
+      const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(getAttributes(span)['tool.output']).toContain('const note = `public text`;');
+      expect(span.status.message).toContain('; keep();');
+      expect(getAttributes(span)['trace.metadata.tagged']).toContain('; keep();');
+      expect(getAttributes(span)).toMatchObject(
+        redacted('trace.metadata.nested', 'trace.metadata.truncated'),
+      );
+    },
+  );
+
   it.each(
     formats.flatMap((format) =>
       ['X-Session-Id', 'Ocp-Apim-Subscription-Key', 'X-Honeycomb-Team'].map(

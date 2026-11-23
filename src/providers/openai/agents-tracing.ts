@@ -609,11 +609,25 @@ function parseStructuredJson(value: string): unknown {
   });
 }
 
+function isStandaloneAuthorization(value: string): boolean {
+  const auth = /^\s*(Bearer|Basic)[ \t]+([A-Za-z\d._~+/-]+)=*\s*$/i.exec(value);
+  if (!auth) {
+    return false;
+  }
+  // Basic credentials encode a colon even for empty usernames or passwords.
+  // Retain the existing opaque-token protection without masking labels like "Basic plan".
+  return (
+    auth[1].toLowerCase() === 'bearer' ||
+    auth[2].length >= 20 ||
+    Buffer.from(auth[2], 'base64').includes(':')
+  );
+}
+
 // Withhold the whole string when a credential has no reliable closing delimiter.
 function mustWithholdCredentialText(value: string): boolean {
   if (
     /\b(?:authorization|cookie)[ \t]*:[^\r\n]*\r?\n[ \t]/i.test(value) ||
-    /^\s*(?:Bearer|Basic)[ \t]+[A-Za-z\d._~+/-]{20,}=*\s*$/i.test(value) ||
+    isStandaloneAuthorization(value) ||
     /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY(?: BLOCK)?-----/.test(value) ||
     hasCredentialNamedPayload(value)
   ) {
@@ -721,6 +735,7 @@ function sanitizeCredentialText(
     }
   }
 
+  value = redactCredentialLiterals(value);
   const command = value.replace(/\\\r?\n/g, '');
   const curl = context === 'curl' || containsCurl(command);
   if (curl || command.includes('-')) {
@@ -1018,6 +1033,77 @@ function hasCredentialNamedPayload(value: string): boolean {
     }
   }
   return false;
+}
+
+// Stop at the closing literal or withhold ambiguous interpolation and truncated input.
+function credentialLiteralEnd(value: string, start: number, delimiter: string): number {
+  for (let i = start + delimiter.length; i < value.length; i++) {
+    if (value[i] === '\\') {
+      i++;
+    } else if (delimiter === '`' && value.startsWith('${', i)) {
+      return -1; // Interpolations can contain nested literals, including backticks.
+    } else if (value.startsWith(delimiter, i)) {
+      if (delimiter !== '`' && delimiter.length === 1 && value[i + 1] === delimiter) {
+        i++; // Doubled quotes in configuration values.
+      } else {
+        return i + delimiter.length;
+      }
+    }
+  }
+  return -1;
+}
+
+function redactCredentialLiterals(value: string): string {
+  if (!/[="'`]/.test(value)) {
+    return value;
+  }
+  // Consume each segment once, including in a long dotted name with no assignment.
+  // Quoted TOML keys can mix with bare names and whitespace on either side of a dot.
+  const segments =
+    /(?:(?<!\\)"((?:\\.|[^"\\\r\n])*)"|'([^'\r\n]*)'|(?<![\w$-])([\w$-]+))([ \t]*\.[ \t]*|\s*[:=]\s*)/g;
+  const templateTag = /[\w$.]+[ \t]*(?=`)/y;
+  const parts: string[] = [];
+  let next = -1;
+  let qualified = false;
+  let result = '';
+  let copied = 0;
+  for (let match = segments.exec(value); match; match = segments.exec(value)) {
+    if (match.index !== next) {
+      parts.length = 0;
+      qualified = false;
+    }
+    const [, double, single, bare, separator] = match;
+    // Use the shared classifier's Unicode spelling for TOML byte and long escapes.
+    parts.push(double?.replace(/\\U0000/g, '\\u').replace(/\\x/g, '\\u00') ?? single ?? bare);
+    qualified ||= bare === undefined || (separator.includes('.') && separator !== '.');
+    if (separator.includes('.')) {
+      next = segments.lastIndex;
+      continue;
+    }
+    // A simple tag such as String.raw can precede a JavaScript template.
+    templateTag.lastIndex = segments.lastIndex;
+    const start = templateTag.test(value) ? templateTag.lastIndex : segments.lastIndex;
+    const quote = value[start];
+    const triple = value.startsWith('"""', start) || value.startsWith("'''", start);
+    if (quote !== '`' && quote !== '[' && !triple && !(qualified && parts.length > 1)) {
+      continue;
+    }
+    if (!isCredentialAttributeKey(parts.join('.'))) {
+      continue;
+    }
+    if (quote !== '`' && quote !== '"' && quote !== "'") {
+      return '<redacted>'; // A credential array or table can span multiple lines.
+    }
+    const delimiter = triple ? quote.repeat(3) : quote;
+    const end = credentialLiteralEnd(value, start, delimiter);
+    if (end === -1) {
+      return '<redacted>';
+    }
+    result += value.slice(copied, start) + delimiter + '<redacted>' + delimiter;
+    copied = end;
+    segments.lastIndex = end;
+  }
+  return result + value.slice(copied);
 }
 
 function redactQuotedCredentials(value: string): string {
