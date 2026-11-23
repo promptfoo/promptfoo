@@ -885,7 +885,7 @@ function localSchemaPointer(ref: string): SchemaPointer | undefined | null {
     const head = scheme < 0 ? ref : ref.slice(0, scheme + 1);
     const tail = scheme < 0 ? '' : pointerToken(ref.slice(scheme + 1));
     // A decoded fragment's percent signs are literal. Do not decode them twice.
-    ref = (encoded ? head.replaceAll('%', '%25') : head) + tail;
+    ref = (encoded ? head.replace(/%/g, '%25') : head) + tail;
     return ref
       .slice(2)
       .split('/')
