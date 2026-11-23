@@ -3485,7 +3485,7 @@ function curlWord(word: string) {
     /"((?:\\.|[^"\\])*)"|'([^']*)'|((?:\\.|[^"'\\])+)/g,
   )) {
     literal += double ?? single ?? bare;
-    expansions += double ?? single?.replaceAll('$', '\\$') ?? bare;
+    expansions += double ?? single?.replace(/\$/g, '\\$') ?? bare;
   }
   return { literal, expansions };
 }
