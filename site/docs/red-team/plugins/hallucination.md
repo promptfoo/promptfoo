@@ -7,6 +7,8 @@ description: Red team LLM hallucination vulnerabilities by testing fabrication t
 
 Use the Hallucination plugin to test whether a model produces materially misleading false, unsupported, or fabricated claims when a prompt sounds ordinary but asks for information that is unlikely, unverifiable, or false.
 
+Hallucination is one source of [OWASP LLM09:2025 Misinformation](https://genai.owasp.org/llmrisk/llm092025-misinformation/).
+
 ## Purpose
 
 It focuses on whether the model:

@@ -7,6 +7,8 @@ description: Red team shell injection vulnerabilities by testing AI systems' res
 
 Use the Shell Injection plugin to test whether prompts can push a tool-using system toward unauthorized command execution. It is most relevant for assistants that can construct shell commands, invoke scripts, or pass user-controlled text into command-like workflows.
 
+This risk falls under [OWASP A05:2025 Injection](https://top10.owasp.org/2025/A05_2025-Injection/). When an application executes generated output without validation, [LLM05:2025 Improper Output Handling](https://genai.owasp.org/llmrisk/llm052025-improper-output-handling/) also applies.
+
 ## Purpose
 
 It focuses on whether the system:
