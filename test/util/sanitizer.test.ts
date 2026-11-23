@@ -202,6 +202,30 @@ describe('looksLikeSecret', () => {
 });
 
 describe('stripProviderPromptSelectors', () => {
+  it.each(['id', 'label', 'config', 'env', 'transform', 'delay', 'inputs', 'prompts', 'text'])(
+    'strips selectors on provider IDs including %s without touching provider configuration',
+    (key) => {
+      const config = { prompts: ['application payload'] };
+      const entry = { id: 'echo', prompts: ['private selector'], config };
+      const map = { [key]: entry, auth: entry };
+      expect(stripProviderPromptSelectors(map)).toEqual({
+        [key]: { id: 'echo', config },
+        auth: { id: 'echo', config },
+      });
+      expect(entry.prompts).toEqual(['private selector']);
+    },
+  );
+
+  it('preserves application config beside scalar environment settings in id-less options', () => {
+    const options = { env: { REGION: 'local' }, config: { prompts: ['application payload'] } };
+    expect(stripProviderPromptSelectors(options)).toEqual(options);
+  });
+
+  it('strips an ambiguous selector-only entry and preserves other redactions', () => {
+    const provider = { config: { prompts: ['private selector'] }, token: '[REDACTED]' };
+    expect(stripProviderPromptSelectors(provider)).toEqual({ config: {}, token: '[REDACTED]' });
+  });
+
   it.each([
     {},
     {

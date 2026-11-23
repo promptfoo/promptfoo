@@ -689,32 +689,47 @@ describe('EvalResult', () => {
     ]);
   });
 
-  it('preserves provider maps whose keys match option fields', () => {
-    const result = sanitizeResultForJsonlArtifact({
-      testCase: {
-        vars: {},
-        options: {
-          provider: {
-            id: { env: { API_KEY: 'sk-map-secret', GITHUB_TOKEN: 'fixture', REGION: 'local' } },
-            label: { prompts: ['judge'] },
-            config: { delay: 1 },
-            env: { config: { apiKey: 'fixture' } },
-            auth: { prompts: ['judge'] },
-            token: { delay: 2 },
+  it.each([false, true])(
+    'projects maps with option-like provider IDs (strip: %s)',
+    async (strip) => {
+      const input = createEvaluateResult({
+        testCase: {
+          vars: {},
+          options: {
+            provider: {
+              id: { env: { API_KEY: 'sk-map-secret', GITHUB_TOKEN: 'fixture', REGION: 'local' } },
+              label: { prompts: ['private selector'] },
+              config: { delay: 1 },
+              env: { config: { apiKey: 'fixture' } },
+              auth: { prompts: ['private selector'], config: { prompts: ['application value'] } },
+              token: { delay: 2 },
+            },
           },
-        },
-      } as AtomicTestCase,
-    });
+        } as AtomicTestCase,
+      });
+      const flags = getStripFlags({ PROMPTFOO_STRIP_PROMPT_TEXT: String(strip) });
+      const result = sanitizeResultForJsonlArtifact(input, flags);
+      const record = await EvalResult.createFromEvaluateResult('option-map', input, {
+        persist: true,
+      });
+      const reloaded = (await EvalResult.findById(record.id))!;
+      expect(reloaded.toEvaluateResult(flags).testCase.options?.provider).toEqual(
+        result.testCase.options?.provider,
+      );
+      expect(JSON.stringify(reloaded.testCase)).toContain('private selector');
 
-    expect(result.testCase.options?.provider).toEqual({
-      id: { env: { API_KEY: '[REDACTED]', GITHUB_TOKEN: '[REDACTED]', REGION: 'local' } },
-      label: { prompts: ['judge'] },
-      config: { delay: 1 },
-      env: { config: { apiKey: '[REDACTED]' } },
-      auth: { prompts: ['judge'] },
-      token: { delay: 2 },
-    });
-  });
+      expect(JSON.stringify(result).includes('private selector')).toBe(!strip);
+      const selectors = strip ? {} : { prompts: ['private selector'] };
+      expect(result.testCase.options?.provider).toEqual({
+        id: { env: { API_KEY: '[REDACTED]', GITHUB_TOKEN: '[REDACTED]', REGION: 'local' } },
+        label: selectors,
+        config: { delay: 1 },
+        env: { config: { apiKey: '[REDACTED]' } },
+        auth: { ...selectors, config: { prompts: ['application value'] } },
+        token: { delay: 2 },
+      });
+    },
+  );
 
   it('sanitizes id-less provider options without classifying map keys', () => {
     const result = sanitizeResultForJsonlArtifact({

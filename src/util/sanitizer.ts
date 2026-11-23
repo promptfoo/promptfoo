@@ -707,6 +707,37 @@ export function sanitizeTracingConfigForPersistence(
   };
 }
 
+const PROVIDER_OPTION_FIELDS = [
+  'id',
+  'label',
+  'config',
+  'env',
+  'transform',
+  'delay',
+  'inputs',
+  'prompts',
+];
+
+/** A provider ID can itself be any option name, including "prompts". */
+function isProviderOptionsMap(providers: object): boolean {
+  const record = providers as Record<string, unknown>;
+  if (typeof record.id === 'function' || typeof record.toJSON === 'function') {
+    return false;
+  }
+  return Object.entries(Object.getOwnPropertyDescriptors(providers)).every(([key, entry]) => {
+    if (!entry.enumerable || (entry.value === REDACTED && isSecretField(key))) {
+      return true;
+    }
+    const value = entry.value;
+    return (
+      !!value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Object.keys(value).every((field) => PROVIDER_OPTION_FIELDS.includes(field))
+    );
+  });
+}
+
 /** Project direct providers and provider/type maps without changing their local configuration. */
 export function stripProviderPromptSelectors<T>(providers: T): T {
   if (Array.isArray(providers)) {
@@ -736,7 +767,8 @@ export function stripProviderPromptSelectors<T>(providers: T): T {
     const { prompts: _prompts, ...rest } = projected;
     return rest;
   };
-  if (isProviderTypeMap(providers)) {
+  const optionsMap = isProviderOptionsMap(providers);
+  if (!optionsMap && isProviderTypeMap(providers)) {
     const projected: Record<string, unknown> = { ...providers };
     for (const type of GRADING_PROVIDER_TYPE_KEYS) {
       if (Object.prototype.hasOwnProperty.call(providers, type)) {
@@ -746,16 +778,7 @@ export function stripProviderPromptSelectors<T>(providers: T): T {
     return projected as T;
   }
   // Runtime serialization can remove id() and absent selectors from an options object.
-  const isOptions = [
-    'id',
-    'label',
-    'config',
-    'env',
-    'transform',
-    'delay',
-    'inputs',
-    'prompts',
-  ].some((key) => key in providers);
+  const isOptions = !optionsMap && PROVIDER_OPTION_FIELDS.some((key) => key in providers);
   return (
     isOptions
       ? omitSelectors(providers)
