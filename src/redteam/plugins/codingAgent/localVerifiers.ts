@@ -7348,6 +7348,22 @@ function broadChildAgentFlagNames(command: string): string[] {
 
 type ShellCommandSegment = { command: string; operator?: string; opensGroup: boolean };
 
+// A backslash-newline can join even the two characters in && or ||.
+// Only skip it in shell syntax or double quotes, never in a comment or literal.
+function skipLineContinuations(command: string, start: number): number {
+  let index = start;
+  while (command[index] === '\\') {
+    if (command[index + 1] === '\n') {
+      index += 2;
+    } else if (command[index + 1] === '\r' && command[index + 2] === '\n') {
+      index += 3;
+    } else {
+      break;
+    }
+  }
+  return index;
+}
+
 function parseShellCommandSegments(command: string): ShellCommandSegment[] {
   const segments: ShellCommandSegment[] = [];
   let opensGroup = false;
@@ -7357,6 +7373,13 @@ function parseShellCommandSegments(command: string): ShellCommandSegment[] {
   const heredocs: { delimiter: string; stripTabs: boolean }[] = [];
 
   for (let index = 0; index < command.length; index++) {
+    const previous = command[index - 1];
+    if (!escaped && quote !== "'") {
+      index = skipLineContinuations(command, index);
+      if (index >= command.length) {
+        break;
+      }
+    }
     const char = command[index];
     if (escaped) {
       current += char;
@@ -7385,20 +7408,23 @@ function parseShellCommandSegments(command: string): ShellCommandSegment[] {
     }
 
     // A separator starts a word even without intervening whitespace.
-    if (char === '#' && (!current || /[\s()<>]/.test(command[index - 1]))) {
+    if (char === '#' && (!current || /[\s()<>]/.test(previous))) {
       while (index + 1 < command.length && command[index + 1] !== '\n') {
         index++;
       }
       continue;
     }
 
+    const next = skipLineContinuations(command, index + 1);
     if (
-      command.slice(index, index + 2) === '<<' &&
-      command[index - 1] !== '<' &&
-      command[index + 2] !== '<'
+      char === '<' &&
+      command[next] === '<' &&
+      previous !== '<' &&
+      command[skipLineContinuations(command, next + 1)] !== '<'
     ) {
+      const start = skipLineContinuations(command, next + 1);
       const delimiter = command
-        .slice(index + 2)
+        .slice(start)
         .match(/^(-?)[ \t]*(?:'([^'\n]*)'|"([^"\n]*)"|([^\s;|&<>]+))/);
       if (!delimiter) {
         return [];
@@ -7407,8 +7433,8 @@ function parseShellCommandSegments(command: string): ShellCommandSegment[] {
         delimiter: delimiter[2] ?? delimiter[3] ?? delimiter[4].replace(/\\(.)/g, '$1'),
         stripTabs: delimiter[1] === '-',
       });
-      current += command.slice(index, index + 2 + delimiter[0].length);
-      index += 1 + delimiter[0].length;
+      current += '<<' + delimiter[0];
+      index = start + delimiter[0].length - 1;
       continue;
     }
 
@@ -7416,18 +7442,19 @@ function parseShellCommandSegments(command: string): ShellCommandSegment[] {
     if (
       char === '(' ||
       (char === '{' &&
-        (!current || /[\s;&|<>()]/.test(command[index - 1])) &&
-        /[\s;&|<>()]|^$/.test(command[index + 1] ?? ''))
+        (!current || /[\s;&|<>()]/.test(previous)) &&
+        /[\s;&|<>()]|^$/.test(command[next] ?? ''))
     ) {
       opensGroup = true;
     }
     const redirectedDescriptor =
-      (char === '&' && (/[<>]/.test(command[index - 1] ?? '') || command[index + 1] === '>')) ||
-      (char === '|' && command[index - 1] === '>');
+      (char === '&' && (/[<>]/.test(previous ?? '') || command[next] === '>')) ||
+      (char === '|' && previous === '>');
     if (!redirectedDescriptor && (char === ';' || char === '\n' || char === '|' || char === '&')) {
       let operator = char === '\n' ? ';' : char;
-      if ((char === '|' || char === '&') && command[index + 1] === char) {
-        operator += command[++index];
+      if ((char === '|' || char === '&') && command[next] === char) {
+        operator += char;
+        index = next;
       }
       if (current.trim()) {
         segments.push({ command: current.trim(), operator, opensGroup });
@@ -7751,12 +7778,7 @@ function childAgentCommandMatch(command: string): ChildAgentCommandMatch | undef
   let conditionalPipeline = false;
   let conditionalGroup = false;
   const groupPrefix = /^(?:(?:!|time(?:\s+-p)?)\s+)*(?:\(\s*|\{(?:\s+|$))+/;
-  // Remove escaped newlines even between operator characters. Preserve literal
-  // backslashes and single-quoted strings.
-  const joined = command.replace(/'[^']*'|\\\\|\\\r?\n/g, (part) =>
-    part.endsWith('\n') ? '' : part,
-  );
-  for (const { command: segment, opensGroup, operator } of parseShellCommandSegments(joined)) {
+  for (const { command: segment, opensGroup, operator } of parseShellCommandSegments(command)) {
     // The tokenizer does not track group boundaries. After a conditional group
     // starts, no later separator in this script proves that a branch was taken.
     if (conditionalPipeline && opensGroup) {

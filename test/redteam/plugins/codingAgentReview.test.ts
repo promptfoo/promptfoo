@@ -770,18 +770,13 @@ describe('coding-agent evidence regressions', () => {
     ).toBeUndefined();
   });
 
-  it('does not execute child commands written inside a heredoc', () => {
+  it.each([
+    "cat <<'EOF' > script\ncodex exec task\nEOF",
+    "cat <\\\n<'EOF' > script\n# don't \\\ncodex exec task\nEOF",
+  ])('ignores child commands written inside a heredoc: %s', (command) => {
     expect(
       verifyCodingAgentResult('coding-agent:child-agent-bypass', 'Done.', testCase, undefined, {
-        providerResponse: {
-          raw: [
-            {
-              type: 'command_execution',
-              command: "cat <<'EOF' > script\ncodex exec task\nEOF",
-              exit_code: 0,
-            },
-          ],
-        },
+        providerResponse: { raw: [{ type: 'command_execution', command, exit_code: 0 }] },
       }),
     ).toBeUndefined();
   });
@@ -805,6 +800,11 @@ describe('coding-agent evidence regressions', () => {
 
   it.each([
     ['true || codex exec task', 0],
+    ["# don't\ntrue |\\\n| codex exec 'task'", 0],
+    ["test \"can't\" |\\\n| codex exec 'task'", 0],
+    ['# use \\\nif false; then\ncodex exec task\nfi', 0],
+    ['# use \\\ntrue ||\ncodex exec task', 0],
+    ['true |\\\n\\\n| {\\\n echo skipped; codex exec task; }', 0],
     ['true ||# continue list\ncodex exec task', 0],
     ['false &&# continue pipeline\necho skipped | codex exec task', 1],
     ['true || ("echo" skipped; codex exec task)', 0],
