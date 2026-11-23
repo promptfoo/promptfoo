@@ -737,16 +737,6 @@ function sanitizeCredentialText(
   return (
     redactQuotedCredentials(value)
       .replace(/\b(?:gh[opsur]_|github_pat_|glpat-)[A-Za-z0-9_-]+/g, '<redacted>')
-      // ANSI colors and escaped newlines can put a letter immediately before a key.
-      // Keep short matches delimited so identifiers like task_test_results survive.
-      .replace(
-        /([sr]k_(?:live|test)_|sk_org_?)([\w-]*[A-Za-z0-9])/g,
-        (key, prefix: string, suffix: string, offset: number, text: string) =>
-          suffix.length >= 20 ||
-          (prefix.endsWith('_') && !/[A-Za-z0-9]/.test(text.charAt(offset - 1)))
-            ? '<redacted>'
-            : key,
-      )
       .replace(/\b(?:sk|pk|key)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
       .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED_AWS_KEY>')
       .replace(/\bAIza[a-zA-Z0-9_-]{35}\b/g, '<redacted>')
@@ -804,6 +794,12 @@ function sanitizeCredentialText(
           isPrivateParameter(key, prefix, raw, inspectEncoding)
             ? prefix + key + separator + quote + '<redacted>' + quote
             : match,
+      )
+      // Mask field values before Stripe keys, since names like sk_org_token can match both.
+      // ANSI color codes, escaped whitespace and Markdown underscores also delimit keys.
+      .replace(
+        /(^|\\[bfnrtv]|\[[\d;:]*m|[^A-Za-z0-9])(?:[sr]k_(?:live|test)_|sk_org(?:_|(?=[A-Za-z0-9]{20})))[\w-]*[A-Za-z0-9]/g,
+        '$1<redacted>',
       )
   );
 }
