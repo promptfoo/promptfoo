@@ -11,7 +11,7 @@ This folder contains a small example of how to test LLM prompts using Jest, Vite
 
 ## Getting Started
 
-Use Node.js 22.22 or newer to meet the Promptfoo and Vitest 5 requirements.
+Use a [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support) for Promptfoo and Vitest 5.
 
 To get started, follow these steps:
 

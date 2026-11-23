@@ -2,7 +2,7 @@
 sidebar_position: 21
 sidebar_label: Dataset generation
 title: Dataset Generation - Automated Test Data Creation
-description: Generate comprehensive test datasets automatically using promptfoo. Create diverse test cases, personas, and edge cases for thorough LLM evaluation.
+description: Generate test cases from prompts or extend datasets with promptfoo generate dataset. Configure personas and review generated cases before running evals.
 keywords:
   [
     dataset generation,
@@ -19,9 +19,7 @@ pagination_next: configuration/huggingface-datasets
 
 # Dataset generation
 
-Your dataset is the heart of your LLM eval. To the extent possible, it should closely represent true inputs into your LLM app.
-
-promptfoo can extend existing datasets and help make them more comprehensive and diverse using the `promptfoo generate dataset` command. This guide will walk you through the process of generating datasets using `promptfoo`.
+Choose test cases that represent real inputs to your application. Use `promptfoo generate dataset` to generate additional cases from your prompts or extend an existing dataset.
 
 ### Prepare your prompts
 

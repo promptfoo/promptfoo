@@ -1,7 +1,7 @@
 ---
 sidebar_position: 50
 title: Self-hosting
-description: Learn how to self-host promptfoo using Docker, Docker Compose, or Helm. This comprehensive guide walks you through setup, configuration, and troubleshooting.
+description: Self-host a Promptfoo server with Docker, Docker Compose, or Helm. Configure persistent storage, share eval results, and troubleshoot common deployment issues.
 keywords:
   - AI testing
   - configuration
@@ -19,7 +19,7 @@ keywords:
 
 # Self-hosting Promptfoo
 
-Promptfoo provides a basic Docker image that allows you to host a server that stores evals. This guide covers various deployment methods.
+Use the Promptfoo Docker image to host a server that stores and shares eval results.
 
 Self-hosting enables you to:
 
@@ -86,7 +86,7 @@ docker run -d \
 - **`-d`**: Run in detached mode (background).
 - **`--name promptfoo_container`**: Assign a name to the container.
 - **`-p 3000:3000`**: Map host port 3000 to container port 3000.
-- **`-v /path/to/local_promptfoo:/home/promptfoo/.promptfoo`**: **Crucial for persistence.** Maps the container's data directory (`/home/promptfoo/.promptfoo`, containing `promptfoo.db`) to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred host path (e.g., `./promptfoo_data`). **Data will be lost if this volume mapping is omitted.**
+- **`-v /path/to/local_promptfoo:/home/promptfoo/.promptfoo`**: Maps the container's data directory (`/home/promptfoo/.promptfoo`, containing `promptfoo.db`) to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred host path (e.g., `./promptfoo_data`). **Data will be lost if this volume mapping is omitted.**
 - **`-e OPENAI_API_KEY=sk-abc123`**: Example of setting an environment variable. Add necessary API keys here so users can run evals directly from the web UI. Replace `sk-abc123` with your actual key.
 
 Access the UI at `http://localhost:3000`.
@@ -216,7 +216,6 @@ persistentVolumeClaims:
 service:
   type: LoadBalancer # Expose via LoadBalancer (adjust based on your cluster/needs)
 
-
 # Optional: Configure ingress if you have an ingress controller
 # ingress:
 #   enabled: true
@@ -276,8 +275,8 @@ docker build -t promptfoo:custom .
 ```
 
 Images built from this Dockerfile are marked as custom containers. To apply a Promptfoo update,
-first advance the checkout to the desired release, then rebuild and redeploy. Use a Node.js
-`22.22.0` or newer base image (24 LTS recommended). Use `docker build --pull` when a
+first advance the checkout to the desired release, then rebuild and redeploy. Choose a base image with a
+[supported Node.js version](/docs/installation#nodejs-runtime-support). Use `docker build --pull` when a
 tagged parent image must be refreshed. An unchanged build context produces the same Promptfoo
 version.
 
@@ -618,7 +617,7 @@ The `VITE_PUBLIC_BASENAME` build argument configures the frontend to use the cor
 - **GPU**: Not required
 - **RAM**: 4 GB+
 - **Storage**: 10 GB+
-- **Dependencies**: Node.js `>=22.22.0`, npm
+- Install npm and a [supported Node.js version](/docs/installation#nodejs-runtime-support).
 
 ### Server Requirements (Hosting the Web UI/API)
 
