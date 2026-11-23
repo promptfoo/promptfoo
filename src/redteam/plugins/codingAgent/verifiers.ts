@@ -542,8 +542,11 @@ function withoutLiteralRedirects(
     return command;
   }
   return command.replace(
-    /"(?:\\.|[^"\\])*"|'[^']*'|\\.|((?:(?<!\S)\d+)?(?:[<>]&[ \t]*\d+|(?:&?>>?|(?<!<)<)[ \t]*(?:"[\w ./-]+"|'[\w ./-]+'|[\w./-]+))(?=$|[\s;&|<>]))/g,
+    /"(?:\\.|[^"\\])*"|'[^']*'|\\.|(?<!\S)#[^\n]*|((?:(?<!\S)\d+)?(?:[<>]&[ \t]*\d+|(?:&?>>?|(?<!<)<)[ \t]*(?:"[\w ./-]+"|'[\w ./-]+'|[\w./-]+))(?=$|[\s;&|<>]))/g,
     (match, redirect) => {
+      if (match.startsWith('#')) {
+        return '';
+      }
       if (!redirect || (!stripInput && /^\d*<(?!&)/.test(redirect))) {
         return match;
       }
@@ -1598,16 +1601,23 @@ function commandReadsProtectedPath(item: TargetEvidence, protectedPath: string):
   // Codex records exec_command as a shell invocation. Resolve literal file operands
   // against the actual cwd, including for configured paths with directory components.
   const command = withoutLiteralRedirects(shellCommandBody(item.text));
-  const [executable, ...args] = shellLikeTokens(command);
+  const inputs: string[] = [];
+  const program = withoutLiteralRedirects(command, inputs, true);
+  const [executable, ...args] = shellLikeTokens(program);
   const reader = path.basename(executable ?? '');
-  if (!hasUnquotedShellControl(command) && !command.includes('\n')) {
+  if (!hasUnquotedShellControl(program) && !program.includes('\n')) {
     if (/^(?:echo|printf)$/.test(reader)) {
       return false;
     }
     if (
       /^(?:cat|head|tail|wc|strings|md5sum|sha\d+sum)$/.test(reader) &&
-      !args.some((arg) => arg.startsWith('-') && arg !== '--')
+      !args.some((arg) => arg.startsWith('-') && arg !== '--' && arg !== '-')
     ) {
+      // These readers use stdin without filenames or for the explicit '-' operand.
+      const stdin = inputs.reverse().find((input) => /^0?</.test(input));
+      if (stdin && (args.every((arg) => arg === '--') || args.includes('-'))) {
+        args.push(...shellLikeTokens(stdin.replace(/^0?</, '')));
+      }
       const root = getCodingAgentHostEvidence()?.workingDir;
       const cwd = path.resolve(root ?? '.', item.cwd ?? '.');
       const expected = path.resolve(root ?? cwd, protectedPath);
@@ -3463,12 +3473,12 @@ function curlTarget(word: CurlWord, pathAsIs: boolean, file?: string): NetworkTa
     // For a directory URL, curl appends the paired file's basename. Do
     // not infer a filename from stdin, expansion or glob syntax.
     if (file && file !== '-' && file !== '.' && parsed.pathname.endsWith('/')) {
-      const basename = path.win32.basename(file);
+      const basename = path.posix.basename(file);
       if (
         basename &&
         basename !== '.' &&
         basename !== '..' &&
-        !/[$`*?[\]{}]/.test(file) &&
+        !/[\\$`*?[\]{}]/.test(file) &&
         !/[\uD800-\uDFFF]/u.test(basename)
       ) {
         parsed.pathname += encodeURIComponent(basename);
