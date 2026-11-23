@@ -5,7 +5,13 @@ import { type Inputs } from '../types/shared';
 import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
 import { getErrorTokenUsage } from '../util/tokenUsageUtils';
-import { pluginDescriptions } from './constants';
+import {
+  AGENT_OUTCOME_PLUGINS,
+  AgentOutcomeCaseSchema,
+  getAgentOutcomeCase,
+  MULTI_INPUT_VAR,
+  pluginDescriptions,
+} from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
 import { recordGenerationTokenUsage } from './generationTokenUsage';
 import {
@@ -20,7 +26,113 @@ import {
 } from './remoteGeneration';
 import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  Prompt,
+  ProviderResponse,
+  Vars,
+} from '../types/index';
+
+// Both setup UIs build {"field":"{{field}}",...} for targets with declared inputs.
+// An outcome trial already binds its user message to __prompt. Rendering the whole
+// object would put third-party tool content in the user channel of an indirect trial.
+function isMultiInputTemplate(raw: string, inputs: ApiProvider['inputs'], vars: Vars): boolean {
+  let template: unknown;
+  try {
+    template = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  if (!template || typeof template !== 'object' || Array.isArray(template)) {
+    return false;
+  }
+  const entries = Object.entries(template);
+  // Metadata-stripped replays may retain only the trial identity and its variables.
+  return (
+    entries.length > 0 &&
+    (!inputs || entries.length === Object.keys(inputs).length) &&
+    entries.every(
+      ([key, value]) =>
+        Object.prototype.hasOwnProperty.call(inputs ?? vars, key) && value === `{{${key}}}`,
+    )
+  );
+}
+
+function hasAgentOutcomeAssertion(
+  assertion: NonNullable<AtomicTestCase['assert']>[number],
+): boolean {
+  return assertion.type === 'assert-set'
+    ? Boolean(assertion.assert?.some(hasAgentOutcomeAssertion))
+    : AGENT_OUTCOME_PLUGINS.some((id) => assertion.type === `promptfoo:redteam:${id}`);
+}
+
+export function getAgentOutcomePrompt(
+  test: AtomicTestCase,
+  prompt: Prompt,
+  provider: ApiProvider,
+  vars: Vars,
+) {
+  const outcome = getAgentOutcomeCase(test);
+  // Older metadata-stripped exports can retain the assertion and payload without a
+  // trusted assignment. Refuse to dispatch a trial whose measurement cannot be graded.
+  if (!outcome && test.assert?.some(hasAgentOutcomeAssertion)) {
+    throw new Error(
+      '[inconclusive] Missing or invalid agentOutcome case metadata. Regenerate the test.',
+    );
+  }
+  if (!outcome) {
+    return undefined;
+  }
+  // Imported rows can bypass strategy synthesis. A chat wrapper changes the
+  // owner's instructions and can collapse several service receipts into one.
+  const override = test.provider;
+  const overrideId =
+    typeof override === 'string'
+      ? override
+      : typeof override?.id === 'function'
+        ? override.id()
+        : override?.id;
+  if (
+    provider.orchestratesTargetTurns ||
+    (override &&
+      typeof override === 'object' &&
+      'orchestratesTargetTurns' in override &&
+      override.orchestratesTargetTurns) ||
+    [provider.id(), overrideId].some(
+      (id) =>
+        id?.startsWith('promptfoo:redteam:') ||
+        id === 'promptfoo:simulated-user' ||
+        id === 'agentic:memory-poisoning' ||
+        id === 'sequence' ||
+        id === 'sequence-provider',
+    )
+  ) {
+    throw new Error(
+      '[inconclusive] Agent outcome trials require a single target dispatch. Remove the strategy provider.',
+    );
+  }
+  let raw = prompt.raw;
+  if (outcome.injectVar === MULTI_INPUT_VAR && !prompt.function) {
+    const inputs = test.metadata?.pluginConfig?.inputs ?? provider.inputs;
+    // The engine retains the original template when adding a task prefix or suffix.
+    const template = prompt.template ?? raw;
+    if (isMultiInputTemplate(template, inputs, vars) && raw.includes(template)) {
+      raw = raw.split(template).join(`{{${MULTI_INPUT_VAR}}}`);
+    } else if (template !== raw && isMultiInputTemplate(raw, inputs, vars)) {
+      raw = `{{${MULTI_INPUT_VAR}}}`;
+    }
+  }
+  return { raw, message: outcome.message, requireExactOwner: Boolean(outcome.metaTicketRevision) };
+}
+
+/** Independent trials must never reuse measurements from concurrent requests or earlier runs. */
+export function getAgentOutcomeDispatchPolicy(test: AtomicTestCase) {
+  const trial = test.metadata?.agentOutcome;
+  const assigned = trial ? AgentOutcomeCaseSchema.safeParse(trial).data : undefined;
+  return assigned && { singleAttempt: Boolean(assigned.metaTicketRevision) };
+}
 
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.

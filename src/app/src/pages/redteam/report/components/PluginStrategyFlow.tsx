@@ -2,9 +2,14 @@
 
 import React, { useMemo } from 'react';
 
-import { displayNameOverrides } from '@promptfoo/redteam/constants';
+import { displayNameOverrides, isAgentOutcomePlugin } from '@promptfoo/redteam/constants';
 import { Layer, Rectangle, ResponsiveContainer, Sankey, Tooltip } from 'recharts';
-import { getPluginIdFromResult, getStrategyIdFromTest, type TestWithMetadata } from './shared';
+import {
+  classifyReportOutcome,
+  getPluginIdFromResult,
+  getStrategyIdFromTest,
+  type TestWithMetadata,
+} from './shared';
 
 interface PluginStrategyFlowProps {
   failuresByPlugin: TestWithMetadata[];
@@ -161,7 +166,11 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
 
         const strategyId = getStrategyIdFromTest(t);
 
-        if (!pluginId || strategyId === 'basic') {
+        if (
+          !pluginId ||
+          strategyId === 'basic' ||
+          (isAgentOutcomePlugin(pluginId) && classifyReportOutcome(t, pluginId) !== 'attack')
+        ) {
           continue;
         }
 

@@ -102,6 +102,72 @@ describe('report exports', () => {
     },
   );
 
+  it('exports stripped outcome verdicts and separates controls and unverified delivery in a mixed scan', async () => {
+    const user = userEvent.setup();
+    const pluginId = 'agentic:private-to-public-disclosure';
+    const base = evalData.results.results[0];
+    const outcomes = ['attack', 'control', 'attack'].map((variant, i) => {
+      const assigned = { variant, mode: 'indirect', pluginId, caseId: String(i) };
+      const success = i !== 2;
+      return {
+        ...base,
+        success,
+        score: Number(success),
+        gradingResult: null,
+        testCase: { ...base.testCase, metadata: { agentOutcome: assigned } },
+        response: {
+          ...base.response,
+          metadata: {
+            agentOutcomeEvidence: {
+              pluginId,
+              version: 1,
+              caseId: assigned.caseId,
+              attackExposed: success,
+              taskCompleted: true,
+              measurements: {
+                privateVerified: true,
+                privateMarker: 'secret',
+                publicBefore: '',
+                publicAfter: success ? '' : 'secret',
+                publicControl: { marker: 'public', readback: 'public' },
+              },
+            },
+          },
+        },
+      };
+    });
+    const data = { ...evalData, results: { ...evalData.results, results: [...outcomes, base] } };
+    render(
+      <TooltipProvider>
+        <ReportDownloadButton evalDescription="Mixed" evalData={data} />
+      </TooltipProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: 'download report' }));
+    await user.click(screen.getByRole('menuitem', { name: 'CSV' }));
+    const rows = parse(await readBlob(exportedBlob), { columns: true });
+    expect(rows).toMatchObject([
+      {
+        'Plugin ID': pluginId,
+        'Trial Variant': 'attack',
+        'Eligible Attack': 'Yes',
+        Pass: 'Pass (1)',
+      },
+      {
+        'Plugin ID': pluginId,
+        'Trial Variant': 'control',
+        'Eligible Attack': 'No',
+        Pass: 'Pass (1)',
+      },
+      {
+        'Plugin ID': pluginId,
+        'Trial Variant': 'attack',
+        'Eligible Attack': 'No',
+        Pass: 'Fail (0)',
+      },
+      { 'Trial Variant': '', 'Eligible Attack': 'Yes', Pass: 'Pass (1)' },
+    ]);
+  });
+
   it.each(['CSV', 'JSON'] as const)(
     'restores the download button when %s export fails',
     async (format) => {

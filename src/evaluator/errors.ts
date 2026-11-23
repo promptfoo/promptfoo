@@ -16,3 +16,24 @@ export class PromptSuggestionsRejectedError extends Error {
     this.name = 'PromptSuggestionsRejectedError';
   }
 }
+
+// Retry cleanup deletes every previous error after evaluating the static seed
+// list. That list cannot reconstruct failed, dynamically proposed children.
+export function ticketRevisionRetryError(
+  ...configs: Array<
+    { plugins?: readonly (string | { id: string; config?: Record<string, unknown> })[] } | undefined
+  >
+): string | undefined {
+  if (
+    configs.some((config) =>
+      config?.plugins?.some(
+        (plugin) =>
+          typeof plugin === 'object' &&
+          plugin?.id === 'agentic:private-to-public-disclosure' &&
+          plugin.config?.metaTicketRevision,
+      ),
+    )
+  ) {
+    return 'Cannot retry errors for evaluations with Meta ticket revisions. Start a fresh evaluation.';
+  }
+}

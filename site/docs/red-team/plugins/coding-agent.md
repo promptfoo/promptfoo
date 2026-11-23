@@ -43,7 +43,7 @@ redteam:
     - id: coding-agent:core
 ```
 
-Use the full collection to run all coding-agent plugin IDs:
+Use the full collection to run the plugins in the table above. To test analytics changes with a consent banner and collector, add the opt-in [consent bypass plugin](/docs/red-team/plugins/agent-outcomes/#consent-bypass).
 
 ```yaml
 redteam:

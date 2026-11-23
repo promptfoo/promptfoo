@@ -407,30 +407,81 @@ describe('doGenerateRedteam', () => {
     );
   });
 
-  it.each([
+  function mockOutputCache(configPath: string, outputPath: string, configContent = '{}') {
+    const cache: { output?: Partial<UnifiedConfig> } = {};
+    vi.mocked(fs.existsSync).mockImplementation((filePath) => {
+      const path = String(filePath);
+      return path === configPath || (path === outputPath && cache.output !== undefined);
+    });
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      String(filePath) === outputPath ? yaml.dump(cache.output) : configContent,
+    );
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult([]));
+    return cache;
+  }
+
+  it.each([[], undefined, 'tests.yaml'].map((tests) => ({ tests })))(
+    'rejects an unusable strict cache hit with tests=$tests when regeneration yields zero cases',
+    async ({ tests }) => {
+      const options = { config: 'config.yaml', output: 'redteam.yaml', strict: true };
+      const cache = mockOutputCache(options.config, options.output);
+      await doGenerateRedteam(options);
+      cache.output = { ...vi.mocked(writePromptfooConfig).mock.calls[0][0], tests };
+      vi.mocked(synthesize).mockResolvedValue({ ...createSynthesisResult(), testCases: [] });
+
+      await expect(doGenerateRedteam(options)).rejects.toThrow(
+        'Strict generation produced no final test cases',
+      );
+      expect(synthesize).toHaveBeenCalledTimes(2);
+      expect(writePromptfooConfig).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('honors --write with a cached default output and reuses an explicit matching output', async () => {
+    const options = { config: 'config.yaml', output: 'redteam.yaml' };
+    const cache = mockOutputCache(options.config, options.output);
+    await doGenerateRedteam(options);
+    cache.output = vi.mocked(writePromptfooConfig).mock.calls[0][0];
+
+    await doGenerateRedteam({ ...options, write: true });
+    expect(synthesize).toHaveBeenCalledOnce();
+
+    await doGenerateRedteam({ config: options.config, write: true });
+    expect(synthesize).toHaveBeenCalledTimes(2);
+    expect(writePromptfooConfig).toHaveBeenLastCalledWith(
+      expect.anything(),
+      options.config,
+      expect.anything(),
+    );
+  });
+
+  it.each<[string, Partial<RedteamCliGenerateOptions>, Partial<RedteamCliGenerateOptions>]>([
     ['adding a filter', {}, { filterProviders: 'team-a' }],
     ['filterProviders value', { filterProviders: 'team-a' }, { filterProviders: 'team-b' }],
     ['filterTargets value', { filterTargets: 'team-a' }, { filterTargets: 'team-b' }],
     ['filter option', { filterProviders: 'team-a' }, { filterTargets: 'team-a' }],
-  ] as const)(
+    ['adding a strategy override', {}, { strategies: ['basic'] }],
+    ['dropping a strategy override', { strategies: ['basic'] }, {}],
+    ['plugin selection', { plugins: [{ id: 'hijacking' }] }, { plugins: [{ id: 'harmful:hate' }] }],
+    ['strict test count', { strict: true, numTests: 1 }, { strict: true, numTests: 3 }],
+    ['language', {}, { language: 'fr' }],
+    ['purpose', {}, { purpose: 'Check weather' }],
+    ['injection variable', {}, { injectVar: 'request' }],
+    ['target output exclusion', {}, { excludeTargetOutputFromAgenticAttackGeneration: true }],
+    ['provider', {}, { provider: 'openai:gpt-4o-mini' }],
+    ['description', {}, { description: 'Weather checks' }],
+    ['enabling strict generation', {}, { strict: true }],
+    ['strict strategy selection', { strict: true, strategies: ['basic'] }, { strict: true }],
+  ])(
     'should regenerate when the %s changes for an existing output',
-    async (_, initialFilters, changedFilters) => {
+    async (_, initialOverrides, changedOverrides) => {
       const configPath = 'config.yaml';
       const outputPath = 'output.yaml';
       const configContent = yaml.dump({
         providers: ['promptfoo://provider/team-a', 'promptfoo://provider/team-b'],
         redteam: { plugins: ['harmful:hate'] },
       });
-      let generatedOutput: Partial<UnifiedConfig> | undefined;
-
-      vi.mocked(fs.existsSync).mockImplementation((filePath) => {
-        const path = String(filePath);
-        return path === configPath || (path === outputPath && generatedOutput !== undefined);
-      });
-      vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
-        return String(filePath) === outputPath ? yaml.dump(generatedOutput) : configContent;
-      });
-      vi.mocked(synthesize).mockResolvedValue(createSynthesisResult([]));
+      const cache = mockOutputCache(configPath, outputPath, configContent);
 
       const options: RedteamCliGenerateOptions = {
         output: outputPath,
@@ -438,16 +489,16 @@ describe('doGenerateRedteam', () => {
         cache: true,
         defaultConfig: {},
         write: false,
-        ...initialFilters,
       };
+      const initialOptions = { ...options, ...initialOverrides };
 
-      await doGenerateRedteam(options);
-      generatedOutput = vi.mocked(writePromptfooConfig).mock.calls[0][0];
-      const firstHash = generatedOutput.metadata?.configHash;
+      await doGenerateRedteam(initialOptions);
+      cache.output = vi.mocked(writePromptfooConfig).mock.calls[0][0];
+      const firstHash = cache.output.metadata?.configHash;
       expect(firstHash).toMatch(/^[a-f0-9]{64}$/);
 
       vi.clearAllMocks();
-      await doGenerateRedteam(options);
+      await doGenerateRedteam(initialOptions);
 
       expect(synthesize).not.toHaveBeenCalled();
       expect(logger.warn).toHaveBeenCalledWith(
@@ -455,7 +506,7 @@ describe('doGenerateRedteam', () => {
       );
 
       vi.clearAllMocks();
-      await doGenerateRedteam({ ...options, ...changedFilters });
+      await doGenerateRedteam({ ...options, ...changedOverrides });
 
       expect(synthesize).toHaveBeenCalledTimes(1);
       const changedOutput = vi.mocked(writePromptfooConfig).mock.calls[0][0];
@@ -704,6 +755,14 @@ describe('doGenerateRedteam', () => {
     );
   });
 
+  it('fails strict generation when no config or purpose is supplied', async () => {
+    await expect(doGenerateRedteam({ strict: true })).rejects.toThrow(
+      'Strict generation produced no final test cases.',
+    );
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(writePromptfooConfig).not.toHaveBeenCalled();
+  });
+
   it('should use purpose when no config is provided', async () => {
     vi.mocked(extractMcpToolsInfo).mockResolvedValue('');
 
@@ -848,7 +907,7 @@ describe('doGenerateRedteam', () => {
     );
   });
 
-  it('should pass entities from redteam config to synthesize', async () => {
+  it('passes entities and the scan-wide message limit from redteam config to synthesize', async () => {
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
@@ -858,6 +917,7 @@ describe('doGenerateRedteam', () => {
       config: {
         redteam: {
           entities: ['Company X', 'John Doe', 'Product Y'],
+          maxCharsPerMessage: 100,
           plugins: ['harmful:hate' as unknown as RedteamPluginObject],
           strategies: [],
         },
@@ -898,6 +958,7 @@ describe('doGenerateRedteam', () => {
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
         entities: ['Company X', 'John Doe', 'Product Y'],
+        maxCharsPerMessage: 100,
         plugins: expect.any(Array),
         prompts: ['Test prompt'],
         strategies: expect.any(Array),
@@ -952,7 +1013,7 @@ describe('doGenerateRedteam', () => {
     );
   });
 
-  it('should write entities to output config', async () => {
+  it('writes entities and the resolved target privacy policy to the output config', async () => {
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
@@ -962,6 +1023,7 @@ describe('doGenerateRedteam', () => {
       config: {
         redteam: {
           entities: ['Company X', 'John Doe', 'Product Y'],
+          excludeTargetOutputFromAgenticAttackGeneration: true,
           plugins: ['harmful:hate' as unknown as RedteamPluginObject],
           strategies: [],
         },
@@ -1003,6 +1065,7 @@ describe('doGenerateRedteam', () => {
       expect.objectContaining({
         redteam: expect.objectContaining({
           entities: ['Company X', 'John Doe', 'Product Y'],
+          excludeTargetOutputFromAgenticAttackGeneration: true,
         }),
         defaultTest: expect.objectContaining({
           metadata: expect.objectContaining({
@@ -1075,6 +1138,26 @@ describe('doGenerateRedteam', () => {
 
     expect(result).toBeNull();
     expect(mockProvider.cleanup).toHaveBeenCalledWith();
+  });
+
+  it('fails strict generation with no final cases and preserves the previous output', async () => {
+    vi.mocked(synthesize).mockResolvedValue({ ...createSynthesisResult(), testCases: [] });
+
+    await expect(
+      doGenerateRedteam({
+        config: 'test-config.yaml',
+        output: 'redteam.yaml',
+        defaultConfig: {},
+        force: true,
+        strict: true,
+      }),
+    ).rejects.toThrow(
+      'Strict generation produced no final test cases. Any existing output is unchanged.',
+    );
+
+    expect(writePromptfooConfig).not.toHaveBeenCalled();
+    expect(fsMocks.writeFileSync).not.toHaveBeenCalled();
+    expect(mockProvider.cleanup).toHaveBeenCalledOnce();
   });
 
   it('should explain when basic is disabled without replacement strategies', async () => {
@@ -3112,7 +3195,7 @@ describe('doGenerateRedteam', () => {
       );
     });
 
-    it('should merge context vars into test case vars', async () => {
+    it('merges context vars while preserving generated literal bindings', async () => {
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
         testSuite: {
@@ -3129,7 +3212,7 @@ describe('doGenerateRedteam', () => {
               {
                 id: 'ctx',
                 purpose: 'Context purpose',
-                vars: { context_file: 'data.json', role: 'admin' },
+                vars: { context_file: 'data.json', role: 'admin', ticket: 'Context ticket' },
               },
             ],
           },
@@ -3139,9 +3222,16 @@ describe('doGenerateRedteam', () => {
       vi.mocked(synthesize).mockResolvedValue({
         testCases: [
           {
-            vars: { input: 'Test input', existingVar: 'existing' },
+            vars: { input: 'Test input', existingVar: 'existing', ticket: 'Default ticket' },
             assert: [{ type: 'equals', value: 'Test output' }],
             metadata: { pluginId: 'harmful:hate' },
+          },
+          {
+            vars: { input: 'Triage the ticket', ticket: 'Generated ticket' },
+            metadata: {
+              pluginId: 'agentic:private-to-public-disclosure',
+              __promptfoo: { literalVars: ['input', 'ticket'] },
+            },
           },
         ],
         purpose: 'Test purpose',
@@ -3169,6 +3259,14 @@ describe('doGenerateRedteam', () => {
                 input: 'Test input',
                 existingVar: 'existing',
                 context_file: 'data.json',
+                role: 'admin',
+                ticket: 'Context ticket',
+              }),
+            }),
+            expect.objectContaining({
+              vars: expect.objectContaining({
+                input: 'Triage the ticket',
+                ticket: 'Generated ticket',
                 role: 'admin',
               }),
             }),

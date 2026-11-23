@@ -1,4 +1,5 @@
 import { AegisGrader } from './plugins/aegis';
+import { agentOutcomeGraders } from './plugins/agentic/agentOutcomeGrader';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/constants';
 import { MemoryPoisoningPluginGrader } from './plugins/agentic/memoryPoisoning';
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
@@ -293,6 +294,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:vlsu': new VLSUGrader(),
   'promptfoo:redteam:wordplay': new WordplayGrader(),
   ...createCodingAgentGraders(),
+  ...agentOutcomeGraders,
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {

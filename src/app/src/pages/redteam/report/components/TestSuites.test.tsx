@@ -645,6 +645,53 @@ describe('TestSuites Component - Zero Attack Success Rate Navigation', () => {
     mockWindowLocation({ search: '?evalId=test-eval-123' });
   });
 
+  it.each([
+    { passedAttacks: 0, rate: 'N/A' },
+    { passedAttacks: 2, rate: '0.00%' },
+  ])(
+    'shows a failed baseline with $passedAttacks graded attacks and links to the failure',
+    async ({ passedAttacks, rate }) => {
+      const attacks = {
+        total: passedAttacks,
+        pass: passedAttacks,
+        failCount: 0,
+        passWithFilter: passedAttacks,
+      };
+      const stats = { ...attacks, total: passedAttacks + 1, failCount: 1, attacks };
+      renderWithProviders(
+        <TestSuites {...defaultProps} categoryStats={{ 'agentic:unauthorized-sharing': stats }} />,
+      );
+      expect(screen.getByText(/^1 matched baseline failed/)).toBeInTheDocument();
+      expect(screen.getByText(rate)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'View logs' }));
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('mode=failures'));
+    },
+  );
+
+  it('distinguishes a violation without verified delivery from a baseline failure in the table and CSV', async () => {
+    const pluginId = 'agentic:unauthorized-sharing';
+    const attacks = { total: 0, pass: 0, failCount: 0, passWithFilter: 0 };
+    const stats = { ...attacks, total: 1, failCount: 1, attacks, unverifiedFailures: 1 };
+    mockCsvDownloadApis();
+    renderWithProviders(<TestSuites {...defaultProps} categoryStats={{ [pluginId]: stats }} />);
+    expect(screen.getByText(/^1 violation without verified attack delivery/)).toBeInTheDocument();
+    expect(screen.queryByText(/baseline failed/)).toBeNull();
+    expect(screen.getByText('N/A')).toBeInTheDocument();
+    expect(screen.getByText('0 / 0')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Export vulnerabilities to CSV' }));
+    const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob;
+    const csv = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blob);
+    });
+    expect(csv).toContain(
+      'Successful Attacks,Eligible Attacks,Failed Baselines,Violations Without Verified Delivery,Total Tests,Attack Success Rate',
+    );
+    expect(csv).toContain(',0,0,0,1,1,N/A,');
+  });
+
   it('should navigate to eval page with mode=passes when attackSuccessRate is 0', async () => {
     const user = userEvent.setup();
     renderWithProviders(<TestSuites {...defaultProps} />);

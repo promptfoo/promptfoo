@@ -1,5 +1,5 @@
 import type { EventSource } from './eventSource';
-import type { EvaluateOptions } from './index';
+import type { EvaluateOptions, PluginConfig } from './index';
 import type { TokenUsage } from './shared';
 
 /**
@@ -8,6 +8,8 @@ import type { TokenUsage } from './shared';
  * separate from the public `EvaluateOptions` surface.
  */
 export type InternalEvaluateOptions = EvaluateOptions & {
+  /** Host policy can restrict the explicitly configured arms. An empty list disables proposals. */
+  allowedMetaTicketRevisions?: readonly NonNullable<PluginConfig['metaTicketRevision']>[];
   eventSource?: EventSource;
   /** CLI-owned graceful pause; ordinary caller cancellation retains its error rows. */
   pauseSignal?: AbortSignal;

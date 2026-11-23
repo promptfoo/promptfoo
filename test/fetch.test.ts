@@ -791,6 +791,103 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it('requires verified TLS through HTTPS proxies and refuses redirects for sensitive requests', async () => {
+    mockProcessEnv({ HTTPS_PROXY: 'https://proxy.example.com' });
+    vi.mocked(getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_INSECURE_SSL');
+    // A dispatcher warmed without verification must not be reused.
+    await fetchWithProxy('https://example.com');
+    await fetchWithProxy('https://example.com', { requireSecureTransport: true });
+    expect(ProxyAgent).toHaveBeenCalledTimes(2);
+    expect(ProxyAgent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        proxyTls: { rejectUnauthorized: true },
+        requestTls: { rejectUnauthorized: true },
+      }),
+    );
+    expect(global.fetch).toHaveBeenLastCalledWith(
+      'https://example.com',
+      expect.objectContaining({ redirect: 'error' }),
+    );
+  });
+
+  it('allows plaintext sensitive requests only on unproxied loopback', async () => {
+    const options = { requireSecureTransport: true } as const;
+    for (const host of ['127.0.0.1', 'localhost', '[::1]', '[::ffff:7f00:2]']) {
+      await fetchWithProxy('http://' + host, options);
+    }
+    await expect(fetchWithProxy('http://127.0.0.1.example.com', options)).rejects.toThrow(
+      'Verified transport',
+    );
+    mockProcessEnv({ HTTP_PROXY: 'http://proxy.example.com' });
+    await expect(fetchWithProxy('http://127.0.0.1', options)).rejects.toThrow('Verified transport');
+    expect(global.fetch).toHaveBeenCalledTimes(4);
+  });
+
+  describe('verified transport custom CA', () => {
+    beforeEach(() => {
+      vi.mocked(getEnvString).mockImplementation((key, fallback) =>
+        key === 'PROMPTFOO_CA_CERT_PATH'
+          ? (process.env.PROMPTFOO_CA_CERT_PATH ?? '')
+          : (fallback ?? ''),
+      );
+    });
+    const options = { requireSecureTransport: true } as const;
+
+    it.each([
+      'certs/authority.pem',
+      '../authority.pem',
+      'C:authority.pem',
+      '\\certs\\authority.pem',
+      ...(path.sep === '\\' ? ['/certs/authority.pem'] : []),
+    ])('rejects relative CA %s before reading any suite files or dispatching', async (cert) => {
+      mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: cert });
+      cliState.basePath = path.resolve('untrusted-suite');
+      await expect(fetchWithProxy('https://example.com', options)).rejects.toThrow('absolute');
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('uses a trusted absolute CA directly on both TLS legs', async () => {
+      const cert = path.resolve('trusted', 'authority.pem');
+      mockProcessEnv({ HTTPS_PROXY: 'https://proxy.example.com', PROMPTFOO_CA_CERT_PATH: cert });
+      cliState.basePath = path.resolve('untrusted-suite');
+      vi.mocked(fsPromises.readFile).mockResolvedValue('trusted CA');
+      await fetchWithProxy('https://example.com', options);
+      expect(fsPromises.readFile).toHaveBeenCalledExactlyOnceWith(cert, 'utf8');
+      expect(ProxyAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          proxyTls: { ca: 'trusted CA', rejectUnauthorized: true },
+          requestTls: { ca: 'trusted CA', rejectUnauthorized: true },
+        }),
+      );
+    });
+
+    it('fails closed if the configured CA cannot be read', async () => {
+      mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: path.resolve('missing.pem') });
+      vi.mocked(fsPromises.readFile).mockRejectedValue(new Error('ENOENT'));
+      await expect(fetchWithProxy('https://example.com', options)).rejects.toThrow(
+        'CA certificate',
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('fails closed on an empty CA file', async () => {
+      mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: path.resolve('empty.pem') });
+      vi.mocked(fsPromises.readFile).mockResolvedValue(' ');
+      await expect(fetchWithProxy('https://example.com', options)).rejects.toThrow(
+        'CA certificate',
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('does not load TLS trust roots for a direct HTTP loopback worker request', async () => {
+      mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: 'relative.pem' });
+      await fetchWithProxy('http://127.0.0.1/api/v1/task', options);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('should resolve CA certificate path relative to basePath when available', async () => {
     const mockBasePath = path.normalize('/base/path');
     const mockCertPath = 'certs/cert.pem';

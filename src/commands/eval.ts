@@ -185,6 +185,11 @@ export function evalCommand(
         const optsWithAliases = normalizeTagOption(
           opts as EvalCommandOptions & { tag?: Record<string, string> },
         );
+        // Commander can consume --env-file on a parent command. Retain its
+        // provenance so config.commandLineOptions.envPath cannot override it.
+        if (command.getOptionValueSourceWithGlobals('envPath') === 'cli') {
+          optsWithAliases.envPath = command.optsWithGlobals().envPath;
+        }
         // Commander defaults a lone `--no-cache` to `true`. Only an explicit flag should
         // override the loaded config's `commandLineOptions.cache` / `evaluateOptions.cache`.
         if (command.getOptionValueSource('cache') !== 'cli') {

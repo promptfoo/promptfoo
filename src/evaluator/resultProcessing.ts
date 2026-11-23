@@ -10,6 +10,7 @@ import { safeJsonStringify } from '../util/json';
 import {
   isSecretField,
   mapTestProviderRefs,
+  projectOperationalMetadata,
   REDACTED,
   sanitizeObject,
   stripProviderPromptSelectors,
@@ -221,8 +222,11 @@ export function projectTestCase(
   if (options.stripOutput) {
     delete projectedTestCase.providerOutput;
   }
-  if (options.stripMetadata && testCase.metadata?.__promptfoo?.remote === true) {
-    projectedTestCase.metadata = { __promptfoo: { remote: true } };
+  if (options.stripMetadata) {
+    const metadata = projectOperationalMetadata(testCase.metadata, projectedTestCase.vars);
+    if (metadata) {
+      projectedTestCase.metadata = metadata;
+    }
   }
 
   return options.stripPromptText

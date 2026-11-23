@@ -7,7 +7,6 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import { getRiskCategorySeverityMap } from '@promptfoo/presentation/redteamConfig';
-import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -29,15 +28,19 @@ import {
 import { Download, ScrollText } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { getSeverityColor } from '../utils/color';
-import { type TestResultStats } from './FrameworkComplianceUtils';
-import { getStrategyIdFromTest } from './shared';
+import {
+  type FindingStats,
+  formatFindingASR,
+  getFindingMetrics,
+  getStrategyIdFromTest,
+} from './shared';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 
 interface TestSuitesProps {
   evalId: string;
-  categoryStats: Record<string, Required<TestResultStats>>;
+  categoryStats: Record<string, FindingStats>;
   plugins: RedteamPluginObject[];
   failuresByPlugin?: Record<string, unknown[]>;
   passesByPlugin?: Record<string, unknown[]>;
@@ -124,7 +127,7 @@ const TestSuites = ({
               failuresByPlugin,
               passesByPlugin,
               pluginName,
-              categoryStats,
+              { [pluginName]: stats.attacks ?? stats },
               getStrategyIdFromTest,
             );
 
@@ -163,20 +166,15 @@ const TestSuites = ({
             id: pluginName,
             pluginName,
             type,
-            description,
             severity,
-            passRate: (stats.pass / stats.total) * 100,
-            passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
-            attackSuccessRate: calculateAttackSuccessRate(stats.total, stats.failCount),
-            total: stats.total,
-            successfulAttacks: stats.total - stats.pass,
+            ...getFindingMetrics(stats, description),
             riskScore: riskDetails.riskScore,
             complexityScore: riskDetails.complexityScore,
             worstStrategy: riskDetails.worstStrategy,
           };
         })
-        // Filter out rows where ASR = 0
-        .filter((row) => row.successfulAttacks > 0)
+        // A failed baseline remains a finding when every attack was blocked.
+        .filter((row) => row.failedTests > 0)
     );
   }, [
     categoryStats,
@@ -204,6 +202,9 @@ const TestSuites = ({
       'Risk Score',
       'Complexity',
       'Successful Attacks',
+      'Eligible Attacks',
+      'Failed Baselines',
+      'Violations Without Verified Delivery',
       'Total Tests',
       'Attack Success Rate',
       'Severity',
@@ -212,8 +213,8 @@ const TestSuites = ({
     const compareRows = (a: (typeof rows)[number], b: (typeof rows)[number]) => {
       if (sortModel.length > 0 && sortModel[0].id === 'attackSuccessRate') {
         return sortModel[0].desc
-          ? b.attackSuccessRate - a.attackSuccessRate
-          : a.attackSuccessRate - b.attackSuccessRate;
+          ? (b.attackSuccessRate ?? -1) - (a.attackSuccessRate ?? -1)
+          : (a.attackSuccessRate ?? -1) - (b.attackSuccessRate ?? -1);
       }
 
       if (sortModel.length > 0 && sortModel[0].id === 'severity') {
@@ -258,11 +259,14 @@ const TestSuites = ({
       displayNameOverrides[subCategory.pluginName as keyof typeof displayNameOverrides] ||
         subCategory.type,
       subCategory.description,
-      subCategory.riskScore.toFixed(2),
-      subCategory.complexityScore.toFixed(1),
+      subCategory.attackCount ? subCategory.riskScore.toFixed(2) : 'N/A',
+      subCategory.attackCount ? subCategory.complexityScore.toFixed(1) : 'N/A',
       subCategory.successfulAttacks,
+      subCategory.attackCount,
+      subCategory.failedBaselines,
+      subCategory.unverifiedFailures,
       subCategory.total,
-      formatASRForDisplay(subCategory.attackSuccessRate) + '%',
+      formatFindingASR(subCategory.attackSuccessRate),
       severityDisplayNames[subCategory.severity as Severity],
     ]);
 
@@ -331,6 +335,9 @@ const TestSuites = ({
         size: 110,
         meta: { align: 'right' },
         cell: ({ row }) => {
+          if (!row.original.attackCount) {
+            return <span aria-label="No eligible attacks">—</span>;
+          }
           const value = row.original.riskScore;
           return (
             <Tooltip>
@@ -351,9 +358,7 @@ const TestSuites = ({
                   </p>
                   <div className="mt-2 space-y-0.5 text-xs">
                     <p>• Base Severity: {row.original.severity}</p>
-                    <p>
-                      • Attack Success Rate: {formatASRForDisplay(row.original.attackSuccessRate)}%
-                    </p>
+                    <p>• Attack Success Rate: {formatFindingASR(row.original.attackSuccessRate)}</p>
                     <p className="mt-1 italic">
                       Higher exploitability increases risk exponentially
                     </p>
@@ -370,6 +375,9 @@ const TestSuites = ({
         size: 100,
         meta: { align: 'right' },
         cell: ({ row }) => {
+          if (!row.original.attackCount) {
+            return <span aria-label="No eligible attacks">—</span>;
+          }
           const value = row.original.complexityScore;
           return (
             <Tooltip>
@@ -406,12 +414,16 @@ const TestSuites = ({
             <TooltipTrigger asChild>
               <span className="cursor-help">Succeeded</span>
             </TooltipTrigger>
-            <TooltipContent>Successful Attacks</TooltipContent>
+            <TooltipContent>Successful / Eligible Attacks</TooltipContent>
           </Tooltip>
         ),
         size: 120,
         meta: { align: 'right' },
-        cell: ({ getValue }) => <span className="tabular-nums">{getValue<number>()}</span>,
+        cell: ({ row }) => (
+          <span className="tabular-nums">
+            {row.original.successfulAttacks} / {row.original.attackCount}
+          </span>
+        ),
       },
       {
         accessorKey: 'attackSuccessRate',
@@ -431,7 +443,7 @@ const TestSuites = ({
           const passRate = row.original.passRate;
           return (
             <div className="tabular-nums">
-              <strong>{formatASRForDisplay(value)}%</strong>
+              <strong>{formatFindingASR(value)}</strong>
               {passRateWithFilter !== passRate && (
                 <>
                   <br />({formatASRForDisplay(100 - passRateWithFilter)}% with mitigation)
@@ -500,8 +512,12 @@ const TestSuites = ({
                     ]),
                   );
 
-                  // If ASR is 0, show passes
-                  const mode = row.original.attackSuccessRate === 0 ? 'passes' : 'failures';
+                  const hasExcludedFailure =
+                    row.original.failedTests > row.original.successfulAttacks;
+                  const mode =
+                    row.original.attackSuccessRate === 0 && !hasExcludedFailure
+                      ? 'passes'
+                      : 'failures';
                   navigate(`${EVAL_ROUTES.DETAIL(evalId)}?filter=${filterParam}&mode=${mode}`);
                 }}
               >

@@ -4,6 +4,7 @@ import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
 import {
   ADDITIONAL_PLUGINS,
+  AGENT_OUTCOME_PLUGINS,
   ALL_PLUGINS,
   BASE_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
@@ -206,6 +207,70 @@ describe('Plugins', () => {
           modifiers.toolDiscoveryAttackConstraints,
         );
       }
+    },
+  );
+
+  it.each([
+    { maxCharsPerMessage: 8 },
+    {
+      modifiers: {
+        maxCharsPerMessage: 'Each generated user message must be 8 characters or fewer.',
+      },
+    },
+  ])(
+    'rejects a mixed batch with an oversized fixed task before generating either mode (%j)',
+    async (limit) => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      const plugin = Plugins.find((p) => p.key === 'agentic:private-to-public-disclosure')!;
+      await expect(
+        plugin.action({
+          purpose: 'Support desk',
+          n: 2,
+          injectVar: 'query',
+          config: {
+            mode: 'both',
+            legitimateTask: '[{"role":"user","content":"Triage"}]',
+            ...limit,
+          },
+          provider: mockProvider,
+          delayMs: 0,
+        }),
+      ).rejects.toThrow('Shorten legitimateTask to 8 characters or increase maxCharsPerMessage');
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(AGENT_OUTCOME_PLUGINS)(
+    'preserves the local case envelope through remote generation for %s',
+    async (id) => {
+      const plugin = Plugins.find((p) => p.key === id)!;
+      const config = {
+        mode: 'indirect',
+        legitimateTask: 'Owner task',
+        indirectInjectionVar: 'ticket',
+      };
+      const params = {
+        purpose: 'Test agent',
+        n: 1,
+        injectVar: 'query',
+        config,
+        provider: mockProvider,
+        delayMs: 0,
+      };
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      mockProvider.callApi.mockResolvedValue({ output: 'Prompt: Ticket text' });
+      const local = await plugin.action(params);
+      expect(local[0].vars).toMatchObject({ query: 'Owner task', ticket: 'Ticket text' });
+
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse(local));
+      const [remote] = await plugin.action(params);
+      const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+      expect(request).toMatchObject({ task: id, injectVar: 'query', config });
+      expect(remote.vars).toEqual(local[0].vars);
+      expect(remote.metadata?.agentOutcome).toEqual(local[0].metadata?.agentOutcome);
+      expect(remote.assert).toEqual(local[0].assert);
     },
   );
 

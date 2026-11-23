@@ -12,6 +12,9 @@ import {
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
+import { AgentOutcomeCaseSchema } from '../contracts/agentOutcomes';
+import { getLiteralVarNames } from '../contracts/literalVars';
+import { InputsSchema } from '../contracts/shared';
 import { getEnvBool, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from '../envars';
 import { runExtensionHook } from '../evaluatorHelpers';
 import logger, { isDebugEnabled } from '../logger';
@@ -92,6 +95,7 @@ import {
   isNonCredentialHeader,
   isSecretEnvVarName,
   isSecretField,
+  looksLikeSecret,
   REDACTED,
   sanitizeObject,
   sanitizeUrl,
@@ -108,7 +112,8 @@ import {
 } from '../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../util/transform';
 import { compileDerivedMetricFormula } from './derivedMetricFormula';
-import { PromptSuggestionsRejectedError } from './errors';
+import { PromptSuggestionsRejectedError, ticketRevisionRetryError } from './errors';
+import { MetaTicketRevisions } from './metaTicketRevisions';
 import { getResultIndexKey } from './resultIndex';
 import { PROMPTFOO_METADATA_KEY, sanitizeResultForJsonlArtifact } from './resultProcessing';
 import {
@@ -314,6 +319,7 @@ function getNonTransientTargetStatus(row: EvaluateResult): number | undefined {
 
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
+  literalVars?: string[],
 ): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
   const combinations: Record<string, VarValue>[] = [{}];
@@ -321,7 +327,8 @@ export function generateVarCombinations(
   for (const key of keys) {
     let values: Array<string | object> = [];
 
-    if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
+    const literal = literalVars?.includes(key);
+    if (!literal && typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
 
       // For glob patterns, we need to resolve the base directory and use relative patterns
@@ -342,8 +349,8 @@ export function generateVarCombinations(
       values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
     }
 
-    // Check if it's an array but not a string array
-    if (Array.isArray(vars[key]) && typeof vars[key][0] !== 'string') {
+    // A literal array is one payload, even when every item is a string.
+    if (Array.isArray(vars[key]) && (literal || typeof vars[key][0] !== 'string')) {
       values = [vars[key]];
     }
 
@@ -1107,9 +1114,13 @@ async function applyInputTransform(
     return;
   }
 
+  const literalVars = getLiteralVarNames(testCase);
+  // A transform can mutate its input, including nested objects shared with the assigned trial.
+  // Keep the originals for comparison and leave the assignment intact.
+  const inputVars = literalVars?.length ? structuredClone(testCase.vars) : testCase.vars;
   const transformedVars = await transform(
     inputTransform,
-    testCase.vars,
+    inputVars,
     {
       prompt: {},
       uuid: crypto.randomUUID(),
@@ -1121,7 +1132,45 @@ async function applyInputTransform(
     typeof transformedVars === 'object',
     'Transform function did not return a valid object',
   );
-  testCase.vars = { ...testCase.vars, ...transformedVars };
+  const vars = { ...inputVars, ...transformedVars };
+  if (literalVars?.length) {
+    // Arbitrary transforms can derive a value from any input. Only unchanged operator vars
+    // may still be interpreted as files, scripts or templates, including on replay.
+    const names = new Set(literalVars);
+    for (const [name, value] of Object.entries(vars)) {
+      if (
+        !Object.hasOwn(testCase.vars ?? {}, name) ||
+        !isDeepStrictEqual(testCase.vars?.[name], value)
+      ) {
+        // On replay the schema resolver follows $ref before variable loading, and
+        // names from literalVars occur as strings in config metadata. Secret-looking
+        // names are redacted there, leaving the corresponding vars key unprotected.
+        invariant(
+          InputsSchema.keyType.safeParse(name).success &&
+            !Object.hasOwn(Object.prototype, name) &&
+            !looksLikeSecret(name) &&
+            !hasConfigRef(value),
+          'Cannot replay transformVars output with an unsafe variable name or a $ref. Keep the generated content as a literal string under a short, fixed variable name.',
+        );
+        names.add(name);
+      }
+    }
+    testCase.metadata = {
+      ...testCase.metadata,
+      __promptfoo: { ...testCase.metadata?.__promptfoo, literalVars: [...names] },
+    };
+  }
+  testCase.vars = vars;
+}
+
+function hasConfigRef(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (value === null || typeof value !== 'object' || seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  return (
+    Object.hasOwn(value, '$ref') || Object.values(value).some((child) => hasConfigRef(child, seen))
+  );
 }
 
 async function buildRunEvalOptions({
@@ -1276,7 +1325,7 @@ function appendRunEvalOptionsForTestCase({
   const varCombinations =
     getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
       ? [testCase.vars]
-      : generateVarCombinations(testCase.vars || {});
+      : generateVarCombinations(testCase.vars || {}, getLiteralVarNames(testCase));
 
   const globalRepeat = normalizeRepeatCount(options.repeat);
   const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
@@ -1527,13 +1576,30 @@ function createRunEvalTest(
     options: testOptions,
   };
 
+  // Each dispatch (including prompt/provider columns and repeats) needs a fresh receipt.
+  // Bind the nonce to the persisted assignment too so deferred grading can match it.
+  if (testCase.metadata?.agentOutcome) {
+    const assigned = AgentOutcomeCaseSchema.safeParse(testCase.metadata.agentOutcome);
+    if (assigned.success) {
+      const caseId = crypto.randomUUID();
+      baseTest.metadata = {
+        ...testCase.metadata,
+        agentOutcome: { ...assigned.data, caseId },
+      };
+      const sent = AgentOutcomeCaseSchema.safeParse(vars?.agentOutcome);
+      if (sent.success && sent.data.caseId === assigned.data.caseId) {
+        baseTest.vars = { ...vars, agentOutcome: { ...sent.data, caseId } };
+      }
+    }
+  }
+
   if (!isTracingEnabledForTest(testSuite, testCase)) {
     return baseTest;
   }
   return {
     ...baseTest,
     metadata: {
-      ...testCase.metadata,
+      ...baseTest.metadata,
       tracingEnabled: true,
       evaluationId: evalId,
     },
@@ -1882,6 +1948,7 @@ interface EvalProcessingContext {
   concurrency: number;
   deferredGradingAbortSignal?: AbortSignal;
   derivedMetrics: PreparedDerivedMetrics;
+  metaTicketRevisions?: MetaTicketRevisions;
   numComplete: number;
   options: InternalEvaluateOptions;
   promptEvalCounts: number[];
@@ -2478,7 +2545,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       // the hook's mutations don't need to be applied first. If future changes add
       // namedScores tracking here, move afterEach above this call.
       this.trackCompletedRow(evalStep, row, context);
-      context.numComplete++;
 
       // Apply afterEach hook mutations before persisting. Pass a shallow copy
       // so in-place mutations don't corrupt the row on hook failure.
@@ -2519,7 +2585,19 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
       }
 
+      // A target or replay can supply metadata with the same name. Only the
+      // current scheduler can attest to a proposal decision for this attempt.
+      if (evalStep.test.metadata?.agentOutcome?.metaTicketRevision && row.metadata) {
+        delete row.metadata.metaTicketRevisionDecision;
+      }
+      const proposed =
+        context.metaTicketRevisions &&
+        (await context.metaTicketRevisions.decide(index, evalStep, row, rows.length === 1));
       await this.persistEvalRow(row);
+      context.numComplete++;
+      if (proposed && !this.store.hasResultPersistenceFailure(row)) {
+        context.runEvalOptionsLength++;
+      }
 
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
@@ -2702,6 +2780,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices,
     progressBarManager,
     prompts,
+    runEvalOptions,
     serialRunEvalOptions,
     shouldGroupGradingByProvider,
   }: {
@@ -2719,6 +2798,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices: Set<number>;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
+    runEvalOptions: RunEvalOptions[];
     serialRunEvalOptions: RunEvalOptions[];
     shouldGroupGradingByProvider: boolean;
   }): Promise<TEvaluation | undefined> {
@@ -2753,6 +2833,20 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         });
       }
       checkAbort();
+      const children = processingContext.metaTicketRevisions?.ready(
+        (index) => !this.store.hasResultPersistenceFailure(runEvalOptions[index]),
+      );
+      if (children?.length) {
+        for (const child of children) {
+          checkAbort();
+          // Record only children whose step actually started. A deadline during
+          // the seed phase must not manufacture timeouts for hypothetical retries.
+          const index = runEvalOptions.push(child) - 1;
+          await this.processEvalStepWithTimeout(child, index, {}, processingContext);
+          processedIndices.add(index);
+        }
+        checkAbort();
+      }
     } catch (err) {
       if (!combinedAbortSignal.aborted) {
         cleanupProgressAfterError(progressBarManager, ciProgressReporter, err);
@@ -2975,9 +3069,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       concurrentRunEvalOptions,
       processingContext.concurrency,
       async (evalStep) => {
+        // forEachOfLimit short-circuits on the first rejection. When cancelled
+        // during a proposal, drain in-flight grades before saving the eval.
+        const revisionSignal = processingContext.metaTicketRevisions?.signal;
+        if (revisionSignal?.aborted) {
+          return;
+        }
         checkAbort();
         const idx = evalStepIndexMap.get(evalStep)!;
-        await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+        try {
+          await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+        } catch (error) {
+          if (revisionSignal?.aborted) {
+            return;
+          }
+          throw error;
+        }
         processedIndices.add(idx);
         const now = Date.now();
         if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
@@ -3871,7 +3978,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (recovery) {
       testSuite = { ...testSuite, prompts: recovery.hookPrompts };
     }
+    const operatorArms = testSuite.extensions?.length
+      ? MetaTicketRevisions.operatorArms(testSuite.redteam)
+      : undefined;
     testSuite = await runBeforeAllExtensions(testSuite);
+    if (cliState.retryMode) {
+      const retryError = ticketRevisionRetryError(this.store.config.redteam, testSuite.redteam);
+      if (retryError) {
+        throw new Error(retryError);
+      }
+    }
     const derivedMetrics = prepareDerivedMetrics(testSuite.derivedMetrics);
     if (
       !restorePromptColumns &&
@@ -3931,11 +4047,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
 
+    const revisions = new MetaTicketRevisions(runEvalOptions, combinedAbortSignal, operatorArms);
     const processingContext: EvalProcessingContext = {
       assertionTypes,
       concurrency,
       deferredGradingAbortSignal,
       derivedMetrics,
+      metaTicketRevisions: revisions.enabled ? revisions : undefined,
       numComplete: 0,
       options,
       promptEvalCounts: createPromptEvalCounts(prompts),
@@ -3968,7 +4086,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       progressBarManager = new ProgressBarManager(isWebUI);
     }
 
+    let previousTotal = runEvalOptions.length;
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
+      if (total > previousTotal) {
+        progressBarManager?.updateTotalCount(total - previousTotal);
+        ciProgressReporter?.updateTotalTests(total);
+        previousTotal = total;
+      }
       if (originalProgressCallback) {
         originalProgressCallback(completed, total, index, evalStep, metrics);
       }
@@ -3987,9 +4111,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         // CI progress reporter update
         ciProgressReporter.update(processingContext.numComplete);
       } else {
-        logger.debug(
-          `Eval #${index + 1} complete (${processingContext.numComplete} of ${runEvalOptions.length})`,
-        );
+        logger.debug(`Eval #${index + 1} complete (${processingContext.numComplete} of ${total})`);
       }
     };
 
@@ -4053,6 +4175,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       processedIndices,
       progressBarManager,
       prompts,
+      runEvalOptions,
       serialRunEvalOptions,
       shouldGroupGradingByProvider,
     });

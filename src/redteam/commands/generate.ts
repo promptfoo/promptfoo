@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { withCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
+import { getLiteralVarNames } from '../../contracts/literalVars';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -64,7 +65,7 @@ import { getRedteamGenerationContextFromProviders } from '../remoteGenerationCon
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
+import type { ApiProvider, TestCase, TestSuite, UnifiedConfig } from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
 import type {
   FailedPluginInfo,
@@ -138,6 +139,14 @@ function getDefaultPurposeVars(testSuite: TestSuite): Record<string, unknown> {
     : {};
 }
 
+function mergeContextVars(test: TestCase, contextVars?: Record<string, string>) {
+  const overrides = { ...contextVars };
+  for (const key of getLiteralVarNames(test) ?? []) {
+    delete overrides[key];
+  }
+  return { ...test.vars, ...overrides };
+}
+
 function renderPurposeTemplate(purpose: string | undefined, vars: Record<string, unknown>): string {
   if (!purpose?.trim()) {
     return '';
@@ -206,12 +215,25 @@ function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): st
 
 async function getConfigHash(
   configPath: string,
-  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+  options: Partial<RedteamCliGenerateOptions>,
 ): Promise<string> {
   const content = await fs.readFile(configPath, 'utf8');
   const filters = {
     ...(options.filterProviders ? { filterProviders: options.filterProviders } : {}),
     ...(options.filterTargets ? { filterTargets: options.filterTargets } : {}),
+    ...(options.plugins?.length ? { plugins: options.plugins } : {}),
+    ...(options.strategies ? { strategies: options.strategies } : {}),
+    ...(options.numTests === undefined ? {} : { numTests: options.numTests }),
+    ...(options.language ? { language: options.language } : {}),
+    ...(options.purpose ? { purpose: options.purpose } : {}),
+    ...(options.injectVar ? { injectVar: options.injectVar } : {}),
+    ...(options.excludeTargetOutputFromAgenticAttackGeneration && {
+      excludeTargetOutputFromAgenticAttackGeneration: true,
+    }),
+    ...(typeof options.provider === 'string' ? { provider: options.provider } : {}),
+    ...(options.description ? { description: options.description } : {}),
+    // An earlier non-strict output may contain only partial results.
+    ...(options.strict ? { strict: true } : {}),
   };
   const hashInput =
     Object.keys(filters).length > 0
@@ -279,7 +301,13 @@ export async function doGenerateRedteam(
     logger.info('Cache is disabled');
   }
 
-  return withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+  const result = await withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+  if (result === null && options.strict) {
+    throw new Error(
+      'Strict generation produced no final test cases. Any existing output is unchanged.',
+    );
+  }
+  return result;
 }
 
 async function doGenerateRedteamInternal(
@@ -325,6 +353,7 @@ async function doGenerateRedteamInternal(
   if (
     !options.force &&
     !options.configFromCloud &&
+    (!options.write || options.output) &&
     !outputPath.endsWith('.burp') &&
     (await pathExists(outputPath)) &&
     configPath &&
@@ -336,7 +365,8 @@ async function doGenerateRedteamInternal(
     const storedHash = redteamContent.metadata?.configHash;
     const currentHash = await getConfigHash(configPath, options);
 
-    if (storedHash === currentHash) {
+    const hasTests = Array.isArray(redteamContent.tests) && redteamContent.tests.length > 0;
+    if (storedHash === currentHash && (!options.strict || hasTests)) {
       logger.warn(
         'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
       );
@@ -498,7 +528,8 @@ async function doGenerateRedteamInternal(
       const pluginConfig = {
         id: plugin.id,
         numTests: plugin.numTests || options.numTests || redteamConfig?.numTests,
-        ...(plugin.config && { config: plugin.config }),
+        // Resolving policy text below must leave the original override intact for hashing.
+        ...(plugin.config && { config: { ...plugin.config } }),
       };
       return pluginConfig;
     });
@@ -593,6 +624,7 @@ async function doGenerateRedteamInternal(
     // Multi-variable inputs for test case generation (read from target)
     inputs: targetInputs,
     language: redteamConfig?.language || options.language,
+    maxCharsPerMessage: redteamConfig?.maxCharsPerMessage,
     maxConcurrency: explicitMaxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
     numTests: redteamConfig?.numTests ?? options.numTests,
     entities: redteamConfig?.entities,
@@ -607,7 +639,8 @@ async function doGenerateRedteamInternal(
       resolvedConfig?.evaluateOptions?.delay,
     sharing: redteamConfig?.sharing || options.sharing,
     excludeTargetOutputFromAgenticAttackGeneration:
-      redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
+      redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration ||
+      options.excludeTargetOutputFromAgenticAttackGeneration,
     ...(redteamConfig?.testGenerationInstructions
       ? { testGenerationInstructions: redteamConfig.testGenerationInstructions }
       : {}),
@@ -726,12 +759,9 @@ async function doGenerateRedteamInternal(
 
       // Tag each test with context metadata and merge context vars
       // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
-      const taggedTests = contextResult.testCases.map((test: any) => ({
+      const taggedTests = contextResult.testCases.map((test) => ({
         ...test,
-        vars: {
-          ...test.vars,
-          ...(context.vars || {}),
-        },
+        vars: mergeContextVars(test, context.vars),
         metadata: {
           ...test.metadata,
           purpose: contextResult.purpose,
@@ -836,6 +866,9 @@ async function doGenerateRedteamInternal(
       strategies: strategyObjs || [],
       plugins: plugins || [],
       sharing: config.sharing,
+      ...(config.excludeTargetOutputFromAgenticAttackGeneration && {
+        excludeTargetOutputFromAgenticAttackGeneration: true,
+      }),
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
     const generationRequestCount = generationTokenUsage.numRequests ?? 0;
@@ -1131,11 +1164,7 @@ export function redteamGenerateCommand(
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
-    .option(
-      '--strict',
-      'Fail if any plugins fail to generate test cases. By default, warnings are logged but generation continues.',
-      false,
-    )
+    .option('--strict', 'Fail if any plugin fails or no final test cases are generated.', false)
     .action(async (opts: Partial<RedteamCliGenerateOptions>): Promise<void> => {
       // Handle cloud config with target
       if (opts.config && isUuid(opts.config)) {

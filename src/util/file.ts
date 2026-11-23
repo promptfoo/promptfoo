@@ -6,6 +6,7 @@ import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
 import { escape as escapeGlob, globSync, hasMagic } from 'glob/raw';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
+import { processConfigField } from '../contracts/literalVars';
 import {
   getEnvBool,
   getEnvOverrides,
@@ -340,7 +341,9 @@ export function maybeLoadConfigFromExternalFile(
       const isVarsField = key === 'vars';
 
       const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+      const value = processConfigField(config, key, config[key], (child) =>
+        maybeLoadConfigFromExternalFile(child, childContext),
+      );
 
       if (key === '__proto__') {
         Object.defineProperty(result, key, {

@@ -2,6 +2,9 @@
  * Extended RequestInit options with additional features
  */
 export interface FetchOptions extends RequestInit {
+  /** Require verified TLS or direct loopback HTTP and refuse redirects in fetchWithProxy. */
+  requireSecureTransport?: true;
+
   /**
    * Resolve default authentication headers immediately before each HTTP attempt, including
    * retries. Explicit request headers take precedence (case-insensitively). The signal includes

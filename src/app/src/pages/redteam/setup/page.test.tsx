@@ -306,6 +306,60 @@ describe('RedTeamSetupPage', () => {
   });
 
   describe('YAML file import', () => {
+    it.each([
+      ['blind', { env: { PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' } }, undefined, false],
+      ['public', { env: { PROMPTFOO_DISABLE_REMOTE_GENERATION: true } }, undefined, false],
+      ['public', { commandLineOptions: { envPath: '.env.private' } }, undefined, false],
+      ['blind', {}, false, false],
+      ['blind', {}, undefined, true],
+      ['public', {}, true, true],
+    ] as const)(
+      'imports %s revisions with settings %j and remote=%s (retained=%s)',
+      async (metaTicketRevision, settings, remote, retained) => {
+        const user = userEvent.setup();
+        const showToast = vi.fn();
+        mockedUseToast.mockReturnValue({ showToast });
+        render(
+          <MemoryRouter initialEntries={['/redteam/setup']}>
+            <RedTeamSetupPage />
+          </MemoryRouter>,
+        );
+        await user.click(screen.getByRole('button', { name: /Load Config/i }));
+        const id = 'agentic:private-to-public-disclosure';
+        const plugin = { id, config: { mode: 'indirect', metaTicketRevision } };
+        const file = new File(
+          [
+            JSON.stringify({
+              ...settings,
+              redteam: {
+                plugins: [plugin],
+                remote,
+                excludeTargetOutputFromAgenticAttackGeneration: true,
+              },
+            }),
+          ],
+          'config.yaml',
+          { type: 'text/yaml' },
+        );
+        await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+        await waitFor(() =>
+          expect(showToast).toHaveBeenCalledWith(
+            retained
+              ? 'Configuration loaded successfully'
+              : expect.stringContaining('revisions were turned off'),
+            retained ? 'success' : 'warning',
+          ),
+        );
+        const exported = loadYaml(generateOrderedYaml(useRedTeamConfig.getState().config)) as {
+          redteam: { plugins: unknown[]; excludeTargetOutputFromAgenticAttackGeneration?: boolean };
+        };
+        expect(exported.redteam.plugins).toEqual([
+          retained ? plugin : { id, config: { mode: 'indirect' } },
+        ]);
+        expect(exported.redteam.excludeTargetOutputFromAgenticAttackGeneration).toBe(true);
+      },
+    );
+
     it('preserves plugin overrides through import, editing, and YAML export', async () => {
       const user = userEvent.setup();
       render(
@@ -450,7 +504,7 @@ describe('RedTeamSetupPage', () => {
       },
     );
 
-    it('should preserve redteam.provider when loading a YAML config', async () => {
+    it('preserves the provider and privacy restrictions when loading a YAML config', async () => {
       const user = userEvent.setup();
       mockedUseToast.mockReturnValue({ showToast: vi.fn() });
 
@@ -473,6 +527,7 @@ prompts:
   - "{{prompt}}"
 redteam:
   purpose: Test purpose
+  excludeTargetOutputFromAgenticAttackGeneration: true
   provider:
     id: openai:chat:qwen3
     config:
@@ -503,6 +558,9 @@ redteam:
         expect(config.plugins).toEqual(['shell-injection']);
         expect(config.strategies).toEqual(['jailbreak']);
         expect(config.purpose).toBe('Test purpose');
+        expect(
+          getUnifiedConfig(config).redteam.excludeTargetOutputFromAgenticAttackGeneration,
+        ).toBe(true);
       });
     });
 

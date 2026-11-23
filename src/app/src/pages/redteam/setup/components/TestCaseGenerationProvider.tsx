@@ -13,12 +13,19 @@ import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
+  isAgentOutcomePlugin,
   isMultiTurnStrategy,
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
+import {
+  canPreviewPluginWithStrategy,
+  getStrategyPreviewPlugins,
+  INCOMPATIBLE_PREVIEW_MESSAGE,
+} from '../utils/plugins';
+import { withAgentOutcomeMessageLimit } from './AgentOutcomeConfig';
 import { normalizeLocalProviders } from './Targets/helpers';
 import { TestCaseDialog } from './TestCaseDialog';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
@@ -32,8 +39,6 @@ import type {
 
 // Re-export types for backward compatibility
 export type { GeneratedTestCase, TargetPlugin, TargetResponse, TargetStrategy };
-
-const DEFAULT_PLUGIN = 'harmful:hate';
 
 const TEST_GENERATION_TIMEOUT = 60000; // 60s timeout
 const TEST_EXECUTION_TIMEOUT = 60000; // 60s timeout
@@ -238,16 +243,10 @@ export const TestCaseGenerationProvider: React.FC<{
   const [batchIndex, setBatchIndex] = useState<number>(0);
   const [isPrefetching, setIsPrefetching] = useState(false);
 
-  // Compute available plugins from config
-  const availablePlugins = useMemo(() => {
-    const plugins =
-      redTeamConfig.plugins?.map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean) ?? [];
-    // If no plugins are configured, provide a default
-    if (plugins.length === 0) {
-      return [DEFAULT_PLUGIN];
-    }
-    return plugins;
-  }, [redTeamConfig.plugins]);
+  const availablePlugins = useMemo(
+    () => getStrategyPreviewPlugins(redTeamConfig.plugins, strategy?.id),
+    [redTeamConfig.plugins, strategy?.id],
+  );
 
   // ===================================================================
   // Refs
@@ -310,14 +309,7 @@ export const TestCaseGenerationProvider: React.FC<{
           throw new Error(data?.details ?? data.error);
         }
 
-        setGeneratedTestCases((prev) => [
-          ...prev,
-          {
-            prompt: data.prompt,
-            context: data.context,
-            metadata: data.metadata,
-          },
-        ]);
+        setGeneratedTestCases((prev) => [...prev, data]);
       } catch (error) {
         // Ignore abort errors (these happen when a new generation is triggered)
         if (error instanceof Error && error.name === 'AbortError') {
@@ -470,7 +462,16 @@ export const TestCaseGenerationProvider: React.FC<{
         });
 
         const response = await callTestGenerationApi(
-          targetPlugin,
+          {
+            ...targetPlugin,
+            config: withAgentOutcomeMessageLimit(
+              targetPlugin.id,
+              isAgentOutcomePlugin(targetPlugin.id) && redTeamConfig.target?.inputs
+                ? { ...targetPlugin.config, inputs: redTeamConfig.target.inputs }
+                : targetPlugin.config,
+              redTeamConfig.maxCharsPerMessage,
+            ),
+          },
           targetStrategy,
           redTeamConfig.applicationDefinition.purpose ?? null,
           redTeamConfig.language,
@@ -488,19 +489,7 @@ export const TestCaseGenerationProvider: React.FC<{
           throw new Error(data?.details ?? data.error);
         }
 
-        // Handle batch response
-        if (data.testCases && Array.isArray(data.testCases)) {
-          return data.testCases as GeneratedTestCase[];
-        }
-
-        // Backward compatible: single test case response
-        return [
-          {
-            prompt: data.prompt,
-            context: data.context,
-            metadata: data.metadata,
-          },
-        ];
+        return Array.isArray(data.testCases) ? data.testCases : [data];
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           return null;
@@ -512,6 +501,8 @@ export const TestCaseGenerationProvider: React.FC<{
       redTeamConfig.applicationDefinition?.purpose,
       redTeamConfig.language,
       redTeamConfig.provider,
+      redTeamConfig.maxCharsPerMessage,
+      redTeamConfig.target?.inputs,
       recordEvent,
     ],
   );
@@ -566,9 +557,13 @@ export const TestCaseGenerationProvider: React.FC<{
       testExecutionAbortController.current?.abort();
       resetState();
 
-      if (targetConfigError) {
-        toast.showToast(targetConfigError, 'error', ERROR_MSG_DURATION);
-        onError?.(new Error(targetConfigError));
+      const compatible =
+        canPreviewPluginWithStrategy(plugin.id, strategy.id) &&
+        getStrategyPreviewPlugins(redTeamConfig.plugins, strategy.id).length > 0;
+      const previewError = targetConfigError || (!compatible && INCOMPATIBLE_PREVIEW_MESSAGE);
+      if (previewError) {
+        toast.showToast(previewError, 'error', ERROR_MSG_DURATION);
+        onError?.(new Error(previewError));
         return;
       }
 
@@ -605,7 +600,7 @@ export const TestCaseGenerationProvider: React.FC<{
       // Open dialog to show test case generation results
       setIsDialogOpen(true);
     },
-    [shouldEvaluateAgainstTarget, resetState, targetConfigError, toast],
+    [shouldEvaluateAgainstTarget, redTeamConfig.plugins, resetState, targetConfigError, toast],
   );
 
   const handleCloseDialog = useCallback(() => {
@@ -626,17 +621,8 @@ export const TestCaseGenerationProvider: React.FC<{
         setTestCaseBatch([]);
         setBatchIndex(0);
 
-        // Look up the plugin config from redTeamConfig.plugins
-        const pluginFromConfig = redTeamConfig.plugins?.find((p) =>
-          typeof p === 'string' ? p === newPluginId : p.id === newPluginId,
-        );
-        const pluginConfig =
-          typeof pluginFromConfig === 'object' ? (pluginFromConfig.config ?? {}) : {};
-
-        handleStart(
-          { id: newPluginId as Plugin, config: pluginConfig, isStatic: false },
-          strategy!,
-        );
+        const config = availablePlugins.find(({ id }) => id === newPluginId)?.config ?? {};
+        handleStart({ id: newPluginId as Plugin, config, isStatic: false }, strategy!);
         return;
       }
 
@@ -672,7 +658,7 @@ export const TestCaseGenerationProvider: React.FC<{
       handleStart,
       plugin,
       strategy,
-      redTeamConfig.plugins,
+      availablePlugins,
       batchIndex,
       testCaseBatch,
       isPrefetching,
@@ -771,7 +757,9 @@ export const TestCaseGenerationProvider: React.FC<{
       const abortController = new AbortController();
       testExecutionAbortController.current = abortController;
 
-      if (shouldEvaluateAgainstTarget) {
+      // The connectivity endpoint only sends a prompt. Outcome targets need
+      // the generated case and its tool inputs from the full evaluation.
+      if (shouldEvaluateAgainstTarget && !isAgentOutcomePlugin(plugin?.id ?? '')) {
         executeTest(abortController);
       } else {
         // No target, just finish this turn immediately (only for single turn)
@@ -786,6 +774,7 @@ export const TestCaseGenerationProvider: React.FC<{
     generatedTestCases.length,
     targetResponses.length,
     shouldEvaluateAgainstTarget,
+    plugin?.id,
     executeTest,
     generatedTestCases,
   ]);
@@ -849,7 +838,7 @@ export const TestCaseGenerationProvider: React.FC<{
         isRunningTest={isRunningTest}
         currentTurn={currentTurn}
         maxTurns={maxTurns}
-        availablePlugins={availablePlugins}
+        availablePlugins={availablePlugins.map(({ id }) => id)}
         allowPluginChange={allowPluginChange}
       />
     </TestCaseGenerationContext>

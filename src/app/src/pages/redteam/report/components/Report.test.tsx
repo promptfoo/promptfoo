@@ -105,6 +105,179 @@ describe('Report filtering logic', () => {
     );
   }
 
+  it('counts only attacks in ASR while keeping failed baselines visible', async () => {
+    const pluginId = 'agentic:unauthorized-sharing';
+    const moderationFailure: GradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'Flagged by moderation',
+      assertion: { type: 'moderation' },
+    };
+    const cases = ['attack', 'control', 'authorized'].map((variant) => {
+      const passed = variant === 'authorized';
+      const row = createComponentMockResult(0, pluginId, passed, passed ? [] : [moderationFailure]);
+      row.response = { output: variant };
+      const assigned = { pluginId, variant, mode: 'indirect', caseId: variant };
+      row.testCase.metadata = { pluginId, agentOutcome: assigned };
+      row.gradingResult!.metadata = {
+        agentOutcomeResult: {
+          ...assigned,
+          status: passed ? 'safe' : 'violation',
+          attackExposed: true,
+          taskCompleted: true,
+          reason: 'Measured outcome',
+        },
+      };
+      return row;
+    });
+    await renderReportData(1, cases);
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('3');
+    expect(screen.getByTestId('overview-failures')).toHaveTextContent('2');
+    const readStats = () =>
+      JSON.parse(screen.getByTestId('overview-category-stats').textContent!)[pluginId];
+    const attackStats = { total: 1, pass: 0, passWithFilter: 0, failCount: 1 };
+    expect(readStats().attacks).toEqual(attackStats);
+    expect(readStrategyStats()).toEqual({ basic: { pass: 0, total: 1, failCount: 1 } });
+    expect(readGroups().failuresByPlugin[pluginId]).toHaveLength(2);
+    expect(readGroups().passesByPlugin[pluginId]).toHaveLength(1);
+
+    await userEvent.click(screen.getAllByLabelText('filter results')[0]);
+    await userEvent.type(screen.getByPlaceholderText('Search prompts & outputs'), 'attack');
+    expect(readStats()).toEqual(attackStats);
+  });
+
+  it.each([false, null])(
+    'keeps a finding with delivery %s outside attack and baseline counts',
+    async (attackExposed) => {
+      const pluginId = 'agentic:private-to-public-disclosure';
+      const row = createComponentMockResult(0, pluginId, false);
+      const assigned = { pluginId, variant: 'attack', mode: 'indirect', caseId: 'leak' };
+      row.metadata = {};
+      row.testCase.metadata = { agentOutcome: assigned };
+      row.gradingResult!.metadata = {
+        agentOutcomeResult: {
+          ...assigned,
+          status: 'violation',
+          attackExposed,
+          taskCompleted: true,
+          reason: 'Disclosed',
+        },
+      };
+      const inconclusive = {
+        ...row,
+        failureReason: ResultFailureReason.ERROR,
+        gradingResult: null,
+      };
+      await renderReportData(1, [row, inconclusive]);
+      const stats = JSON.parse(screen.getByTestId('overview-category-stats').textContent!)[
+        pluginId
+      ];
+      expect(stats).toMatchObject({
+        total: 1,
+        failCount: 1,
+        attacks: { total: 0, failCount: 0 },
+        unverifiedFailures: 1,
+      });
+      expect(readGroups().failuresByPlugin[pluginId]).toHaveLength(1);
+      expect(readStrategyStats()).toEqual({});
+      expect(screen.getByRole('alert')).toHaveTextContent('1 agent outcome test with errors');
+    },
+  );
+
+  it('uses stored success and matching target evidence before and after filtering when grades are stripped', async () => {
+    const pluginId = 'coding-agent:consent-bypass';
+    const cases = ['attack', 'attack', 'control', 'control'].map((variant, i) => {
+      const row = createComponentMockResult(0, pluginId, true);
+      const assigned = {
+        pluginId,
+        variant,
+        mode: i % 2 ? 'indirect' : 'direct',
+        caseId: String(i),
+      };
+      row.metadata = {};
+      row.testCase.metadata = { agentOutcome: assigned };
+      row.gradingResult = null;
+      row.response = {
+        output: 'Consent',
+        metadata: {
+          agentOutcomeEvidence: {
+            pluginId,
+            version: 1,
+            caseId: assigned.caseId,
+            attackExposed: true,
+            taskCompleted: true,
+            measurements: {
+              beforeReject: { decision: 'reject', actionId: 'before', collectedActionIds: [] },
+              afterReject: { decision: 'reject', actionId: 'after', collectedActionIds: [] },
+              afterAccept: {
+                decision: 'accept',
+                actionId: 'accept',
+                collectedActionIds: ['accept'],
+              },
+            },
+          },
+        },
+      };
+      return row;
+    });
+    await renderReportData(1, cases);
+    function checkCounts() {
+      const stats = JSON.parse(screen.getByTestId('overview-category-stats').textContent!)[
+        pluginId
+      ];
+      expect(stats).toMatchObject({
+        total: 4,
+        pass: 4,
+        failCount: 0,
+        attacks: { total: 2, pass: 2, failCount: 0 },
+      });
+      expect(readStrategyStats()).toEqual({ basic: { total: 2, pass: 2, failCount: 0 } });
+      expect(readGroups().failuresByPlugin).toEqual({});
+    }
+    checkCounts();
+    await userEvent.click(screen.getAllByLabelText('filter results')[0]);
+    await userEvent.type(screen.getByPlaceholderText('Search prompts & outputs'), 'Consent');
+    checkCounts();
+  });
+
+  it('links to excluded agent outcome errors for the current target and preserves owner requests', async () => {
+    const pluginId = 'agentic:unauthorized-sharing';
+    const error = createComponentMockResult(0, pluginId, false);
+    error.error = 'Missing evidence';
+    error.failureReason = ResultFailureReason.ERROR;
+    const pass = createComponentMockResult(1, pluginId, true);
+    pass.vars = { assignment: 'Share the file', query: 'Share the folder' };
+    pass.testCase = {
+      ...pass.testCase,
+      vars: pass.vars,
+      metadata: {
+        pluginId,
+        agentOutcome: {
+          pluginId,
+          caseId: 'case-1',
+          mode: 'indirect',
+          variant: 'attack',
+          injectVar: 'assignment',
+          indirectInjectionVar: 'query',
+        },
+      },
+    };
+
+    await renderReportData(2, [error, pass]);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Pass rates exclude 1 agent outcome test with errors.',
+    );
+    expect(screen.getByRole('link', { name: 'View errors' })).toHaveAttribute(
+      'href',
+      '/eval/first?mode=errors',
+    );
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('0');
+
+    await selectTarget();
+    expect(screen.queryByText('View errors')).toBeNull();
+    expect(readGroups().passesByPlugin[pluginId]).toMatchObject([{ prompt: 'Share the file' }]);
+  });
+
   describe('failuresByPlugin filtering', () => {
     it('should include all failures when only one prompt exists', async () => {
       await renderReportData(1, [

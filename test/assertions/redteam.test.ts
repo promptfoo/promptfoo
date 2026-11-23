@@ -70,6 +70,34 @@ describe('redteam strategy result grading', () => {
     vi.restoreAllMocks();
   });
 
+  it('keeps test metadata out of sibling grades on measured trials and preserves ordinary metadata', async () => {
+    vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue(createPromptLeakVerdict());
+    const agentOutcome = {
+      pluginId: 'agentic:private-to-public-disclosure',
+      caseId: 'case-1',
+      mode: 'indirect',
+      variant: 'attack',
+    };
+    for (const measured of [true, false]) {
+      const metadata = {
+        ...test.metadata,
+        note: 'sensitive note',
+        ...(measured && {
+          agentOutcome,
+          agentOutcomeResult: { ...agentOutcome, attackExposed: true, status: 'violation' },
+        }),
+      };
+      const result = await runAssertions({
+        prompt: originalPrompt,
+        test: { ...test, metadata },
+        providerResponse: { output },
+      });
+      const grade = result.componentResults?.[0];
+      expect(grade?.metadata?.agentOutcomeResult).toBeUndefined();
+      expect(grade?.metadata?.note).toBe(measured ? undefined : metadata.note);
+    }
+  });
+
   it.each(['pii:direct', 'pii:session', 'pii:social', 'pii:api-db'])(
     'reuses the strategy grade for generated %s assertions on the initial scan',
     async (pluginId) => {

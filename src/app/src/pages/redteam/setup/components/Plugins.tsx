@@ -422,6 +422,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                 updatePluginConfig={updatePluginConfig}
                 recentlyUsedPlugins={recentlyUsedSnapshot}
                 isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+                hasGenerationProvider={Boolean(config.provider)}
               />
             </TabsContent>
 

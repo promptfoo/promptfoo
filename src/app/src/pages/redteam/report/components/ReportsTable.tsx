@@ -84,7 +84,7 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
           `"${(row.description || 'Untitled Evaluation').replace(/"/g, '""')}"`,
           `"${target.replace(/"/g, '""')}"`,
           new Date(row.createdAt).toISOString(),
-          formatASRForDisplay(row.attackSuccessRate ?? 0),
+          row.attackSuccessRate == null ? 'N/A' : formatASRForDisplay(row.attackSuccessRate),
           row.numTests,
           row.evalId,
         ].join(',');
@@ -149,7 +149,10 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
         accessorKey: 'attackSuccessRate',
         header: 'Attack Success Rate',
         cell: ({ getValue }) => {
-          const rate = getValue<number>() ?? 0;
+          const rate = getValue<number | undefined>();
+          if (rate == null) {
+            return 'N/A';
+          }
           const colorClass = getASRColorClass(rate);
           return (
             <span className={cn('font-mono tabular-nums', colorClass)}>

@@ -19,9 +19,15 @@ import { getRemoteHealthUrl } from './remoteGeneration';
 import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
+import type { InternalEvaluateOptions } from '../types/internal';
 import type { RedteamRunOptions } from './types';
 
-export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
+export async function doRedteamRun({
+  allowedMetaTicketRevisions,
+  ...options
+}: RedteamRunOptions & Pick<InternalEvaluateOptions, 'allowedMetaTicketRevisions'>): Promise<
+  Eval | undefined
+> {
   const isCliInvocation = isCliEventSource(options);
 
   if (options.verbose) {
@@ -95,6 +101,10 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     // the eval below via `evalOptions`, which is destructured from the untouched `options`
     // object (see the `doEval` call), where they are persisted onto the eval result.
     const { maxConcurrency, tags: _runtimeTags, ...passThroughOptions } = options;
+    // Generation's envFile is a caller option that mutates process.env before
+    // evaluation. A live config must not use it to change remote task policy.
+    const { envFile: _configEnvFile, ...generationCommandOptions } =
+      options.liveRedteamConfig?.commandLineOptions ?? {};
 
     let redteamConfig;
     const generationRunId = randomUUID();
@@ -102,7 +112,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     try {
       redteamConfig = await doGenerateRedteam({
         ...passThroughOptions,
-        ...(options.liveRedteamConfig?.commandLineOptions || {}),
+        ...generationCommandOptions,
         ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
         config: configPath,
         output: redteamPath,
@@ -158,6 +168,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
         abortSignal: options.abortSignal,
         progressCallback: options.progressCallback,
         eventSource: options.eventSource,
+        ...(allowedMetaTicketRevisions && { allowedMetaTicketRevisions }),
         ...(generatedDuringRun && generation.tokenUsage
           ? { generationEventId: generation.id, generationTokenUsage: generation.tokenUsage }
           : {}),

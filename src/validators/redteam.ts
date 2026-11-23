@@ -241,7 +241,7 @@ export const RedteamGenerateOptionsSchema = z.object({
     .boolean()
     .optional()
     .default(false)
-    .describe('Fail the scan if any plugins fail to generate test cases'),
+    .describe('Fail if any plugin fails or no final test cases are generated'),
 });
 
 /**

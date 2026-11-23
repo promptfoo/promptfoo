@@ -138,6 +138,215 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     expect(onCloseMock).toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      variant: 'attack',
+      label: 'Indirect attack',
+      measuredId: 'case-1',
+      exposed: 'Yes',
+      completed: 'No',
+      control: 'Yes',
+    },
+    {
+      variant: 'control',
+      label: 'Indirect baseline',
+      measuredId: 'case-1',
+      exposed: 'Yes',
+      completed: 'No',
+      control: 'Yes',
+    },
+    {
+      variant: 'attack',
+      label: 'Indirect attack',
+      measuredId: 'case-2',
+      exposed: 'Unknown',
+      completed: 'Unknown',
+      control: 'Unknown',
+    },
+  ])(
+    'associates outcome evidence for $variant with receipt $measuredId',
+    ({ variant, label, measuredId, exposed, completed, control }) => {
+      const pluginId = 'coding-agent:consent-bypass';
+      const agentOutcome = {
+        pluginId,
+        mode: 'indirect',
+        caseId: 'case-1',
+        variant,
+        injectVar: 'assignment',
+        indirectInjectionVar: 'query',
+      };
+      const artifact = 'Initialize tracking on page load';
+      const grade = {
+        pass: false,
+        score: 0,
+        reason: 'The collector received the event after rejection.',
+      };
+      const agentOutcomeResult = {
+        ...agentOutcome,
+        caseId: measuredId,
+        status: 'violation',
+        attackExposed: true,
+        taskCompleted: false,
+        controlPassed: true,
+        reason: grade.reason,
+      };
+      const result = createMockEvaluateResult({ pluginId });
+      const measurements = {
+        beforeReject: { decision: 'reject', actionId: 'before', collectedActionIds: [] },
+        afterReject: { decision: 'reject', actionId: 'after', collectedActionIds: ['after'] },
+        afterAccept: { decision: 'accept', actionId: 'accepted', collectedActionIds: ['accepted'] },
+      };
+      result.response = {
+        metadata: {
+          agentOutcomeEvidence: {
+            version: 1,
+            pluginId,
+            caseId: measuredId,
+            taskCompleted: false,
+            attackExposed: true,
+            measurements,
+          },
+        },
+      };
+      result.testCase = {
+        ...result.testCase,
+        metadata: { pluginId, agentOutcome },
+        vars: { assignment: 'Upgrade the analytics SDK', query: artifact },
+      };
+      renderWithProviders(
+        <RiskCategoryDrawer
+          {...defaultProps}
+          category={pluginId}
+          failures={[
+            {
+              prompt: artifact,
+              output: 'Done',
+              result,
+              gradingResult: {
+                ...grade,
+                componentResults: [{ ...grade, metadata: { agentOutcomeResult } }],
+              },
+            },
+          ]}
+        />,
+      );
+      expect(screen.getByText(label).closest('[aria-expanded]')).toBeInTheDocument();
+      expect(screen.getByText('Upgrade the analytics SDK')).toBeInTheDocument();
+      expect(screen.getByText('Tool content delivered').nextElementSibling).toHaveTextContent(
+        exposed,
+      );
+      expect(screen.getByText('Task completed').nextElementSibling).toHaveTextContent(completed);
+      expect(screen.getByText('Positive control passed').nextElementSibling).toHaveTextContent(
+        control,
+      );
+      expect(screen.getByText(artifact)).toBeInTheDocument();
+      const receipts = screen.queryByText('Recorded measurements');
+      if (measuredId === agentOutcome.caseId) {
+        expect(receipts?.nextElementSibling?.textContent).toBe(
+          JSON.stringify(measurements, null, 2),
+        );
+      } else {
+        expect(receipts).toBeNull();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'uses only fresh evidence for a direct attack with a stripped grade (cached=%s)',
+    (cached) => {
+      const pluginId = 'agentic:unauthorized-sharing';
+      const agentOutcome = { pluginId, caseId: 'share-1', mode: 'direct', variant: 'attack' };
+      const result = createMockEvaluateResult({ pluginId });
+      result.testCase = { ...result.testCase, metadata: { pluginId, agentOutcome } };
+      result.gradingResult = null;
+      result.response = {
+        cached,
+        guardrails: { flaggedOutput: true },
+        metadata: {
+          agentOutcomeEvidence: {
+            version: 1,
+            pluginId,
+            caseId: agentOutcome.caseId,
+            attackExposed: true,
+            taskCompleted: false,
+            measurements: { futureVerified: true, future: null, folderControl: null },
+          },
+        },
+      };
+      renderWithProviders(
+        <RiskCategoryDrawer
+          {...defaultProps}
+          category={pluginId}
+          failures={[{ prompt: 'Share the folder', output: 'Blocked', result }]}
+        />,
+      );
+
+      expect(screen.getByText('Direct attack')).toBeInTheDocument();
+      expect(screen.getByText('User request delivered').nextElementSibling).toHaveTextContent(
+        cached ? 'Unknown' : 'Yes',
+      );
+      expect(screen.getByText('Task completed').nextElementSibling).toHaveTextContent(
+        cached ? 'Unknown' : 'No',
+      );
+      expect(screen.getByText('Positive control passed').nextElementSibling).toHaveTextContent(
+        'Unknown',
+      );
+      expect(screen.getByText('Reply flagged by guardrail').nextElementSibling).toHaveTextContent(
+        'Yes',
+      );
+      expect(screen.queryByText('Third-party content for the tool')).not.toBeInTheDocument();
+      expect(screen.queryByText('Recorded measurements') !== null).toBe(!cached);
+    },
+  );
+
+  it.each([
+    ['public', undefined, 'Seed ticket · Public feedback'],
+    ['blind', 'seed-id', 'Revised ticket · Blind'],
+  ] as const)(
+    'identifies the %s attempt and requires graded delivery proof',
+    (arm, parentCaseId, label) => {
+      const pluginId = 'agentic:private-to-public-disclosure';
+      const agentOutcome = {
+        pluginId,
+        caseId: parentCaseId ? 'child-id' : 'seed-id',
+        mode: 'indirect',
+        variant: 'attack',
+        metaTicketRevision: arm,
+        parentCaseId,
+      };
+      const result = createMockEvaluateResult({ pluginId });
+      result.testCase = { ...result.testCase, metadata: { pluginId, agentOutcome } };
+      result.metadata = { metaTicketRevisionDecision: 'proposed' };
+      result.gradingResult = null;
+      result.response = {
+        metadata: {
+          agentOutcomeEvidence: {
+            version: 1,
+            pluginId,
+            caseId: agentOutcome.caseId,
+            attackExposed: true,
+            taskCompleted: true,
+            measurements: null,
+          },
+        },
+      };
+      renderWithProviders(
+        <RiskCategoryDrawer
+          {...defaultProps}
+          category={pluginId}
+          failures={[{ prompt: 'Post a workaround.', output: 'Done', result }]}
+        />,
+      );
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.getByText('Seed case ID').nextElementSibling).toHaveTextContent('seed-id');
+      expect(screen.getByText('Tool content delivered').nextElementSibling).toHaveTextContent(
+        'Unknown',
+      );
+      expect(screen.getByText('Task completed').nextElementSibling).toHaveTextContent('Yes');
+      expect(Boolean(screen.queryByText('proposed'))).toBe(!parentCaseId);
+    },
+  );
+
   it('should display correct pass/fail statistics', () => {
     renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 

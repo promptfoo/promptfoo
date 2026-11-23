@@ -1,5 +1,6 @@
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
+import { AgentOutcomeCaseSchema } from '../contracts/agentOutcomes';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import {
@@ -40,6 +41,28 @@ import {
 import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
+function assignedPluginId(test: AtomicTestCase) {
+  const trial = test.metadata?.agentOutcome;
+  return trial ? AgentOutcomeCaseSchema.safeParse(trial).data?.pluginId : undefined;
+}
+
+// The plugin index must track the assigned trial even when a manual test omits
+// the duplicate pluginId, or a provider overwrites it in merged response metadata.
+export function persistResultMetadata(
+  row: Pick<
+    EvaluateResult,
+    'testCase' | 'metadata' | 'traceId' | 'evaluationId' | 'repeatIndex' | 'repeatGroupId'
+  >,
+) {
+  const pluginId = assignedPluginId(row.testCase);
+  const metadata = pluginId ? { ...row.metadata, pluginId } : row.metadata;
+  return persistTraceMetadata(
+    persistRepeatMetadata(metadata, row.repeatIndex, row.repeatGroupId),
+    row.traceId,
+    row.evaluationId,
+  );
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -57,22 +80,9 @@ export default class EvalResult {
       gradingResult,
       namedScores,
       cost,
-      metadata,
       failureReason,
       testCase,
-      traceId,
-      evaluationId,
-      repeatIndex,
-      repeatGroupId,
     } = serializeResultProviderRefs(result);
-
-    // Persist trace and repeat linkage inside a private metadata namespace so they
-    // survive EvalResult round-trips without a Drizzle schema migration.
-    const persistedMetadata = persistTraceMetadata(
-      persistRepeatMetadata(metadata, repeatIndex, repeatGroupId),
-      traceId,
-      evaluationId,
-    );
 
     const processedResponse = await extractAndStoreBinaryData(result.response, {
       evalId,
@@ -104,7 +114,7 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(persistedMetadata),
+      metadata: sanitizeForDb(persistResultMetadata(result)),
       failureReason,
     };
     if (persist) {
@@ -163,13 +173,7 @@ export default class EvalResult {
           ...redactSensitiveResultFieldsForDb({
             response: sanitizeForDb(result.response),
             gradingResult: sanitizeForDb(result.gradingResult),
-            metadata: sanitizeForDb(
-              persistTraceMetadata(
-                persistRepeatMetadata(result.metadata, result.repeatIndex, result.repeatGroupId),
-                result.traceId,
-                result.evaluationId,
-              ),
-            ),
+            metadata: sanitizeForDb(persistResultMetadata(result)),
           }),
           namedScores: sanitizeForDb(result.namedScores),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
@@ -379,7 +383,7 @@ export default class EvalResult {
       ? opts.failureReason
       : ResultFailureReason.NONE;
     this.persisted = opts.persisted || false;
-    this.pluginId = opts.testCase.metadata?.pluginId;
+    this.pluginId = assignedPluginId(opts.testCase) ?? opts.testCase.metadata?.pluginId;
   }
 
   async save() {
@@ -399,11 +403,7 @@ export default class EvalResult {
       ...rest,
       error: this.error ?? null,
       gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
-      metadata: persistTraceMetadata(
-        persistRepeatMetadata(this.metadata, this.repeatIndex, this.repeatGroupId),
-        this.traceId,
-        this.evaluationId,
-      ),
+      metadata: persistResultMetadata(this),
     };
     //check if this exists in the db
     if (this.persisted) {

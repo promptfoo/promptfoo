@@ -4,6 +4,7 @@ import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
 import { FILE_METADATA_KEY } from '../constants';
+import { getLiteralVarNames } from '../contracts/literalVars';
 import { getEnvBool, getEnvInt } from '../envars';
 import { collectFileMetadata, renderPrompt } from '../evaluatorHelpers';
 import logger from '../logger';
@@ -11,7 +12,11 @@ import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers
 import { providerRegistry } from '../providers/providerRegistry';
 import { maybeWrapMcpProviderForRedteam } from '../redteam/mcpTargetProvider';
 import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLength';
-import { getSessionId } from '../redteam/util';
+import {
+  getAgentOutcomeDispatchPolicy,
+  getAgentOutcomePrompt,
+  getSessionId,
+} from '../redteam/util';
 import { createProviderRateLimitOptions, sleepWithAbort } from '../scheduler';
 import {
   withProviderCallExecutionContext,
@@ -37,6 +42,7 @@ import {
 import { type ApiProvider, isApiProvider } from '../types/providers';
 import { isAbortError } from '../util/fetch/errors';
 import { isCallerAbortError } from '../util/fetch/requestSignal';
+import { withSingleAttempt } from '../util/fetch/retryContext';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProviderIdentifier, sanitizeProviderIdForLog } from '../util/provider';
@@ -269,7 +275,7 @@ function createRunEvalState({
   promptIndex: number;
 }): RunEvalState {
   const vars = structuredClone(test.vars || {});
-  const fileMetadata = collectFileMetadata(vars);
+  const fileMetadata = collectFileMetadata(vars, getLiteralVarNames(test));
   // Provider identifiers and prompt ids can both collide, but every result-table
   // column has a unique index. Encode the components as a tuple because identifiers
   // can contain separators that would make concatenated keys ambiguous.
@@ -407,18 +413,32 @@ async function renderRunEvalPrompt({
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
+  const outcome = getAgentOutcomePrompt(test, promptForRender, provider, vars);
+  if (outcome) {
+    promptForRender.raw = outcome.raw;
+  }
+  const literalVars = getLiteralVarNames(test);
   const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
-    ? [getRedteamInjectVar(test, promptForRender, testSuite)]
-    : undefined;
+    ? [getRedteamInjectVar(test, promptForRender, testSuite), ...(literalVars ?? [])]
+    : literalVars;
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,
     filters,
     provider,
     skipRenderVars,
+    { literalFunctionResult: Boolean(literalVars?.length) },
   );
-  if (isRedteam) {
-    throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
+  if (outcome?.requireExactOwner && renderedPrompt !== outcome.message) {
+    throw new Error(
+      '[inconclusive] Ticket revision requires the exact assigned owner request. Check the prompt template.',
+    );
+  }
+  if (isRedteam || outcome) {
+    const limit =
+      testSuite?.redteam?.maxCharsPerMessage ??
+      (outcome ? test.metadata?.pluginConfig?.maxCharsPerMessage : undefined);
+    throwIfTargetPromptExceedsMaxChars(renderedPrompt, limit, renderedPrompt === outcome?.message);
   }
   const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);
   const setup = createRunEvalSetup({ provider, prompt: promptForRender, promptConfig, vars });
@@ -499,7 +519,7 @@ async function callProviderForRunEval({
         cached: false,
       };
     } else {
-      response = await callActiveProvider({
+      const request = {
         abortSignal,
         pauseSignal,
         evalId,
@@ -517,7 +537,12 @@ async function callProviderForRunEval({
         testSuite,
         traceContext,
         vars,
-      });
+      };
+      const policy = getAgentOutcomeDispatchPolicy(test);
+      const dispatch = () => callActiveProvider(request);
+      response = await withCacheEnabled(policy ? false : undefined, () =>
+        policy?.singleAttempt ? withSingleAttempt(dispatch) : dispatch(),
+      );
     }
 
     sanitizeResponseMetadata(response);
@@ -1173,9 +1198,8 @@ async function gradeRunEvalResponse({
     );
     applyGradingResult(ret, checkResult);
   } catch (error) {
-    if (!isGradingAbort(error, abortSignal)) {
-      throw error;
-    }
+    // Keep the completed target response, as deferred grading does, so a grading error
+    // still shows what the target returned.
     applyGradingError(ret, error, abortSignal);
   }
   ret.response = processedResponse;

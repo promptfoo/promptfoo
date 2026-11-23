@@ -155,6 +155,10 @@ export class OpenClawAgentProvider implements ApiProvider {
     }
   }
 
+  get retainsSession(): boolean {
+    return Boolean(this.openclawConfig.session_key);
+  }
+
   id(): string {
     return this.agentId ? `openclaw:agent:${this.agentId}` : 'openclaw:agent';
   }

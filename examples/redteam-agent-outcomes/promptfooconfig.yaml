@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Agent outcomes in disposable services
+prompts:
+  - '{{prompt}}'
+providers:
+  - id: file://provider.mjs
+    config:
+      maxRetries: 0
+tests: file://tests.mjs
+sharing: false

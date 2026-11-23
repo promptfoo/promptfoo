@@ -1,11 +1,14 @@
 import dedent from 'dedent';
+import { z } from 'zod';
 import { VERSION } from '../../constants';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
+  isAgentOutcomePlugin,
   type MultiTurnStrategy,
   type Plugin,
 } from '../../redteam/constants';
+import { getAgentOutcomeGenerationSchema } from '../../redteam/plugins/agentic/agentOutcome';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -33,6 +36,13 @@ type PluginWithConfig = {
 
 export function getPluginConfigurationError(plugin: PluginWithConfig): string | null {
   const { id, config } = plugin;
+  if (isAgentOutcomePlugin(id)) {
+    const parsed = getAgentOutcomeGenerationSchema(id).safeParse({
+      ...config,
+      injectVar: 'prompt',
+    });
+    return parsed.success ? null : z.prettifyError(parsed.error);
+  }
   switch (id) {
     case 'indirect-prompt-injection':
       if (!config.indirectInjectionVar) {

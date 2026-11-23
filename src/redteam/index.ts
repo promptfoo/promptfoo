@@ -4,6 +4,7 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
+import { z } from 'zod';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -27,13 +28,16 @@ import {
   MULTI_INPUT_VAR,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
+  pluginIdMatchesTargets,
   riskCategorySeverityMap,
   Severity,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
+  strategyDeduplicationKey,
   TEEN_SAFETY_PLUGINS,
   TELECOM_PLUGINS,
 } from './constants';
+import { getAgentOutcomeCase, isAgentOutcomePlugin } from './constants/agentOutcomes';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
@@ -462,7 +466,11 @@ function getIntentTestCount(plugin: SynthesizeOptions['plugins'][number]): numbe
 function getExpectedPluginTestCount(
   plugin: SynthesizeOptions['plugins'][number],
   language?: string | string[],
+  omitOutcomeSeeds = false,
 ): number {
+  if (omitOutcomeSeeds && isAgentOutcomePlugin(plugin.id)) {
+    return 0;
+  }
   const languageCount = getPluginLanguageCount(plugin, language);
   return (getIntentTestCount(plugin) ?? plugin.numTests ?? 0) * languageCount;
 }
@@ -562,27 +570,12 @@ function addLanguageToPluginMetadata(
       },
       // Hoist language to top-level metadata for backward compatibility and easier access
       ...languageToAdd,
-      ...getMaterializedMultiInputPromptMetadata(test.vars),
+      ...(!isAgentOutcomePlugin(plugin.id) &&
+        !getAgentOutcomeCase(test) &&
+        getMaterializedMultiInputPromptMetadata(test.vars)),
     },
   };
 }
-
-/**
- * Determines whether a strategy should be applied to a test case based on plugin targeting rules.
- *
- * This function evaluates multiple criteria to decide if a strategy matches a test case:
- * - Excludes strategy-exempt plugins (defined in STRATEGY_EXEMPT_PLUGINS)
- * - Excludes sequence providers (which are verbatim and don't support strategies)
- * - Respects plugin-level strategy exclusions via excludeStrategies config
- * - Matches against target plugins through direct ID match or category prefixes
- *
- * @param testCase - The test case containing plugin metadata to evaluate
- * @param strategyId - The ID of the strategy being considered for application
- * @param targetPlugins - Optional array of plugin IDs or categories that the strategy targets.
- *                       If undefined or empty, strategy applies to all non-exempt plugins.
- *                       Supports both exact matches and category prefixes (e.g., 'harmful' matches 'harmful:hate')
- * @returns True if the strategy should be applied to this test case, false otherwise
- */
 
 /**
  * Applies strategies to the test cases.
@@ -601,18 +594,26 @@ async function applyStrategies(
   maxCharsPerMessage?: number,
   redteamGenerationContext?: RedteamGenerationContext,
   wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
+  omittedOutcomeSeeds = false,
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
 }> {
   const newTestCases: TestCaseWithPlugin[] = [];
+  const hasOutcomeCases =
+    omittedOutcomeSeeds ||
+    testCases.some(
+      ({ metadata }) =>
+        isAgentOutcomePlugin(metadata?.pluginId) || getAgentOutcomeCase({ metadata }),
+    );
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
 
   for (const strategy of strategies) {
     logger.debug(`Generating ${strategy.id} tests`);
 
     let strategyAction;
-    if (strategy.id.startsWith('file://')) {
+    const isFileStrategy = strategy.id.startsWith('file://');
+    if (isFileStrategy) {
       const loadedStrategy = await loadStrategy(strategy.id);
       strategyAction = loadedStrategy.action;
     } else {
@@ -649,6 +650,11 @@ async function applyStrategies(
 
       return true;
     });
+
+    // Avoid remote strategy setup when outcome cases yielded no eligible inputs.
+    if (hasOutcomeCases && !isFileStrategy && applicableTestCases.length === 0) {
+      continue;
+    }
 
     // Apply numTests pre-limit if configured (with defensive check for NaN/Infinity)
     const numTestsLimit = strategy.config?.numTests;
@@ -879,6 +885,33 @@ export function getTestCount(
   return count;
 }
 
+// Built-in strategies (including retry) need eligible seeds. File strategies can
+// emit rows even from an empty batch, so preserve their existing generation path.
+function usesEligibleSeeds(strategy: RedteamStrategyObject) {
+  return strategy.id !== 'basic' && !strategy.id.startsWith('file://');
+}
+
+function canOmitOutcomeSeeds(strategies: RedteamStrategyObject[], includeBasicTests: boolean) {
+  return !includeBasicTests && !strategies.some((s) => s.id.startsWith('file://'));
+}
+
+function getStrategySeedCount(
+  strategy: RedteamStrategyObject,
+  plugins: SynthesizeOptions['plugins'],
+  totalPluginTests: number,
+  language?: string | string[],
+) {
+  if (!usesEligibleSeeds(strategy) || !plugins.some((p) => isAgentOutcomePlugin(p.id))) {
+    return totalPluginTests;
+  }
+  return plugins.reduce((count, plugin) => {
+    const seed = { metadata: { pluginId: plugin.id, pluginConfig: plugin.config } };
+    return pluginMatchesStrategyTargets(seed, strategy.id, strategy.config?.plugins)
+      ? count + getExpectedPluginTestCount(plugin, language)
+      : count;
+  }, 0);
+}
+
 /**
  * Calculates the total number of tests to be generated based on plugins and strategies.
  * @param plugins - The array of plugins to generate tests for
@@ -906,8 +939,9 @@ export function calculateTotalTests(
 
   // Calculate total plugin tests accounting for multiple languages
   // Each plugin's tests are multiplied by the number of languages when multiple languages are configured
+  const omitOutcomeSeeds = canOmitOutcomeSeeds(strategies, includeBasicTests);
   const totalPluginTests = plugins.reduce((sum, p) => {
-    return sum + getExpectedPluginTestCount(p, language);
+    return sum + getExpectedPluginTestCount(p, language, omitOutcomeSeeds);
   }, 0);
 
   // When there are no strategies, or only a disabled basic strategy
@@ -927,7 +961,13 @@ export function calculateTotalTests(
   let totalTests = includeBasicTests ? totalPluginTests : 0;
 
   // Apply retry strategy first if present
-  if (retryStrategy) {
+  if (retryStrategy && plugins.some((p) => isAgentOutcomePlugin(p.id))) {
+    // Retries join the basic rows and are limited to plugins with eligible seeds.
+    const eligible = getStrategySeedCount(retryStrategy, plugins, totalPluginTests, language);
+    if (includeBasicTests && eligible > 0) {
+      totalTests += getTestCount(retryStrategy, eligible, strategies) - eligible;
+    }
+  } else if (retryStrategy) {
     totalTests = getTestCount(retryStrategy, totalTests, strategies);
   }
 
@@ -937,7 +977,8 @@ export function calculateTotalTests(
       continue;
     }
     // Add the tests from this strategy to the total, not replace the total
-    totalTests += getTestCount(strategy, totalPluginTests, strategies);
+    const eligible = getStrategySeedCount(strategy, plugins, totalPluginTests, language);
+    totalTests += getTestCount(strategy, eligible, strategies);
   }
 
   return {
@@ -1040,25 +1081,8 @@ export async function synthesize({
   // Deduplicate strategies by a key. For most strategies, the key is the id.
   // For 'layer', use label if provided, otherwise include the ordered step ids.
   const seen = new Set<string>();
-  const keyForStrategy = (s: (typeof strategies)[number]): string => {
-    if (s.id === 'layer' && s.config) {
-      const config = s.config as Record<string, unknown>;
-      // If label is provided, use it for uniqueness (allows multiple layer strategies)
-      if (typeof config.label === 'string' && config.label.trim()) {
-        return `layer/${config.label}`;
-      }
-      // Otherwise use steps for uniqueness
-      if (Array.isArray(config.steps)) {
-        const steps = (config.steps as Array<string | { id?: string }>).map((st) =>
-          typeof st === 'string' ? st : (st?.id ?? 'unknown'),
-        );
-        return `layer:${steps.join('->')}`;
-      }
-    }
-    return s.id;
-  };
   strategies = expandedStrategies.filter((strategy) => {
-    const key = keyForStrategy(strategy);
+    const key = strategyDeduplicationKey(strategy);
     if (seen.has(key)) {
       logger.debug(`[Synthesize] Skipping duplicate strategy: ${key}`);
       return false;
@@ -1075,28 +1099,10 @@ export async function synthesize({
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
 
-  const providerSelection = await redteamProviderManager.getProviderSelection({
-    provider,
-  });
-  const generationTokenUsage: TokenUsage = {
-    cached: 0,
-    completion: 0,
-    numRequests: 0,
-    prompt: 0,
-    total: 0,
-  };
-  const redteamProvider = trackGenerationTokenUsage(
-    providerSelection.provider,
-    generationTokenUsage,
-  );
-  const trackedProviderSelection = {
-    ...providerSelection,
-    provider: redteamProvider,
-  };
-
   const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
     calculateTotalTests(plugins, strategies, language);
 
+  const omitOutcomeSeedsInEstimate = canOmitOutcomeSeeds(strategies, includeBasicTests);
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
@@ -1104,7 +1110,11 @@ export async function synthesize({
       plugins
         .map((p) => {
           // Calculate actual test count accounting for multiple languages
-          const actualTestCount = getExpectedPluginTestCount(p, language);
+          const actualTestCount = getExpectedPluginTestCount(
+            p,
+            language,
+            omitOutcomeSeedsInEstimate,
+          );
           // Build a concise display string for the plugin
           let configSummary = '';
           if (p.config) {
@@ -1145,24 +1155,8 @@ export async function synthesize({
         strategies
           .filter((s) => !['basic', 'retry'].includes(s.id))
           .map((s) => {
-            // Apply fan-out multiplier if this is a fan-out strategy
-            let n = 1;
-            if (typeof s.config?.n === 'number') {
-              n = s.config.n;
-            } else if (isFanoutStrategy(s.id)) {
-              n = getDefaultNFanout(s.id);
-            }
-            // For non-basic strategies, we want to show the additional tests they generate
-            let testCount = totalPluginTests * n;
-            // Apply numTests cap if configured (consistent with calculateExpectedStrategyTests)
-            const numTestsCap = s.config?.numTests;
-            if (
-              typeof numTestsCap === 'number' &&
-              Number.isFinite(numTestsCap) &&
-              numTestsCap >= 0
-            ) {
-              testCount = Math.min(testCount, numTestsCap);
-            }
+            const eligible = getStrategySeedCount(s, plugins, totalPluginTests, language);
+            const testCount = getTestCount(s, eligible, strategies);
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()
@@ -1276,6 +1270,7 @@ export async function synthesize({
         logger.debug(`Plugin ${plugin.id} not registered, skipping validation`);
       }
     } else if (registeredPlugin.validate) {
+      const isOutcome = isAgentOutcomePlugin(plugin.id);
       try {
         const resolvedPluginConfig = resolvePluginConfigWithMaxChars(
           plugin.config,
@@ -1284,6 +1279,7 @@ export async function synthesize({
         registeredPlugin.validate({
           language,
           ...resolvedPluginConfig,
+          ...(isOutcome && { injectVar, ...(hasMultipleInputs && { inputs }) }),
           modifiers: buildRedteamModifiers({
             maxCharsPerMessage,
             pluginConfig: resolvedPluginConfig,
@@ -1291,6 +1287,9 @@ export async function synthesize({
           }),
         });
       } catch (error) {
+        if (isOutcome && error instanceof z.ZodError) {
+          throw new Error(`Invalid configuration for ${plugin.id}. ${z.prettifyError(error)}`);
+        }
         logger.warn(`Validation failed for plugin ${plugin.id}: ${error}, skipping plugin.`);
         return false;
       }
@@ -1302,6 +1301,59 @@ export async function synthesize({
   // Validate all plugins upfront
   logger.debug('Validating plugins...');
   plugins = [...new Set(expandedPlugins)].filter(validatePlugin).sort();
+
+  const generationTokenUsage: TokenUsage = {
+    cached: 0,
+    completion: 0,
+    numRequests: 0,
+    prompt: 0,
+    total: 0,
+  };
+  const outcomePlugins = plugins.filter((p) => isAgentOutcomePlugin(p.id));
+  const omitOutcomeSeeds =
+    outcomePlugins.length > 0 && canOmitOutcomeSeeds(strategies, includeBasicTests);
+  if (outcomePlugins.length) {
+    const skipped = strategies.filter(
+      (strategy) =>
+        usesEligibleSeeds(strategy) &&
+        outcomePlugins.some((p) => pluginIdMatchesTargets(p.id, strategy.config?.plugins)),
+    );
+    if (skipped.length) {
+      const basic = includeBasicTests
+        ? 'Basic remains enabled. Any original outcome attacks count only toward basic coverage.'
+        : 'Basic is disabled. Enable basic to generate outcome attacks.';
+      logger.warn(
+        `Agent outcome plugins skip ${skipped.map((s) => s.id).join(', ')} to preserve the owner request, tool content and per-trial evidence. ${basic}`,
+      );
+    }
+    if (omitOutcomeSeeds) {
+      // With no path from these seeds to a final row, avoid paying for discarded generations.
+      plugins = plugins.filter((p) => !isAgentOutcomePlugin(p.id));
+    }
+    if (!plugins.length) {
+      checkAbort();
+      return {
+        purpose: purposeOverride ?? '',
+        entities: entitiesOverride ?? [],
+        testCases: [],
+        injectVar,
+        failedPlugins: [],
+        generationTokenUsage,
+      };
+    }
+  }
+
+  const providerSelection = await redteamProviderManager.getProviderSelection({
+    provider,
+  });
+  const redteamProvider = trackGenerationTokenUsage(
+    providerSelection.provider,
+    generationTokenUsage,
+  );
+  const trackedProviderSelection = {
+    ...providerSelection,
+    provider: redteamProvider,
+  };
 
   // Check API health before proceeding
   if (shouldGenerateRemote()) {
@@ -1485,11 +1537,14 @@ export async function synthesize({
         const testCasesWithMetadata = allPluginTests as TestCaseWithPlugin[];
 
         // Extract goal for this plugin's tests (only needed for agentic strategies)
-        if (needsGoalExtraction) {
+        if (needsGoalExtraction && !isAgentOutcomePlugin(plugin.id)) {
           logger.debug(
             `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
           );
           for (const testCase of testCasesWithMetadata) {
+            if (getAgentOutcomeCase(testCase)) {
+              continue;
+            }
             const promptVar = testCase.vars?.[injectVar];
             const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
@@ -1629,6 +1684,9 @@ export async function synthesize({
             `Extracting goal for ${allCustomTests.length} custom tests from ${plugin.id}...`,
           );
           for (const testCase of allCustomTests) {
+            if (getAgentOutcomeCase(testCase)) {
+              continue;
+            }
             const promptVar = testCase.vars?.[injectVar];
             const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
@@ -1706,6 +1764,7 @@ export async function synthesize({
       maxCharsPerMessage,
       redteamGenerationContext,
       (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
+      omitOutcomeSeeds,
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1732,6 +1791,7 @@ export async function synthesize({
       maxCharsPerMessage,
       redteamGenerationContext,
       (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
+      omitOutcomeSeeds,
     );
 
   Object.assign(strategyResults, otherStrategyResults);

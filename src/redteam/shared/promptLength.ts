@@ -1,6 +1,10 @@
 import cliState from '../../cliState';
+import {
+  getLiteralMessageOverLimit,
+  getMaxCharsPerMessageFromConfig,
+} from './promptLengthValidation';
 
-export const MAX_CHARS_PER_MESSAGE_MODIFIER_KEY = 'maxCharsPerMessage';
+export { MAX_CHARS_PER_MESSAGE_MODIFIER_KEY } from './promptLengthValidation';
 
 type ChatMessage = {
   content: string;
@@ -12,18 +16,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function getMaxCharsPerMessage(limit?: number): number | undefined {
-  const maxCharsPerMessage = limit ?? cliState.config?.redteam?.maxCharsPerMessage;
-
-  if (
-    typeof maxCharsPerMessage !== 'number' ||
-    !Number.isInteger(maxCharsPerMessage) ||
-    maxCharsPerMessage <= 0
-  ) {
-    return undefined;
-  }
-
-  return maxCharsPerMessage;
+export function getMaxCharsPerMessage(limit?: number): number | undefined {
+  return getMaxCharsPerMessageFromConfig({
+    maxCharsPerMessage: limit ?? cliState.config?.redteam?.maxCharsPerMessage,
+  });
 }
 
 function parseChatMessages(prompt: string): ChatMessage[] | undefined {
@@ -84,13 +80,14 @@ function parseChatMessages(prompt: string): ChatMessage[] | undefined {
 function getPromptLengthViolation(
   prompt: string,
   limit?: number,
+  literalMessage = false,
 ): { length: number; limit: number; path: string } | undefined {
   const maxCharsPerMessage = getMaxCharsPerMessage(limit);
   if (!maxCharsPerMessage) {
     return undefined;
   }
 
-  const messages = parseChatMessages(prompt);
+  const messages = literalMessage ? undefined : parseChatMessages(prompt);
   if (messages) {
     const oversizedMessage = messages.find(
       (message) => message.role === 'user' && message.content.length > maxCharsPerMessage,
@@ -105,15 +102,8 @@ function getPromptLengthViolation(
       : undefined;
   }
 
-  if (prompt.length <= maxCharsPerMessage) {
-    return undefined;
-  }
-
-  return {
-    length: prompt.length,
-    limit: maxCharsPerMessage,
-    path: 'prompt',
-  };
+  const violation = getLiteralMessageOverLimit(prompt, maxCharsPerMessage);
+  return violation && { ...violation, path: 'prompt' };
 }
 
 export function getMaxCharsPerMessageModifierValue(limit?: number): string | undefined {
@@ -140,8 +130,12 @@ export function getGeneratedPromptOverLimit(
   };
 }
 
-export function throwIfTargetPromptExceedsMaxChars(prompt: string, limit?: number): void {
-  const violation = getPromptLengthViolation(prompt, limit);
+export function throwIfTargetPromptExceedsMaxChars(
+  prompt: string,
+  limit?: number,
+  literalMessage = false,
+): void {
+  const violation = getPromptLengthViolation(prompt, limit, literalMessage);
   if (!violation) {
     return;
   }

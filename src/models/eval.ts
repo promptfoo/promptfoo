@@ -14,7 +14,11 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import {
+  AGENT_OUTCOME_PLUGINS,
+  classifyAgentOutcome,
+  PLUGIN_CATEGORIES,
+} from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
@@ -66,8 +70,7 @@ import EvalResult, {
   getResultIndexKey,
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
-  persistRepeatMetadata,
-  persistTraceMetadata,
+  persistResultMetadata,
   projectPrompt,
   projectTracesForOutput,
   stripTraceLinkageFromMetadata,
@@ -575,11 +578,7 @@ export default class Eval {
           .values(
             opts.results?.map((r) => ({
               ...r,
-              metadata: persistTraceMetadata(
-                persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
-                r.traceId,
-                r.evaluationId,
-              ),
+              metadata: persistResultMetadata(r),
               evalId,
               id: crypto.randomUUID(),
             })),
@@ -1409,11 +1408,7 @@ export default class Eval {
         .values(
           results.map((r) => ({
             ...r,
-            metadata: persistTraceMetadata(
-              persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
-              r.traceId,
-              r.evaluationId,
-            ),
+            metadata: persistResultMetadata(r),
             evalId: this.id,
           })),
         )
@@ -1811,6 +1806,75 @@ export default class Eval {
   }
 }
 
+// Prompt metrics mix attacks, controls and errors. For reports with outcome trials,
+// count ordinary results in SQL and validate outcome delivery with the same classifier as the UI.
+async function getAgentReportRates(evalIds: string[]): Promise<Map<string, number | undefined>> {
+  const db = await getDb();
+  const plugins = sql.join([...AGENT_OUTCOME_PLUGINS], sql`, `);
+  const isOutcome = sql`json_extract(metadata, '$.pluginId') IN (${plugins})`;
+  const candidates = await db.all<{ id: string; eval_id: string; failure_reason: number }>(sql`
+    SELECT id, eval_id, failure_reason FROM eval_results WHERE ${isOutcome}
+    AND eval_id IN (SELECT value FROM json_each(${JSON.stringify(evalIds)}))
+  `);
+  const totals = new Map<string, { attempts: number; failures: number }>();
+  for (const row of candidates) {
+    totals.set(row.eval_id, { attempts: 0, failures: 0 });
+  }
+  if (!totals.size) {
+    return new Map();
+  }
+  const ordinary = await db.all<{ eval_id: string; attempts: number; failures: number }>(sql`
+    SELECT eval_id, COUNT(*) AS attempts, COUNT(*) FILTER (WHERE success = 0) AS failures
+    FROM eval_results WHERE eval_id IN (SELECT value FROM json_each(${JSON.stringify([...totals.keys()])}))
+    AND failure_reason != ${ResultFailureReason.ERROR} AND NOT COALESCE(${isOutcome}, 0)
+    GROUP BY eval_id
+  `);
+  for (const row of ordinary) {
+    totals.set(row.eval_id, row);
+  }
+  const ids = candidates
+    .filter((row) => row.failure_reason !== ResultFailureReason.ERROR)
+    .map((row) => row.id);
+  // Read only assignments, grades and (for stripped grades) provider evidence in bounded batches.
+  const batchSize = 100;
+  for (let i = 0; i < ids.length; i += batchSize) {
+    const rows = await db
+      .select({
+        evalId: evalResultsTable.evalId,
+        success: evalResultsTable.success,
+        testCase:
+          sql`json_object('metadata',json_object('agentOutcome',json_extract(test_case, '$.metadata.agentOutcome')))`.mapWith(
+            evalResultsTable.testCase,
+          ),
+        gradingResult: evalResultsTable.gradingResult,
+        response: sql`CASE WHEN grading_result IS NULL THEN json_object(
+        'cached', json_extract(response, '$.cached'),
+        'metadata', json_object('agentOutcomeEvidence',json_extract(response, '$.metadata.agentOutcomeEvidence'))
+      ) END`.mapWith(evalResultsTable.response),
+      })
+      .from(evalResultsTable)
+      .where(
+        sql`id IN (SELECT value FROM json_each(${JSON.stringify(ids.slice(i, i + batchSize))}))`,
+      )
+      .all();
+    for (const row of rows) {
+      const counts = totals.get(row.evalId);
+      if (counts && classifyAgentOutcome(row) === 'attack') {
+        counts.attempts++;
+        if (!row.success) {
+          counts.failures++;
+        }
+      }
+    }
+  }
+  return new Map(
+    Array.from(totals, ([id, { attempts, failures }]) => [
+      id,
+      attempts ? calculateAttackSuccessRate(attempts, failures) : undefined,
+    ]),
+  );
+}
+
 /**
  * Queries summaries of all evals, optionally for a given dataset.
  *
@@ -1858,12 +1922,35 @@ export async function getEvalSummaries(
     .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id))
     .all();
 
-  /**
-   * Deserialize the evals. A few things to note:
-   *
-   * - Test statistics are derived from the prompt metrics as this is the only reliable source of truth
-   * that's written to the evals table.
-   */
+  const agentReportRates =
+    type === 'redteam' && results.length > 0
+      ? await getAgentReportRates(results.map((result) => result.evalId))
+      : undefined;
+
+  // A successful outcome seed records attackExposed. Each column can then
+  // have its own child test index, even if column totals happen to match.
+  // Limit the indexed count to multi-column outcome runs to keep ordinary
+  // summary reads independent of the size of the results table.
+  const outcomeIds = results
+    .filter(
+      ({ prompts }) =>
+        prompts &&
+        prompts.length > 1 &&
+        prompts.some((p) => p.metrics?.namedScores?.attackExposed !== undefined),
+    )
+    .map(({ evalId }) => evalId);
+  const distinctTests = new Map<string, number>();
+  if (outcomeIds.length) {
+    const counts = await db.all<{ eval_id: string; tests: number }>(sql`
+      SELECT eval_id, COUNT(DISTINCT test_idx) AS tests FROM eval_results
+      WHERE eval_id IN (SELECT value FROM json_each(${JSON.stringify(outcomeIds)}))
+      GROUP BY eval_id
+    `);
+    for (const { eval_id, tests } of counts) {
+      distinctTests.set(eval_id, tests);
+    }
+  }
+
   return results.map((result) => {
     const passCount =
       result.prompts?.reduce((memo, prompt) => {
@@ -1875,7 +1962,7 @@ export async function getEvalSummaries(
         return memo + (prompt.metrics?.testFailCount ?? 0);
       }, 0) ?? 0;
 
-    // All prompts should have the same number of test cases:
+    // Conditional trials and provider filters make column lengths unequal.
     const testCounts = result.prompts?.map((p) => {
       return (
         (p.metrics?.testPassCount ?? 0) +
@@ -1884,11 +1971,10 @@ export async function getEvalSummaries(
       );
     }) ?? [0];
 
-    // Derive the number of tests from the first prompt.
-    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
-
-    // Test count * prompt count
-    const testRunCount = testCount * (result.prompts?.length ?? 0);
+    const testCount = distinctTests.get(result.evalId) ?? testCounts[0] ?? 0;
+    const testRunCount = testCounts.reduce((sum, count) => sum + count, 0);
+    const rateFromPromptMetrics =
+      type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined;
 
     // Construct an array of providers
     const deserializedProviders = [];
@@ -1944,8 +2030,9 @@ export async function getEvalSummaries(
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,
-      attackSuccessRate:
-        type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
+      attackSuccessRate: agentReportRates?.has(result.evalId)
+        ? agentReportRates.get(result.evalId)
+        : rateFromPromptMetrics,
     };
   });
 }

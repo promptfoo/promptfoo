@@ -645,7 +645,14 @@ const smokeCases: SmokeCase[] = [
     method: 'post',
     openApiPath: '/api/redteam/generate-test',
     path: '/api/redteam/generate-test',
-    body: {},
+    body: {
+      plugin: {
+        id: 'agentic:unauthorized-sharing',
+        config: { mode: 'indirect', legitimateTask: 'Share one build.' },
+      },
+      strategy: { id: 'jailbreak', config: {} },
+      config: { applicationDefinition: { purpose: 'Share builds' } },
+    },
     expectedStatus: 400,
   },
   {

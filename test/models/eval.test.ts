@@ -29,7 +29,11 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createPromptMetrics,
+} from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 import { createAccuracyFilter, createPassFailOptions } from '../factories/literalFixtures';
 
@@ -466,6 +470,46 @@ describe('evaluator', () => {
   });
 
   describe('summaryResults', () => {
+    it.each([1, 2])(
+      'counts distinct outcome tests and actual runs across columns with %d revisions',
+      async (children) => {
+        const evaluation = await Eval.create({ redteam: {} }, []);
+        // Both columns share index 0. Each revision has a distinct ticket and
+        // test index and runs in its own seed's column only.
+        for (let promptIdx = 0; promptIdx < 2; promptIdx++) {
+          await evaluation.addResult(createEvaluateResult({ promptIdx, testIdx: 0 }));
+          if (promptIdx < children) {
+            await evaluation.addResult(
+              createEvaluateResult({
+                promptIdx,
+                testIdx: promptIdx + 1,
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+              }),
+            );
+          }
+        }
+        await evaluation.addPrompts(
+          [0, 1].map((column) =>
+            createCompletedPrompt(String(column), {
+              metrics: createPromptMetrics({
+                testPassCount: 1,
+                testFailCount: Number(column < children),
+                namedScores: { attackExposed: 1 },
+              }),
+            }),
+          ),
+        );
+        for (const type of [undefined, 'redteam'] as const) {
+          const summary = (await getEvalSummaries(undefined, type)).find(
+            (e) => e.evalId === evaluation.id,
+          );
+          expect(summary?.numTests).toBe(1 + children);
+          expect(summary?.passRate).toBeCloseTo(200 / (2 + children));
+        }
+      },
+    );
+
     it('should return all evaluations', async () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();
@@ -535,6 +579,134 @@ describe('evaluator', () => {
       expect(allIds).toEqual(expectedIds);
       expect(filteredIds).toEqual(expectedIds);
     });
+
+    it('counts graded attacks across plugins in reports containing agent outcome controls', async () => {
+      const pluginId = 'agentic:unauthorized-sharing';
+      const rows = [
+        { variant: 'attack', failureReason: ResultFailureReason.ASSERT, attackExposed: true },
+        { variant: 'attack', failureReason: ResultFailureReason.ERROR, attackExposed: true },
+        { variant: 'control', failureReason: ResultFailureReason.ASSERT, attackExposed: true },
+        { variant: 'authorized', failureReason: ResultFailureReason.NONE, attackExposed: true },
+        { variant: undefined, failureReason: ResultFailureReason.NONE },
+        { variant: 'attack', failureReason: ResultFailureReason.ASSERT, attackExposed: false },
+        { variant: 'attack', failureReason: ResultFailureReason.ASSERT, attackExposed: null },
+        {
+          variant: 'attack',
+          failureReason: ResultFailureReason.ASSERT,
+          attackExposed: true,
+          mismatched: true,
+        },
+      ].map(({ variant, failureReason, attackExposed, mismatched }, testIdx) => {
+        const assigned = { pluginId, mode: 'indirect', variant, caseId: String(testIdx) };
+        const metadata = variant ? { pluginId, agentOutcome: assigned } : { pluginId: 'bola' };
+        const success = failureReason === ResultFailureReason.NONE;
+        const verdict = { pass: success, score: Number(success), reason: 'Test outcome' };
+        const agentOutcomeResult = {
+          ...assigned,
+          caseId: mismatched ? 'other' : assigned.caseId,
+          attackExposed,
+          taskCompleted: true,
+          status: success ? 'safe' : 'violation',
+          reason: verdict.reason,
+        };
+        return createEvaluateResult({
+          testIdx,
+          metadata,
+          testCase: { metadata },
+          failureReason,
+          success,
+          gradingResult: {
+            ...verdict,
+            componentResults: [{ ...verdict, metadata: { agentOutcomeResult } }],
+          },
+        });
+      });
+      const evaluation = await Eval.create({ redteam: {} }, []);
+      const controls = await Eval.create({ redteam: {} }, []);
+      for (const row of rows) {
+        await evaluation.addResult(row);
+      }
+      for (const row of rows.slice(2, 4)) {
+        await controls.addResult(row);
+      }
+      const summaries = await getEvalSummaries(undefined, 'redteam');
+      expect(summaries).toContainEqual(
+        expect.objectContaining({ evalId: evaluation.id, attackSuccessRate: 50 }),
+      );
+      expect(summaries).toContainEqual(
+        expect.objectContaining({ evalId: controls.id, attackSuccessRate: undefined }),
+      );
+    });
+
+    it.each(['duplicate', 'omitted', 'overwritten'])(
+      'reports N/A for a failed manual control (%s result plugin ID)',
+      async (identity) => {
+        const pluginId = 'agentic:unauthorized-sharing';
+        const metadata = {
+          ...(identity === 'duplicate' && { pluginId }),
+          agentOutcome: { pluginId, caseId: 'manual', variant: 'control', mode: 'indirect' },
+        };
+        const evaluation = await Eval.create({ redteam: {} }, []);
+        await evaluation.addResult(
+          createEvaluateResult({
+            metadata: identity === 'overwritten' ? { pluginId: 'bola' } : metadata,
+            testCase: { metadata },
+            success: false,
+            failureReason: ResultFailureReason.ASSERT,
+          }),
+        );
+        const [stored] = await EvalResult.findManyByEvalId(evaluation.id);
+        expect(stored.metadata.pluginId).toBe(pluginId);
+        expect(await getEvalSummaries(undefined, 'redteam')).toContainEqual(
+          expect.objectContaining({ evalId: evaluation.id, attackSuccessRate: undefined }),
+        );
+      },
+    );
+
+    it.each([
+      { exposed: false, rate: undefined },
+      { exposed: null, rate: undefined },
+      { exposed: true, rate: 100 },
+    ])(
+      'uses matched response evidence for stripped grades (delivery $exposed)',
+      async ({ exposed, rate }) => {
+        const pluginId = 'agentic:private-to-public-disclosure';
+        const evaluation = await Eval.create({ redteam: {} }, []);
+        const assigned = { pluginId, caseId: 'manual', variant: 'attack', mode: 'indirect' };
+        const metadata = { agentOutcome: assigned };
+        const agentOutcomeEvidence = {
+          pluginId,
+          version: 1,
+          caseId: assigned.caseId,
+          attackExposed: exposed,
+          taskCompleted: true,
+          measurements: {
+            privateVerified: true,
+            privateMarker: 'secret',
+            publicBefore: '',
+            publicAfter: 'secret',
+            publicControl: null,
+          },
+        };
+        const violation = createEvaluateResult({
+          metadata,
+          testCase: { metadata },
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+          response: { metadata: { agentOutcomeEvidence } },
+          gradingResult: null,
+        });
+        await evaluation.addResult(violation);
+        await evaluation.addResult({
+          ...violation,
+          testIdx: 1,
+          failureReason: ResultFailureReason.ERROR,
+        });
+        expect(await getEvalSummaries(undefined, 'redteam')).toContainEqual(
+          expect.objectContaining({ evalId: evaluation.id, attackSuccessRate: rate }),
+        );
+      },
+    );
 
     it('should update redteam classification when a persisted config changes type', async () => {
       const redteamEvaluation = await Eval.create({ redteam: {} as any }, []);

@@ -220,6 +220,14 @@ describe('doRedteamRun', () => {
     );
   });
 
+  it('passes the worker ticket policy directly to the evaluator, outside the generated config', async () => {
+    await doRedteamRun({ allowedMetaTicketRevisions: ['blind'] });
+    expect(vi.mocked(doGenerateRedteam).mock.calls[0][0]).not.toHaveProperty(
+      'allowedMetaTicketRevisions',
+    );
+    expect(vi.mocked(doEval).mock.calls[0][3].allowedMetaTicketRevisions).toEqual(['blind']);
+  });
+
   it('does not charge an evaluation for a reused generated test suite', async () => {
     vi.mocked(doGenerateRedteam).mockResolvedValue({
       metadata: {
@@ -320,6 +328,13 @@ describe('doRedteamRun', () => {
           },
         }),
       );
+    });
+
+    it('does not promote a live config envFile to a trusted generation option', async () => {
+      await doRedteamRun({
+        liveRedteamConfig: { ...mockConfig, commandLineOptions: { envFile: 'untrusted.env' } },
+      });
+      expect(vi.mocked(doGenerateRedteam).mock.lastCall?.[0]).not.toHaveProperty('envFile');
     });
 
     it('logs the live config path while keeping its contents private', async () => {

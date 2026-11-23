@@ -2127,6 +2127,52 @@ describe('evalCommand', () => {
     });
   });
 
+  it.each(['saved-config', 'missing-key', 'evaluator'])(
+    'keeps failed revision rows and clears retry flags on %s rejection',
+    async (stage) => {
+      const redteam = {
+        plugins: [
+          { id: 'agentic:private-to-public-disclosure', config: { metaTicketRevision: 'public' } },
+        ],
+      };
+      const latestEval = new Eval({
+        prompts: [],
+        ...(stage === 'saved-config' && { redteam }),
+      } as UnifiedConfig);
+      const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+      vi.mocked(getErrorResultIds).mockResolvedValueOnce(['failed-child']);
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [{ raw: 'owner', label: 'Owner' }],
+          providers: [{ id: () => 'echo', callApi: async () => ({ output: 'reply' }) }],
+        },
+        basePath: path.resolve('/'),
+      });
+      if (stage === 'missing-key') {
+        vi.mocked(checkProviderApiKeys).mockReturnValueOnce(
+          new Map([['OPENAI_API_KEY', ['target']]]),
+        );
+      } else if (stage === 'evaluator') {
+        vi.mocked(evaluate).mockRejectedValueOnce(new Error('Cannot retry errors'));
+      }
+      try {
+        await expect(
+          doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {}),
+        ).rejects.toThrow(
+          stage === 'missing-key' ? 'Missing required API keys' : 'Cannot retry errors',
+        );
+        expect(evaluate).toHaveBeenCalledTimes(stage === 'evaluator' ? 1 : 0);
+        expect(deleteErrorResults).not.toHaveBeenCalled();
+        expect(cliState.resume).toBe(false);
+        expect(cliState.retryMode).toBe(false);
+        expect(cliState._retryErrorResultIds).toBeUndefined();
+      } finally {
+        latestSpy.mockRestore();
+      }
+    },
+  );
+
   it('should retry error results from the latest eval and clean up after success', async () => {
     const authored = { raw: 'retry prompt', label: 'Retry', config: { temperature: 1 } };
     const latestEval = new Eval({ prompts: [authored] } as UnifiedConfig);
@@ -2566,6 +2612,70 @@ describe('evalCommand', () => {
       expect.objectContaining({ eventSource: 'mcp' }),
     );
   });
+
+  it('does not let a config widen the worker policy on remote ticket proposals', async () => {
+    const untrusted = { showProgressBar: false, allowedMetaTicketRevisions: ['public'] };
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: { ...defaultConfig, evaluateOptions: untrusted },
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockResolvedValueOnce(new Eval(defaultConfig));
+    await doEval({}, defaultConfig, defaultConfigPath, { allowedMetaTicketRevisions: [] });
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Eval),
+      expect.objectContaining({ allowedMetaTicketRevisions: [] }),
+    );
+  });
+
+  it.each([false, true])(
+    'trusts only caller-selected env files for remote ticket proposals (explicit file %s)',
+    async (explicit) => {
+      const setup = vi
+        .spyOn(await import('../../src/util/index'), 'setupEnv')
+        .mockImplementation(() => {});
+      try {
+        const untrusted = { showProgressBar: false, allowedMetaTicketRevisions: ['public'] };
+        vi.mocked(resolveConfigs).mockResolvedValueOnce({
+          config: { ...defaultConfig, evaluateOptions: untrusted },
+          commandLineOptions: { envPath: 'suite-selected.env' },
+          testSuite: { prompts: [], providers: [] },
+          basePath: path.resolve('/'),
+        });
+        vi.mocked(evaluate).mockResolvedValueOnce(new Eval(defaultConfig));
+        if (explicit) {
+          // Commander consumes this option on the root command.
+          program.option('--env-file, --env-path <path>');
+          evalCommand(program, defaultConfig, defaultConfigPath);
+          await program.parseAsync([
+            'node',
+            'test',
+            'eval',
+            '--no-table',
+            '--no-write',
+            '--env-file',
+            'caller-selected.env',
+          ]);
+          expect(vi.mocked(evaluate).mock.lastCall?.[2]).not.toMatchObject({
+            allowedMetaTicketRevisions: [],
+          });
+        } else {
+          await doEval({}, defaultConfig, defaultConfigPath, {
+            allowedMetaTicketRevisions: ['public'],
+          });
+          expect(vi.mocked(evaluate).mock.lastCall?.[2]).toMatchObject({
+            allowedMetaTicketRevisions: [],
+          });
+        }
+        expect(setup.mock.lastCall?.[0]).toBe(
+          explicit ? 'caller-selected.env' : 'suite-selected.env',
+        );
+      } finally {
+        setup.mockRestore();
+      }
+    },
+  );
 
   it('should keep CLI event sources for CLI invocations', async () => {
     const mockEvalRecord = new Eval(defaultConfig);

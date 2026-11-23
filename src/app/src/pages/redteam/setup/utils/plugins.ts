@@ -1,4 +1,25 @@
-import { type Config } from '../types';
+import { isAgentOutcomePlugin, type Plugin } from '@promptfoo/redteam/constants';
+
+import type { Config } from '../types';
+
+export const INCOMPATIBLE_PREVIEW_MESSAGE =
+  'Agent outcome plugins only support basic strategy previews.';
+
+export function canPreviewPluginWithStrategy(pluginId: string, strategyId?: string) {
+  return strategyId === 'basic' || strategyId === 'default' || !isAgentOutcomePlugin(pluginId);
+}
+
+export function getStrategyPreviewPlugins(plugins: Config['plugins'], strategyId?: string) {
+  if (!plugins?.length) {
+    return [{ id: 'harmful:hate' as const, config: {} }];
+  }
+  return plugins
+    .map((plugin) => ({
+      id: (typeof plugin === 'string' ? plugin : plugin.id) as Plugin,
+      config: typeof plugin === 'string' ? {} : (plugin.config ?? {}),
+    }))
+    .filter(({ id }) => id && canPreviewPluginWithStrategy(id, strategyId));
+}
 
 /**
  * Counts the number of custom policies defined in the config.

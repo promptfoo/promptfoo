@@ -1,15 +1,24 @@
 // This file is imported by the frontend and shouldn't use native dependencies.
 
 import {
+  AgentOutcomePluginIdSchema,
+  isAgentOutcomePlugin,
   MULTI_TURN_STRATEGIES,
   type Plugin,
+  pluginIdMatchesTargets,
   riskCategorySeverityMap,
   type Severity,
   SeveritySchema,
+  STRATEGY_EXEMPT_PLUGINS,
+  strategyDeduplicationKey,
 } from '../redteam/constants';
 import { RedteamConfigSchema } from '../validators/redteam';
 
-import type { RedteamPluginObject, SavedRedteamConfig } from '../redteam/types';
+import type {
+  RedteamPluginObject,
+  RedteamStrategyObject,
+  SavedRedteamConfig,
+} from '../redteam/types';
 import type { UnifiedConfig, Vars } from '../types/index';
 
 export function getRiskCategorySeverityMap(
@@ -48,9 +57,16 @@ function getValidPluginSeverity(value: unknown) {
 
 /** Normalize the workload preview with the same aliases and duplicate precedence as generation. */
 export function normalizeRedteamConfigForPreview(
-  config: Pick<SavedRedteamConfig, 'plugins' | 'strategies' | 'numTests' | 'language'>,
+  config: Pick<
+    SavedRedteamConfig,
+    | 'plugins'
+    | 'strategies'
+    | 'numTests'
+    | 'language'
+    | 'excludeTargetOutputFromAgenticAttackGeneration'
+  >,
 ) {
-  const numTests = config.numTests ?? 5;
+  const numTests = getValidPluginNumTests(config.numTests) ?? 5;
   const plugins = config.plugins.map((entry) => {
     if (typeof entry === 'string') {
       return entry;
@@ -74,12 +90,15 @@ export function normalizeRedteamConfigForPreview(
       ...(validSeverity !== undefined && { severity: validSeverity }),
     };
   });
-  const normalized = RedteamConfigSchema.safeParse({
+  const preview = {
     plugins,
     numTests,
     strategies: config.strategies,
     language: config.language,
-  });
+    excludeTargetOutputFromAgenticAttackGeneration:
+      config.excludeTargetOutputFromAgenticAttackGeneration,
+  };
+  const normalized = RedteamConfigSchema.safeParse(preview);
   // Keep a best-effort preview while plugin or strategy fields are incomplete in the editor.
   return normalized.success
     ? {
@@ -88,7 +107,107 @@ export function normalizeRedteamConfigForPreview(
         plugins: normalized.data.plugins ?? [],
         strategies: normalized.data.strategies ?? [],
       }
-    : { plugins, numTests, strategies: config.strategies, language: config.language };
+    : preview;
+}
+
+type PreviewConfig = ReturnType<typeof normalizeRedteamConfigForPreview>;
+
+function getPreviewSeeds({
+  plugins,
+  language,
+  numTests,
+  excludeTargetOutputFromAgenticAttackGeneration,
+}: PreviewConfig) {
+  const counts = new Map<
+    string,
+    { id: string; count: number; revisions: number; exclusions: unknown }
+  >();
+  for (const entry of plugins) {
+    const plugin = typeof entry === 'string' ? { id: entry } : entry;
+    const severity = 'severity' in plugin ? plugin.severity : undefined;
+    const key = `${plugin.id}:${JSON.stringify(plugin.config)}:${severity || ''}`;
+    // The last override wins. The browser counts top-level intents and cannot read external files.
+    const intent = plugin.config?.intent;
+    const intentCount = Array.isArray(intent) ? intent.length : intent ? 1 : 0;
+    const count =
+      plugin.id === 'intent' ? intentCount : ('numTests' in plugin && plugin.numTests) || numTests;
+    const languages = plugin.config?.language ?? language;
+    const languageCount = Array.isArray(languages) ? languages.length : 1;
+    const { mode = 'both', metaTicketRevision } = plugin.config ?? {};
+    const canRevise =
+      plugin.id === AgentOutcomePluginIdSchema.enum.privateToPublicDisclosure &&
+      (metaTicketRevision === 'blind' ||
+        (metaTicketRevision === 'public' && !excludeTargetOutputFromAgenticAttackGeneration));
+    // Only an indirect seed can lead to a revision. Each language starts with an indirect case.
+    const indirect = mode === 'both' ? Math.ceil(count / 2) : mode === 'indirect' ? count : 0;
+    counts.set(key, {
+      id: plugin.id,
+      exclusions: plugin.config?.excludeStrategies,
+      count: count * languageCount,
+      revisions: canRevise ? indirect * languageCount : 0,
+    });
+  }
+  return Array.from(counts.values());
+}
+
+function getStrategyLimit(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+// Both setup screens use the same seed counts with platform-specific probe budgets.
+export function getEstimatedProbeCount(
+  config: PreviewConfig,
+  multipliers: Readonly<Record<string, number>>,
+): number {
+  const seen = new Set<string>();
+  const strategies = config.strategies
+    .map<RedteamStrategyObject>((strategy) =>
+      typeof strategy === 'string' ? { id: strategy } : strategy,
+    )
+    .filter((strategy) => {
+      const key = strategyDeduplicationKey(strategy);
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  const seeds = getPreviewSeeds(config);
+  const base = seeds.reduce((total, seed) => total + seed.count, 0);
+  const hasOutcomes = seeds.some((seed) => isAgentOutcomePlugin(seed.id));
+  const ordinary = seeds.filter((seed) => !STRATEGY_EXEMPT_PLUGINS.some((id) => id === seed.id));
+  const basicEnabled = strategies.find((s) => s.id === 'basic')?.config?.enabled !== false;
+  // Revisions are conditional evaluation attempts. They never feed strategy generation.
+  let total = basicEnabled ? seeds.reduce((n, seed) => n + seed.revisions, base) : 0;
+  for (const { id, config: options } of strategies) {
+    if (id === 'basic') {
+      continue;
+    }
+    const targets = Array.isArray(options?.plugins) ? options.plugins : undefined;
+    // Keep existing estimates for ordinary scans. File strategies can create rows without seeds.
+    const eligible =
+      hasOutcomes && !id.startsWith('file://')
+        ? ordinary.reduce((n, seed) => {
+            if (Array.isArray(seed.exclusions) && seed.exclusions.includes(id)) {
+              return n;
+            }
+            return n + (pluginIdMatchesTargets(seed.id, targets) ? seed.count : 0);
+          }, 0)
+        : base;
+    const limit = getStrategyLimit(options?.numTests);
+    if (id === 'retry') {
+      // Retry rows join the basic cases and are discarded when basic is disabled.
+      if (hasOutcomes && (!basicEnabled || eligible === 0)) {
+        continue;
+      }
+      total += limit ?? (basicEnabled ? eligible : 0);
+    } else {
+      const multiplier = multipliers[id];
+      const inputs = hasOutcomes && limit !== undefined ? Math.min(eligible, limit) : eligible;
+      total += inputs * (Number.isFinite(multiplier) ? multiplier : 1);
+    }
+  }
+  return total;
 }
 
 export function getUnifiedConfig(
@@ -117,6 +236,9 @@ export function getUnifiedConfig(
     redteam: {
       purpose: config.purpose,
       numTests: config.numTests,
+      ...(config.excludeTargetOutputFromAgenticAttackGeneration && {
+        excludeTargetOutputFromAgenticAttackGeneration: true,
+      }),
       ...(config.maxCharsPerMessage && {
         maxCharsPerMessage: config.maxCharsPerMessage,
       }),

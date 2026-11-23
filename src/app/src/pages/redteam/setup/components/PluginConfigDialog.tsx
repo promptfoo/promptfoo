@@ -11,9 +11,14 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
-import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  isAgentOutcomePlugin,
+} from '@promptfoo/redteam/constants';
 import { Minus, Plus } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { AgentOutcomeConfig, getAgentOutcomeConfigIssue } from './AgentOutcomeConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
@@ -94,6 +99,17 @@ export default function PluginConfigDialog({
   const renderConfigInputs = () => {
     if (!plugin) {
       return null;
+    }
+
+    if (isAgentOutcomePlugin(plugin)) {
+      return (
+        <AgentOutcomeConfig
+          plugin={plugin}
+          config={localConfig}
+          maxCharsPerMessage={redTeamConfig.maxCharsPerMessage}
+          onChange={setLocalConfig}
+        />
+      );
     }
 
     let specificConfig;
@@ -359,7 +375,16 @@ export default function PluginConfigDialog({
           <Button variant="outline" onClick={onClose}>
             {isReadOnlyPlugin ? 'Close' : 'Cancel'}
           </Button>
-          {!isReadOnlyPlugin && <Button onClick={handleSave}>Save</Button>}
+          {!isReadOnlyPlugin && (
+            <Button
+              disabled={
+                !!getAgentOutcomeConfigIssue(plugin, localConfig, redTeamConfig.maxCharsPerMessage)
+              }
+              onClick={handleSave}
+            >
+              Save
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

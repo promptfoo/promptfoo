@@ -4,6 +4,8 @@ import cliState from '../../cliState';
 import logger from '../../logger';
 import {
   DATASET_EXEMPT_PLUGINS,
+  getAgentOutcomeCase,
+  isAgentOutcomePlugin,
   isMultiTurnStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
@@ -18,7 +20,6 @@ import {
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
-import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
@@ -31,7 +32,13 @@ import {
 } from '../services/redteamTestCaseGenerationService';
 import type { Request, Response } from 'express';
 
+import type { RedteamFileConfig, TestCase, TestCaseWithPlugin } from '../../types';
+
 export const redteamRouter = Router();
+const multiInputExcluded = new Set<string>([
+  ...DATASET_EXEMPT_PLUGINS,
+  ...MULTI_INPUT_EXCLUDED_PLUGINS,
+]);
 
 /**
  * Generates a test case for a given plugin/strategy combination.
@@ -57,6 +64,12 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       count,
     } = parsedBody.data;
 
+    const isOutcome = isAgentOutcomePlugin(plugin.id);
+    const usesStrategy = !['basic', 'default'].includes(strategy.id);
+    if (isOutcome && usesStrategy) {
+      res.status(400).json({ error: 'Select the basic strategy to preview this plugin.' });
+      return;
+    }
     const pluginConfigurationError = getPluginConfigurationError(plugin);
     if (pluginConfigurationError) {
       res.status(400).json({ error: pluginConfigurationError });
@@ -64,15 +77,10 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     }
 
     // In multi-input mode, some plugins don't support dynamic generation
-    const hasMultiInput =
-      plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
-    if (hasMultiInput) {
-      const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
-      if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
-        logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
-        res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
-        return;
-      }
+    if (multiInputExcluded.has(plugin.id) && Object.keys(plugin.config.inputs ?? {}).length > 0) {
+      logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
+      res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
+      return;
     }
 
     // For multi-turn strategies, force count to 1 (each turn depends on previous response)
@@ -83,9 +91,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     // Find the plugin
     const pluginFactory = Plugins.find((p) => p.key === plugin.id) as PluginFactory;
 
-    // TODO: Add support for this? Was previously misconfigured such that the no value would ever
-    // be passed in as a configuration option.
-    const injectVar = 'query';
+    const injectVar = isOutcome ? 'prompt' : 'query';
 
     // Keep preview generation request-scoped. A form-selected provider wins, followed by
     // any org/team cache, then the built-in default; previous CLI runs must not leak here.
@@ -115,8 +121,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     // Apply strategy to test case
     let finalTestCases = testCases;
 
-    // Skip applying strategy if it's 'basic' as they don't transform test cases
-    if (!['basic', 'default'].includes(strategy.id)) {
+    if (usesStrategy) {
       try {
         const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
 
@@ -133,7 +138,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           },
         );
 
-        if (strategyTestCases && strategyTestCases.length > 0) {
+        if (strategyTestCases?.length) {
           finalTestCases = strategyTestCases;
         }
       } catch (error) {
@@ -147,17 +152,16 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
 
     const context = `This test case targets the ${plugin.id} plugin with strategy ${strategy.id} and was generated based on your application context. If the test case is not relevant to your application, you can modify the application definition to improve relevance.`;
     const purpose = config.applicationDefinition.purpose ?? null;
+    const toPreview = (testCase: TestCase) => ({
+      prompt: extractGeneratedPrompt(testCase, injectVar),
+      context,
+      metadata: testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {},
+      artifact: getAgentOutcomeCase(testCase)?.artifact,
+    });
 
     // Handle multi-turn strategies (always single test case)
     if (isMultiTurnStrategy(strategy.id)) {
-      const testCase = finalTestCases[0];
-      const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
-      const baseMetadata =
-        testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
-      const metadataForStrategy = {
-        ...baseMetadata,
-        strategyId: strategy.id,
-      };
+      const { prompt: generatedPrompt, metadata } = toPreview(finalTestCases[0]);
 
       try {
         const multiTurnResult = await generateMultiTurnPrompt({
@@ -168,7 +172,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           turn,
           maxTurns,
           goalOverride,
-          baseMetadata: metadataForStrategy,
+          baseMetadata: { ...metadata, strategyId: strategy.id },
           generatedPrompt,
           purpose,
           stateful,
@@ -199,37 +203,11 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       }
     }
 
-    // Handle batch response (count > 1)
-    if (effectiveCount > 1) {
-      const batchResults = finalTestCases.map((testCase) => {
-        const prompt = extractGeneratedPrompt(testCase, injectVar);
-        const metadata =
-          testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
-        return { prompt, context, metadata };
-      });
-
-      res.json(
-        RedteamSchemas.GenerateTest.Response.parse({
-          testCases: batchResults,
-          count: batchResults.length,
-        }),
-      );
-      return;
-    }
-
-    // Handle single test case response (backward compatible)
-    const testCase = finalTestCases[0];
-    const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
-    const baseMetadata =
-      testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
-
-    res.json(
-      RedteamSchemas.GenerateTest.Response.parse({
-        prompt: generatedPrompt,
-        context,
-        metadata: baseMetadata,
-      }),
-    );
+    const preview =
+      effectiveCount > 1
+        ? { testCases: finalTestCases.map(toPreview), count: finalTestCases.length }
+        : toPreview(finalTestCases[0]);
+    res.json(RedteamSchemas.GenerateTest.Response.parse(preview));
   } catch (error) {
     logger.error('Error generating test case', { error });
     res.status(500).json({

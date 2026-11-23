@@ -28,6 +28,108 @@ describe('PluginConfigDialog - OSS', () => {
     });
   });
 
+  it('validates the indirect task against the scan limit and preserves the local limit', async () => {
+    const user = userEvent.setup();
+    const plugin = 'agentic:private-to-public-disclosure';
+    mockUseRedTeamConfig.mockReturnValue({
+      config: { ...defaultRedTeamConfig, maxCharsPerMessage: 8 },
+    });
+    render(
+      <PluginConfigDialog
+        open
+        plugin={plugin}
+        config={{ maxCharsPerMessage: 100 }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+      />,
+    );
+
+    expect(screen.getByRole('radio', { name: 'Both' })).toBeChecked();
+    expect(screen.getByRole('link', { name: 'Set up evidence collection' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/red-team/plugins/agent-outcomes/#private-to-public-disclosure',
+    );
+    expect(screen.queryByText('Grading Guidance (Optional)')).toBeNull();
+    await user.click(screen.getByRole('radio', { name: 'Indirect via tool' }));
+    const task = screen.getByLabelText(/User task for indirect tests/);
+    expect(task).toHaveAccessibleDescription(/8 characters/);
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await user.type(task, 'Triage.');
+    await user.type(screen.getByLabelText('Variable for third-party content'), 'ticket');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockOnSave).toHaveBeenCalledWith(plugin, {
+      mode: 'indirect',
+      maxCharsPerMessage: 100,
+      legitimateTask: 'Triage.',
+      indirectInjectionVar: 'ticket',
+    });
+  });
+
+  it('explains invalid overrides and restores the defaults when cleared', async () => {
+    const user = userEvent.setup();
+    const plugin = 'coding-agent:consent-bypass';
+    render(
+      <PluginConfigDialog
+        open
+        plugin={plugin}
+        config={{
+          mode: 'indirect',
+          legitimateTask: '   ',
+          indirectInjectionVar: 'prompt',
+        }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+      />,
+    );
+
+    const task = screen.getByLabelText(/User task for indirect tests/);
+    const variable = screen.getByLabelText('Variable for third-party content');
+    const save = screen.getByRole('button', { name: 'Save' });
+    expect(task).toHaveAttribute('aria-invalid', 'true');
+    expect(task).toHaveAccessibleDescription(/task/i);
+    expect(save).toBeDisabled();
+    await user.clear(task);
+    expect(variable).toHaveAttribute('aria-invalid', 'true');
+    expect(variable).toHaveAccessibleDescription(/ticket_body/i);
+    expect(save).toBeDisabled();
+    await user.clear(variable);
+    expect(save).toBeEnabled();
+    expect(
+      screen.getByPlaceholderText('Upgrade the analytics SDK and preserve our consent settings.'),
+    ).toHaveValue('');
+    expect(screen.getByPlaceholderText('artifact')).toHaveValue('');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mockOnSave).toHaveBeenCalledWith(plugin, {
+      mode: 'indirect',
+      legitimateTask: undefined,
+      indirectInjectionVar: undefined,
+    });
+  });
+
+  it('offers an optional revision and clears it when switching to direct requests', async () => {
+    const user = userEvent.setup();
+    const plugin = 'agentic:private-to-public-disclosure';
+    render(
+      <PluginConfigDialog
+        open
+        plugin={plugin}
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+      />,
+    );
+    expect(screen.getByRole('radio', { name: 'Off' })).toBeChecked();
+    await user.click(screen.getByRole('radio', { name: 'Use public reply' }));
+    await user.click(screen.getByRole('radio', { name: 'Direct user request' }));
+    expect(screen.queryByRole('radio', { name: 'Use public reply' })).toBeNull();
+    await user.click(screen.getByRole('radio', { name: 'Both' }));
+    expect(screen.getByRole('radio', { name: 'Off' })).toBeChecked();
+    await user.click(screen.getByRole('radio', { name: 'Ticket only (blind)' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mockOnSave).toHaveBeenCalledWith(plugin, { mode: 'both', metaTicketRevision: 'blind' });
+  });
+
   describe('Grading Guidance', () => {
     it('renders gradingGuidance field for all plugins', () => {
       render(

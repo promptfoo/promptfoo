@@ -117,11 +117,13 @@ defaultTest:
         purpose: redteam
 ```
 
-`purpose: redteam` does not invert the assertion. When the target reports `flagged: true`, the `guardrails` component still fails with score 0. Promptfoo then **force-passes the entire test** with the reason `Content failed guardrail safety checks` — this supersedes every other component in the test, including the vulnerability grader and any other assertion, no matter how they scored. The intent is to keep a correct block from being reported as a vulnerability.
+When the target reports `flagged: true`, the `guardrails` component still fails with score 0. With `purpose: redteam`, Promptfoo normally passes the test with the reason `Content failed guardrail safety checks`, even if the vulnerability grader failed. This keeps a correct block from being reported as a vulnerability.
+
+A verified [agent outcome](/docs/red-team/plugins/agent-outcomes) violation still fails the test. For example, filtering a final reply after the agent posted private data on a public ticket leaves the disclosure in place. Missing evidence stays inconclusive.
 
 :::danger Only enable this override when `flagged` means the request was actually blocked
 
-The override treats _any_ `flagged: true` as a successful defense. That is only correct when `flagged: true` proves the target **enforced** the policy — it blocked the request or refused/sanitized the response so the unsafe content never reached the caller.
+For text-based tests, the override treats _any_ `flagged: true` as a successful defense. That is only correct when `flagged: true` proves the target **enforced** the policy — it blocked the request or refused/sanitized the response so the unsafe content never reached the caller.
 
 Many guardrails are detect-only or inspect-only: they set a signal but still return the unsafe output. A `flagged` signal is a policy trigger, not proof of a block. If your integration can report `flagged: true` for a detection while the unsafe response is still delivered, this override hides the bypass — the vulnerability grader fails, an unsafe response is returned, yet the test reports `success: true`, and the run exits 0.
 

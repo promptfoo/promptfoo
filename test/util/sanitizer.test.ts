@@ -539,6 +539,21 @@ describe('sanitizeConfigForOutput', () => {
     expect(JSON.stringify(output)).not.toContain('private-value');
   });
 
+  it('preserves literal variables for replay when stripping test metadata', () => {
+    const vars = { ticket: 'file://example.md' };
+    const metadata = { __promptfoo: { literalVars: ['ticket'] } };
+    const config = { tests: [{ vars, metadata: { ...metadata, note: 'private note' } }] };
+
+    const saved = sanitizeConfigForOutput(config, { shouldStripMetadata: true });
+    expect(saved.tests).toEqual([{ vars, metadata }]);
+
+    const stripped = sanitizeConfigForOutput(config, {
+      shouldStripMetadata: true,
+      shouldStripTestVars: true,
+    });
+    expect(stripped.tests).toEqual([{}]);
+  });
+
   it('strips saved test data while preserving remote-row safety and local replay data', () => {
     const test = {
       vars: { input: 'private test vars' },

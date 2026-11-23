@@ -29,12 +29,14 @@ import ChatMessages, {
 import {
   categoryAliases,
   displayNameOverrides,
+  isAgentOutcomePlugin,
   isMultiTurnStrategy,
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
 import { ExternalLink, Info, Sparkles } from 'lucide-react';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
+import { AgentOutcomePreview } from './AgentOutcomePreview';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
@@ -81,6 +83,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   allowPluginChange = false,
 }) => {
   const pluginName = plugin?.id ?? '';
+  const outcomePreview = isAgentOutcomePlugin(pluginName) && generatedTestCases[0];
   const pluginDisplayName =
     displayNameOverrides[pluginName as Plugin] ||
     categoryAliases[pluginName as Plugin] ||
@@ -199,13 +202,17 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
 
         <div className="min-h-[200px] flex-1 space-y-4 overflow-y-auto">
           <div className="max-h-[50vh] overflow-y-auto">
-            <ChatMessages
-              messages={turnMessages}
-              displayTurnCount={maxTurns > 1}
-              maxTurns={maxTurns}
-            />
+            {outcomePreview ? (
+              <AgentOutcomePreview {...outcomePreview} />
+            ) : (
+              <ChatMessages
+                messages={turnMessages}
+                displayTurnCount={maxTurns > 1}
+                maxTurns={maxTurns}
+              />
+            )}
           </div>
-          {generatedTestCases.length > 0 && (
+          {!outcomePreview && generatedTestCases.length > 0 && (
             <Alert variant="info">
               <Info className="size-4" />
               <AlertContent>
@@ -262,11 +269,20 @@ export const TestCaseGenerateButton: React.FC<{
   isGenerating?: boolean;
   size?: 'small' | 'medium';
   tooltipTitle?: string;
-}> = ({ onClick, disabled = false, isGenerating = false, size = 'small', tooltipTitle }) => {
+  localPreview?: boolean;
+}> = ({
+  onClick,
+  disabled = false,
+  isGenerating = false,
+  size = 'small',
+  tooltipTitle,
+  localPreview,
+}) => {
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
-  const isRemoteDisabled = apiHealthStatus !== 'connected';
+  const canGenerate =
+    apiHealthStatus === 'connected' || (apiHealthStatus === 'disabled' && localPreview);
   const { targetConfigError } = useRedTeamTargetConfigValidation();
 
   // Tooltip component uses controlled state in order to imperatively close it when the Test Case
@@ -278,9 +294,7 @@ export const TestCaseGenerateButton: React.FC<{
 
   const iconSize = size === 'small' ? 'h-4 w-4' : 'h-5 w-5';
   const buttonLabel =
-    targetConfigError ||
-    tooltipTitle ||
-    (isRemoteDisabled ? 'Requires Promptfoo Cloud connection' : 'Generate a test case');
+    targetConfigError || (canGenerate ? tooltipTitle : 'Requires Promptfoo Cloud connection');
 
   return (
     <Tooltip open={shouldRenderTooltip} onOpenChange={setShouldRenderTooltip}>
@@ -288,13 +302,13 @@ export const TestCaseGenerateButton: React.FC<{
         <Button
           variant="ghost"
           size="icon"
-          aria-label={buttonLabel}
+          aria-label={buttonLabel || 'Generate a test case'}
           onClick={(e) => {
             e.stopPropagation();
             hideTooltip();
             onClick();
           }}
-          disabled={disabled || isRemoteDisabled || Boolean(targetConfigError)}
+          disabled={disabled || !canGenerate || Boolean(targetConfigError)}
           className="text-muted-foreground hover:text-foreground"
           onMouseEnter={showTooltip}
           onMouseLeave={hideTooltip}
@@ -302,12 +316,7 @@ export const TestCaseGenerateButton: React.FC<{
           {isGenerating ? <Spinner size="sm" /> : <Sparkles className={iconSize} />}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>
-        {targetConfigError ||
-          (isRemoteDisabled
-            ? 'Requires Promptfoo Cloud connection'
-            : tooltipTitle || 'Generate test case')}
-      </TooltipContent>
+      <TooltipContent>{buttonLabel || 'Generate test case'}</TooltipContent>
     </Tooltip>
   );
 };

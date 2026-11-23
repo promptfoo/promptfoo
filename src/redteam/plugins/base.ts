@@ -22,7 +22,7 @@ import {
   isBasicRefusal,
   isEmptyResponse,
 } from '../util';
-import { getPromptOutputFormatter } from './multiInputFormat';
+import { getPromptOutputFormatter, type PromptOutputFormatter } from './multiInputFormat';
 
 import type {
   ApiProvider,
@@ -102,12 +102,16 @@ export abstract class RedteamPluginBase {
    * @param n - The number of test cases to generate.
    * @param delayMs - The delay in milliseconds between plugin API calls.
    * @param templateGetter - A function that returns a promise of a template string.
+   * @param checkMessageLength - Validates generated user messages. Pass null for tool content.
+   * @param formatter - Pairs the requested output format with its parser.
    * @returns A promise that resolves to an array of TestCase objects.
    */
   async generateTests(
     n: number,
     delayMs: number = 0,
     templateGetter: () => Promise<string> = this.getTemplate.bind(this),
+    checkMessageLength: typeof getGeneratedPromptOverLimit | null = getGeneratedPromptOverLimit,
+    formatter: PromptOutputFormatter = getPromptOutputFormatter(this.config),
   ): Promise<TestCase[]> {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
@@ -138,14 +142,19 @@ export abstract class RedteamPluginBase {
       const nunjucks = getNunjucksEngine();
       const renderedTemplate = nunjucks.renderString(await templateGetter(), {
         purpose: this.purpose,
+        legitimateTask: this.config.legitimateTask,
         n: currentBatchSize,
         examples: this.config.examples,
-        outputFormat: RedteamPluginBase.getOutputFormatInstruction(this.config),
+        outputFormat: formatter.instruction(this.config),
         hasCustomOutputFormat: !!this.config.inputs && Object.keys(this.config.inputs).length > 0,
       });
 
       const finalTemplate = [
-        RedteamPluginBase.appendModifiers(renderedTemplate, this.config),
+        RedteamPluginBase.appendModifiers(
+          renderedTemplate,
+          this.config,
+          checkMessageLength !== null,
+        ),
         retryInstructions,
       ]
         .filter(Boolean)
@@ -196,7 +205,6 @@ export abstract class RedteamPluginBase {
       }
 
       // Use formatter to parse output
-      const formatter = getPromptOutputFormatter(this.config);
       const parsedPrompts = formatter.parse(generatedPrompts, this.config);
       const acceptedPrompts: ({ __prompt: string } | Record<string, string>)[] = [];
       const rejectedPromptLengths: number[] = [];
@@ -206,7 +214,7 @@ export abstract class RedteamPluginBase {
         const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
         // TODO(ian): In multi-input mode, validate the generated user-facing field values rather
         // than the serialized JSON envelope stored in __prompt, which overcounts keys/braces.
-        const violation = getGeneratedPromptOverLimit(promptText, this.config.maxCharsPerMessage);
+        const violation = checkMessageLength?.(promptText, this.config.maxCharsPerMessage);
         if (violation) {
           rejectedPromptLengths.push(violation.length);
           rejectedPromptLimit = violation.limit;
@@ -300,9 +308,15 @@ export abstract class RedteamPluginBase {
   /**
    * Appends modifiers to the template.
    * @param template - The template to append modifiers to.
+   * @param config - The configuration that also carries modifiers to downstream strategies.
+   * @param generatesUserMessage - Whether the generated text is subject to the user message limit.
    * @returns The modified template.
    */
-  static appendModifiers(template: string, config: PluginConfig): string {
+  static appendModifiers(
+    template: string,
+    config: PluginConfig,
+    generatesUserMessage = true,
+  ): string {
     // Take everything under "modifiers" config key
     const modifiers: Record<string, string> = {
       ...((config.modifiers as Record<string, string> | undefined) ?? {}),
@@ -335,6 +349,9 @@ export abstract class RedteamPluginBase {
     const promptModifiers = {
       ...modifiers,
     };
+    if (!generatesUserMessage) {
+      delete promptModifiers[MAX_CHARS_PER_MESSAGE_MODIFIER_KEY];
+    }
 
     const regularModifiers = Object.entries(promptModifiers)
       .filter(

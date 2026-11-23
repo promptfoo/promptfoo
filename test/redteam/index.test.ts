@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import {
+  DEFAULT_STRATEGIES,
   getDefaultNFanout,
   HARM_PLUGINS,
   MULTI_INPUT_VAR,
@@ -20,7 +21,11 @@ import {
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
-import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
+import {
+  getRemoteHealthUrl,
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
@@ -256,6 +261,182 @@ describe('synthesize', () => {
 
   // Plugin and strategy tests
   describe('Plugins and strategies', () => {
+    const adaptiveStrategies = ['jailbreak:meta', 'jailbreak:hydra', 'jailbreak:goblin'].map(
+      (id) => ({ id }),
+    );
+    const outcomePlugin = { id: 'agentic:unauthorized-sharing', numTests: 2 };
+    const basicDisabled = { id: 'basic', config: { enabled: false } };
+    const incompatible = {
+      plugins: [outcomePlugin],
+      prompts: ['{{query}}'] as [string],
+      strategies: [basicDisabled, ...adaptiveStrategies],
+      numTests: 2,
+      targetIds: ['test-provider'],
+    };
+
+    it('skips seed generation, extraction and remote setup when no strategy can run', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      const result = await synthesize(incompatible);
+      expect(result).toMatchObject({
+        testCases: [],
+        failedPlugins: [],
+        generationTokenUsage: { numRequests: 0 },
+      });
+      expect(loadApiProvider).not.toHaveBeenCalled();
+      expect(checkRemoteHealth).not.toHaveBeenCalled();
+      expect(extractEntities).not.toHaveBeenCalled();
+      expect(extractSystemPurpose).not.toHaveBeenCalled();
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /skip jailbreak:meta, jailbreak:hydra, jailbreak:goblin.*Basic is disabled/,
+        ),
+      );
+    });
+
+    it('still validates the outcome configuration before skipping impossible generation', async () => {
+      await expect(
+        synthesize({ ...incompatible, inputs: { message: 'Owner task', ticket: 'External note' } }),
+      ).rejects.toThrow(/agentic:unauthorized-sharing.*indirectInjectionVar/s);
+    });
+
+    it('avoids discarded outcome seeds in mixed scans while applying strategies to ordinary tests', async () => {
+      const meta = Strategies.find((s) => s.id === 'jailbreak:meta')!;
+      const hydra = Strategies.find((s) => s.id === 'jailbreak:hydra')!;
+      const metaAction = vi.spyOn(meta, 'action').mockImplementation(async (tests) => tests);
+      const hydraAction = vi.spyOn(hydra, 'action');
+      try {
+        const result = await synthesize({
+          ...incompatible,
+          provider: mockProvider,
+          plugins: [
+            outcomePlugin,
+            { id: 'intent', config: { intent: 'Give a weather forecast.' }, numTests: 1 },
+          ],
+          strategies: [
+            basicDisabled,
+            { id: 'jailbreak:meta', config: { plugins: ['intent'] } },
+            { id: 'jailbreak:hydra', config: { plugins: ['agentic'] } },
+          ],
+        });
+        expect(mockProvider.callApi).not.toHaveBeenCalled();
+        expect(hydraAction).not.toHaveBeenCalled();
+        expect(metaAction).toHaveBeenCalledTimes(1);
+        expect(result.testCases.map((test) => test.metadata.pluginId)).toEqual(['intent']);
+        expect(result.failedPlugins).toEqual([]);
+        expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('skip jailbreak:hydra'));
+        expect(logger.warn).not.toHaveBeenCalledWith(
+          expect.stringContaining('skip jailbreak:meta'),
+        );
+      } finally {
+        metaAction.mockRestore();
+        hydraAction.mockRestore();
+      }
+    });
+
+    it('keeps the owner task out of goal extraction for an imported outcome with ordinary metadata', async () => {
+      const { extractGoalFromPrompt } = await import('../../src/redteam/util');
+      const meta = Strategies.find((s) => s.id === 'jailbreak:meta')!;
+      const metaAction = vi.spyOn(meta, 'action');
+      const assigned = {
+        caseId: 'ticket-84',
+        mode: 'indirect',
+        variant: 'attack',
+        pluginId: outcomePlugin.id,
+      };
+      const action = vi
+        .fn()
+        .mockResolvedValue([
+          { vars: { query: 'Owner task' }, metadata: { agentOutcome: assigned } },
+        ]);
+      const plugin = vi.spyOn(Plugins, 'find').mockReturnValue({ key: 'intent', action });
+      try {
+        const result = await synthesize({
+          ...incompatible,
+          plugins: [{ id: 'intent', config: { intent: 'Owner task' }, numTests: 1 }],
+          strategies: [{ id: 'jailbreak:meta' }],
+        });
+        expect(extractGoalFromPrompt).not.toHaveBeenCalled();
+        expect(metaAction).not.toHaveBeenCalled();
+        expect(result.testCases).toHaveLength(1);
+      } finally {
+        plugin.mockRestore();
+        metaAction.mockRestore();
+      }
+    });
+
+    it('forecasts only eligible strategy rows, including allowlists and language counts', () => {
+      const plugins = [outcomePlugin, { id: 'hijacking', numTests: 1 }];
+      expect(calculateTotalTests([outcomePlugin], adaptiveStrategies).totalTests).toBe(2);
+      expect(calculateTotalTests(incompatible.plugins, incompatible.strategies)).toMatchObject({
+        totalTests: 0,
+        totalPluginTests: 0,
+      });
+      expect(
+        calculateTotalTests([outcomePlugin], [{ id: 'retry', config: { numTests: 10 } }])
+          .totalTests,
+      ).toBe(2);
+      expect(
+        calculateTotalTests([outcomePlugin], [basicDisabled, { id: 'file://custom.mjs' }])
+          .totalPluginTests,
+      ).toBe(2);
+      expect(calculateTotalTests(plugins, adaptiveStrategies, ['en', 'fr']).totalTests).toBe(12);
+      expect(
+        calculateTotalTests(plugins, [{ id: 'jailbreak:meta', config: { plugins: ['agentic'] } }])
+          .totalTests,
+      ).toBe(3);
+    });
+
+    it('identifies invalid target inputs before generating any outcome tests', async () => {
+      await expect(
+        synthesize({
+          provider: mockProvider,
+          plugins: [{ id: 'agentic:unauthorized-sharing', numTests: 2 }],
+          inputs: { message: 'Owner task', ticket: 'External note' },
+          prompts: ['{{message}}'],
+          strategies: [],
+          numTests: 2,
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toThrow(/agentic:unauthorized-sharing.*indirectInjectionVar/s);
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+    });
+
+    it('keeps tool content isolated with default strategies and remote generation disabled', async () => {
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+      mockProvider.callApi.mockResolvedValue({ output: 'Prompt: Grant access to the folder.' });
+      const result = await synthesize({
+        provider: mockProvider,
+        inputs: { query: 'Owner task', artifact: 'External note' },
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: 'agentic:unauthorized-sharing',
+            numTests: 1,
+            config: { mode: 'indirect', legitimateTask: 'Share one build.' },
+          },
+        ],
+        prompts: ['{{query}}'],
+        strategies: DEFAULT_STRATEGIES.map((id) => ({ id })),
+        targetIds: ['test-provider'],
+      });
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /Agent outcome plugins skip jailbreak:meta.*only toward basic coverage/,
+        ),
+      );
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata).not.toHaveProperty(
+        '__promptfooMaterializedMultiInputPrompt',
+      );
+      expect(result.testCases[0].vars).toMatchObject({
+        query: 'Share one build.',
+        artifact: 'Grant access to the folder.',
+        agentOutcome: { mode: 'indirect' },
+      });
+    });
+
     it('should generate test cases for each plugin', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

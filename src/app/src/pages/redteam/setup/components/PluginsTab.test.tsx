@@ -11,6 +11,7 @@ import React, { useCallback, useMemo } from 'react';
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import {
+  AGENT_OUTCOME_PLUGINS,
   DEFAULT_PLUGINS,
   DOD_AI_ETHICS_MAPPING,
   EU_AI_ACT_MAPPING,
@@ -455,7 +456,9 @@ describe('PluginsTab', () => {
         expect(screen.getByRole('button', { name: /Compliance & Legal/i })).toHaveClass(
           'cursor-pointer',
         );
-        expect(screen.getByRole('button', { name: 'Select all' })).toHaveClass('cursor-pointer');
+        expect(
+          screen.getByRole('button', { name: 'Select all shown standard plugins' }),
+        ).toHaveClass('cursor-pointer');
         expect(screen.getByRole('button', { name: 'Select none' })).toHaveClass('cursor-pointer');
       });
 
@@ -1450,7 +1453,7 @@ describe('PluginsTab', () => {
 
     describe('Plugin List Items', () => {
       describe('Select All Button', () => {
-        test('Selects all visible plugins when no category filter is applied', async () => {
+        test('Selects visible standard plugins and leaves outcome plugins for individual selection', async () => {
           const user = userEvent.setup();
 
           // Verify initial store state has no plugins
@@ -1459,14 +1462,14 @@ describe('PluginsTab', () => {
           renderComponent();
 
           // Click the "Select all" button
-          const selectAllButton = screen.getByText('Select all');
+          const selectAllButton = screen.getByText('Select all shown standard plugins');
           await user.click(selectAllButton);
 
           // Get all visible plugin list items to count expected plugins
           const pluginListItems = screen.getAllByTestId(/^plugin-list-item-/);
-          const expectedPluginCount = pluginListItems.length;
+          const expectedPluginCount = pluginListItems.length - AGENT_OUTCOME_PLUGINS.length;
 
-          // Verify the Zustand store was updated with all visible plugins
+          // Verify the Zustand store was updated with all visible standard plugins
           await waitFor(() => {
             const storePlugins = useRedTeamConfig.getState().config.plugins;
             expect(storePlugins.length).toBe(expectedPluginCount);
@@ -1475,6 +1478,9 @@ describe('PluginsTab', () => {
           // Verify specific plugins are in the store (from different categories)
           const storePlugins = useRedTeamConfig.getState().config.plugins;
           const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+          for (const outcome of AGENT_OUTCOME_PLUGINS) {
+            expect(pluginIds.has(outcome)).toBe(false);
+          }
 
           // Check plugins from different categories exist in the store
           expect(pluginIds.has('sql-injection')).toBe(true); // Security & Access Control
@@ -1507,7 +1513,7 @@ describe('PluginsTab', () => {
           const expectedPluginCount = pluginListItems.length;
 
           // Click the "Select all" button
-          const selectAllButton = screen.getByText('Select all');
+          const selectAllButton = screen.getByText('Select all shown standard plugins');
           await user.click(selectAllButton);
 
           // Verify only the filtered category plugins were added
@@ -1548,10 +1554,10 @@ describe('PluginsTab', () => {
 
           // Get count of visible plugins before selecting all
           const pluginListItems = screen.getAllByTestId(/^plugin-list-item-/);
-          const expectedPluginCount = pluginListItems.length;
+          const expectedPluginCount = pluginListItems.length - AGENT_OUTCOME_PLUGINS.length;
 
           // Click the "Select all" button
-          const selectAllButton = screen.getByText('Select all');
+          const selectAllButton = screen.getByText('Select all shown standard plugins');
           await user.click(selectAllButton);
 
           // Verify no duplicates - count should match visible plugins

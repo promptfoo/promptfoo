@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
+import { processConfigField } from '../../contracts/literalVars';
 import { getEnvBool, isCI, isTemplateProcessEnvDisabled } from '../../envars';
 import { clearCjsModuleCache, ensureTypescriptLoader, importModule } from '../../esm';
 import logger from '../../logger';
@@ -742,7 +743,9 @@ async function prepareCombinedConfig(
             ? resolveConfigPath(basePath, source.vars)
             : Array.isArray(source.vars)
               ? source.vars.map((value) => resolveConfigPath(basePath, value))
-              : resolveNestedFileReferences(basePath, source.vars),
+              : processConfigField(source, 'vars', source.vars, (value) =>
+                  resolveNestedFileReferences(basePath, value),
+                ),
       }),
       ...(typeof source.provider === 'string' &&
         source.provider.startsWith('file://') && {
