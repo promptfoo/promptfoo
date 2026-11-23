@@ -4897,10 +4897,26 @@
                     "maxItems": 24
                   },
                   "config": { "type": "object", "additionalProperties": {} },
+                  "testContext": {
+                    "type": "object",
+                    "properties": {
+                      "remaining": { "type": "integer", "minimum": 0, "maximum": 3 },
+                      "targetIndex": { "type": "integer", "minimum": 0 },
+                      "consentSince": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 23,
+                        "description": "Earliest message eligible to authorize this probe, after earlier tests."
+                      }
+                    },
+                    "required": ["remaining"],
+                    "additionalProperties": false
+                  },
                   "verification": {
                     "type": "object",
                     "properties": {
                       "success": { "type": "boolean" },
+                      "retryable": { "type": "boolean" },
                       "message": { "type": "string", "maxLength": 500 },
                       "paths": {
                         "type": "array",
@@ -4934,6 +4950,7 @@
                   "properties": {
                     "message": { "type": "string", "minLength": 1, "maxLength": 4000 },
                     "config": { "type": "object", "additionalProperties": {} },
+                    "testTarget": { "type": "integer", "minimum": 0 },
                     "runnable": { "type": "boolean" },
                     "runIssue": { "type": "string" },
                     "testableTargets": {
@@ -5044,12 +5061,11 @@
                     ]
                   },
                   "label": { "type": "string" },
+                  "prompts": { "type": "array", "items": { "type": "string" } },
+                  "delay": { "type": "number", "minimum": 0 },
                   "config": {
                     "type": "object",
                     "properties": {
-                      "url": { "type": "string" },
-                      "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH"] },
-                      "headers": { "type": "object", "additionalProperties": { "type": "string" } },
                       "body": {
                         "oneOf": [
                           { "type": "object", "additionalProperties": {} },
@@ -5057,18 +5073,163 @@
                           { "type": "string" }
                         ]
                       },
+                      "headers": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" },
+                        "description": "HTTP headers; names are open and values support templates"
+                      },
+                      "redirect": {
+                        "type": "string",
+                        "enum": ["follow", "error"],
+                        "description": "Redirect policy for the target request. Defaults to follow. Use error to keep custom credentials at the configured endpoint."
+                      },
+                      "maxRetries": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Maximum retry count; omitted uses the execution-time default"
+                      },
+                      "method": {
+                        "type": "string",
+                        "pattern": "^(?!(?:CONNECT|TRACE|TRACK)$)[a-z][a-z0-9-]*$/i"
+                      },
+                      "multipart": {
+                        "type": "object",
+                        "properties": {
+                          "parts": {
+                            "type": "array",
+                            "items": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": { "type": "string", "enum": ["field"] },
+                                    "name": {
+                                      "type": "string",
+                                      "description": "Multipart form field name"
+                                    },
+                                    "value": {
+                                      "oneOf": [
+                                        { "type": "string" },
+                                        { "type": "number" },
+                                        { "type": "boolean" }
+                                      ]
+                                    }
+                                  },
+                                  "required": ["kind", "name", "value"],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": { "type": "string", "enum": ["file"] },
+                                    "name": {
+                                      "type": "string",
+                                      "description": "Multipart form file field name"
+                                    },
+                                    "filename": { "type": "string" },
+                                    "filenameTemplate": {
+                                      "type": "string",
+                                      "description": "Template for the uploaded filename"
+                                    },
+                                    "contentType": {
+                                      "type": "string",
+                                      "description": "MIME type of the uploaded file"
+                                    },
+                                    "source": {
+                                      "oneOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": { "type": "string", "enum": ["generated"] },
+                                            "generator": {
+                                              "type": "string",
+                                              "enum": ["basic-document"],
+                                              "description": "Defaults to basic-document at runtime"
+                                            },
+                                            "format": {
+                                              "type": "string",
+                                              "enum": ["pdf", "png", "jpeg", "jpg"],
+                                              "description": "Defaults to pdf at runtime"
+                                            },
+                                            "text": {
+                                              "type": "string",
+                                              "description": "Generated document text; supports templates"
+                                            }
+                                          },
+                                          "required": ["type"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": { "type": "string", "enum": ["path"] },
+                                            "path": {
+                                              "type": "string",
+                                              "description": "File path; templates and file access are resolved during execution"
+                                            }
+                                          },
+                                          "required": ["type", "path"],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": ["kind", "name", "source"],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "required": ["parts"],
+                        "additionalProperties": false,
+                        "description": "Multipart upload; cannot be combined with body or a nonempty raw request"
+                      },
                       "queryParams": {
                         "type": "object",
-                        "additionalProperties": { "type": "string" }
+                        "additionalProperties": { "type": "string" },
+                        "description": "Query parameters; names are open and values support templates"
                       },
-                      "transformResponse": { "type": "string" },
-                      "responseParser": { "type": "string" },
-                      "redirect": { "type": "string", "enum": ["error"] },
-                      "maxRetries": { "type": "integer", "minimum": 0 },
+                      "tools": {
+                        "type": "array",
+                        "items": { "type": "object", "additionalProperties": {} }
+                      },
+                      "tool_choice": {},
+                      "transformToolsFormat": {
+                        "type": "string",
+                        "enum": ["openai", "anthropic", "bedrock", "google"],
+                        "description": "Convert OpenAI-format tools and tool_choice to this provider format"
+                      },
+                      "useHttps": {
+                        "type": "boolean",
+                        "description": "Use HTTPS; applies only to raw requests"
+                      },
+                      "sessionSource": {
+                        "type": "string",
+                        "enum": ["client", "server", "endpoint"]
+                      },
                       "stateful": { "type": "boolean" },
-                      "sessionSource": { "type": "string", "enum": ["client"] }
+                      "transformResponse": { "type": "string" },
+                      "url": { "type": "string" },
+                      "responseParser": { "type": "string" },
+                      "tokenEstimation": {
+                        "type": "object",
+                        "properties": {
+                          "enabled": {
+                            "type": "boolean",
+                            "description": "Defaults to false inside an explicit tokenEstimation object"
+                          },
+                          "multiplier": {
+                            "type": "number",
+                            "minimum": 0.01,
+                            "description": "Token estimate multiplier; defaults to 1.3 at runtime"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "Token estimation settings; omitted may enable estimation for red-team runs"
+                      }
                     },
-                    "required": ["method"],
                     "additionalProperties": false
                   },
                   "localKeys": {
@@ -5091,6 +5252,7 @@
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean" },
+                    "retryable": { "type": "boolean" },
                     "message": { "type": "string", "maxLength": 500 },
                     "paths": {
                       "type": "array",

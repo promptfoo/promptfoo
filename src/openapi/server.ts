@@ -38,6 +38,19 @@ const OpenApiMediaParamsSchema = z.object({
 });
 
 const OpenApiLooseObjectSchema = z.record(z.string(), z.unknown());
+// zod-to-openapi cannot expand the native HTTP schema's recursive z.json().
+// JSON payloads stay open in the spec. Runtime validation uses the native schema.
+const probe = RedteamSchemas.SetupConnectionTest.Payload.shape;
+const OpenApiConnectionTestPayload = z.strictObject({
+  ...probe,
+  config: z.strictObject({
+    ...probe.config.shape,
+    body: z.union([OpenApiLooseObjectSchema, z.array(z.unknown()), z.string()]).optional(),
+    tools: z.array(OpenApiLooseObjectSchema).optional(),
+    tool_choice: z.unknown().optional(),
+  }),
+});
+
 const OpenApiProvidersSchema = z.union([
   z.string(),
   z.array(z.unknown()),
@@ -1025,7 +1038,7 @@ export function createServerOpenApiRegistry() {
     summary: 'Test a supported HTTP target with one Hello from the local server',
     description:
       'Tests the configured reply path, or suggests fields if it is missing. Requires a local caller. Does not send the reply to Cloud or start a scan.',
-    request: { body: jsonBody(RedteamSchemas.SetupConnectionTest.Payload) },
+    request: { body: jsonBody(OpenApiConnectionTestPayload) },
     responses: {
       200: jsonResponse(RedteamSchemas.SetupConnectionTest.Response),
       400: jsonResponse(ErrorResponseSchema, 'Invalid connection'),

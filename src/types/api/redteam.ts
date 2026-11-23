@@ -1,8 +1,4 @@
 import { z } from 'zod';
-import {
-  HttpProviderConfigFieldsSchema,
-  HttpProviderConfigInputSchema,
-} from '../../contracts/providerConfig/http';
 import { ALL_PLUGINS, ALL_STRATEGIES, type Plugin, type Strategy } from '../../redteam/constants';
 import {
   ConversationMessageSchema,
@@ -15,7 +11,11 @@ import {
   RedteamPluginSchema,
   RedteamStrategySchema,
 } from '../../validators/redteam';
-import { CONFIG_PROVIDER_INPUT_ERROR, hasValidConfigProviders } from '../configAliases';
+import {
+  CONFIG_PROVIDER_INPUT_ERROR,
+  CONFIG_PROVIDER_INPUT_KEYS,
+  hasValidConfigProviders,
+} from '../configAliases';
 import { UnifiedConfigSchema } from '../index';
 import { BaseTokenUsageSchema } from '../shared';
 import { MessageResponseSchema } from './common';
@@ -33,6 +33,23 @@ import {
 const [pluginId, pluginOptions] = RedteamPluginSchema.options;
 const [strategyId, strategyOptions] = RedteamStrategySchema.options;
 const partialConfig = z.object(UnifiedConfigSchema.in.shape).partial();
+// Generate from the installed CLI. Provider config is open in UnifiedConfig,
+// so include the HTTP contract for connection setup as a separate schema root.
+let configSchema: { config: object; http: object } | undefined;
+function installedSchema() {
+  return (configSchema ??= {
+    config: {
+      ...z.toJSONSchema(UnifiedConfigSchema, {
+        target: 'draft-07',
+        io: 'input',
+        unrepresentable: 'any',
+        reused: 'ref',
+      }),
+      not: { required: [...CONFIG_PROVIDER_INPUT_KEYS] },
+    },
+    http: SetupConnectionTest.configSchema,
+  });
+}
 const setupInput = z.strictObject({
   ...partialConfig.shape,
   redteam: RedteamConfigSchema.in
@@ -43,35 +60,6 @@ const setupInput = z.strictObject({
     })
     .optional(),
 });
-
-// Validate native drafts without constructing a provider or loading external files.
-export function httpTargetValidationIssue(target: unknown): string | undefined {
-  const value = typeof target === 'string' ? { id: target } : target;
-  if (
-    !value ||
-    typeof value !== 'object' ||
-    !('id' in value) ||
-    typeof value.id !== 'string' ||
-    !/^https?(?::\/\/|$)/.test(value.id)
-  ) {
-    return;
-  }
-  const config = 'config' in value ? value.config : {};
-  const fields = HttpProviderConfigFieldsSchema.safeParse(config);
-  if (!fields.success) {
-    const issue = fields.error.issues[0];
-    const field = issue.code === 'unrecognized_keys' ? issue.keys[0] : issue.path[0];
-    return typeof field === 'string' && /^[a-z_][\w-]{0,63}$/i.test(field)
-      ? 'Invalid HTTP target option config.' + field + '.'
-      : 'Unknown or invalid HTTP target config option.';
-  }
-  if (!HttpProviderConfigInputSchema.safeParse(config).success) {
-    return 'An HTTP target needs a body, raw request, multipart upload, or explicit GET method.';
-  }
-  if (!fields.data.request && !fields.data.url && !value.id.includes('://')) {
-    return 'The HTTP target needs a URL.';
-  }
-}
 
 // POST /api/redteam/generate-test
 
@@ -206,6 +194,7 @@ export const RedteamSchemas = {
     Payload: SetupConnectionTest.Request.safeExtend({ localKeys: localKeysSchema.optional() }),
   },
   SetupPlan: {
+    installedSchema,
     HostedReply: HostedSetupReplySchema,
     Input: setupInput,
     Draft: partialConfig.refine((data) => hasValidConfigProviders(data, true), {
@@ -233,6 +222,18 @@ export const RedteamSchemas = {
         .max(24)
         .refine((messages) => messages.reduce((n, m) => n + m.content.length, 0) <= 48000),
       config: SetupConfigSchema.optional(),
+      testContext: z
+        .strictObject({
+          remaining: z.int().min(0).max(3),
+          targetIndex: z.int().nonnegative().optional(),
+          consentSince: z
+            .int()
+            .min(0)
+            .max(23)
+            .optional()
+            .describe('Earliest message eligible to authorize this probe, after earlier tests.'),
+        })
+        .optional(),
       verification: SetupConnectionTest.Response.extend({
         targetIndex: z.int().nonnegative().optional(),
       }).optional(),

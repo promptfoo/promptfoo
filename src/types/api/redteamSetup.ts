@@ -1,39 +1,94 @@
 import { z } from 'zod';
+import { AnthropicMessagesConfigInputSchema } from '../../contracts/providerConfig/anthropic';
+import {
+  HttpProviderConfigFieldsSchema,
+  HttpProviderConfigInputJsonSchema,
+  HttpProviderConfigInputSchema,
+} from '../../contracts/providerConfig/http';
+import {
+  OpenAiChatConfigInputSchema,
+  OpenAiResponsesConfigInputSchema,
+} from '../../contracts/providerConfig/openai';
 
-// The HTTP provider evaluates transformResponse. Only property reads may become a reply path.
+// Credential selectors, alternate services, tools and callbacks need local review.
+// Check everything else against the selected provider's own inference schema.
+const privilegedOption =
+  /^(?:apiKey.*|apiHost|apiBaseUrl|headers|organization|useDefaultApiKey|functionToolCallbacks|mcp|passthrough|extra_body|webhook_url|tools|tool_resources|functions|previous_response_id)$/i;
+export function isSetupModelConfig(id: string, config: Record<string, unknown>) {
+  if (Object.keys(config).some((key) => privilegedOption.test(key))) {
+    return false;
+  }
+  if (id.startsWith('openai:')) {
+    if (/^openai:responses(?::|$)/.test(id)) {
+      return OpenAiResponsesConfigInputSchema.safeParse(config).success;
+    }
+    return (
+      OpenAiChatConfigInputSchema.safeParse(config).success ||
+      (!/^openai:chat(?::|$)/.test(id) &&
+        OpenAiResponsesConfigInputSchema.safeParse(config).success)
+    );
+  }
+  if (id.startsWith('anthropic:')) {
+    return AnthropicMessagesConfigInputSchema.safeParse(config).success;
+  }
+  if (/^https?(?::|$)/.test(id)) {
+    // Prompt and test options can override any provider, including a gateway.
+    return (
+      OpenAiChatConfigInputSchema.safeParse(config).success ||
+      OpenAiResponsesConfigInputSchema.safeParse(config).success
+    );
+  }
+  // These adapters have no portable config schema. Limit overrides to their
+  // inference controls and leave unknown options intact for CLI review.
+  const numeric = id.startsWith('ollama:')
+    ? /^(?:num_predict|num_keep|num_ctx|seed|top_k|top_p|min_p|temperature|repeat_last_n|repeat_penalty|presence_penalty|frequency_penalty)$/
+    : /^(?:temperature|topK|topP|maxOutputTokens|candidateCount|seed|frequencyPenalty|presencePenalty)$/;
+  return Object.entries(config).every(
+    ([key, value]) => typeof value === 'number' && numeric.test(key),
+  );
+}
+
+// These expressions also run in the native HTTP provider. Admit property reads,
+// including optional chaining, without allowing calls or computed expressions.
 export function isSetupReplyPath(path: string): boolean {
   return (
     path.length <= 200 &&
-    /^[A-Za-z_]\w*(?:(?:\.[A-Za-z_]\w*)|(?:\[(?:0|[1-9]\d*)\]))*$/.test(path) &&
-    !path.split(/[.\[\]]/).some((key) => ['__proto__', 'prototype', 'constructor'].includes(key))
+    /^(?:[A-Za-z_$][\w$]*|\[(?:0|[1-9]\d*|"[\w-]+"|'[\w-]+')\])(?:(?:\?\.|\.)[A-Za-z_$][\w$]*|(?:\?\.)?\[(?:0|[1-9]\d*|"[\w-]+"|'[\w-]+')\])*$/.test(
+      path,
+    ) &&
+    !/(?:^|[^\w$])(?:__proto__|prototype|constructor)(?:$|[^\w$])/.test(path)
   );
+}
+
+export function setupReplyPath(expression: string): string | undefined {
+  const match = /^json(?:\?\.|\.(?!\[)|(?=\[))(.+)$/.exec(expression);
+  return match && isSetupReplyPath(match[1]) ? match[1] : undefined;
 }
 
 const replyPath = z.string().refine(isSetupReplyPath);
 
-// The local verifier never evaluates JavaScript or loads a provider. Accept
-// only native options whose request it can reproduce and whose reply it can read.
+// A model cannot control routing or HTTP framing through a header.
 const reservedHeaders = new Set(
   (
     'host origin referer cookie cookie2 set-cookie connection keep-alive upgrade expect ' +
-    'te trailer transfer-encoding forwarded via user-agent range traceparent tracestate baggage ' +
+    'te trailer transfer-encoding content-encoding content-length forwarded via traceparent tracestate baggage ' +
     'x-real-ip x-host x-method-override constructor prototype'
   ).split(' '),
 );
 const reservedPrefixes =
-  /^(?:accept-|content-|proxy-|sec-|access-control-|x-(?:promptfoo|forwarded|original|rewrite|http|proxy|envoy)-)/;
+  /^(?:proxy-|sec-|content-type.+|access-control-|x-(?:promptfoo|forwarded|original|rewrite|http|proxy|envoy)-)/;
 const visibleHeaders =
-  /^(?:accept|content-type|x-org-id|x-organization-id|x-scope-orgid|x-tenant-id|openai-.*|x-openai-.*)$/;
+  /^(?:accept|content-type|user-agent|x-org-id|x-organization-id|x-scope-orgid|x-tenant-id|openai-.*|x-openai-.*)$/;
 const sensitive =
   /password|passwd|credential|secret|cookie|(?:^|[-_])(?:authorization|auth|token|key|signature)(?:$|[-_])|api[-_]?key|access[-_]?token/i;
 const unsafe = /\{[{%#]|\$\{|file:\/\//i;
-const publicValue = (value: string) =>
-  !/\{\{(?!\s*(?:prompt|sessionId)\s*\}\})|\{[%#]|\$\{/.test(value) && !/file:\/\//i.test(value);
+const inputs = /\{\{\s*([A-Za-z_]\w*)\s*(?:\|\s*(?:dump|trim|urlencode)\s*)?\}\}/g;
 
 export function headerVariable(value: string): string | undefined {
-  return /^(?:(?:Bearer|Basic|Token|ApiKey) )?\{\{\s*env\.([A-Z_][A-Z0-9_]*)\s*\}\}$/.exec(
-    value,
-  )?.[1];
+  const template = value.replace(/^(?:Bearer|Basic|Token|ApiKey) /i, '');
+  const match = /^\{\{\s*env(?:\.([a-zA-Z_]\w*)|\[(["'])([a-zA-Z_]\w*)\2\])\s*\}\}$/.exec(template);
+  const name = match?.[1] ?? match?.[3];
+  return name && !['constructor', 'prototype', '__proto__'].includes(name) ? name : undefined;
 }
 
 // Session-only references cannot override process settings or caller-named variables.
@@ -57,11 +112,6 @@ function safeHeader(name: string, value: string) {
   ) {
     return false;
   }
-  if (name.toLowerCase() === 'content-type') {
-    return /^(?:application\/(?:json|x-www-form-urlencoded)|text\/plain)(?:;\s*charset=[uU][tT][fF]-8)?$/.test(
-      value,
-    );
-  }
   if (reservedPrefixes.test(normalized)) {
     return false;
   }
@@ -84,102 +134,198 @@ const url = z.string().refine((value) => {
   );
 });
 
-function safePayload(body: unknown) {
-  let safe = true;
-  JSON.stringify(body, (name, value) => {
-    if (
-      ['$ref', 'constructor', 'prototype', '__proto__'].includes(name) ||
-      unsafe.test(name) ||
-      sensitive.test(name) ||
-      (typeof value === 'string' && !publicValue(value))
-    ) {
-      safe = false;
-    }
-    return value;
-  });
-  return safe;
+function safePayload(value: unknown): boolean {
+  if (typeof value === 'string') {
+    const literal = value.replace(inputs, (template, variable) =>
+      /^(?:env|process|global|constructor|__proto__|prototype)$/i.test(variable) ? template : '',
+    );
+    return !unsafe.test(literal);
+  }
+  return (
+    !value ||
+    typeof value !== 'object' ||
+    Object.entries(value).every(
+      ([name, item]) =>
+        !['$ref', 'constructor', 'prototype', '__proto__'].includes(name) &&
+        !unsafe.test(name) &&
+        safePayload(item),
+    )
+  );
 }
 
 const response = z
   .string()
-  .refine(
-    (value) =>
-      value === 'text' ||
-      value === 'json' ||
-      (value.startsWith('json.') && isSetupReplyPath(value.slice(5))),
-  );
-const config = z.strictObject({
+  .refine((value) => value === 'text' || value === 'json' || setupReplyPath(value) !== undefined);
+
+// Native settings carry through unless they execute code, load files, or can
+// cause another request outside the verified destination and header bindings.
+const config = HttpProviderConfigFieldsSchema.omit({
+  request: true,
+  auth: true,
+  signatureAuth: true,
+  tls: true,
+  session: true,
+  sessionParser: true,
+  transformRequest: true,
+  validateStatus: true,
+}).extend({
   url: url.optional(),
-  method: z.enum(['GET', 'POST', 'PUT', 'PATCH']),
-  headers: z
-    .record(z.string(), z.string())
-    .refine((headers) => {
-      const names = Object.keys(headers).map((name) => name.toLowerCase());
-      return (
-        new Set(names).size === names.length &&
-        Object.entries(headers).every(([name, value]) => safeHeader(name, value))
-      );
-    })
+  method: z
+    .string()
+    .regex(/^(?!(?:CONNECT|TRACE|TRACK)$)[a-z][a-z0-9-]*$/i)
     .optional(),
-  body: z
-    .union([z.record(z.string(), z.unknown()), z.array(z.unknown()), z.string()])
-    .refine(safePayload)
-    .optional(),
-  queryParams: z.record(z.string(), z.string()).refine(safePayload).optional(),
   transformResponse: response.optional(),
   responseParser: response.optional(),
-  redirect: z.literal('error').optional(),
-  maxRetries: z.int().nonnegative().optional(),
-  stateful: z.boolean().optional(),
-  sessionSource: z.literal('client').optional(),
 });
 
+const literal = z.string().refine((value) => !unsafe.test(value));
+export const setupHttpTarget = z
+  .strictObject({
+    id: z.union([z.literal('http'), z.literal('https'), url]),
+    label: literal.optional(),
+    prompts: z.array(literal).optional(),
+    delay: z.number().nonnegative().optional(),
+    config,
+  })
+  .refine(({ id, config }) => {
+    const destination = config.url ?? id;
+    if (!url.safeParse(destination).success || (id.includes('://') && id !== destination)) {
+      return false;
+    }
+    const headers = Object.entries(config.headers ?? {});
+    const names = headers.map(([name]) => name.toLowerCase());
+    if (new Set(names).size !== names.length || !headers.every(([k, v]) => safeHeader(k, v))) {
+      return false;
+    }
+    const method = config.method ?? (config.multipart ? 'POST' : 'GET');
+    if (
+      ['GET', 'HEAD'].includes(method.toUpperCase())
+        ? config.body || config.multipart
+        : !config.body && !config.multipart
+    ) {
+      return false;
+    }
+    if (
+      config.multipart &&
+      (config.body ||
+        config.multipart.parts.some((part) => part.kind === 'file' && part.source.type === 'path'))
+    ) {
+      return false;
+    }
+    const contentType = headers.find(([name]) => name.toLowerCase() === 'content-type')?.[1];
+    if (
+      config.body &&
+      contentType &&
+      typeof config.body !== 'string' &&
+      !contentType.includes('application/json')
+    ) {
+      return false;
+    }
+    if (
+      !safePayload([
+        config.body,
+        config.queryParams,
+        config.tools,
+        config.tool_choice,
+        config.multipart,
+      ])
+    ) {
+      return false;
+    }
+    // Native JSON rendering decodes stringified JSON before evaluating templates.
+    if (typeof config.body === 'string' && contentType?.includes('application/json')) {
+      try {
+        if (!safePayload(JSON.parse(config.body))) {
+          return false;
+        }
+      } catch {
+        return false;
+      }
+    }
+    if (headers.some(([, value]) => headerVariable(value))) {
+      const parsed = new URL(destination);
+      return (
+        config.redirect === 'error' &&
+        (parsed.protocol === 'https:' ||
+          ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname))
+      );
+    }
+    return true;
+  });
+
+// Validate native drafts without constructing a provider or loading external files.
+function httpTargetValidationIssue(target: unknown): string | undefined {
+  const value = typeof target === 'string' ? { id: target } : target;
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('id' in value) ||
+    typeof value.id !== 'string' ||
+    !/^https?(?::\/\/|$)/.test(value.id)
+  ) {
+    return;
+  }
+  const config = 'config' in value ? value.config : {};
+  const fields = HttpProviderConfigFieldsSchema.safeParse(config);
+  if (!fields.success) {
+    const issue = fields.error.issues[0];
+    const field = issue.code === 'unrecognized_keys' ? issue.keys[0] : issue.path[0];
+    return typeof field === 'string' && /^[a-z_][\w-]{0,63}$/i.test(field)
+      ? 'Invalid HTTP target option config.' + field + '.'
+      : 'Unknown or invalid HTTP target config option.';
+  }
+  if (!HttpProviderConfigInputSchema.safeParse(config).success) {
+    return 'An HTTP target needs a body, raw request, multipart upload, or explicit GET method.';
+  }
+  if (!fields.data.request && fields.data.body && !fields.data.method) {
+    return 'Set an explicit HTTP method for the request body. The HTTP provider defaults to GET and would omit the body.';
+  }
+  if (!fields.data.request && !fields.data.url && !value.id.includes('://')) {
+    return 'The HTTP target needs a URL.';
+  }
+}
+
 export const SetupConnectionTest = {
-  Request: z
-    .strictObject({
-      id: z.union([z.literal('http'), z.literal('https'), url]),
-      label: z
-        .string()
-        .refine((value) => !unsafe.test(value))
-        .optional(),
-      config,
-    })
-    .refine(({ id, config }) => {
-      const destination = config.url ?? id;
-      if (!url.safeParse(destination).success || (id.includes('://') && id !== destination)) {
+  configSchema: HttpProviderConfigInputJsonSchema,
+  validationIssue: httpTargetValidationIssue,
+  Request: setupHttpTarget.refine(({ config }) => {
+    // Leave provider-specific tool transformations and generated file uploads
+    // to the scan. Never silently probe a different payload.
+    if (
+      (config.transformToolsFormat && config.transformToolsFormat !== 'openai') ||
+      config.multipart?.parts.some((part) => part.kind === 'file')
+    ) {
+      return false;
+    }
+    // A Hello probe cannot reproduce per-test variables. Keep them intact for Run.
+    const json = Object.entries(config.headers ?? {}).some(
+      ([name, value]) =>
+        name.toLowerCase() === 'content-type' && value.includes('application/json'),
+    );
+    let body = config.body;
+    if (json && typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {
         return false;
       }
-      if (
-        (config.method === 'GET') === Boolean(config.body) ||
-        (config.transformResponse && config.responseParser)
-      ) {
-        return false;
-      }
-      const contentType = Object.entries(config.headers ?? {}).find(
-        ([key]) => key.toLowerCase() === 'content-type',
-      )?.[1];
-      if (
-        config.body &&
-        contentType &&
-        (typeof config.body !== 'string') !== contentType.startsWith('application/json')
-      ) {
-        return false;
-      }
-      if (!/\{\{\s*prompt\s*\}\}/.test(JSON.stringify([config.body, config.queryParams]))) {
-        return false;
-      }
-      if (Object.values(config.headers ?? {}).some((value) => headerVariable(value))) {
-        const parsed = new URL(destination);
-        return (
-          config.redirect === 'error' &&
-          (parsed.protocol === 'https:' ||
-            ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname))
-        );
-      }
-      return true;
-    }),
+    }
+    const payload = JSON.stringify([body, config.queryParams, config.multipart]);
+    const variables = Array.from(payload.matchAll(inputs), (match) => match[1]);
+    return (
+      variables.includes('prompt') &&
+      variables.every(
+        (name) =>
+          name === 'prompt' ||
+          name === 'sessionId' ||
+          (name === 'tools' && config.tools !== undefined) ||
+          (name === 'tool_choice' && config.tool_choice !== undefined),
+      )
+    );
+  }),
   Response: z.strictObject({
     success: z.boolean(),
+    retryable: z.boolean().optional(),
     message: z.string().max(500),
     paths: z
       .array(z.union([z.literal('Plain text'), replyPath]))
@@ -198,6 +344,7 @@ export const SetupConfigSchema = z
 export const HostedSetupReplySchema = z.strictObject({
   message: z.string().trim().min(1).max(4000),
   config: SetupConfigSchema.optional(),
+  testTarget: z.int().nonnegative().optional(),
 });
 
 export const RedteamSetupReplySchema = HostedSetupReplySchema.extend({

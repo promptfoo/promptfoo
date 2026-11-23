@@ -4,10 +4,11 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   containsSetupSecret,
+  sameProbeScope,
   targetExecutionIssue,
 } from '../../../src/node/redteamSetupConnection';
 import { createApp } from '../../../src/server/server';
-import { httpTargetValidationIssue } from '../../../src/types/api/redteam';
+import { RedteamSchemas } from '../../../src/types/api/redteam';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
@@ -184,10 +185,119 @@ describe('local chat connection test', () => {
       'The target responded with HTTP 401, so the endpoint is reachable but authentication failed. Does this API expect `X-Client-Token`, or a different scheme such as `Authorization: Bearer ...`?';
     expect(containsSetupSecret(question)).toBe(false);
     expect(containsSetupSecret(question.replace('...', '…'))).toBe(false);
-    for (const value of ['...abc', '...=', 'private-value', '…secret']) {
+    for (const value of ['<token>', '<api-key>', '…', '...', '{{env.APP_TOKEN}}']) {
+      expect(containsSetupSecret(question.replace('...', value))).toBe(false);
+      expect(containsSetupSecret('Use `X-Client-Token: ' + value + '`?')).toBe(false);
+    }
+    for (const value of [
+      '...abc',
+      '...=',
+      'private-value',
+      '…secret',
+      '<token>secret',
+      '<private-value>',
+    ]) {
+      expect(containsSetupSecret('X-API-Key: ' + value)).toBe(true);
       expect(containsSetupSecret(question.replace('...', value))).toBe(true);
     }
   });
+
+  it('screens credentials in agent prose without treating illustrative assignments as pasted keys', () => {
+    const example = 'Your API may expect X-Api-Key: replace-with-your-key';
+    expect(containsSetupSecret(example, 'assistant')).toBe(false);
+    expect(containsSetupSecret(example, 'user')).toBe(true);
+    for (const value of [
+      'sk-proj-syntheticvalueonly',
+      'https://example.com/?api_key=private',
+      'https://private@example.com/',
+    ]) {
+      expect(containsSetupSecret(value, 'assistant')).toBe(true);
+    }
+  });
+
+  it('accepts ordinary custom header and inference options without misclassifying them as pasted credentials', () => {
+    for (const input of [
+      'Set header X-Request-Mode: compact',
+      '{"maxTokens":500,"max_output_tokens":32,"tokenEstimation":{"enabled":true}}',
+      'prompt_cache_key: batch-1',
+      'Authorization: Bearer {{env["CHAT_KEY"]}}',
+    ]) {
+      expect(containsSetupSecret(input), input).toBe(false);
+    }
+    for (const input of [
+      'Acme-Access: private-value',
+      'mySecretKey: private-value',
+      'accessToken: private-value',
+      JSON.stringify({ body: JSON.stringify({ password: 'private-value' }) }),
+    ]) {
+      expect(containsSetupSecret(input), input).toBe(true);
+    }
+  });
+
+  it('probes native options with a custom method, media type and safe optional reply path', async () => {
+    fetchTarget.mockResolvedValueOnce(Response.json([{ 'answer-text': 'hi' }]));
+    const res = await test({
+      method: 'PATCH',
+      headers: { 'content-type': 'application/xml', 'X-Request-Mode': 'compact' },
+      body: '<message>{{prompt}}</message>',
+      transformResponse: 'json?.[0]?.["answer-text"]',
+      tokenEstimation: { enabled: true, multiplier: 1.1 },
+      maxRetries: 2,
+    });
+    expect(res.body.success).toBe(true);
+    expect(fetchTarget.mock.calls[0][1]).toMatchObject({
+      method: 'PATCH',
+      body: '<message>Hello</message>',
+      headers: { 'content-type': 'application/xml', 'x-request-mode': 'compact' },
+      disableTransientRetries: true,
+    });
+  });
+
+  it('renders native stringified JSON containing tool definitions and a bracketed header reference', async () => {
+    vi.stubEnv('CUSTOM_KEY', 'private-value');
+    fetchTarget.mockResolvedValueOnce(Response.json({ result: { answer: 'Hi' } }));
+    const tools = [{ type: 'function', function: { name: 'lookup' } }];
+    const res = await test({
+      tools,
+      tool_choice: 'auto',
+      headers: { 'Content-Type': 'application/json', 'Acme-Access': "{{env['CUSTOM_KEY']}}" },
+      body: JSON.stringify({
+        message: '{{prompt}}',
+        tools: '{{tools}}',
+        choice: '{{tool_choice}}',
+      }),
+    });
+    expect(res.body.success).toBe(true);
+    expect(fetchTarget.mock.calls[0][1]?.headers).toMatchObject({ 'acme-access': 'private-value' });
+    expect(JSON.parse(String(fetchTarget.mock.calls[0][1]?.body))).toEqual({
+      message: 'Hello',
+      tools,
+      choice: 'auto',
+    });
+  });
+
+  it('sends inline multipart fields with native POST default and a generated boundary', async () => {
+    fetchTarget.mockResolvedValueOnce(Response.json({ result: { answer: 'Hi' } }));
+    const res = await test({
+      method: undefined,
+      body: undefined,
+      multipart: { parts: [{ kind: 'field', name: 'message', value: '{{prompt}}' }] },
+    });
+    expect(res.body.success).toBe(true);
+    const options = fetchTarget.mock.calls[0][1];
+    expect(options?.method).toBe('POST');
+    expect((options?.body as FormData).get('message')).toBe('Hello');
+  });
+
+  it.each([400, 401, 403, 404, 406, 415, 422, 302, 408, 429, 500, 502, 503])(
+    'classifies only actionable HTTP rejections as retryable (%i)',
+    async (status) => {
+      fetchTarget.mockResolvedValueOnce(new Response('private', { status }));
+      const { body } = await test();
+      expect(body.success).toBe(false);
+      expect(body.retryable ?? false).toBe([400, 401, 403, 404, 406, 415, 422].includes(status));
+    },
+  );
 
   it('reports HTTP evidence without guessing the cause or revealing the key', async () => {
     vi.stubEnv('PRIVATE_CHAT_TOKEN', 'private-value');
@@ -345,7 +455,27 @@ describe('local chat connection test', () => {
     { headers: { 'Content-Type': 'text/plain' } },
     { request: 'file:///tmp/request' },
     { transformRequest: 'file:///tmp/pwn.js' },
-    { method: 'DELETE' },
+    { method: 'CONNECT' },
+    { method: 'trace' },
+    { method: 'POST\r\nDELETE' },
+    { body: { input: '{{prompt}}', more: '{{env | dump}}' } },
+    { body: { input: '{{prompt}}', more: '{{constructor | dump}}' } },
+    { tools: [{ detail: '{{env.SECRET}}' }] },
+    { tools: [{ detail: { $ref: '/tmp/private' } }] },
+    {
+      body: undefined,
+      multipart: {
+        parts: [{ kind: 'file', name: 'x', source: { type: 'path', path: '/etc/hosts' } }],
+      },
+    },
+    { transformResponse: 'json["constructor"].name' },
+    { transformResponse: 'json?.[process.exit()]' },
+    { headers: { Secret: '{{env.constructor}}' } },
+    { headers: { 'Content-Type-Other': 'application/json' } },
+    {
+      headers: { 'Content-Type': 'application/json' },
+      body: String.raw`{"input":"{{prompt}}","private":"\u007b\u007benv.SECRET\u007d\u007d"}`,
+    },
     { queryParams: { key: '{{env.TOKEN}}' } },
     { session: { url: 'https://example.com', responseParser: 'json.token' } },
     { headers: { Host: '{{env.KEY}}' } },
@@ -396,20 +526,30 @@ describe('native target validation and permission to execute', () => {
   ];
 
   it('validates native configs without running any user code', () => {
-    expect(httpTargetValidationIssue(auth)).toBeUndefined();
-    expect(httpTargetValidationIssue({ id: 'http', config: { url } })).toContain('body');
-    expect(httpTargetValidationIssue({ id: 'http', config: { method: 'GET' } })).toContain('URL');
-    expect(httpTargetValidationIssue({ id: 'http', config: { url, headers: { N: 1 } } })).toContain(
-      'headers',
-    );
-    expect(httpTargetValidationIssue({ id: 'http', config: { url, unknown: true } })).toContain(
-      'config.unknown',
-    );
+    expect(RedteamSchemas.SetupConnectionTest.validationIssue(auth)).toBeUndefined();
+    expect(
+      RedteamSchemas.SetupConnectionTest.validationIssue({ id: 'http', config: { url } }),
+    ).toContain('body');
+    expect(
+      RedteamSchemas.SetupConnectionTest.validationIssue({ id: 'http', config: { method: 'GET' } }),
+    ).toContain('URL');
+    expect(
+      RedteamSchemas.SetupConnectionTest.validationIssue({
+        id: 'http',
+        config: { url, headers: { N: 1 } },
+      }),
+    ).toContain('headers');
+    expect(
+      RedteamSchemas.SetupConnectionTest.validationIssue({
+        id: 'http',
+        config: { url, unknown: true },
+      }),
+    ).toContain('config.unknown');
     const scripted = {
       id: 'http',
       config: { ...target, transformResponse: 'file:///untrusted.js' },
     };
-    expect(httpTargetValidationIssue(scripted)).toBeUndefined();
+    expect(RedteamSchemas.SetupConnectionTest.validationIssue(scripted)).toBeUndefined();
     expect(targetExecutionIssue(scripted, [target.url])).toMatchObject({ repairable: false });
   });
 
@@ -514,6 +654,132 @@ describe('native target validation and permission to execute', () => {
         auth,
       ),
     ).toBeUndefined();
+  });
+
+  it('allows inferring a path for a named origin, while preserving a user-supplied exact path', () => {
+    const proposal = { id: 'http', config: { ...target, url, method: 'PUT' } };
+    expect(targetExecutionIssue(proposal, ['Use localhost:3555'])).toBeUndefined();
+    expect(
+      targetExecutionIssue(proposal, ['Use localhost:3555', 'Send requests to /admin']),
+    ).toMatchObject({ repairable: true });
+    expect(
+      targetExecutionIssue(proposal, [
+        'Use localhost:3555/admin',
+        'Use https://other.example',
+        'Send requests to /chat',
+      ]),
+    ).toMatchObject({ repairable: true });
+    expect(targetExecutionIssue(proposal, ['Use localhost:3555/admin'])).toMatchObject({
+      repairable: true,
+    });
+  });
+
+  it('keeps the public demo accessible without granting a credential or another endpoint', () => {
+    const demo = 'https://customer-service-chatbot-example.promptfoo.app';
+    expect(
+      targetExecutionIssue({ id: 'http', config: { ...target, url: demo } }, ['Try the demo']),
+    ).toBeUndefined();
+    expect(
+      targetExecutionIssue({ id: 'http', config: { ...auth.config, url: demo } }, initial),
+    ).toBeDefined();
+    expect(
+      targetExecutionIssue({ id: 'http', config: { ...target, url: demo + '/admin' } }, initial),
+    ).toBeDefined();
+  });
+
+  it('lets the agent choose model versions and inference options within the named service', () => {
+    expect(
+      targetExecutionIssue(
+        {
+          id: 'openai:responses:custom-model-v4',
+          config: {
+            reasoning_effort: 'medium',
+            max_output_tokens: 800,
+            verbosity: 'low',
+          },
+        },
+        ['Use a small OpenAI model'],
+      ),
+    ).toBeUndefined();
+    expect(
+      targetExecutionIssue({ id: 'ollama:chat:myteam/model:1', config: { num_predict: 80 } }, [
+        'Use Ollama',
+      ]),
+    ).toBeUndefined();
+    expect(
+      targetExecutionIssue(
+        {
+          id: 'openai:responses',
+          config: { model: 'custom-v42', reasoning: { effort: 'medium' } },
+        },
+        ['Use GPT'],
+      ),
+    ).toBeUndefined();
+    expect(targetExecutionIssue('anthropic:messages:custom-v42', ['Try Claude'])).toBeUndefined();
+    expect(targetExecutionIssue('openai:chat:custom-v42', ['Try Claude'])).toBeDefined();
+    for (const config of [
+      { apiHost: 2130706433 },
+      { effort: 'high' }, // Anthropic option on an OpenAI target
+      { unrecognized: true },
+      { response_format: 'file:///private/schema.json' },
+      { passthrough: { tools: [{ type: 'mcp', server_url: 'https://other.example' }] } },
+      { apiKeyEnvar: 'OTHER_KEY' },
+      { functionToolCallbacks: { f: 'process.exit()' } },
+      { mcp: { enabled: true } },
+    ]) {
+      expect(
+        targetExecutionIssue({ id: 'openai:chat:test', config }, ['Use OpenAI']),
+      ).toBeDefined();
+    }
+  });
+
+  it('allows an explicit scan with native tool conversions or custom test variables the probe cannot reproduce', () => {
+    for (const change of [
+      {
+        transformToolsFormat: 'anthropic',
+        tools: [{ type: 'function', function: { name: 'lookup' } }],
+      },
+      { body: { question: '{{custom_question}}' } },
+    ]) {
+      const proposal = { ...auth, config: { ...auth.config, ...change } };
+      expect(targetExecutionIssue(proposal, initial)).toBeUndefined();
+      expect(sameProbeScope(proposal, proposal)).toBe(false);
+    }
+  });
+
+  it('limits an automatic repair to the same effective destination, method and credentials', () => {
+    const changed = (edits: object) => ({ ...auth, config: { ...auth.config, ...edits } });
+    expect(
+      sameProbeScope(
+        auth,
+        changed({
+          body: { message: '{{prompt}}' },
+          headers: { 'X-New-Name': '{{env.APP_KEY}}', 'Acme-Access': '{{env.APP_TOKEN}}' },
+        }),
+      ),
+    ).toBe(true);
+    for (const edit of [
+      { url: 'https://other.example/chat' },
+      { url: url + '/admin' },
+      { method: 'DELETE' },
+      { queryParams: { mode: 'admin' } },
+      { headers: { 'X-Secret-Key': '{{env.OTHER}}' } },
+      { headers: { 'Acme-Access': '{{env.APP_KEY}}', 'X-Secret-Key': '{{env.APP_TOKEN}}' } },
+      { headers: { ...auth.config.headers, 'X-Additional': '{{env.APP_TOKEN}}' } },
+      { transformResponse: 'process.exit()' },
+    ]) {
+      expect(sameProbeScope(auth, changed(edit))).toBe(false);
+    }
+    const withTools = (name: string) =>
+      changed({ queryParams: { tool: '{{tools}}' }, tools: [{ name }] });
+    expect(sameProbeScope(withTools('a'), withTools('b'))).toBe(false);
+    expect(
+      sameProbeScope(
+        changed({ url: url + '?q=Hello' }),
+        changed({ queryParams: { q: '{{prompt}}' } }),
+      ),
+    ).toBe(true);
+    expect(sameProbeScope(undefined, auth)).toBe(false);
   });
 
   it('requires disabling redirects for credentials', () => {

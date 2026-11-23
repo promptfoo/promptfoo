@@ -32,13 +32,13 @@ export {
   isCliEventSource,
 } from './eventSource';
 
-import type { Prompt, PromptFunction } from '../contracts/prompts';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
+import type { Prompt, PromptFunction } from './prompts';
 import type {
   ApiProvider,
   CallApiContextParams,

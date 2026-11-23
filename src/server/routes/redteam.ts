@@ -5,6 +5,7 @@ import logger from '../../logger';
 import {
   containsSetupSecret,
   localReviewField,
+  sameProbeScope,
   sessionTransform,
   targetExecutionIssue,
   testSetupConnection,
@@ -26,7 +27,7 @@ import { doRedteamRun } from '../../redteam/shared';
 import { Strategies, validateStrategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
-import { httpTargetValidationIssue, RedteamSchemas } from '../../types/api/redteam';
+import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { isLocalHost } from '../middleware/csrfProtection';
 import { evalJobService } from '../services/evalJobService';
@@ -404,6 +405,112 @@ function issue(error: z.ZodError) {
 }
 
 const schema = RedteamSchemas.SetupPlan;
+type SetupInput = z.infer<typeof schema.Request>;
+
+// Only a fresh user turn or a recoverable failure in that same turn can
+// initiate a probe. Old clients, manual test feedback and retries after a
+// network interruption have no authority to send a request.
+function probeContext(req: Request, input: SetupInput) {
+  const { testContext, messages, verification } = input;
+  if (!testContext?.remaining || !localCaller(req)) {
+    return;
+  }
+  if (testContext.targetIndex === undefined) {
+    return testContext.remaining === 3 && messages.at(-1)?.role === 'user'
+      ? testContext
+      : undefined;
+  }
+  if (
+    testContext.remaining < 3 &&
+    verification?.success === false &&
+    verification.retryable &&
+    verification.targetIndex === testContext.targetIndex
+  ) {
+    return testContext;
+  }
+}
+
+function probeIssue(
+  index: number | undefined,
+  context: SetupInput['testContext'],
+  previous: Config | undefined,
+  proposed: Config | undefined,
+  status: Assessment,
+  userTurns: string[],
+) {
+  if (index === undefined) {
+    return;
+  }
+  if (!context || !status.testableTargets.includes(index)) {
+    return (
+      'No permission to test this target in this turn. Omit testTarget. ' + (status.runIssue ?? '')
+    );
+  }
+  const before = targets(previous)[index];
+  const after = targets(proposed)[index];
+  if (context.targetIndex === undefined) {
+    // Do not let the agent introduce and exercise a destructive method in
+    // one step unless the user specified it. Case and phrasing are immaterial.
+    const method =
+      RedteamSchemas.SetupConnectionTest.Request.parse(after).config.method?.toUpperCase();
+    if (
+      method &&
+      !['GET', 'HEAD', 'POST', 'OPTIONS'].includes(method) &&
+      !sameProbeScope(before, after) &&
+      !userTurns.some((turn) =>
+        turn
+          .toUpperCase()
+          .split(/[^A-Z0-9-]+/)
+          .includes(method),
+      )
+    ) {
+      return 'Show the proposed HTTP method and ask before testing a request that could modify data.';
+    }
+  } else {
+    if (index !== context.targetIndex || !sameProbeScope(before, after)) {
+      return 'A retest cannot change destination, method or credentials. Explain any proposed change and ask before testing it.';
+    }
+    if (JSON.stringify(before) === JSON.stringify(after)) {
+      return 'The failed target is unchanged. Correct the connection before retesting or explain what information is missing.';
+    }
+  }
+}
+
+// Run the generation validators without executing plugin actions or loading files.
+async function validatePlan(redteam: RedteamFileConfig) {
+  if (!redteam.plugins?.length) {
+    return 'redteam.plugins is empty. An empty list would run the default suite.';
+  }
+  for (const plugin of redteam.plugins) {
+    const { id, config } = typeof plugin === 'string' ? { id: plugin, config: undefined } : plugin;
+    try {
+      Plugins.find((entry) => entry.key === id)?.validate?.(config ?? {});
+    } catch (err) {
+      return (
+        'redteam.plugins (' + id + '): ' + (err instanceof Error ? err.message : 'Invalid settings')
+      );
+    }
+  }
+  try {
+    await validateStrategies(
+      (redteam.strategies ?? []).map((s) => (typeof s === 'string' ? { id: s } : s)),
+    );
+  } catch (err) {
+    return 'redteam.strategies: ' + (err instanceof Error ? err.message : 'Invalid settings');
+  }
+}
+
+function validateTarget(target: unknown) {
+  if (target && typeof target === 'object') {
+    const keys = Object.keys(target);
+    const isMap = keys.length && keys.every((key) => !Object.hasOwn(schema.Provider.shape, key));
+    const parsed = (isMap ? schema.ProviderMap : schema.Provider).safeParse(target);
+    if (!parsed.success) {
+      return issue(parsed.error);
+    }
+  }
+  return RedteamSchemas.SetupConnectionTest.validationIssue(target);
+}
 
 async function assessSetup(
   config: Config | undefined,
@@ -427,35 +534,9 @@ async function assessSetup(
   }
   const redteam = parsed.data.redteam;
   if (redteam) {
-    // Use the same validators as generation. Do not call plugin actions, load
-    // file-based strategies, or replace the authored config with parsed defaults.
-    for (const plugin of redteam.plugins ?? []) {
-      const { id, config: settings } =
-        typeof plugin === 'string' ? { id: plugin, config: undefined } : plugin;
-      try {
-        Plugins.find((entry) => entry.key === id)?.validate?.(settings ?? {});
-      } catch (err) {
-        return invalid(
-          'redteam.plugins (' +
-            id +
-            '): ' +
-            (err instanceof Error ? err.message : 'Invalid plugin settings'),
-        );
-      }
-    }
-    try {
-      await validateStrategies(
-        (redteam.strategies ?? []).map((s) => (typeof s === 'string' ? { id: s } : s)),
-      );
-    } catch (err) {
-      return invalid(
-        'redteam.strategies: ' + (err instanceof Error ? err.message : 'Invalid strategy settings'),
-      );
-    }
-    if (!redteam.plugins?.length) {
-      return invalid(
-        'redteam.plugins is empty. Choose plugins or omit redteam until the scope is clear. An empty list would run the default suite.',
-      );
+    const error = await validatePlan(redteam);
+    if (error) {
+      return invalid(error);
     }
   }
 
@@ -464,17 +545,9 @@ async function assessSetup(
   let runIssue: string | undefined;
   for (const [index, target] of list.entries()) {
     const path = (config.targets ? 'targets.' : 'providers.') + index;
-    if (target && typeof target === 'object') {
-      const keys = Object.keys(target);
-      const isMap = keys.length && keys.every((key) => !Object.hasOwn(schema.Provider.shape, key));
-      const parsed = (isMap ? schema.ProviderMap : schema.Provider).safeParse(target);
-      if (!parsed.success) {
-        return invalid(path + ': ' + issue(parsed.error));
-      }
-    }
-    const httpError = httpTargetValidationIssue(target);
-    if (httpError) {
-      return invalid(path + ': ' + httpError);
+    const targetError = validateTarget(target);
+    if (targetError) {
+      return invalid(path + ': ' + targetError);
     }
     const restriction = targetExecutionIssue(target, userTurns, prior[index]);
     if (restriction?.repairable) {
@@ -594,23 +667,21 @@ redteamRouter.post('/setup-plan', async (req, res) => {
     });
     return;
   }
-  const { version: _version, priorUserTurns = [], ...conversation } = input.data;
-  const { messages, config, verification } = conversation;
-  const fields = [
-    ...messages.map(({ content }) => content),
-    JSON.stringify(config),
-    verification?.message,
-    ...(verification?.paths ?? []),
-  ];
-  if (fields.some((value) => value && containsSetupSecret(value))) {
+  const { priorUserTurns = [], messages, config, verification } = input.data;
+  const testContext = probeContext(req, input.data);
+  const fields = [JSON.stringify(config), verification?.message, ...(verification?.paths ?? [])];
+  if (
+    messages.some(({ role, content }) => containsSetupSecret(content, role)) ||
+    fields.some((value) => value && containsSetupSecret(value))
+  ) {
     res.status(400).json({
       error:
-        'This looks like a credential. I didn’t send it to Cloud. Remove the value and use the environment variable name instead.',
+        'I couldn’t mask a possible credential. Nothing was sent to Cloud. Put the value in quotes after “the key is” or use a variable name.',
     });
     return;
   }
 
-  const timeout = AbortSignal.timeout(60_000);
+  const timeout = AbortSignal.timeout(90_000);
   const disconnected = new AbortController();
   res.once('close', () => disconnected.abort());
   const signal = AbortSignal.any([timeout, disconnected.signal]);
@@ -623,7 +694,15 @@ redteamRouter.post('/setup-plan', async (req, res) => {
       const response = await fetchWithProxy(getRemoteGenerationUrl(), {
         method: 'POST',
         headers: getRemoteGenerationHeaders(),
-        body: JSON.stringify({ task: 'redteam-setup', ...conversation, ...feedback }),
+        body: JSON.stringify({
+          task: 'redteam-setup',
+          configSchema: schema.installedSchema(),
+          messages,
+          config,
+          verification: verification && { ...verification, retryable: undefined },
+          testContext,
+          ...feedback,
+        }),
         signal,
         redirect: 'error',
       });
@@ -650,7 +729,7 @@ redteamRouter.post('/setup-plan', async (req, res) => {
         break;
       }
       if (
-        containsSetupSecret(reply.data.message) ||
+        containsSetupSecret(reply.data.message, 'assistant') ||
         (reply.data.config && containsSetupSecret(JSON.stringify(reply.data.config)))
       ) {
         feedback = {
@@ -658,21 +737,21 @@ redteamRouter.post('/setup-plan', async (req, res) => {
         };
         continue;
       }
-      const { validationError, ...status } = await assessSetup(
-        reply.data.config ?? config,
-        userTurns,
-        config,
-      );
-      if (!validationError) {
+      const proposed = reply.data.config ?? config;
+      const { validationError, ...status } = await assessSetup(proposed, userTurns, config);
+      const problem =
+        validationError ??
+        probeIssue(reply.data.testTarget, testContext, config, proposed, status, userTurns);
+      if (!problem) {
         res.json(schema.Response.parse({ ...reply.data, ...status }));
         return;
       }
-      feedback = { validationError, rejectedConfig: reply.data.config };
+      feedback = { validationError: problem, rejectedConfig: reply.data.config };
     }
     if (feedback) {
+      const reason = feedback.validationError.slice(0, 300);
       res.status(502).json({
-        error:
-          'The agent couldn’t validate its changes. Your draft is unchanged. Try again or clarify the request.',
+        error: 'The agent couldn’t validate its changes. Your draft is unchanged. ' + reason,
       });
       return;
     }
