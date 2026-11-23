@@ -922,6 +922,40 @@ describe('OTLPTracingExporter', () => {
     expect(attributes.intact).toBe('curl -H<redacted> https://host');
   });
 
+  it.each(formats)('checks flattened curl header values in %s', async (format) => {
+    const ordinary = 'curl -HX-Example: public https://host';
+    const { attributes } = await exportCustomData(format, {
+      cmd: 'curl -HX-Example: Bearer opaque/value https://host',
+      basic: 'curl -H X-Example:Basic opaque/value https://host',
+      proxy: 'curl --proxy-header=X-Example : Api-Key opaque/value',
+      raw: 'curl --header X-Example: ' + 'opaque'.repeat(12) + ' https://host',
+      native: ['curl', '-HX-Example: Token opaque/value', 'https://host'],
+      ordinary,
+    });
+    expect(attributes).toMatchObject(redacted('cmd', 'command', 'basic', 'proxy', 'raw'));
+    expect(attributes.native).toEqual(wireStrings('curl', '-H<redacted>', 'https://host'));
+    expect(attributes.ordinary).toBe(ordinary);
+  });
+
+  it.each(formats)(
+    'withholds curl options interrupted by shell redirects in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(format, {
+        cmd: "curl -H 2>/dev/null 'Service-Key: opaque/header' https://host",
+        user: 'curl -u </dev/null alice:opaque/user https://host',
+        joined: 'curl --header>/dev/null "Service-Key: opaque/joined"',
+        combined: 'curl -sSH &>/dev/null "Service-Key: opaque/combined"',
+        publicRedirect: 'curl -HAccept:text/plain https://host > result.txt',
+        native: ['curl', '-H', 'X-Note: >literal', 'https://host'],
+      });
+      expect(attributes).toMatchObject(redacted('cmd', 'command', 'user', 'joined', 'combined'));
+      expect(attributes.publicRedirect).toBe('curl -HAccept:text/plain https://host > result.txt');
+      expect(attributes.native).toEqual(
+        wireStrings('curl', '-H', 'X-Note: >literal', 'https://host'),
+      );
+    },
+  );
+
   it.each(formats)('masks curl header operands in native arguments in %s', async (format) => {
     const argv = ['curl', '-sSHAuthorization:opaque/value', '-HIdempotency-Key:shown'];
     const native = await exportCustomData(format, {

@@ -750,8 +750,11 @@ function sanitizeCredentialText(
   const command = value.replace(/\\\r?\n/g, '');
   const curl = context === 'curl' || containsCurl(command);
   if (curl || command.includes('-')) {
-    const redact = argumentRedactor(context);
-    const masked = command.replace(COMMAND_WORDS, (word) => redact.argument(word) ?? word);
+    const redact = argumentRedactor(context, command);
+    const masked = command.replace(
+      COMMAND_WORDS,
+      (word, start: number) => redact.argument(word, start + word.length) ?? word,
+    );
     if (redact.ambiguous || ((curl || masked !== command) && SHELL_EXPANSION.test(command))) {
       return '<redacted>';
     }
@@ -970,43 +973,78 @@ function credentialOption(
   return undefined;
 }
 
-function isPrivateCurlHeader(header: string) {
+function isPrivateCurlHeader(header: string, tail?: string) {
   if (/[\r\n]/.test(header)) {
     return true;
   }
   const colon = header.indexOf(':');
-  if (colon < 0) {
-    // A flattened operand can also split immediately before its colon.
-    return /^[\w.-]+$/.test(header) && isCredentialAttributeKey(header, 'headers');
+  const name = colon < 0 ? header : header.slice(0, colon).trim();
+  if ((colon >= 0 || /^[\w.-]+$/.test(name)) && isCredentialAttributeKey(name, 'headers')) {
+    return true;
   }
-  return (
-    isCredentialAttributeKey(header.slice(0, colon).trim(), 'headers') ||
-    isCredentialHeader('', header.slice(colon + 1))
-  );
+  let value = colon < 0 ? '' : header.slice(colon + 1);
+  if (isCredentialHeader('', value)) {
+    return true;
+  }
+  if (!tail || (colon < 0 && !/^\s*:/.test(tail))) {
+    return false;
+  }
+  // A flattened header may split before its colon, scheme or credential.
+  // Check each prefix so the following URL cannot hide an opaque token.
+  const words = (colon < 0 ? tail.replace(/^\s*:/, '') : tail).matchAll(/[^\s;&|]+|[;&|]/g);
+  for (let i = 0; i < 2; i++) {
+    const fragment = words.next().value?.[0];
+    if (!fragment || /^[;&|]$/.test(fragment)) {
+      break;
+    }
+    value += ' ' + unquoteShellWord(fragment);
+    if (isCredentialHeader('', value)) {
+      return true;
+    }
+  }
+  return false;
 }
 
-function argumentRedactor(context?: AttributeContext, native = false) {
+function argumentRedactor(context?: AttributeContext, command?: string) {
+  const native = command === undefined;
   let mode: 'start' | 'unknown' | 'operands' | 'curl' | 'expanded' =
     context === 'operands' || context === 'curl' ? context : 'start';
   let next: 'credential' | 'header' | undefined;
   let property = false;
   const redact = { argument, ambiguous: false };
 
-  function redactOption(word: string, arg: string, isHeaderOperand: boolean) {
+  function redactHeader(word: string, arg: string, prefix: string, end: number) {
+    // Flattened headers can continue across words and shell separators.
+    // Only native argv or a complete quoted operand establishes an end.
+    const raw = word.startsWith(prefix) ? word.slice(prefix.length) : word;
+    const intact = native || /^(?:"(?:[^"\\]|\\[\s\S])*"|'[^']*')$/.test(raw);
+    if (!isPrivateCurlHeader(arg.slice(prefix.length), intact ? undefined : command?.slice(end))) {
+      return;
+    }
+    redact.ambiguous ||= !intact;
+    const label = /^(["'])[\w-]+:[ \t]*/.exec(word);
+    return !prefix && label && word.endsWith(label[1])
+      ? label[0] + '<redacted>' + label[1]
+      : prefix + '<redacted>';
+  }
+
+  function redactOption(word: string, arg: string, isHeaderOperand: boolean, end: number) {
+    // A shell redirect consumes no argv slot, even when attached to a flag.
+    // Withhold ambiguous commands instead of treating a filename as the operand.
+    if (command && mode === 'curl') {
+      const before = /^([^<>]+)(?!<redacted>$)[<>]/.exec(arg)?.[1];
+      if (before && credentialOption(before, true, property)?.flag === before) {
+        redact.ambiguous = true;
+      }
+    }
     const option = credentialOption(arg, mode === 'curl', property);
     property = PROPERTY_OPTIONS.has(arg);
     const prefix = option?.header ? option.flag : '';
-    if ((prefix || isHeaderOperand) && isPrivateCurlHeader(arg.slice(prefix.length))) {
-      // Flattened headers can continue across words and shell separators.
-      // Only native argv or a complete quoted operand establishes an end.
-      const raw = word.startsWith(prefix) ? word.slice(prefix.length) : word;
-      if (!native && !/^(?:"(?:[^"\\]|\\[\s\S])*"|'[^']*')$/.test(raw)) {
-        redact.ambiguous = true;
+    if (prefix || isHeaderOperand) {
+      const replacement = redactHeader(word, arg, prefix, end);
+      if (replacement) {
+        return replacement;
       }
-      const label = /^(["'])[\w-]+:[ \t]*/.exec(word);
-      return !prefix && label && word.endsWith(label[1])
-        ? label[0] + '<redacted>' + label[1]
-        : prefix + '<redacted>';
     }
     if (!option) {
       return;
@@ -1015,10 +1053,13 @@ function argumentRedactor(context?: AttributeContext, native = false) {
     if (arg !== flag || flag.endsWith('=')) {
       return header ? undefined : flag + '<redacted>';
     }
+    if (command && /^\s*(?!<redacted>(?:\s|$))(?:\d+|\{\w+\}|&)?[<>]/.test(command.slice(end))) {
+      redact.ambiguous = true;
+    }
     next = header ? 'header' : 'credential';
   }
 
-  function argument(word: unknown) {
+  function argument(word: unknown, end = 0) {
     const operand = next;
     next = undefined;
     // In native argv, even a standalone shell operator can be a literal
@@ -1046,7 +1087,7 @@ function argumentRedactor(context?: AttributeContext, native = false) {
       // A quoted shell program can hide both the option and its operand in one word.
       if (/\s/.test(arg) && arg.includes('-')) {
         // A private header containing "curl" can still have an ambiguous tail.
-        return redactOption(word, arg, operand === 'header') ?? '<redacted>';
+        return redactOption(word, arg, operand === 'header', end) ?? '<redacted>';
       }
       if (mode !== 'operands') {
         mode = 'curl';
@@ -1056,7 +1097,7 @@ function argumentRedactor(context?: AttributeContext, native = false) {
       mode = 'expanded';
       return '<redacted>';
     }
-    return redactOption(word, arg, operand === 'header');
+    return redactOption(word, arg, operand === 'header', end);
   }
   return redact;
 }
@@ -1760,7 +1801,7 @@ function sanitizeStructuredAttribute(
     charge(array ? source.length : 0);
     const target = array ? new Array<unknown>(source.length) : {};
     const inherited = context === 'operands' || context === 'curl' ? undefined : context;
-    const redactArgument = array ? argumentRedactor(context, true).argument : undefined;
+    const redactArgument = array ? argumentRedactor(context).argument : undefined;
     const prefix = parent && !array ? parent + '.' : '';
     for (const [key, value] of structuredAttributeEntries(source)) {
       // Keep the immediate qualifier across arrays and serialized objects.
