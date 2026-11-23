@@ -165,6 +165,33 @@ describe('Strategies', () => {
     });
   });
 
+  describe('Imported layers', () => {
+    it.each([
+      { steps: ['unknown-id'], remote: true, valid: false },
+      { steps: [{ id: 'base64', config: 'bad' }], remote: true, valid: false },
+      { steps: ['authoritative-markup-injection', 'base64'], remote: true, valid: false },
+      { steps: ['best-of-n'], remote: false, valid: false },
+      { steps: ['best-of-n'], remote: true, valid: true },
+      { steps: ['base64', 'rot13'], remote: false, valid: true },
+    ])('checks $steps before Next with remote=$remote', ({ steps, remote, valid }) => {
+      vi.mocked(useRedTeamConfig, { partial: true, deep: true }).mockReturnValue({
+        config: { strategies: [{ id: 'layer', config: { steps } }], plugins: [], numTests: 5 },
+        updateConfig: mockUpdateConfig,
+      });
+      vi.mocked(useApiHealth, { partial: true }).mockReturnValue({
+        data: { status: remote ? 'connected' : 'disabled', message: '' },
+      });
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      const next = screen.getByRole('button', { name: 'Next' });
+      if (valid) {
+        expect(next).toBeEnabled();
+      } else {
+        expect(next).toBeDisabled();
+      }
+    });
+  });
+
   describe('Telemetry', () => {
     it('records page view on mount', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);

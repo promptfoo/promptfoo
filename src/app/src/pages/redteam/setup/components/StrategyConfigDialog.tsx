@@ -26,9 +26,7 @@ import useCloudConfig from '@app/hooks/useCloudConfig';
 import { cn } from '@app/lib/utils';
 import {
   ADDITIONAL_STRATEGIES,
-  ALL_STRATEGIES,
   getLayerOrderError,
-  isCustomStrategy,
   isLayerProvider,
   isTerminalLayerStep,
   MULTI_MODAL_STRATEGIES_SET,
@@ -36,7 +34,11 @@ import {
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
 import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
-import { isStrategyConfigured, STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
+import {
+  getLayerConfigError,
+  isStrategyConfigured,
+  STRATEGIES_REQUIRING_CONFIG,
+} from './strategies/utils';
 import type { StrategyConfig } from '@promptfoo/redteam/types';
 
 import type { StrategyCardData } from './strategies/types';
@@ -52,7 +54,6 @@ const getStepId = (step: StepType) =>
   typeof step === 'string' ? step : typeof step?.id === 'string' ? step.id : 'Invalid step';
 const isAgenticStrategy = (step: StepType) => isLayerProvider(getStepId(step));
 const isMultiModalStrategy = (step: StepType) => MULTI_MODAL_STRATEGIES_SET.has(getStepId(step));
-const isFileStep = (id: string) => id.startsWith('file://') && /\.[cm]?[jt]s$/i.test(id);
 
 const EMPTY_PLUGINS_ARRAY: string[] = [];
 const EMPTY_STRATEGIES_ARRAY: StepType[] = [];
@@ -115,17 +116,10 @@ export default function StrategyConfigDialog({
   const availablePlugins = selectedPlugins;
 
   const stepIds = React.useMemo(() => steps.map(getStepId), [steps]);
-  const unavailable = stepIds.find(
-    (id) =>
-      isStrategyDisabled?.(id) ||
-      (!(ALL_STRATEGIES as readonly string[]).includes(id) &&
-        !isCustomStrategy(id) &&
-        !isFileStep(id)),
+  const layerError = React.useMemo(
+    () => getLayerConfigError(steps, isStrategyDisabled),
+    [steps, isStrategyDisabled],
   );
-  const layerError =
-    unavailable === undefined
-      ? getLayerOrderError(stepIds)
-      : `Remove the unavailable strategy "${unavailable}" to save this layer.`;
   const lastStep = stepIds[stepIds.length - 1];
   const isTerminal = lastStep !== undefined && isTerminalLayerStep(lastStep);
 
@@ -261,7 +255,7 @@ export default function StrategyConfigDialog({
   };
 
   const getNewStep = (id: string) => {
-    if (isFileStep(id) && !getLayerOrderError([...stepIds, id])) {
+    if (id.startsWith('file://') && !getLayerConfigError([...steps, id], isStrategyDisabled)) {
       return id;
     }
     return availableStrategies.get(id);
@@ -1176,15 +1170,8 @@ export default function StrategyConfigDialog({
         </Button>
       </div>
 
-      <p
-        className={cn(
-          'mt-1 text-xs',
-          steps.length === 0 || layerError ? 'text-destructive' : 'text-muted-foreground',
-        )}
-      >
-        {steps.length === 0
-          ? 'Add at least one strategy step (required)'
-          : getValidationMessage() || 'Add steps to build your transform chain'}
+      <p className={cn('mt-1 text-xs', layerError ? 'text-destructive' : 'text-muted-foreground')}>
+        {getValidationMessage() || 'Add steps to build your transform chain'}
       </p>
 
       {steps.length > 0 && (
@@ -1260,7 +1247,7 @@ export default function StrategyConfigDialog({
             disabled={
               (strategy === 'retry' && (!!error || !numTests)) ||
               !isCustomStrategyValid() ||
-              (strategy === 'layer' && (steps.length === 0 || !!layerError))
+              (strategy === 'layer' && !!layerError)
             }
           >
             Save

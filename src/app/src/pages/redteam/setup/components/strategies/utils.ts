@@ -1,4 +1,7 @@
-import { normalizeRedteamConfigForPreview } from '@promptfoo/presentation/redteamConfig';
+import {
+  getRedteamStrategyError,
+  normalizeRedteamConfigForPreview,
+} from '@promptfoo/presentation/redteamConfig';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
@@ -12,20 +15,22 @@ export function getStrategyId(strategy: RedteamStrategy): string {
 // Strategies that require configuration before they can be used
 export const STRATEGIES_REQUIRING_CONFIG = ['layer', 'custom'];
 
-/**
- * Checks if layer strategy has valid configuration
- * @param strategy The strategy object
- * @returns true if layer strategy has steps configured
- */
-function isLayerStrategyConfigValid(strategy: RedteamStrategy): boolean {
-  const config = typeof strategy === 'object' ? strategy.config : undefined;
-  const steps = config?.steps;
-  // Validate that steps array exists, has length, and contains valid non-empty values
-  return (
-    Array.isArray(steps) &&
-    steps.length > 0 &&
-    steps.every((step) => step != null && step !== '' && typeof step !== 'undefined')
-  );
+/** The editor also requires a nonempty layer whose steps are available in this environment. */
+export function getLayerConfigError(
+  steps: unknown,
+  isStrategyDisabled?: (id: string) => boolean,
+): string | undefined {
+  if (!Array.isArray(steps) || steps.length === 0) {
+    return 'Add at least one strategy step (required)';
+  }
+  const error = getRedteamStrategyError({ id: 'layer', config: { steps } });
+  if (error) {
+    return error;
+  }
+  const unavailable = isStrategyDisabled && steps.map(getStrategyId).find(isStrategyDisabled);
+  if (unavailable) {
+    return `Remove the unavailable strategy "${unavailable}" to save this layer.`;
+  }
 }
 
 /**
@@ -43,15 +48,23 @@ function isCustomStrategyConfigValid(strategy: RedteamStrategy): boolean {
  * Checks if a strategy is properly configured
  * @param strategyId The ID of the strategy to check
  * @param strategy The full strategy object
+ * @param isStrategyDisabled Determines whether a layer step is unavailable in the editor
  * @returns true if the strategy is configured or doesn't require configuration
  */
-export function isStrategyConfigured(strategyId: string, strategy: RedteamStrategy): boolean {
+export function isStrategyConfigured(
+  strategyId: string,
+  strategy: RedteamStrategy,
+  isStrategyDisabled?: (id: string) => boolean,
+): boolean {
   if (!STRATEGIES_REQUIRING_CONFIG.includes(strategyId)) {
     return true;
   }
 
   if (strategyId === 'layer') {
-    return isLayerStrategyConfigValid(strategy);
+    return (
+      typeof strategy !== 'string' &&
+      !getLayerConfigError(strategy.config?.steps, isStrategyDisabled)
+    );
   }
 
   if (strategyId === 'custom') {

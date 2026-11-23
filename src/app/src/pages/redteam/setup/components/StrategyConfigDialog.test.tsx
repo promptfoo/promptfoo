@@ -1339,12 +1339,15 @@ describe('StrategyConfigDialog', () => {
 
     it.each(['mischievous-user', 'authoritative-markup-injection'])(
       'keeps %s last when adding or moving steps',
-      (id) => {
+      async (id) => {
         renderLayer(['base64', id]);
         expect(screen.getByRole('combobox')).toBeDisabled();
         expect(screen.getByPlaceholderText('Or type file://path/to/custom.js')).toBeDisabled();
         expect(screen.getAllByLabelText('move step up')[1]).toBeDisabled();
         expect(screen.getAllByLabelText('move step down')[0]).toBeDisabled();
+        await userEvent.click(screen.getAllByLabelText('move step up')[1]);
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+        expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64', id] });
       },
     );
 
@@ -1359,13 +1362,18 @@ describe('StrategyConfigDialog', () => {
       },
     );
 
-    it('lets an imported malformed step be removed before saving', async () => {
-      renderLayer([null, 'base64']);
-      const save = screen.getByRole('button', { name: 'Save' });
-      expect(save).toBeDisabled();
-      await userEvent.click(screen.getAllByLabelText('delete step')[0]);
-      expect(save).toBeEnabled();
-    });
+    it.each([null, { id: 'rot13', config: 'bad' }])(
+      'lets an imported malformed step %j be removed before saving',
+      async (step) => {
+        renderLayer([step, 'base64']);
+        const save = screen.getByRole('button', { name: 'Save' });
+        expect(save).toBeDisabled();
+        expect(screen.getByText(/Invalid layer step 1/)).toBeInTheDocument();
+        await userEvent.click(screen.getAllByLabelText('delete step')[0]);
+        await userEvent.click(save);
+        expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
+      },
+    );
 
     it('applies the parent strategy restrictions to layer choices and saved steps', async () => {
       renderLayer(['best-of-n'], (id) => id === 'best-of-n' || id === 'audio');

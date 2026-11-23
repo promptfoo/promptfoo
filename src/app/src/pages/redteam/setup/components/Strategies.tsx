@@ -347,37 +347,23 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies, updateConfig],
   );
 
-  // Check if a specific strategy is configured
-  const isStrategyConfiguredById = useCallback(
-    (strategyId: string): boolean => {
-      const strategy = config.strategies.find((s) => getStrategyId(s) === strategyId);
-      return strategy ? isStrategyConfigured(strategyId, strategy) : true;
-    },
-    [config.strategies],
+  const unconfiguredStrategies = useMemo(
+    () =>
+      config.strategies
+        .filter(
+          (strategy) =>
+            !isStrategyConfigured(getStrategyId(strategy), strategy, isStrategyDisabled),
+        )
+        .map(getStrategyId),
+    [config.strategies, isStrategyDisabled],
   );
-
-  // Validation function to check if all selected strategies are properly configured
-  const isStrategyConfigValid = useCallback(() => {
-    return config.strategies.every((strategy) =>
-      isStrategyConfigured(getStrategyId(strategy), strategy),
-    );
-  }, [config.strategies]);
-
-  const getNextButtonTooltip = useCallback(() => {
-    if (!isStrategyConfigValid()) {
-      const unconfiguredStrategies = config.strategies
-        .filter((strategy) => {
-          const strategyId = getStrategyId(strategy);
-          return !isStrategyConfigured(strategyId, strategy);
-        })
-        .map((s) => getStrategyId(s));
-
-      if (unconfiguredStrategies.length > 0) {
-        return `Please configure the following ${unconfiguredStrategies.length === 1 ? 'strategy' : 'strategies'}: ${unconfiguredStrategies.join(', ')}`;
-      }
-    }
-    return '';
-  }, [config.strategies, isStrategyConfigValid]);
+  const isStrategyConfiguredById = useCallback(
+    (strategyId: string) => !unconfiguredStrategies.includes(strategyId),
+    [unconfiguredStrategies],
+  );
+  const nextWarning = unconfiguredStrategies.length
+    ? `Please configure the following ${unconfiguredStrategies.length === 1 ? 'strategy' : 'strategies'}: ${unconfiguredStrategies.join(', ')}`
+    : '';
 
   // ----------------------------------------------
   // Derived states
@@ -435,8 +421,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       }
       onNext={onNext}
       onBack={onBack}
-      nextDisabled={!isStrategyConfigValid()}
-      warningMessage={getNextButtonTooltip()}
+      nextDisabled={unconfiguredStrategies.length > 0}
+      warningMessage={nextWarning}
     >
       {/* Warning banner when remote generation is disabled - full width sticky */}
       {isRemoteGenerationDisabled && (

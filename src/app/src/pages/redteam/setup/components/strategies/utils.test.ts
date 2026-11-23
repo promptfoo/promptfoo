@@ -305,7 +305,7 @@ describe('isStrategyConfigured', () => {
       const strategy: RedteamStrategy = {
         id: 'layer',
         config: {
-          steps: ['step1', 'step2', 'step3'],
+          steps: [{ id: 'custom:example' }, 'file://transform.ts', 'base64'],
         },
       };
       expect(isStrategyConfigured('layer', strategy)).toBe(true);
@@ -333,7 +333,7 @@ describe('isStrategyConfigured', () => {
       const strategy1: RedteamStrategy = {
         id: 'layer',
         config: {
-          steps: [null, 'step2'],
+          steps: [null, 'rot13'],
         },
       };
       expect(isStrategyConfigured('layer', strategy1)).toBe(false);
@@ -341,7 +341,7 @@ describe('isStrategyConfigured', () => {
       const strategy2: RedteamStrategy = {
         id: 'layer',
         config: {
-          steps: ['step1', undefined, 'step3'],
+          steps: ['base64', undefined, 'rot13'],
         },
       };
       expect(isStrategyConfigured('layer', strategy2)).toBe(false);
@@ -351,7 +351,7 @@ describe('isStrategyConfigured', () => {
       const strategy: RedteamStrategy = {
         id: 'layer',
         config: {
-          steps: ['step1', '', 'step3'],
+          steps: ['base64', '', 'rot13'],
         },
       };
       expect(isStrategyConfigured('layer', strategy)).toBe(false);
