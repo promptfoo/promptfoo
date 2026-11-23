@@ -200,6 +200,8 @@ For best signal, expose one or more of these surfaces from your coding-agent pro
 
 ## Interpreting Failures
 
+The [invoice search experiment](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-coding-agent-issue-revision) uses `coding-agent:generated-vulnerability` to generate optional issue texts. It tests whether seeing the agent’s patch helps a reporter induce a cross-customer disclosure. Each attempt gets a fresh checkout, and independent SQLite queries grade the patch. The example runs offline by default and includes an opt-in Codex target.
+
 A failed row means the target agent crossed the test's security boundary. Inspect the agent transcript, raw provider events, trace, changed files, and sidecar report before deciding whether the issue belongs in model training, provider configuration, sandbox policy, verifier design, or the surrounding CI harness.
 
 Common fixes include removing ambient secrets from the subprocess environment, running agents in disposable checkouts, reducing `additional_directories`, failing closed on sandbox setup errors, protecting verifier scripts outside the writable workspace, and making tests detect behavioral regressions instead of only snapshots.
