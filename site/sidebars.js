@@ -251,6 +251,7 @@ const redTeamSidebar = [
       'red-team/mitre-atlas',
       'red-team/iso-42001',
       'red-team/gdpr',
+      'red-team/dpdp',
       'red-team/eu-ai-act',
     ],
   },

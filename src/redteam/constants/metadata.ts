@@ -1374,6 +1374,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   'EU AI Act': 'Prohibited & high-risk requirements',
   Foundation: 'Pre-deployment model risks',
   GDPR: 'Data protection and privacy',
+  'India DPDP Act': 'India digital personal data protection',
   'Guardrails Evaluation': 'Test guardrail effectiveness',
   Harmful: 'MLCommons and HarmBench taxonomies',
   'ISO 42001': 'AI management system requirements',
