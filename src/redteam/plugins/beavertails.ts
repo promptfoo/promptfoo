@@ -94,7 +94,7 @@ function normalizePluginConfig(
   }
 
   const canonicalSubcategories = config.subcategories
-    .map((subcategory) => {
+    .map((subcategory: unknown) => {
       const normalized = normalizeSubcategoryName(String(subcategory));
       return NORMALIZED_SUBCATEGORY_MAP.get(normalized);
     })
@@ -288,7 +288,7 @@ export class BeavertailsPlugin extends RedteamPluginBase {
   protected validateConfig(config?: BeaverTailsPluginConfig): void {
     // Validate subcategories if provided
     if (config?.subcategories) {
-      const invalidSubcategories = config.subcategories.filter((subcategory) => {
+      const invalidSubcategories = config.subcategories.filter((subcategory: unknown) => {
         const normalized = normalizeSubcategoryName(String(subcategory));
         return !NORMALIZED_SUBCATEGORY_MAP.has(normalized);
       });
