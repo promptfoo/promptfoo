@@ -208,13 +208,16 @@ export function combineFilterConditions(
 }
 
 export class EvalQueries {
-  // Replays address a prompt column, not a test row. Read only its routing
-  // evidence and detect conflicts without loading responses or credentials.
-  static async getReplayTarget(evalId: string, promptIdx?: number) {
+  // A prompt column must have a single recorded target. Mutable sources
+  // also need the provider settings sanitized at result persistence.
+  static async getReplayTarget(evalId: string, promptIdx?: number, includeConfig = false) {
     const db = await getDb();
     const rows = await db
       .selectDistinct({
         id: sql<string | null>`json_extract(${evalResultsTable.provider}, '$.id')`,
+        config: includeConfig
+          ? sql<string | null>`json_extract(${evalResultsTable.provider}, '$.config')`
+          : sql<null>`null`,
         linkedTargetId: sql<
           string | null
         >`json_extract(${evalResultsTable.provider}, '$.config.linkedTargetId')`,

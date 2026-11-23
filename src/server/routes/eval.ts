@@ -35,6 +35,7 @@ import {
   readRawProviderConfigFile,
 } from '../../util/providerRef';
 import {
+  REDACTED,
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeObject,
@@ -890,7 +891,7 @@ function replaySources(eval_: Eval, allowsProvider: (id: string, label?: string)
   return { singleSource, mutableIdentity, resolved };
 }
 
-async function selectReplayProvider(eval_: Eval, promptIndex?: number, recordedId?: string | null) {
+async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
   const { name, groups, unique, allowsProvider, allowsPrompts } = getReplayColumn(
     eval_,
     promptIndex,
@@ -905,11 +906,16 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number, recordedI
   if (mutableIdentity && !complete) {
     throw new Error('Ambiguous replay request');
   }
+  const mutable = resolved.some(
+    ({ ref, fromFile }) =>
+      fromFile || ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)),
+  );
+  const saved = await EvalQueries.getReplayTarget(eval_.id, promptIndex, mutable);
   let selected;
   for (const [index, { provider, fromFile, ref }] of resolved.entries()) {
     const nativeGroup = complete ? groups[index] : undefined;
     const corroboratedEcho =
-      recordedId === 'echo' || (!ref.label && (name ?? nativeGroup) === 'echo');
+      saved?.id === 'echo' || (!ref.label && (name ?? nativeGroup) === 'echo');
     const candidate = prepareReplayCandidate(
       provider,
       name,
@@ -945,13 +951,13 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number, recordedI
   if (!allowsProvider(id, label) || !allowsPrompts(id, label, selectors)) {
     throw new Error('Provider excluded from the original evaluation');
   }
-  return { ...selected, id };
+  return { ...selected, id, saved };
 }
 
-function verifySavedReplayTarget(
-  saved: Awaited<ReturnType<typeof EvalQueries.getReplayTarget>>,
-  selection: Awaited<ReturnType<typeof selectReplayProvider>>,
-) {
+type ReplaySelection = Awaited<ReturnType<typeof selectReplayProvider>>;
+
+function verifySavedReplayTarget(selection: ReplaySelection) {
+  const { saved } = selection;
   // Cloud and file definitions can keep their labels after changing providers.
   // Without a recorded runtime ID their original target cannot be established.
   if (!saved) {
@@ -973,6 +979,100 @@ function verifySavedReplayTarget(
       throw new Error('Cloud target changed since evaluation');
     }
   }
+}
+
+// A model ID or raw HTTP request ID doesn't identify the destination. Require
+// the entire static configuration to match, including nested settings and raw
+// request headers. Opaque settings (e.g. a redacted OAuth or session object)
+// cannot prove a match. Only credential strings may differ due to redaction.
+function matchesRecordedSettings(
+  config: Record<string, unknown>,
+  recorded: string,
+  basePath?: string,
+) {
+  const original = JSON.parse(recorded);
+  if (!original || typeof original !== 'object' || Array.isArray(original)) {
+    return false;
+  }
+  if (!Object.hasOwn(config, 'basePath') && original.basePath === basePath) {
+    delete original.basePath;
+  }
+  if (!Object.hasOwn(config, 'linkedTargetId')) {
+    delete original.linkedTargetId; // The Cloud link was verified separately.
+  }
+  const current = { ...config };
+  if (original.apiKey === REDACTED && typeof current.apiKey === 'string') {
+    current.apiKey = REDACTED;
+  }
+  if (current.headers && typeof current.headers === 'object') {
+    current.headers = Object.fromEntries(
+      Object.entries(current.headers).map(([key, value]) => [
+        key,
+        /^(?:authorization|x-api-key)$/i.test(key) &&
+        typeof value === 'string' &&
+        original.headers?.[key] === REDACTED
+          ? REDACTED
+          : value,
+      ]),
+    );
+  }
+  return isDeepStrictEqual(original, current);
+}
+
+// A removed environment override is invisible in saved model options.
+// Only an explicit endpoint can prove where this OpenAI target originally sent requests.
+function hasStaticReplayRoute(path: string, config: Record<string, unknown>) {
+  let destination;
+  if (path === 'openai' || path.startsWith('openai:')) {
+    destination = config.apiHost || config.apiBaseUrl;
+  } else if (replayUrlTransport(path) === 'http' && typeof config.request === 'string') {
+    // A raw request overrides even an explicit URL. The body can still use {{prompt}}.
+    destination = config.request.split(/\r?\n\r?\n/, 1)[0];
+  } else {
+    return true;
+  }
+  return (
+    typeof destination === 'string' &&
+    !!destination &&
+    !TEMPLATE_MARKER.test(destination) &&
+    !/\[REDACTED\]|%5BREDACTED%5D/i.test(destination)
+  );
+}
+
+function prepareReplaySettings(selection: ReplaySelection, basePath?: string) {
+  const { fromFile, cloud, target, saved } = selection;
+  if (!fromFile && !cloud) {
+    return selection.candidate;
+  }
+  if (target.kind !== 'options') {
+    throw new Error('Cannot verify mutable provider settings');
+  }
+  let candidate = selection.candidate;
+  let config = target.loadOptions.config;
+  if (fromFile && !cloud && config) {
+    // Resolve only the selected settings, once, without executing provider code.
+    replayFileData(config.url);
+    config = replayFileData(config, (path) =>
+      replayFileData(readRawProviderConfigFile(path, basePath)),
+    );
+    candidate = { ...target.loadOptions, config };
+  }
+  const path = target.loadProviderPath;
+  if (path === 'echo') {
+    return candidate;
+  }
+  // A mutable environment can influence a native provider's endpoint without
+  // appearing in its recorded options. URL transports pin the resolved URL.
+  const mutableEnv = fromFile ? target.loadOptions.env : cloud?.provider.env;
+  if (
+    (!replayUrlTransport(path) && Object.keys(mutableEnv ?? {}).length > 0) ||
+    !saved?.config ||
+    !hasStaticReplayRoute(path, config ?? {}) ||
+    !matchesRecordedSettings(config ?? {}, saved.config, basePath)
+  ) {
+    throw new Error('Cannot verify mutable provider settings');
+  }
+  return candidate;
 }
 
 evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> => {
@@ -999,14 +1099,13 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
 
     let selected;
     try {
-      const saved = await EvalQueries.getReplayTarget(eval_.id, promptIndex);
-      selected = await selectReplayProvider(eval_, promptIndex, saved?.id);
+      selected = await selectReplayProvider(eval_, promptIndex);
       const replayError = getReplayProviderError(selected.target);
       if (replayError) {
         res.status(400).json({ error: replayError });
         return;
       }
-      verifySavedReplayTarget(saved, selected);
+      verifySavedReplayTarget(selected);
     } catch (error) {
       sendError(
         res,
@@ -1017,23 +1116,15 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const { cloud, target } = selected;
-    let candidate = selected.candidate;
-    if (selected.fromFile && !cloud && target.kind === 'options' && target.loadOptions.config) {
-      // Only the approved provider may read its settings. Never render paths
-      // or follow another level of indirection, including in a bound URL.
-      try {
-        replayFileData(target.loadOptions.config.url);
-        const config = replayFileData(target.loadOptions.config, (path) =>
-          replayFileData(readRawProviderConfigFile(path, eval_.config.basePath)),
-        );
-        candidate = { ...target.loadOptions, config };
-      } catch {
-        res
-          .status(400)
-          .json({ error: 'Cannot read provider settings. Rerun using the eval configuration.' });
-        return;
-      }
+    const { cloud } = selected;
+    let candidate;
+    try {
+      candidate = prepareReplaySettings(selected, eval_.config.basePath);
+    } catch {
+      res
+        .status(400)
+        .json({ error: 'Cannot verify provider settings. Rerun using the eval configuration.' });
+      return;
     }
     const evaluateReplay = () =>
       evaluateWithSource(

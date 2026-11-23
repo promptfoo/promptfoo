@@ -50,8 +50,18 @@ describe('POST /api/eval/replay provider boundary', () => {
       .mockImplementation(async () => Response.json({ config }));
   }
 
-  function recordedTarget(id: string, scanner = 0, linkedTargetId: string | null = null) {
-    vi.mocked(EvalQueries.getReplayTarget).mockResolvedValue({ id, scanner, linkedTargetId });
+  function recordedTarget(
+    id: string,
+    scanner = 0,
+    linkedTargetId: string | null = null,
+    config?: object,
+  ) {
+    vi.mocked(EvalQueries.getReplayTarget).mockResolvedValue({
+      id,
+      scanner,
+      linkedTargetId,
+      config: config ? JSON.stringify(config) : null,
+    });
   }
 
   function storedConfig(
@@ -712,7 +722,7 @@ describe('POST /api/eval/replay provider boundary', () => {
       const original = 'https://original.invalid';
       mockCloudProvider({ id, label: 'Remote label', config: { url: original, body: {} } });
       const providers = [{ id: 'promptfoo://provider/target', label: '', config: { url } }];
-      recordedTarget(url || id);
+      recordedTarget(url || id, 0, null, { url, body: {} });
       storedConfig(providers, undefined, [url || id]);
       evaluate.mockImplementationOnce(async (suite) => {
         const [loaded] = await loadApiProviders(suite.providers);
@@ -784,7 +794,10 @@ describe('POST /api/eval/replay provider boundary', () => {
   });
 
   it('honors entry overrides for an inherited Cloud label and HTTP URL', async () => {
-    recordedTarget('https://local.invalid');
+    recordedTarget('https://local.invalid', 0, null, {
+      url: 'https://local.invalid',
+      body: '{{prompt}}',
+    });
     const label = '{{ env.AWS_REGION }}';
     const url = '{{ env.OPENAI_BASE_URL }}';
     const env = { AWS_REGION: 'suite', OPENAI_BASE_URL: 'https://suite.invalid' };
@@ -807,6 +820,48 @@ describe('POST /api/eval/replay provider boundary', () => {
     });
     expect((await replay(0, 0)).status).toBe(200);
     expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks all mutable Cloud settings against the saved options before using credentials', async () => {
+    const id = 'openai:chat:gpt-4o';
+    const source = 'promptfoo://provider/target';
+    const config = { apiHost: 'saved.invalid', apiKey: 'fixture' };
+    const remote = { id, label: 'Saved', config, env: {} };
+    mockCloudProvider(remote);
+    storedConfig([source], undefined, ['Saved']);
+    recordedTarget(id, 0, source);
+    expect((await replay(0, 0)).status).toBe(400);
+    recordedTarget(id, 0, source, { ...config, apiKey: '[REDACTED]', linkedTargetId: source });
+    remote.config.apiHost = 'other.invalid';
+    expect((await replay(0, 0)).status).toBe(400);
+    remote.config.apiHost = 'saved.invalid';
+    remote.env = { OPENAI_API_HOST: 'other.invalid' };
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+    remote.env = {};
+    expect((await replay(0, 0)).status).toBe(200);
+  });
+
+  it.each([
+    { id: 'openai:chat:gpt-4o', config: {} },
+    { id: 'openai:chat:gpt-4o', config: { apiBaseUrl: 'https://saved.invalid/%5BREDACTED%5D' } },
+    { id: 'http', config: { request: 'POST /ask HTTP/1.1\nHost: {{host}}\n\n{{prompt}}' } },
+  ])('requires a verifiable static destination for mutable $id targets', async ({ id, config }) => {
+    mockCloudProvider({ id, label: 'Saved', config });
+    storedConfig(['promptfoo://provider/target'], undefined, ['Saved']);
+    recordedTarget(id, 0, null, config);
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a redacted object as proof of an unchanged auxiliary endpoint', async () => {
+    const id = 'https://saved.invalid';
+    const config = { body: '{{prompt}}', session: { url: 'https://other.invalid' } };
+    mockCloudProvider({ id, config });
+    recordedTarget(id, 0, null, { ...config, session: '[REDACTED]' });
+    storedConfig(['promptfoo://provider/target'], undefined, [id]);
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
   });
 
   it('rejects a changed Cloud identity, including scanner results under ordinary aliases', async () => {

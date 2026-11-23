@@ -9,6 +9,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { generateIdFromPrompt } from '../../src/models/prompt';
+import { evaluateWithSource } from '../../src/node';
 import { createApp } from '../../src/server/server';
 import { ResultFailureReason } from '../../src/types';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
@@ -223,7 +224,11 @@ describe('eval routes', () => {
       promptId: 'question',
       testCase: {},
       vars: {},
-      provider: { id: base + '/saved', label: 'Saved' },
+      provider: {
+        id: base + '/saved',
+        label: 'Saved',
+        config: { url: base + '/saved', method: 'POST', body: '{{prompt}}' },
+      },
       success: true,
       score: 1,
       latencyMs: 1,
@@ -242,6 +247,69 @@ describe('eval routes', () => {
     expect((await request(0)).status).toBe(400);
     expect(requests).toEqual(['/saved']);
   });
+
+  it.each(['openai', 'raw HTTP'])(
+    'binds a mutable %s endpoint even when both the stored ID and label stay unchanged',
+    async (transport) => {
+      const directory = await mkdtemp(join(tmpdir(), 'promptfoo-replay-'));
+      onTestFinished(() => rm(directory, { force: true, recursive: true }));
+      const calls: Array<{ host?: string; authorization?: string }> = [];
+      const listen = async () => {
+        const server = createServer((req, res) => {
+          calls.push({ host: req.headers.host, authorization: req.headers.authorization });
+          req.resume();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ choices: [{ message: { content: 'fixture' } }] }));
+        }).listen(0, '127.0.0.1');
+        await once(server, 'listening');
+        onTestFinished(() => new Promise<void>((resolve) => server.close(() => resolve())));
+        const address = server.address();
+        invariant(address && typeof address !== 'string', 'Expected a loopback listener');
+        return `127.0.0.1:${address.port}`;
+      };
+      const first = await listen();
+      const other = await listen();
+      const file = join(directory, 'provider.json');
+      const model = transport === 'openai';
+      const update = (host: string) =>
+        writeFile(
+          file,
+          JSON.stringify({
+            id: model ? 'openai:chat:gpt-4o' : 'http',
+            label: 'Saved',
+            config: model
+              ? { apiBaseUrl: `http://${host}/v1` }
+              : { request: `POST /ask HTTP/1.1\r\nHost: ${host}\r\n\r\n{{prompt}}` },
+          }),
+        );
+      await update(first);
+      const saved = await evaluateWithSource(
+        {
+          providers: [`file://${file}`],
+          env: { OPENAI_API_KEY: 'suite-fixture', OPENAI_BASE_URL: `http://${first}/fallback` },
+          prompts: ['original'],
+          tests: [{ vars: {} }],
+          writeLatestResults: true,
+          sharing: false,
+        },
+        { cache: false, showProgressBar: false, eventSource: 'library' },
+      );
+      testEvalIds.add(saved.id);
+      const replay = () =>
+        api.post('/api/eval/replay').send({
+          evaluationId: saved.id,
+          promptIndex: 0,
+          prompt: 'edited',
+        });
+      expect((await replay()).status).toBe(200);
+      await update(other);
+      const blocked = await replay();
+      expect(blocked.status).toBe(400);
+      expect(JSON.stringify(blocked.body)).not.toContain('suite-fixture');
+      const expected = { host: first, authorization: model ? 'Bearer suite-fixture' : undefined };
+      expect(calls).toEqual([expected, expected]);
+    },
+  );
 
   function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
     const originalStringify = JSON.stringify;

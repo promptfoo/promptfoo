@@ -328,6 +328,7 @@ describe('Eval Routes - Zod Validation', () => {
         vi.mocked(getProviderFromCloud).mockResolvedValue({ id: 'echo' });
         mockedEvalQueries.getReplayTarget.mockResolvedValue({
           id: 'echo',
+          config: null,
           linkedTargetId: null,
           scanner: 0,
         });
@@ -376,6 +377,7 @@ describe('Eval Routes - Zod Validation', () => {
         );
         mockedEvalQueries.getReplayTarget.mockResolvedValue({
           id: './echo.cjs',
+          config: JSON.stringify({ settings: { greeting: 'Hello' } }),
           linkedTargetId: null,
           scanner: 0,
         });
@@ -419,6 +421,13 @@ describe('Eval Routes - Zod Validation', () => {
           );
           expect(providers.map((provider) => provider.prompts)).toEqual([['first'], []]);
           expect(providers[0].config).toEqual({ settings: 'file://./settings.json' });
+          writeFileSync(
+            path.join(directory, 'settings.json'),
+            JSON.stringify({ greeting: 'Changed' }),
+          );
+          const changed = await api.post('/api/eval/replay').send({ ...replay, promptIndex: 0 });
+          expect(changed.status).toBe(400);
+          expect(evaluateWithSource).toHaveBeenCalledTimes(1);
         } finally {
           rmSync(directory, { recursive: true, force: true });
         }
