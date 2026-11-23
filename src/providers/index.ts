@@ -571,4 +571,5 @@ export function getProviderIds(providerPaths: ProvidersConfig): string[] {
   throw new Error('Invalid providers list');
 }
 
+export { getSafeProviderId } from './providerLogging';
 export { getNamedOpenAiTextId } from './registry';

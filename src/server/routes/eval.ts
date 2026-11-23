@@ -9,8 +9,11 @@ import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
-import { getNamedOpenAiTextId, resolveProviderConfigs } from '../../providers/index';
-import { getSafeProviderId } from '../../providers/providerLogging';
+import {
+  getNamedOpenAiTextId,
+  getSafeProviderId,
+  resolveProviderConfigs,
+} from '../../providers/index';
 import { EvalSchemas } from '../../types/api/eval';
 import {
   getCloudDatabaseId,
