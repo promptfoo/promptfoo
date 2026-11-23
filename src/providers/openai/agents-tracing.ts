@@ -760,8 +760,8 @@ function sanitizeCredentialText(
     }
   }
 
-  // Mask field values before Stripe keys, since names like sk_org_token can match both.
-  const clean = redactStripeKeys(
+  // Mask field values before token prefixes, since names like sk_org_token can match both.
+  const clean = redactStripeAndSlackTokens(
     redactQuotedCredentials(value)
       .replace(/\b(?:gh[opsur]_|github_pat_|glpat-)[A-Za-z0-9_-]+/g, '<redacted>')
       .replace(/\b(?:sk|pk|key)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
@@ -829,7 +829,7 @@ function sanitizeCredentialText(
 }
 
 // Inspect escaped delimiters and ANSI colors without putting decoded text into a trace.
-function isStripeKeyBoundary(before: string): boolean {
+function isTokenBoundary(before: string): boolean {
   for (let depth = 0; depth < 3; depth++) {
     const decoded = before.replace(/(?:%|\\x)([\da-f]{2})|\\u([\da-f]{4})/gi, (_, byte, unit) =>
       String.fromCharCode(Number.parseInt(byte ?? unit, 16)),
@@ -842,11 +842,14 @@ function isStripeKeyBoundary(before: string): boolean {
   return /(?:^|[^A-Za-z0-9]|\\[bfnrtv]|(?:\[|\u009b)[\d;:]*m)$/.test(before);
 }
 
-function redactStripeKeys(value: string): string {
+function redactStripeAndSlackTokens(value: string): string {
+  // Slack app tokens have a numeric version. Leave names like xapp-settings alone.
+  const prefixes =
+    /[sr]k_(?:live|test)_|sk_org(?:_|(?=[A-Za-z0-9]{20}))|(?:xoxe\.)?xox[abceprs]-|xwfp-|xapp-\d+-/g;
   const suffix = /[\w-]*[A-Za-z0-9]/y;
   let result = '';
   let start = 0;
-  for (const key of value.matchAll(/[sr]k_(?:live|test)_|sk_org(?:_|(?=[A-Za-z0-9]{20}))/g)) {
+  for (const key of value.matchAll(prefixes)) {
     if (key.index < start) {
       continue;
     }
@@ -856,7 +859,7 @@ function redactStripeKeys(value: string): string {
     result += before;
     start = key.index;
     suffix.lastIndex = start + key[0].length;
-    if (isStripeKeyBoundary(before) && suffix.test(value)) {
+    if (isTokenBoundary(before) && suffix.test(value)) {
       result += '<redacted>';
       start = suffix.lastIndex;
     }

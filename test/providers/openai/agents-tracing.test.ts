@@ -252,6 +252,49 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(formats)(
+    'redacts standalone Slack tokens in %s tool output and errors',
+    async (format) => {
+      const suffix = '123-456-opaque';
+      const prefixes = [
+        'xoxb-',
+        'xoxp-',
+        'xoxa-',
+        'xoxc-',
+        'xoxr-',
+        'xoxs-',
+        'xoxe-',
+        'xoxe.xoxb-',
+        'xoxe.xoxp-',
+        'xapp-1-',
+        'xwfp-',
+      ];
+      const bot = `xoxb-${suffix}`;
+      const publicText = 'xoxb-... xoxo-world xapp-settings foxoxb-report';
+      const payload = await exportSpans(format, [
+        {
+          spanData: {
+            type: 'function',
+            name: 'lookup',
+            input: publicText,
+            output: prefixes.map((prefix) => prefix + suffix).join(', '),
+          },
+          error: new Error(`Rejected%2520${bot} and \\n${bot} in \u001b[32m${bot}\u001b[0m`),
+          traceMetadata: { note: `Copy: _${bot}_ and \\u0020${bot}.` },
+        },
+      ]);
+      const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(getAttributes(span)).toMatchObject({
+        'tool.arguments': publicText,
+        'tool.output': prefixes.map(() => '<redacted>').join(', '),
+        'trace.metadata.note': 'Copy: _<redacted>_ and \\u0020<redacted>.',
+      });
+      expect(span.status.message).toBe(
+        'Rejected%2520<redacted> and \\n<redacted> in \u001b[32m<redacted>\u001b[0m',
+      );
+    },
+  );
+
+  it.each(formats)(
     'masks values before redacting Stripe-like field names in %s',
     async (format) => {
       const payload = await exportSpans(format, [
