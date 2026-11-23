@@ -729,6 +729,52 @@ describe('assertion schema projection', () => {
     },
   );
 
+  it.each(['direct', 'definition'])(
+    'protects env members when a pointer designates an entire %s literal or a nested schema',
+    (location) => {
+      const fields = {
+        DBPWD: 'opaque',
+        GITHUB_KEY: 'opaque',
+        vendorPassword: 'opaque',
+        PUBLIC: 'ok',
+      };
+      const data = [
+        { ...fields, type: 'number' },
+        { $id: 'item', ...fields, meta: { type: 'string' } },
+      ];
+      const direct = location === 'direct';
+      const path = direct ? '#/default/env/' : '#/definitions/vars/examples/';
+      const value = {
+        type: 'object',
+        ...(direct ? { default: { env: data } } : {}),
+        definitions: {
+          alias: { $ref: path + '0' },
+          ...(direct ? {} : { vars: { examples: data } }),
+        },
+        properties: {
+          alias: { $ref: path + '1/meta' },
+          ...(direct ? {} : { env: { type: 'array', items: { $ref: '#/definitions/vars' } } }),
+        },
+      };
+      const safe = project(value);
+      const entries = direct ? safe.default!.env : safe.definitions.vars!.examples;
+      for (const entry of entries) {
+        expect(entry).toMatchObject({
+          DBPWD: '[REDACTED]',
+          GITHUB_KEY: '[REDACTED]',
+          vendorPassword: '[REDACTED]',
+          PUBLIC: 'ok',
+        });
+      }
+      for (const schema of [value, safe]) {
+        const validate = new Ajv().compile(schema);
+        expect(validate({ alias: 'text' })).toBe(true);
+        expect(validate({ alias: 1 })).toBe(false);
+      }
+      expect(data[0].DBPWD).toBe('opaque');
+    },
+  );
+
   it('checks host literals, nested credentials and duplicate JSON members before restoring text', () => {
     const formatted = '{ "label": "two words" }';
     const nested = '[{"password":"opaque","password":"[REDACTED]"}]';

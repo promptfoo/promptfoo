@@ -1687,7 +1687,7 @@ const SCHEMA_OPTIONS = {
 function schemaDataProjector(context?: {
   names: Map<string, string>;
   annotations: Set<object>;
-  visit: (schema: unknown) => unknown;
+  visit: (schema: unknown, env: boolean) => unknown;
   redactLiteral: (value: unknown, key: string, parent: object) => unknown;
 }) {
   function projectString(value: string, key: string, env: boolean): string {
@@ -1723,7 +1723,9 @@ function schemaDataProjector(context?: {
       return typeof value === 'string' ? projectString(value, key, env) : value;
     }
     if (context?.annotations.has(value)) {
-      return context.visit(value);
+      // A referenced default or example is still literal data. Preserve the
+      // sensitivity of its members even when retaining schema keywords.
+      return context.visit(value, key === 'env');
     }
     return Object.fromEntries(
       Object.entries(value).map(([name, item]) => {
@@ -1816,14 +1818,18 @@ function sanitizeAssertionJsonSchema(root: unknown, diagnostics?: SchemaDiagnost
     return unique;
   }
 
-  function visitKeyword(schema: Record<string, unknown>, keyword: string, value: unknown) {
+  function visitKeyword(
+    schema: Record<string, unknown>,
+    keyword: string,
+    value: unknown,
+    env: boolean,
+  ) {
     const credential = sensitive.has(schema);
-    const env = index.environments.has(schema);
     if (JSON_SCHEMA_MAP_KEYWORDS.has(keyword) && isSchemaObject(value)) {
       return [keyword, visitMap(keyword, value, credential, env)];
     }
     if (JSON_SCHEMA_CHILD_KEYWORDS.has(keyword)) {
-      return [keyword, Array.isArray(value) ? value.map(visit) : visit(value)];
+      return [keyword, Array.isArray(value) ? value.map((child) => visit(child)) : visit(value)];
     }
     if (keyword === 'enum' && Array.isArray(value)) {
       return [keyword, visitEnum(value, credential, env)];
@@ -1844,27 +1850,32 @@ function sanitizeAssertionJsonSchema(root: unknown, diagnostics?: SchemaDiagnost
       }
       return [keyword, uri];
     }
-    return visitData(schema, keyword, value);
+    return visitData(schema, keyword, value, env);
   }
 
-  function visitData(schema: Record<string, unknown>, keyword: string, value: unknown) {
+  function visitData(
+    schema: Record<string, unknown>,
+    keyword: string,
+    value: unknown,
+    env: boolean,
+  ) {
     if (keyword === 'required' && Array.isArray(value)) {
       return [keyword, value.map(sanitizeName)];
     }
     const key = sanitizeName(keyword);
-    if (credentialSchemaName(keyword)) {
+    if (credentialSchemaName(keyword, undefined, env)) {
       return [key, redactLiteral(value, keyword, schema)];
     }
-    const env = index.environments.has(schema) && SCHEMA_LITERALS.has(key);
-    return [key, projectData(value, env ? 'env' : key)];
+    return [key, projectData(value, env && SCHEMA_LITERALS.has(key) ? 'env' : key, env)];
   }
 
-  function visit(schema: unknown): unknown {
+  function visit(schema: unknown, envLiteral = false): unknown {
     if (!isSchemaObject(schema)) {
       return sanitizeObject(schema, SCHEMA_OPTIONS);
     }
+    const env = envLiteral || index.environments.has(schema);
     const result = Object.fromEntries(
-      Object.entries(schema).map(([keyword, value]) => visitKeyword(schema, keyword, value)),
+      Object.entries(schema).map(([keyword, value]) => visitKeyword(schema, keyword, value, env)),
     );
     if (typeof schema.pattern === 'string') {
       result.pattern = sensitive.has(schema)
