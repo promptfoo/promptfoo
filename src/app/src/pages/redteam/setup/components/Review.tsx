@@ -199,12 +199,12 @@ export default function Review({
       (native.config && native.runnable ? null : 'This draft is only available for inspection.')
     : targetConfigError || setupRunError(config);
   const incomplete = native ? Boolean(reviewError) : missingEndpoint(config.target);
-  const localKeys =
-    native &&
-    keysForTargets(
-      targets(native.config).filter((_, i) => native.testableTargets?.includes(i)),
-      native.localKeys,
-    );
+  const entries = targets(native?.config);
+  const approved = native?.runnable ? entries.map((_, i) => i) : (native?.testableTargets ?? []);
+  const localKeys = keysForTargets(
+    approved.map((index) => entries[index]),
+    native?.localKeys,
+  );
   const saveError = incomplete ? targetConfigError : reviewError;
   const { recordEvent } = useTelemetry();
   const {
@@ -411,7 +411,7 @@ export default function Review({
 
     const yaml =
       localKeys && native?.config
-        ? dump(exportWithKeys(native.config, localKeys, native.testableTargets ?? []), {
+        ? dump(exportWithKeys(native.config, localKeys, approved), {
             noRefs: true,
             lineWidth: -1,
           })
@@ -1510,6 +1510,9 @@ export default function Review({
                 {localKeys
                   ? 'Downloaded YAML includes the key values you provided.'
                   : 'Save the YAML to keep this draft after you leave setup.'}
+                {!native.runnable &&
+                  Object.keys(native.localKeys ?? {}).length > 0 &&
+                  ' Keys for unapproved targets are omitted.'}
               </p>
             )}
             {native && !incomplete && (

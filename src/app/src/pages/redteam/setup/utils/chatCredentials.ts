@@ -6,46 +6,66 @@ type Keys = Record<string, string>;
 // Mask explicit credential assignments before building the hosted conversation.
 // The model decides which header to use. Only Test, Run and Save YAML need values.
 const assignment =
-  /\b((?:(?:(?:api[ _-]?)?key|(?:access[ _-]?)?token|password|secret|authorization|x-(?!tenant-id\b|org-id\b|api-version\b)[\w-]+)["']?\s*(?:[:=]\s*|\bis\s+))(?:(?:Bearer|Basic|Token|ApiKey)\s+)?|Bearer\s+)(?:"([^"\n]+)"|'([^'\n]+)'|`([^`\n]+)`|([\w+./=~-]+)(?=$|[,;\n]|[.!?]\s))/gi;
+  /(?<![\w-])((?:(?:(?:api[ _-]?)?key|(?:access[ _-]?)?token|password|secret|authorization|x-(?!tenant-id\b|org-id\b|api-version\b)[\w-]+|(?!idempotency-key\b)[\w-]+-(?:access|key|token|auth|secret))["']?\s*(?:[:=]\s*|\bis\s+))(?:(?:Bearer|Basic|Token|ApiKey)\s+)?|Bearer\s+)(?:"((?:[^"\\\n]|\\.)+)(?:"|$)|'((?:[^'\\\n]|\\.)+)(?:'|$)|`([^`\n]+)(?:`|$)|([\w+./=~!?#%$@:&^*-]+)(?=$|[\s,;)}\]]))/gi;
 
 export function captureKeys(input: string, previous: Keys = {}) {
   const keys = { ...previous };
-  let content = input.replace(assignment, (match, prefix, double, single, code, bare) => {
+  const content = input.replace(assignment, (match, prefix, double, single, code, bare, offset) => {
     const supplied: string = double ?? single ?? code ?? bare.replace(/[.!?]+$/, '');
-    const value = supplied.replace(/^(?:Bearer|Basic|Token|ApiKey) /i, '');
-    if (
-      !value ||
-      value.startsWith('{{') ||
-      value.startsWith('$') ||
-      (bare &&
-        (/^(?:bearer|basic|token|auth|authentication|authorization|x-[\w-]+|none|unknown|required|optional|missing|unset|invalid)$/i.test(
+    const raw = supplied.replace(/^(?:Bearer|Basic|Token|ApiKey) /i, '');
+    const value = raw.replace(/\\(["'\\])/g, '$1');
+    if (!value || headerVariable(value) || /^\$\{?[A-Z_][A-Z0-9_]*\}?$/.test(value)) {
+      return match;
+    }
+    if (bare) {
+      // Distinguish "the key is in the header" and variable names from literal assignments.
+      const rest = input.slice(offset + match.length);
+      if (
+        (/\bis\s+$/i.test(prefix) &&
+          !bare.endsWith('.') &&
+          /^\s+\w/.test(rest) &&
+          !/^\s+(?:and|then|in|with|please)\b/i.test(rest)) ||
+        /^(?:bearer|basic|token|auth|authentication|authorization|x-[\w-]+|none|unknown|required|optional|missing|unset|invalid|wrong)$/i.test(
           value,
         ) ||
-          /^[A-Z_][A-Z0-9_]*$/.test(value)))
-    ) {
-      return match;
+        /^[A-Z_][A-Z0-9_]*$/.test(value)
+      ) {
+        return match;
+      }
     }
     const name =
       Object.keys(keys).find((key) => keys[key] === value) ??
       localKeyPrefix + crypto.randomUUID().replace(/-/g, '').toUpperCase();
     keys[name] = value;
     const ref = '{{env.' + name + '}}';
-    const start = prefix.length + (bare ? 0 : 1) + supplied.length - value.length;
-    return match.slice(0, start) + ref + match.slice(start + value.length);
+    const start = prefix.length + (bare ? 0 : 1) + supplied.length - raw.length;
+    return match.slice(0, start) + ref + match.slice(start + raw.length);
   });
-  // A follow-up can refer to a previously supplied value without naming the header again.
-  const byValue = new Map(Object.entries(keys).map(([name, value]) => [value, name]));
-  content = content.replace(/[^\s"'\x60,;{}]+/g, (word) => {
-    const value = byValue.has(word) ? word : word.replace(/[.!?]+$/, '');
-    const name = byValue.get(value);
-    return name ? '{{env.' + name + '}}' + word.slice(value.length) : word;
-  });
-  return { content, keys };
+  // A follow-up can repeat a value without naming the header, including next to punctuation.
+  const names = new Map(Object.entries(keys).map(([name, value]) => [value, name]));
+  if (!names.size) {
+    return { content, keys };
+  }
+  const values = [...names.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  const known = new RegExp(
+    '\\{\\{env\\.PROMPTFOO_CHAT_KEY_[A-F0-9]{32}\\}\\}|(?<!\\w)(?:' + values + ')(?!\\w)',
+    'g',
+  );
+  return {
+    content: content.replace(known, (value) => {
+      const name = names.get(value);
+      return name ? '{{env.' + name + '}}' : value;
+    }),
+    keys,
+  };
 }
 
 export function displayKeys(value: string) {
   return value.replace(
-    /(?:\{\{\s*env\.)?PROMPTFOO_CHAT_KEY_[A-F0-9]{32}(?:\s*\}\})?/g,
+    /(?:\{\{\s*env(?:\.|\[['"]))?PROMPTFOO_CHAT_KEY_[A-F0-9]{32}(?:(?:['"]\])?\s*\}\})?/g,
     '[provided key]',
   );
 }
@@ -74,10 +94,8 @@ export function keysForTargets(targets: unknown[], keys: Keys = {}) {
 
 export function exportWithKeys(config: Record<string, unknown>, keys: Keys, approved: number[]) {
   const result = structuredClone(config);
-  const list = result.targets ?? result.providers;
-  if (!Array.isArray(list)) {
-    return result;
-  }
+  const entries = result.targets ?? result.providers;
+  const list = Array.isArray(entries) ? entries : [entries];
   for (const index of approved) {
     const headers = list[index]?.config?.headers;
     for (const [header, value] of Object.entries(headers ?? {})) {

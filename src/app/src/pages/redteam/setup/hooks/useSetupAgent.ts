@@ -7,21 +7,24 @@ import {
   localKeysSchema,
   RedteamSetupReplySchema,
 } from '@promptfoo/types/api/redteamSetup';
+import isEqual from 'fast-deep-equal';
 import { captureKeys, displayKeys } from '../utils/chatCredentials';
+import { probe, type TestChoice, testChoices, type Verification } from '../utils/connectionTest';
 
 const API_PATH = '/redteam/setup-plan';
 const UNAVAILABLE =
   'Could not reach the setup agent. Try sending a message again or set up manually.';
 export type NativeConfig = Record<string, unknown>;
-interface Verification {
-  success: boolean;
-  message: string;
-  paths?: string[];
-  targetIndex: number;
+interface TestContext {
+  remaining: number;
+  targetIndex?: number;
 }
+type Action = { answer: string } | { test: TestChoice } | { feedback: true };
 
 export interface SetupDraft {
   localKeys?: Record<string, string>;
+  // First ordinary chat message still eligible to authorize a new connection test.
+  consentSince?: number;
   messages: (
     | { role: 'user' | 'assistant'; content: string }
     | { role: 'test'; content: string; success: boolean; destination: string }
@@ -55,7 +58,7 @@ export function credentialHeaders(target: unknown): string[] {
 
 // Only the recent conversation goes to Cloud. Keep earlier user messages
 // locally so trimming history doesn't revoke an endpoint or credential grant.
-function history(draft: SetupDraft) {
+function history(draft: SetupDraft, context?: TestContext, consentSince = 0) {
   let remaining = 48000;
   const turns = draft.messages.filter((m) => m.role !== 'test');
   let start = turns.length;
@@ -67,7 +70,11 @@ function history(draft: SetupDraft) {
     .slice(0, start)
     .filter((m) => m.role === 'user')
     .map((m) => m.content);
-  return { messages: turns.slice(start), priorUserTurns: earlier.length ? earlier : undefined };
+  return {
+    messages: turns.slice(start),
+    priorUserTurns: earlier.length ? earlier : undefined,
+    testContext: context && { ...context, consentSince: Math.max(0, consentSince - start) },
+  };
 }
 
 export function userTurns(draft: SetupDraft) {
@@ -88,9 +95,11 @@ function verification(tested: Verification[] = []) {
   return { ...latest, message: latest.message.slice(0, 500 - status.length) + status };
 }
 
-function applyReply(state: SetupDraft, data: unknown): SetupDraft {
-  const { message, config, runnable, runIssue, testableTargets } =
-    RedteamSetupReplySchema.parse(data);
+function applyReply(
+  state: SetupDraft,
+  reply: ReturnType<typeof RedteamSetupReplySchema.parse>,
+): SetupDraft {
+  const { message, config, runnable, runIssue, testableTargets } = reply;
   const previous = targets(state.config);
   const next = targets(config ?? state.config);
   return {
@@ -102,15 +111,27 @@ function applyReply(state: SetupDraft, data: unknown): SetupDraft {
     runIssue,
     testableTargets,
     tested: state.tested?.filter(
-      ({ targetIndex: i }) =>
-        testableTargets.includes(i) && JSON.stringify(previous[i]) === JSON.stringify(next[i]),
+      ({ targetIndex: i }) => testableTargets.includes(i) && isEqual(previous[i], next[i]),
     ),
   };
 }
 
+// Keep retries on the original destination. Never resend an identical failed
+// proposal, even if the model cycled through a different proposal in between.
+function canTest(choice: TestChoice, attempted: TestChoice[]) {
+  return attempted.every(
+    (previous) =>
+      previous.index === choice.index &&
+      previous.url === choice.url &&
+      previous.method === choice.method &&
+      !isEqual(previous.target.config, choice.target.config),
+  );
+}
+
 export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) => void) {
   const [error, setError] = useState('');
-  const [pending, setPending] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [stopped, setStopped] = useState('');
   const [disabled, setDisabled] = useState(false);
   const request = useRef<AbortController | null>(null);
 
@@ -126,65 +147,133 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
     };
   }, []);
 
-  // A tool result is a new turn. The model may propose a fix, but the user
-  // always chooses whether to send another request to the target.
-  async function respond(state: SetupDraft, answer?: string) {
-    if (pending || request.current) {
+  async function respond(action: Action) {
+    if (request.current) {
       return;
     }
-    const captured = answer && captureKeys(answer, state.localKeys);
+    const captured = 'answer' in action && captureKeys(action.answer, draft.localKeys);
     if (captured && !localKeysSchema.safeParse(captured.keys).success) {
       setError('This value cannot be used in an HTTP header. Check it and try again.');
       return;
     }
     const controller = new AbortController();
+    const { signal } = controller;
     request.current = controller;
-    setPending(true);
     setError('');
-    const next: SetupDraft = captured
+    setStopped('');
+    let next: SetupDraft = captured
       ? {
-          ...state,
+          ...draft,
+          input: '',
           localKeys: captured.keys,
-          messages: [...state.messages, { role: 'user', content: captured.content }],
+          messages: [...draft.messages, { role: 'user', content: captured.content }],
         }
-      : state;
-    const payload = {
-      version: 3,
-      ...history(next),
-      config: state.config,
-      verification: verification(state.tested),
-    };
+      : draft;
+    // Only a fresh message opens a budget for agent-requested tests. Retrying a
+    // lost agent reply or clicking Test connection never grants another request.
+    let context: TestContext | undefined = captured ? { remaining: 3 } : undefined;
+    let choice = 'test' in action ? action.test : undefined;
+    const attempted: TestChoice[] = [];
     try {
-      const response = await callApi(API_PATH, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-      const result = await response.json();
-      if (controller.signal.aborted) {
-        return;
+      while (!signal.aborted) {
+        if (choice) {
+          const { index, url, method } = choice;
+          attempted.push(choice);
+          // Consume earlier consent before dispatch, even if the user stops or
+          // leaves chat before a response arrives. Clear any stale success too.
+          const others = next.tested?.filter((item) => item.targetIndex !== index) ?? [];
+          next = {
+            ...next,
+            tested: others,
+            consentSince: next.messages.filter((m) => m.role !== 'test').length,
+          };
+          setDraft(next);
+          setProgress(`Testing ${method} ${url}…`);
+          const result = await probe(choice, next.localKeys, signal);
+          if (signal.aborted) {
+            return;
+          }
+          next = {
+            ...next,
+            tested: [...others, result],
+            messages: [
+              ...next.messages,
+              {
+                role: 'test',
+                content: result.message,
+                success: result.success,
+                destination: `${method} ${url}`,
+              },
+            ],
+          };
+          setDraft(next);
+          context =
+            !result.success && result.retryable && context && context.remaining > 1
+              ? { remaining: context.remaining - 1, targetIndex: index }
+              : undefined;
+        }
+        setProgress(choice ? 'Reviewing the test result…' : 'Thinking…');
+        const response = await callApi(API_PATH, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            version: 3,
+            // Retests within this turn use its original consent boundary.
+            ...history(next, context, draft.consentSince),
+            config: next.config,
+            verification: verification(next.tested),
+          }),
+          signal,
+        });
+        const result = await response.json();
+        if (signal.aborted) {
+          return;
+        }
+        if (!response.ok) {
+          setError(result.error || UNAVAILABLE);
+          return;
+        }
+        const reply = RedteamSetupReplySchema.parse(result);
+        next = applyReply(next, reply);
+        if (reply.testTarget === undefined) {
+          setDraft(next);
+          return;
+        }
+        choice = testChoices(targets(next.config), next.testableTargets).find(
+          (item) => item.index === reply.testTarget,
+        );
+        if (!context || !choice || !canTest(choice, attempted)) {
+          setError('Stopped before sending an unexpected or repeated connection test.');
+          return;
+        }
       }
-      if (!response.ok) {
-        setError(result.error || UNAVAILABLE);
-        return;
-      }
-      setDraft(applyReply(next, result));
     } catch {
-      if (!controller.signal.aborted) {
+      if (!signal.aborted) {
         setError(UNAVAILABLE);
       }
     } finally {
-      request.current = null;
-      setPending(false);
+      if (request.current === controller) {
+        request.current = null;
+        setProgress('');
+      }
     }
   }
+  function stop() {
+    request.current?.abort();
+    request.current = null;
+    setDraft({ ...draft, consentSince: draft.messages.filter((m) => m.role !== 'test').length });
+    setStopped('Stopped. Requests already sent may still reach your app.');
+    setProgress('');
+  }
   return {
-    pending,
+    progress,
+    stopped,
+    stop,
     disabled,
     error,
-    send: (answer: string) => respond(draft, answer),
-    feedback: (state: SetupDraft) => respond(state),
+    send: (answer: string) => respond({ answer }),
+    test: (test: TestChoice) => respond({ test }),
+    feedback: () => respond({ feedback: true }),
     clearError: () => setError(''),
   };
 }

@@ -96,6 +96,243 @@ describe('agent-led red team setup', () => {
     });
   });
 
+  it('tests in chat, fixes the reply path on evidence, and retests without losing the rest of the config', async () => {
+    const { user } = setup();
+    const custom = {
+      ...draft,
+      evaluateOptions: { maxConcurrency: 2 },
+      redteam: { ...redteam, strategies: ['rot13'], language: 'French' },
+    };
+    reply({ message: 'Which header?', ...incomplete });
+    await send(user, localChat);
+    const suppliedKey = 'foobar';
+    const configWithKey = {
+      ...custom,
+      targets: [
+        {
+          ...target,
+          config: {
+            ...target.config,
+            headers: { 'X-Boner-42': '' },
+          },
+        },
+      ],
+    };
+    api.mockImplementationOnce(async (_url, options) => {
+      const { messages } = JSON.parse(String(options?.body));
+      const ref = messages[2].content.match(/\{\{env\.PROMPTFOO_CHAT_KEY_[A-F0-9]+\}\}/)[0];
+      configWithKey.targets[0].config.headers['X-Boner-42'] = ref;
+      return Response.json({ message: 'Ready for a check.', ...metadata, config: configWithKey });
+    });
+    await send(user, 'X-Boner-42. the key is "foobar"');
+    expect(postCalls()).toHaveLength(2);
+    const fixed = structuredClone(configWithKey);
+    fixed.targets[0].config.transformResponse = 'json.data.answer';
+    reply({ message: 'Trying your endpoint.', ...metadata, testTarget: 0 });
+    reply({
+      success: false,
+      retryable: true,
+      message: 'Reply field missing.',
+      paths: ['data.answer'],
+    });
+    reply({ message: 'Trying the corrected field.', ...metadata, config: fixed, testTarget: 0 });
+    reply({ success: true, message: 'Found data.answer.' });
+    reply({ message: 'Your endpoint answered.', ...metadata });
+    await send(user, 'Can you check the connection and fix whatever fails?');
+    expect(await screen.findByText('Your endpoint answered.')).toBeVisible();
+    expect(input()).toHaveFocus();
+    expect(screen.getByRole('log')).toHaveTextContent(/Reply field missing.*Found data.answer/s);
+    expect(document.body.textContent).not.toMatch(/foobar|PROMPTFOO_CHAT_KEY/);
+    const planner = payloads().filter((_, i) => postCalls()[i][0].endsWith('setup-plan'));
+    expect(JSON.stringify(planner)).not.toContain(suppliedKey);
+    expect(planner[2].testContext).toEqual({ remaining: 3, consentSince: 0 });
+    expect(planner[3].testContext).toEqual({ remaining: 2, targetIndex: 0, consentSince: 0 });
+    expect(planner[4].testContext).toBeUndefined();
+    expect(planner[4].config).toEqual(fixed);
+    const probes = payloads().filter((_, i) => postCalls()[i][0].endsWith('connection-test'));
+    expect(probes).toHaveLength(2);
+    expect(probes.map((p) => Object.values(p.localKeys))).toEqual([[suppliedKey], [suppliedKey]]);
+    expect(probes[1].config.transformResponse).toBe('json.data.answer');
+    await user.click(button('Review setup'));
+    expect(screen.getByText('Test passed')).toBeVisible();
+    expect(postCalls().some(([url]) => url.endsWith('/run'))).toBe(false);
+    await user.click(button('Run Now'));
+    expect(payloads().pop().config).toEqual(fixed);
+  });
+
+  it('limits pending consent to untested turns and carries the same boundary into repairs', async () => {
+    const { user } = setup();
+    reply({ message: 'Which endpoint?', ...incomplete });
+    await send(user, 'Check the connection once you have my endpoint.');
+    reply({ message: 'Checking now.', config: draft, ...metadata, testTarget: 0 });
+    reply({ success: false, message: 'Reply missing.', retryable: true });
+    reply({ message: 'What field contains the reply?', ...metadata });
+    await send(user, endpointMessage);
+    expect(payloads()[1].testContext.consentSince).toBe(0);
+    expect(payloads()[3].testContext.consentSince).toBe(0);
+    await send(user, 'The reply is under answer.');
+    const followup = payloads()[4];
+    expect(followup.messages.slice(followup.testContext.consentSince)).toEqual([
+      { role: 'assistant', content: 'What field contains the reply?' },
+      userMessage('The reply is under answer.'),
+    ]);
+  });
+
+  it('never probes a fourth time, even if asked to keep trying', async () => {
+    const { user } = setup();
+    for (const field of ['one', 'two', 'three', 'four']) {
+      reply({
+        message: 'Trying ' + field,
+        ...metadata,
+        testTarget: 0,
+        config: {
+          redteam,
+          targets: [
+            { ...target, config: { ...target.config, transformResponse: 'json.' + field } },
+          ],
+        },
+      });
+      if (field !== 'four') {
+        reply({ success: false, retryable: true, message: 'Missing ' + field });
+      }
+    }
+    await send(user, endpointMessage + ' Test and keep fixing it until it works.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Stopped before sending/);
+    expect(screen.getByRole('log')).toHaveTextContent('Missing three');
+    expect(screen.getByRole('log')).not.toHaveTextContent('Trying four');
+    expect(
+      payloads()
+        .filter((_, i) => postCalls()[i][0].endsWith('setup-plan'))
+        .map((p) => p.testContext?.remaining),
+    ).toEqual([3, 2, 1, undefined]);
+    expect(postCalls().filter(([url]) => url.endsWith('connection-test'))).toHaveLength(3);
+    expect(screen.getByText('Test failed')).toBeVisible();
+  });
+
+  it.each([
+    ['the identical request', target, 0],
+    ['another destination', second, 0],
+    ['a different target index', target, 1],
+    ['an unsupported target', { id: 'file://target.js' }, 0],
+  ])('refuses an automatic retry of %s', async (_reason, proposed, index) => {
+    const { user } = setup();
+    reply({ message: 'Testing.', ...metadata, config: draft, testTarget: 0 });
+    reply({ success: false, retryable: true, message: 'HTTP 422' });
+    reply({
+      message: 'Trying again.',
+      ...metadata,
+      config: { targets: [proposed, second], redteam },
+      testableTargets: [0, 1],
+      testTarget: index,
+    });
+    await send(user, endpointMessage + ' Test and fix it.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Stopped before sending/);
+    expect(postCalls().filter(([url]) => url.endsWith('connection-test'))).toHaveLength(1);
+    expect(screen.getByRole('log')).toHaveTextContent('HTTP 422');
+  });
+
+  it.each([403, 502, 'network'])(
+    'never replays a test after %s failure, including on Retry agent reply',
+    async (failure) => {
+      const { user } = setup();
+      reply({ message: 'Testing.', ...metadata, config: draft, testTarget: 0 });
+      if (failure === 'network') {
+        api.mockRejectedValueOnce(new Error('private error details'));
+      } else {
+        api.mockResolvedValueOnce(
+          Response.json({ error: 'private error details' }, { status: Number(failure) }),
+        );
+      }
+      api.mockRejectedValueOnce(new Error('Agent unavailable'));
+      await send(user, endpointMessage + ' Check my connection.');
+      expect(await screen.findByRole('alert')).toHaveTextContent(/Could not reach the setup agent/);
+      expect(screen.getByRole('log')).not.toHaveTextContent('private error details');
+      expect(payloads()[2].testContext).toBeUndefined();
+      reply({ message: 'Trying again.', ...metadata, testTarget: 0 });
+      await user.click(button('Retry agent reply'));
+      expect(payloads()[3].testContext).toBeUndefined();
+      expect(postCalls().filter(([url]) => url.endsWith('connection-test'))).toHaveLength(1);
+    },
+  );
+
+  it('stops an in-flight probe and ignores its late result', async () => {
+    const { user } = setup();
+    reply({ message: 'Testing.', ...metadata, config: draft, testTarget: 0 });
+    let finish!: (r: Response) => void;
+    api.mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await send(user, endpointMessage + ' Test my connection.');
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      /Testing POST http:\/\/localhost:3555/,
+    );
+    await user.click(button('Stop agent'));
+    expect(postCalls()[1][1]?.signal?.aborted).toBe(true);
+    expect(screen.getByRole('status')).toHaveTextContent('Stopped');
+    expect(input()).toHaveFocus();
+    await act(() => finish(Response.json({ success: true, message: 'Late result' })));
+    expect(screen.getByRole('log')).not.toHaveTextContent('Late result');
+    expect(screen.queryByText('Test passed')).toBeNull();
+    expect(postCalls()).toHaveLength(2);
+    await send(user, 'What happened?');
+    const followup = payloads()[2];
+    expect(followup.messages.slice(followup.testContext.consentSince)).toEqual([
+      userMessage('What happened?'),
+    ]);
+  });
+
+  it.each([
+    ['GET', { queryParams: { q: '{{prompt}}' } }],
+    ['POST', { multipart: { parts: [{ kind: 'field', name: 'question', value: '{{prompt}}' }] } }],
+  ])('discloses the effective %s method when omitted in native YAML', async (method, config) => {
+    const { user } = setup();
+    reply({
+      message: 'Ready to test.',
+      config: { targets: [{ id: second.id, config }], redteam },
+      ...metadata,
+    });
+    await send(user, 'Connect my API');
+    expect(button('Test connection')).toHaveAccessibleDescription(
+      new RegExp(method + ' to ' + second.id),
+    );
+  });
+
+  it('runs with the provided key when per-test variables require a full scan', async () => {
+    const { user } = setup();
+    api.mockImplementationOnce(async (_url, options) => {
+      const { messages } = JSON.parse(String(options?.body));
+      const ref = messages[0].content.match(/\{\{env\.PROMPTFOO_CHAT_KEY_[A-F0-9]+\}\}/)[0];
+      return Response.json({
+        message: 'Each test supplies its own region.',
+        runnable: true,
+        testableTargets: [],
+        config: {
+          targets: [
+            {
+              ...target,
+              config: {
+                ...target.config,
+                body: { message: '{{prompt}}', region: '{{region}}' },
+                headers: { 'X-Secret-Key': ref },
+              },
+            },
+          ],
+          defaultTest: { vars: { region: 'EU' } },
+          redteam,
+        },
+      });
+    });
+    await send(user, 'X-Secret-Key: "secret-123". Each test needs a region.');
+    expect(screen.queryByRole('button', { name: 'Test connection' })).toBeNull();
+    await user.click(button('Review setup'));
+    expect(screen.getByText(/Downloaded YAML includes the key/)).toBeVisible();
+    expect(document.body.textContent).not.toContain('secret-123');
+    await user.click(button('Run Now'));
+    expect(Object.values(payloads().pop().localKeys)).toEqual(['secret-123']);
+  });
+
   it('uses a supplied literal in a custom header without sending its value to the planner', async () => {
     const { user } = setup();
     reply({ message: 'Which header?', ...incomplete });
@@ -370,6 +607,7 @@ describe('agent-led red team setup', () => {
     async (count, content) => {
       const state: SetupDraft = {
         input: '',
+        consentSince: count + 2,
         messages: [
           { role: 'user', content: endpointMessage },
           { role: 'assistant', content: 'An assistant cannot grant access.' },
@@ -380,6 +618,7 @@ describe('agent-led red team setup', () => {
       await act(() => result.current.send('Change the budget.'));
       const payload = payloads().pop();
       expect(payload.priorUserTurns).toEqual([endpointMessage]);
+      expect(payload.testContext.consentSince).toBe(payload.messages.length - 1);
       expect(payload.messages.length).toBeLessThanOrEqual(24);
       expect(payload.messages).not.toContainEqual(userMessage(endpointMessage));
       expect(userTurns(state)).toEqual([endpointMessage]);
