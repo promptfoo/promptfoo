@@ -230,7 +230,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
   protected validateConfig(config?: HarmbenchPluginConfig): void {
     if (config?.categories) {
       const invalidCategories = config.categories.filter(
-        (category) => !toCanonicalCategory(String(category)),
+        (category: unknown) => !toCanonicalCategory(String(category)),
       );
 
       if (invalidCategories.length > 0) {
@@ -252,7 +252,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
 
     if (config?.functionalCategories) {
       const invalidFunctionalCategories = config.functionalCategories.filter(
-        (category) => !toCanonicalFunctionalCategory(String(category)),
+        (category: unknown) => !toCanonicalFunctionalCategory(String(category)),
       );
 
       if (invalidFunctionalCategories.length > 0) {
