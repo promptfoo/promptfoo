@@ -2439,12 +2439,25 @@ function hostTargetsFromUrl(value: string): string[] {
   }
 }
 
+// A scheme without a default port keeps every explicit port. URL also
+// validates and canonicalizes bracketed IPv6 addresses without DNS.
+function literalAuthority(value: string): URL | null {
+  const host = isIP(value) === 6 ? `[${value}]` : value;
+  return /^(?:[\w.-]+|\[[\da-f:.]+\])(?::\d+)?$/i.test(host)
+    ? URL.parse(`curl://${host.toLowerCase()}`)
+    : null;
+}
+
 function normalizeHostTarget(value: string): string {
   const trimmed = value.trim().toLowerCase().replace(/\/+$/, '');
   if (!trimmed) {
     return '';
   }
 
+  const authority = literalAuthority(trimmed);
+  if (authority) {
+    return authority.host;
+  }
   const parsedHosts = hostTargetsFromUrl(trimmed);
   if (parsedHosts.length) {
     return parsedHosts[0];
@@ -3544,12 +3557,19 @@ function updateCurlConnection(
     group.connections.push(value);
   } else if (option === '--resolve') {
     // One literal hostname, port and numeric address. Do not resolve names.
-    const match = /^\+?([\w.-]+:\d+):(.+)$/.exec(value);
+    const match = /^\+?((?:\[[^\]]+\]|[\w.-]+):\d+):(.+)$/.exec(value);
     if (match && isIP(match[2].replace(/^\[(.*)\]$/, '$1'))) {
-      group.resolves.set(match[1], match[2]);
+      const origin = literalAuthority(match[1]);
+      const address = literalAuthority(match[2]);
+      if (origin && address) {
+        group.resolves.set(origin.host, address.hostname);
+      }
     }
   } else if (option === '--noproxy') {
-    group.noProxy = value.split(',').map((entry) => entry.trim().replace(/^\./, ''));
+    group.noProxy = value.split(',').map((entry) => {
+      const name = entry.trim().replace(/^\./, '');
+      return literalAuthority(name)?.host ?? name;
+    });
   } else {
     group.proxy = value;
   }
@@ -3580,7 +3600,9 @@ function curlRequestGroups(args: string) {
       group.get = option === '--get';
     } else if (option === '--path-as-is' || option === '--no-path-as-is') {
       group.pathAsIs = option === '--path-as-is';
-    } else if (['--connect-to', '--resolve', '-x', '--proxy', '--noproxy'].includes(option)) {
+    } else if (
+      ['--connect-to', '--resolve', '-x', '--proxy', '--proxy1.0', '--noproxy'].includes(option)
+    ) {
       updateCurlConnection(group, option, literal);
     } else if (option === '--url-query') {
       group.query.push(word);
@@ -3630,9 +3652,9 @@ function curlTarget(word: CurlWord, pathAsIs: boolean, file?: string): NetworkTa
     }
     return { kind: 'url', value: url };
   }
-  const host = /^([\w.-]+(?::\d+)?)(?:[/?#]|$)/.exec(url)?.[1];
-  return host && hostTargetFromCommandToken(host)
-    ? { kind: 'host', value: host.toLowerCase() }
+  const host = literalAuthority(url.split(/[/?]/, 1)[0]);
+  return host && (host.hostname.startsWith('[') || hostTargetFromCommandToken(host.host))
+    ? { kind: 'host', value: host.host }
     : undefined;
 }
 
@@ -3725,18 +3747,26 @@ function curlConnectionHost(
     (name) => name === '*' || name === hostname || hostname.endsWith('.' + name),
   );
   if (group.proxy && !bypassProxy) {
-    const proxy = /^(?:https?:\/\/)?(?:[^\s/@]+@)?([\w.-]+)(?::(\d+))?\/?$/.exec(group.proxy);
-    return proxy ? `${proxy[1]}:${proxy[2] || '1080'}` : undefined;
+    const proxy = literalAuthority(
+      group.proxy.replace(/^(?:https?:\/\/)?(?:[^\s/@]+@)?/, '').replace(/\/$/, ''),
+    );
+    const defaultPort = group.proxy.startsWith('https://') ? '443' : '1080';
+    return proxy ? `${proxy.hostname}:${proxy.port || defaultPort}` : undefined;
   }
   for (const mapping of group.connections) {
-    const parts = /^([\w.-]*):(\d*):([\w.-]*):(\d*)$/.exec(mapping);
-    if (!parts || (parts[1] && parts[1] !== hostname) || (parts[2] && parts[2] !== port)) {
+    const parts = /^(\[[^\]]+\]|[\w.-]*):(\d*):(\[[^\]]+\]|[\w.-]*):(\d*)$/.exec(mapping);
+    if (
+      !parts ||
+      (parts[1] && literalAuthority(parts[1])?.hostname !== hostname) ||
+      (parts[2] && parts[2] !== port)
+    ) {
       continue;
     }
-    const host = parts[3] || hostname;
     const destinationPort = parts[4] || port;
-    if (host !== hostname || destinationPort !== port) {
-      return destinationPort ? `${host}:${destinationPort}` : host;
+    const host = parts[3] || hostname;
+    const destination = literalAuthority(destinationPort ? `${host}:${destinationPort}` : host);
+    if (destination && (destination.hostname !== hostname || destination.port !== port)) {
+      return destination.host;
     }
     break;
   }
@@ -3752,8 +3782,7 @@ function curlAuthority(target: NetworkTarget | undefined, word: CurlWord) {
     return { hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? '443' : '80') };
   }
   if (target) {
-    const [hostname, port = ''] = target.value.split(':');
-    return { hostname, port };
+    return literalAuthority(target.value);
   }
   const match =
     /^(?:dict|ftps?|gophers?|imaps?|ldaps?|mqtt|pop3s?|rtmps?|rtsp|scp|sftp|smbs?|smtps?|telnet|tftp|wss?):\/\/([^/?#]+)/i.exec(
