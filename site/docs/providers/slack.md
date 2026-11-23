@@ -515,6 +515,8 @@ async function findBotId() {
 
 ### Missing messages
 
+If Promptfoo reports that Slack may have posted your message, check the destination channel or DM before rerunning the eval. Slack returned HTTP 200, but Promptfoo could not read a valid acknowledgement.
+
 - Ensure bot has `channels:history` permission
 - Check if messages are in threads
 - Verify channel ID is correct
