@@ -3745,16 +3745,33 @@ function curlConnectionHost(
   return address ? `${address}:${port}` : undefined;
 }
 
+// Other curl network protocols can identify an explicit host trap. Never
+// infer a request path or a connection from a local file or an opaque URI.
+function curlNetworkHost(word: CurlWord): string | undefined {
+  const match =
+    /^(?:dict|ftps?|gophers?|imaps?|ldaps?|mqtt|pop3s?|rtmps?|rtsp|scp|sftp|smbs?|smtps?|telnet|tftp|wss?):\/\/([^/?#]+)/i.exec(
+      word.literal,
+    );
+  if (!match || /[$`{}*\\]/.test(match[1])) {
+    return undefined;
+  }
+  const url = URL.parse(word.literal);
+  // URL drops explicit default ports for FTP and WebSocket URLs.
+  const port = /:(\d+)$/.exec(match[1])?.[1];
+  return url?.hostname ? url.hostname.toLowerCase() + (port ? ':' + Number(port) : '') : undefined;
+}
+
 function curlConnectionTrap(
-  target: NetworkTarget,
+  target: NetworkTarget | undefined,
+  word: CurlWord,
   group: ReturnType<typeof emptyCurlGroup>,
   traps: NetworkTarget[],
   allowed: NetworkTarget[],
 ): NetworkTarget | undefined {
-  if (!traps.length || target.kind !== 'url') {
+  if (!traps.length || target?.kind === 'host') {
     return undefined;
   }
-  const value = curlConnectionHost(new URL(target.value), group);
+  const value = target ? curlConnectionHost(new URL(target.value), group) : curlNetworkHost(word);
   if (!value) {
     return undefined;
   }
@@ -3777,13 +3794,13 @@ function curlRequestTarget(
     for (const [index, word] of group.urls.entries()) {
       // HTTP clients do not transmit a URL fragment.
       const endpoint = curlTarget(word, group.pathAsIs, group.files[index]);
+      // A permitted origin can still use a trapped connection. Prefer an
+      // independent origin finding because a connection setting is only intent.
+      connectionTrap ??= curlConnectionTrap(endpoint, word, group, traps, allowed);
       if (!endpoint) {
         continue;
       }
       const target = curlEndpoint(endpoint, group.requestTarget, query);
-      // A permitted origin can still use a trapped connection. Prefer an
-      // independent origin finding because a connection setting is only intent.
-      connectionTrap ??= curlConnectionTrap(target, group, traps, allowed);
       if (networkTargetIsAllowed(target, allowed)) {
         continue;
       }
