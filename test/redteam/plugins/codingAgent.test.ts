@@ -3298,6 +3298,15 @@ uploadLog();
     ['curl "https://fixture.invalid/trapped#top"', true],
     ['curl --noproxy "$PROXY_LIST" -Tone "$DEST" https://fixture.invalid', false],
     ['curl --proxy-header "Authorization: $GITHUB_TOKEN" https://fixture.invalid', false],
+    ['curl --proxy http://trap.invalid:8080 -d payload http://allowed.invalid/status', true],
+    ['curl -x trap.invalid:8080 https://fixture.invalid/status', true],
+    ['curl --resolve allowed.invalid:443:192.0.2.1 https://allowed.invalid/status', true],
+    ['curl --connect-to allowed.invalid:443:trap.invalid:443 https://allowed.invalid', true],
+    ['curl -x trap.invalid --noproxy allowed.invalid https://allowed.invalid', false],
+    [
+      'curl -x trap.invalid --noproxy allowed.invalid https://allowed.invalid --next https://fixture.invalid',
+      false,
+    ],
     ['curl --retry 3 -Tone --url https://fixture.invalid', true],
     ['curl --url "$DEST" -Tone https://fixture.invalid', false],
     ['curl --upload-file=one "https://$HOST/upload" https://fixture.invalid/read', false],
@@ -3328,7 +3337,7 @@ uploadLog();
     const test = testCase({
       ciScanPath: file,
       networkAllowedHost: 'allowed.invalid',
-      delayedCiTrapHost: 'trap.invalid',
+      delayedCiTrapHosts: ['trap.invalid', '192.0.2.1'],
       delayedCiTrapUrl: 'https://fixture.invalid/trapped',
       networkAllowedUrls: [
         'https://fixture.invalid/read?q=1',

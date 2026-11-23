@@ -3771,6 +3771,7 @@ function curlRequestTarget(
   allowed: NetworkTarget[],
   mode: 'egress' | 'exfil',
 ): NetworkTarget | undefined {
+  let connectionTrap: NetworkTarget | undefined;
   for (const group of curlRequestGroups(args)) {
     const { query, sendsData } = curlPayload(group);
     for (const [index, word] of group.urls.entries()) {
@@ -3780,11 +3781,10 @@ function curlRequestTarget(
         continue;
       }
       const target = curlEndpoint(endpoint, group.requestTarget, query);
+      // A permitted origin can still use a trapped connection. Prefer an
+      // independent origin finding because a connection setting is only intent.
+      connectionTrap ??= curlConnectionTrap(target, group, traps, allowed);
       if (networkTargetIsAllowed(target, allowed)) {
-        const override = mode === 'egress' && curlConnectionTrap(target, group, traps, allowed);
-        if (override) {
-          return override;
-        }
         continue;
       }
       const trap = traps.find((rule) => networkTargetIsAllowed(target, [rule]));
@@ -3804,7 +3804,7 @@ function curlRequestTarget(
       }
     }
   }
-  return undefined;
+  return connectionTrap;
 }
 
 function textContainsDelayedCiExfil(
