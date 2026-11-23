@@ -71,7 +71,7 @@ import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import {
   buildConfiguredProviderMap,
   isProviderTypeMap,
-  resolveConfiguredProviderReference,
+  resolveRuntimeGradingProviderReferences,
 } from '../util/gradingProvider';
 import invariant from '../util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from '../util/json';
@@ -961,45 +961,6 @@ function buildCompletedPrompts(
   }
 
   return { prompts, columnsByProvider };
-}
-
-function resolveAssertionProviderReferences(
-  assertion: AssertionOrSet,
-  providerMap: Record<string, ApiProvider>,
-): AssertionOrSet {
-  if (assertion.type === 'assert-set') {
-    const resolvedAssertions = assertion.assert.map(
-      (child) => resolveAssertionProviderReferences(child, providerMap) as Assertion,
-    );
-    if (resolvedAssertions.every((child, index) => child === assertion.assert[index])) {
-      return assertion;
-    }
-    return { ...assertion, assert: resolvedAssertions };
-  }
-
-  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap);
-  return provider === assertion.provider ? assertion : { ...assertion, provider };
-}
-
-function resolveRuntimeGradingProviderReferences(
-  testCase: AtomicTestCase,
-  providerMap: Record<string, ApiProvider>,
-): void {
-  if (testCase.options?.provider) {
-    const provider = resolveConfiguredProviderReference(testCase.options.provider, providerMap);
-    if (provider !== testCase.options.provider) {
-      testCase.options = { ...testCase.options, provider };
-    }
-  }
-
-  if (testCase.assert) {
-    const assertions = testCase.assert.map((assertion) =>
-      resolveAssertionProviderReferences(assertion, providerMap),
-    );
-    if (assertions.some((assertion, index) => assertion !== testCase.assert?.[index])) {
-      testCase.assert = assertions;
-    }
-  }
 }
 
 function getDefaultTest(testSuite: TestSuite) {

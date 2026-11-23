@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../../src/cliState';
 import * as resultFormatter from '../../../../src/commands/mcp/lib/resultFormatter';
+import { registerRunEvaluationTool } from '../../../../src/commands/mcp/tools/runEvaluation';
 import { AnthropicMessagesProvider } from '../../../../src/providers/anthropic/messages';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -13,7 +14,8 @@ vi.mock('../../../../src/telemetry', () => ({
 }));
 
 // Mock dependencies before importing the module
-vi.mock('../../../../src/logger', () => ({
+vi.mock('../../../../src/logger', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/logger')>()),
   default: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -41,32 +43,6 @@ vi.mock('../../../../src/util/config/load', async (importOriginal) => ({
   }),
 }));
 
-vi.mock('../../../../src/node/doEval', () => ({
-  doEval: vi.fn().mockResolvedValue({
-    id: 'test-eval-123',
-    toEvaluateSummary: vi.fn().mockResolvedValue({
-      version: 3,
-      stats: { successes: 1, failures: 0, errors: 0 },
-      results: [
-        {
-          testCase: { description: 'test case 1', assert: [] },
-          vars: { input: 'test' },
-          prompt: { label: 'test-prompt', raw: 'What is 2+2?' },
-          provider: { id: 'test-provider', label: 'Test Provider' },
-          response: { output: 'The answer is 4' },
-          success: true,
-          score: 1,
-          namedScores: {},
-          tokenUsage: { total: 10 },
-          cost: 0.001,
-          latencyMs: 100,
-        },
-      ],
-      prompts: [{ label: 'test-prompt', provider: 'test-provider', metrics: {} }],
-    }),
-  }),
-}));
-
 const { formatEvaluationResults, formatPromptsSummary } = resultFormatter;
 
 describe('runEvaluation tool', () => {
@@ -76,6 +52,18 @@ describe('runEvaluation tool', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('rejects selectors that could silently run the whole suite', () => {
+    const { schema } = getRunEvaluationTool();
+    for (const field of [schema.providerFilter, schema.promptFilter]) {
+      for (const empty of ['', [], ['echo', '']]) {
+        expect(field.safeParse(empty).success).toBe(false);
+      }
+    }
+    for (const invalid of [[], -1, 0.5, [0.5], { start: 0.5, end: 1 }]) {
+      expect(schema.testCaseIndices.safeParse(invalid).success).toBe(false);
+    }
   });
 
   it.each([false, true])(
@@ -91,7 +79,7 @@ describe('runEvaluation tool', () => {
       const callApi = vi
         .spyOn(AnthropicMessagesProvider.prototype, 'callApi')
         .mockResolvedValue({ output: 'offline fixture' });
-      const { schema, handler } = await getRunEvaluationTool();
+      const { schema, handler } = getRunEvaluationTool();
       const advertisedMatch = schema.providerFilter.description.match(/"(anthropic:[^"]+)"/);
       expect(advertisedMatch).not.toBeNull();
       const advertisedFilter = advertisedMatch![1];
@@ -283,7 +271,7 @@ describe('runEvaluation tool', () => {
 
   describe('promptFilter validation', () => {
     it('should error on mixed numeric and non-numeric filters', async () => {
-      const { handler: toolHandler } = await getRunEvaluationTool();
+      const { handler: toolHandler } = getRunEvaluationTool();
 
       const result = await toolHandler({
         configPath: 'test.yaml',
@@ -306,7 +294,7 @@ describe('runEvaluation tool', () => {
         },
       } as any);
 
-      const { handler: toolHandler } = await getRunEvaluationTool();
+      const { handler: toolHandler } = getRunEvaluationTool();
 
       const result = await toolHandler({
         configPath: 'test.yaml',
@@ -331,7 +319,7 @@ describe('runEvaluation tool', () => {
         },
       } as any);
 
-      const { handler: toolHandler } = await getRunEvaluationTool();
+      const { handler: toolHandler } = getRunEvaluationTool();
 
       const result = await toolHandler({
         configPath: 'test.yaml',
@@ -351,7 +339,7 @@ describe('runEvaluation tool', () => {
         new ConfigResolutionError('You must provide at least 1 prompt'),
       );
 
-      const { handler: toolHandler } = await getRunEvaluationTool();
+      const { handler: toolHandler } = getRunEvaluationTool();
 
       const result = await toolHandler({
         configPath: 'test.yaml',
@@ -366,17 +354,12 @@ describe('runEvaluation tool', () => {
         error: 'You must provide at least 1 prompt',
       });
       const logger = (await import('../../../../src/logger')).default;
-      expect(logger.error).toHaveBeenCalledWith(
-        'Evaluation execution failed: You must provide at least 1 prompt',
-      );
+      expect(logger.error).toHaveBeenCalledWith('Evaluation execution failed');
     });
   });
 });
 
-async function getRunEvaluationTool() {
-  const { registerRunEvaluationTool } = await import(
-    '../../../../src/commands/mcp/tools/runEvaluation'
-  );
+function getRunEvaluationTool() {
   const tool = vi.fn();
   registerRunEvaluationTool({ tool } as unknown as McpServer);
   expect(tool).toHaveBeenCalledTimes(1);
