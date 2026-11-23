@@ -221,6 +221,13 @@ export class EvalQueries {
         linkedTargetId: sql<
           string | null
         >`json_extract(${evalResultsTable.provider}, '$.config.linkedTargetId')`,
+        // runEval records the column provider even if the test replaced or
+        // bypassed it. prompt.config contains the merged per-call options.
+        // Nested options.provider is only the grader and repeat is local.
+        overrides: sql<number>`json_extract(${evalResultsTable.testCase}, '$.provider') IS NOT NULL
+          OR json_extract(${evalResultsTable.testCase}, '$.providerOutput') IS NOT NULL
+          OR coalesce(json_remove(json_extract(${evalResultsTable.testCase}, '$.options'), '$.provider', '$.repeat'), '{}') != '{}'
+          OR coalesce(json_remove(json_extract(${evalResultsTable.prompt}, '$.config'), '$.provider', '$.repeat'), '{}') != '{}'`,
         scanner: sql<number>`json_type(${evalResultsTable.metadata}, '$.codexSecurity') IS 'object'
           OR json_type(${evalResultsTable.metadata}, '$.codexSecurityReplay') IS 'object'`,
       })

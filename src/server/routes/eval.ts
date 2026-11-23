@@ -972,6 +972,42 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
 
 type ReplaySelection = Awaited<ReturnType<typeof selectReplayProvider>>;
 
+// A prompt-only replay drops all call options. Those options can select an
+// endpoint or credentials, and test.provider can replace the target entirely.
+// Check the entire selected column: the UI row index may refer to filtered data.
+function hasReplayOverrides(eval_: Eval, saved: ReplaySelection['saved'], promptIndex?: number) {
+  const hasOptions = (options: unknown) =>
+    Object.keys(options ?? {}).some((key) => key !== 'provider' && key !== 'repeat');
+  const columns = eval_.getPrompts();
+  const selected = promptIndex === undefined ? columns : [columns[promptIndex]];
+  if (selected.some(({ config }) => hasOptions(config))) {
+    return true;
+  }
+  if (saved) {
+    return Boolean(saved.overrides);
+  }
+  // Older snapshots can lack result rows. Never open external test sources
+  // or run generators to recover settings from them during replay.
+  const { prompts, tests, scenarios, defaultTest } = eval_.config;
+  if (scenarios?.length || (tests && !Array.isArray(tests))) {
+    return true;
+  }
+  if (
+    Array.isArray(prompts) &&
+    prompts.some((p) => typeof p !== 'string' && 'config' in p && hasOptions(p.config))
+  ) {
+    return true;
+  }
+  const overridden = (test: unknown) =>
+    test != null &&
+    (typeof test !== 'object' ||
+      'path' in test ||
+      'provider' in test ||
+      'providerOutput' in test ||
+      ('options' in test && hasOptions(test.options)));
+  return overridden(defaultTest) || Boolean(Array.isArray(tests) && tests.some(overridden));
+}
+
 function verifySavedReplayTarget(selection: ReplaySelection) {
   const { saved } = selection;
   // Cloud and file definitions can keep their labels after changing providers.
@@ -1088,6 +1124,51 @@ const REPLAY_REQUEST_SETTINGS = new Set([
   'stream',
 ]);
 
+// Outside the request body, an explicit setting can change the destination
+// (including an auxiliary session or token URL). Inspect only literal saved
+// environment bindings. Never run templates or read ambient values here.
+function verifyReplayBindings(value: unknown, env: ProviderOptions['env']) {
+  if (typeof value === 'string' && TEMPLATE_MARKER.test(value)) {
+    const literal = value.replace(/\{\{[^{}]*\}\}/g, (expr) => replayEnvValue(expr, env));
+    if (TEMPLATE_MARKER.test(literal)) {
+      throw new Error('Cannot verify provider template');
+    }
+  } else if (value && typeof value === 'object') {
+    for (const child of Object.values(value)) {
+      verifyReplayBindings(child, env);
+    }
+  }
+}
+
+function verifyReplayDestination(target: ProviderRefDescriptor, suiteEnv: ProviderOptions['env']) {
+  if (!('loadOptions' in target) || target.loadProviderPath === 'echo') {
+    return;
+  }
+  const settings = { ...target.loadOptions.config };
+  const transport = replayUrlTransport(target.loadProviderPath);
+  if (transport) {
+    delete settings.body;
+    delete settings.messageTemplate;
+  }
+  if (transport === 'http' && settings.request != null) {
+    // Raw HTTP takes its destination from the request line and Host header,
+    // even when a URL is set. Reject request files and dynamic headers.
+    const head =
+      typeof settings.request === 'string' &&
+      settings.request.trimStart().split(/\r?\n\r?\n/, 1)[0];
+    if (
+      !head ||
+      !/^[a-z-]+[ \t]+(?:\/|https?:\/\/|\*)/i.test(head) ||
+      TEMPLATE_MARKER.test(head) ||
+      /__PF_VAR__|\[REDACTED\]|%5BREDACTED%5D/i.test(head)
+    ) {
+      throw new Error('Cannot verify raw HTTP destination');
+    }
+    delete settings.request;
+  }
+  verifyReplayBindings(settings, { ...suiteEnv, ...target.loadOptions.env });
+}
+
 function hasStaticReplayRoute(path: string, config: Record<string, unknown>) {
   if (path === 'echo') {
     return true;
@@ -1100,8 +1181,7 @@ function hasStaticReplayRoute(path: string, config: Record<string, unknown>) {
   if (getNamedOpenAiTextId(path)) {
     destination = config.apiHost || config.apiBaseUrl;
   } else if (transport === 'http' && typeof config.request === 'string') {
-    // A raw request overrides even an explicit URL. The body can still use {{prompt}}.
-    destination = config.request.split(/\r?\n\r?\n/, 1)[0];
+    return true; // The raw request head was verified for all HTTP providers.
   } else if (transport) {
     // A WebSocket ID can redact part of the URL. Without a recorded URL
     // setting, such an ID cannot attest to the original destination.
@@ -1124,19 +1204,13 @@ function hasStaticReplayRoute(path: string, config: Record<string, unknown>) {
   );
 }
 
-function prepareReplaySettings(selection: ReplaySelection, basePath?: string) {
+function prepareReplaySettings(
+  selection: ReplaySelection,
+  basePath?: string,
+  suiteEnv?: ProviderOptions['env'],
+) {
   const { fromFile, cloud, target, saved } = selection;
-  // Even an inline HTTP entry can reload a changed Host from a request file.
-  // Require a literal request-line prefix so a template cannot construct a file reference.
-  if ('loadOptions' in target && replayUrlTransport(target.loadProviderPath) === 'http') {
-    const request = target.loadOptions.config?.request;
-    if (
-      request != null &&
-      (typeof request !== 'string' || !/^\s*[a-z-]+[ \t]+(?:\/|https?:\/\/|\*)/i.test(request))
-    ) {
-      throw new Error('Cannot verify external HTTP request');
-    }
-  }
+  verifyReplayDestination(target, suiteEnv);
   if (!fromFile && !cloud) {
     return selection.candidate;
   }
@@ -1203,6 +1277,9 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
         return;
       }
       verifySavedReplayTarget(selected);
+      if (hasReplayOverrides(eval_, selected.saved, promptIndex)) {
+        throw new Error('Prompt-only replay cannot preserve saved provider overrides');
+      }
     } catch (error) {
       sendError(
         res,
@@ -1216,7 +1293,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     const { cloud } = selected;
     let candidate;
     try {
-      candidate = prepareReplaySettings(selected, eval_.config.basePath);
+      candidate = prepareReplaySettings(selected, eval_.config.basePath, eval_.config.env);
     } catch {
       res
         .status(400)

@@ -59,6 +59,7 @@ describe('POST /api/eval/replay provider boundary', () => {
     vi.mocked(EvalQueries.getReplayTarget).mockResolvedValue({
       id,
       scanner,
+      overrides: 0,
       linkedTargetId,
       config: config ? JSON.stringify(config) : null,
     });
@@ -85,8 +86,8 @@ describe('POST /api/eval/replay provider boundary', () => {
         basePath,
         env,
         providers,
-        prompts: [{ raw: 'original', config: { report_file: '/original/report.json' } }],
-        tests: [{ options: { report_file: '/original/report.json' } }],
+        prompts: ['original'],
+        tests: [{}],
       },
     } as unknown as Eval);
   }
@@ -141,6 +142,41 @@ describe('POST /api/eval/replay provider boundary', () => {
       );
     },
   );
+
+  it('rejects dropped prompt overrides without disabling an unaffected column', async () => {
+    const id = 'openai:agents-api';
+    const first = {
+      provider: id,
+      raw: 'override',
+      label: 'override',
+      config: { apiBaseUrl: 'https://original.invalid' },
+    };
+    const second = { provider: id, raw: 'plain', label: 'plain' };
+    recordedTarget(id);
+    vi.mocked(Eval.findById).mockResolvedValue({
+      getPrompts: () => [first, second],
+      config: { providers: [{ id }], prompts: [first, second] },
+    } as unknown as Eval);
+    expect((await replay(0, 0)).status).toBe(400);
+    expect((await replay()).status).toBe(400);
+    expect((await replay(0, 1)).status).toBe(200);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { tests: [{ provider: 'echo' }] },
+    { defaultTest: { options: { apiBaseUrl: 'https://fixture.invalid' } } },
+    { tests: [{ providerOutput: 'recorded' }] },
+    { prompts: [{ raw: 'original', config: { headers: { tenant: 'fixture' } } }] },
+  ])('refuses an overridden suite without saved results: %j', async (config) => {
+    const id = 'openai:agents-api';
+    vi.mocked(Eval.findById).mockResolvedValue({
+      getPrompts: () => [{ provider: id, label: 'original' }],
+      config: { providers: [{ id }], ...config },
+    } as unknown as Eval);
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+  });
 
   it.each(['openai:chat:gpt-4.1', 'openai:responses:gpt-4.1', 'openai:chat', 'openai:responses'])(
     'preserves the native column ID and endpoint for %s',
@@ -834,6 +870,20 @@ describe('POST /api/eval/replay provider boundary', () => {
     });
     expect((await replay(0, 0)).status).toBe(200);
     expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { request: 'POST /{{address}} HTTP/1.1\nHost: fixture.invalid\n\n{{prompt}}' },
+    { request: '\n\nPOST / HTTP/1.1\nHost: {{host}}\n\n{{prompt}}' },
+    { request: 'POST / HTTP/1.1\nHost: __PF_VAR__0__\n\n{{host}}' },
+    { headers: { Host: '{{host}}' } },
+    { session: { url: 'https://{{host}}' } },
+    { auth: { type: 'oauth', tokenUrl: '{{env.UNSAVED}}' } },
+  ])('rejects dynamic inline HTTP routing before loading the target: %j', async (config) => {
+    storedConfig([{ id: 'https', config }]);
+    recordedTarget('https');
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
   });
 
   it.each([

@@ -248,27 +248,32 @@ describe('eval routes', () => {
     expect(requests).toEqual(['/saved']);
   });
 
+  async function replayTargets() {
+    const calls: Array<{ host?: string; authorization?: string }> = [];
+    const listen = async () => {
+      const server = createServer((req, res) => {
+        calls.push({ host: req.headers.host, authorization: req.headers.authorization });
+        req.resume();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ choices: [{ message: { content: 'fixture' } }] }));
+      }).listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      onTestFinished(() => new Promise<void>((resolve) => server.close(() => resolve())));
+      const address = server.address();
+      invariant(address && typeof address !== 'string', 'Expected a loopback listener');
+      return `127.0.0.1:${address.port}`;
+    };
+    const first = await listen();
+    const other = await listen();
+    return { calls, first, other };
+  }
+
   it.each(['openai', 'raw HTTP', 'inline HTTP request file'])(
     'binds a mutable %s endpoint even when both the stored ID and label stay unchanged',
     async (transport) => {
       const directory = await mkdtemp(join(tmpdir(), 'promptfoo-replay-'));
       onTestFinished(() => rm(directory, { force: true, recursive: true }));
-      const calls: Array<{ host?: string; authorization?: string }> = [];
-      const listen = async () => {
-        const server = createServer((req, res) => {
-          calls.push({ host: req.headers.host, authorization: req.headers.authorization });
-          req.resume();
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ choices: [{ message: { content: 'fixture' } }] }));
-        }).listen(0, '127.0.0.1');
-        await once(server, 'listening');
-        onTestFinished(() => new Promise<void>((resolve) => server.close(() => resolve())));
-        const address = server.address();
-        invariant(address && typeof address !== 'string', 'Expected a loopback listener');
-        return `127.0.0.1:${address.port}`;
-      };
-      const first = await listen();
-      const other = await listen();
+      const { calls, first, other } = await replayTargets();
       const inline = transport === 'inline HTTP request file';
       const file = join(directory, inline ? 'request.txt' : 'provider.json');
       const model = transport === 'openai';
@@ -307,6 +312,96 @@ describe('eval routes', () => {
       expect(calls).toEqual(inline ? [expected] : [expected, expected]);
     },
   );
+
+  it.each(['raw Host', 'ambient endpoint', 'saved endpoint', 'test provider', 'provider output'])(
+    'only sends a replay to the original inline target with %s',
+    async (source) => {
+      const { calls, first, other } = await replayTargets();
+      const model = source.endsWith('endpoint');
+      const raw = source === 'raw Host';
+      const endpoint = `http://${first}/v1`;
+      vi.stubEnv('REPLAY_ENDPOINT', endpoint);
+      onTestFinished(() => {
+        vi.unstubAllEnvs();
+      });
+      const config = model
+        ? { apiBaseUrl: '{{ env.REPLAY_ENDPOINT }}' }
+        : raw
+          ? {
+              request:
+                'POST /ask HTTP/1.1\r\nHost: {{host}}\r\nAuthorization: Bearer {{env.OPENAI_API_KEY}}\r\n\r\n{{prompt}}',
+            }
+          : { url: `http://${other}`, method: 'POST', body: '{{prompt}}' };
+      const savedEndpoint = source === 'saved endpoint';
+      const saved = await evaluateWithSource(
+        {
+          providers: [{ id: model ? 'openai:chat:gpt-4o' : 'http', config }],
+          env: {
+            OPENAI_API_KEY: 'suite-fixture',
+            OPENAI_BASE_URL: endpoint,
+            ...(savedEndpoint && { REPLAY_ENDPOINT: endpoint }),
+          },
+          prompts: ['original'],
+          tests: [
+            {
+              vars: { host: first },
+              ...(source === 'test provider' && {
+                provider: { id: () => 'echo', callApi: async () => ({ output: 'local' }) },
+              }),
+              ...(source === 'provider output' && { providerOutput: 'recorded' }),
+            },
+          ],
+          writeLatestResults: true,
+          sharing: false,
+        },
+        { cache: false, showProgressBar: false, eventSource: 'library' },
+      );
+      testEvalIds.add(saved.id);
+      expect((await saved.toEvaluateSummary()).results[0].success).toBe(true);
+      const expected = { host: first, authorization: 'Bearer suite-fixture' };
+      expect(calls.splice(0)).toEqual(raw || model ? [expected] : []);
+      vi.stubEnv('REPLAY_ENDPOINT', `http://${other}/v1`);
+      const replay = await api.post('/api/eval/replay').send({
+        evaluationId: saved.id,
+        testIndex: 0,
+        promptIndex: 0,
+        prompt: 'edited',
+        variables: { host: other },
+      });
+      expect(replay.status).toBe(savedEndpoint ? 200 : 400);
+      expect(calls).toEqual(savedEndpoint ? [expected] : []);
+      expect(JSON.stringify(replay.body)).not.toContain('suite-fixture');
+    },
+  );
+
+  it('distinguishes graders from per-call options anywhere in the selected column', async () => {
+    const saved = await evaluateWithSource(
+      {
+        providers: ['echo'],
+        prompts: ['original'],
+        tests: [{ options: { provider: 'echo', repeat: 1 } }],
+        writeLatestResults: true,
+        sharing: false,
+      },
+      { cache: false, showProgressBar: false, eventSource: 'library' },
+    );
+    testEvalIds.add(saved.id);
+    const replay = () =>
+      api.post('/api/eval/replay').send({
+        evaluationId: saved.id,
+        testIndex: 0,
+        promptIndex: 0,
+        prompt: 'edited',
+      });
+    expect((await replay()).body.output).toBe('edited');
+    const [original] = (await saved.toEvaluateSummary()).results;
+    await saved.addResult({
+      ...original,
+      testIdx: 1,
+      testCase: { options: { apiBaseUrl: 'https://original.invalid' } },
+    });
+    expect((await replay()).status).toBe(400);
+  });
 
   function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
     const originalStringify = JSON.stringify;

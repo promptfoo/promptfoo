@@ -331,6 +331,7 @@ describe('Eval Routes - Zod Validation', () => {
           config: null,
           linkedTargetId: null,
           scanner: 0,
+          overrides: 0,
         });
         mockFindById.mockResolvedValue({
           getPrompts: () => [{ label: 'first', provider: 'echo' }],
@@ -376,6 +377,7 @@ describe('Eval Routes - Zod Validation', () => {
           config: JSON.stringify({ settings: { greeting: 'Hello' } }),
           linkedTargetId: null,
           scanner: 0,
+          overrides: 0,
         });
         mockFindById.mockResolvedValue({
           getPrompts: () => providers.map(({ label }) => ({ provider: label, label: 'first' })),
