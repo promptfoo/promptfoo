@@ -13,6 +13,7 @@ import { runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { geminiFormatAndSystemInstructions } from '../../src/providers/google/util';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import { callTargetProvider } from '../../src/redteam/providers/shared';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   type ApiProvider,
@@ -116,6 +117,68 @@ describe('runEval', () => {
       } finally {
         judge.mockRestore();
         fsSync.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each([
+    { verifier: true, cached: true },
+    { verifier: true, cached: false },
+    { verifier: false, cached: true },
+  ])(
+    'checks all strategy turns for freshness (verifier=$verifier, cached=$cached)',
+    async ({ verifier, cached }) => {
+      const directory = fsSync.mkdtempSync(path.join(os.tmpdir(), 'nested-ledger-'));
+      const connectorSinkLedgerPath = path.join(directory, 'ledger');
+      const judge = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'No finding' },
+        rubric: 'Fixture',
+      });
+      try {
+        fsSync.writeFileSync(connectorSinkLedgerPath, '');
+        const target: ApiProvider = {
+          id: () => 'target',
+          callApi: vi
+            .fn()
+            .mockResolvedValueOnce({ output: 'First', cached })
+            .mockResolvedValueOnce({ output: 'Last' }),
+        };
+        const strategy: ApiProvider = {
+          id: () => 'promptfoo:redteam:hydra',
+          callApi: async (prompt, context, options) => {
+            await callTargetProvider(target, prompt, context, options);
+            return callTargetProvider(target, prompt, context, options);
+          },
+        };
+        const [row] = await runEval({
+          ...defaultOptions,
+          provider: target,
+          prompt: { raw: 'Inspect local report', label: 'report' },
+          test: {
+            provider: strategy,
+            assert: verifier
+              ? [
+                  {
+                    type: 'promptfoo:redteam:coding-agent:connector-parameter-exfil',
+                    value: { connectorSinkLedgerPath },
+                  },
+                ]
+              : [{ type: 'equals', value: 'Last' }],
+          },
+        });
+        expect(target.callApi).toHaveBeenCalledTimes(2);
+        expect(row.success).toBe(!(verifier && cached));
+        if (verifier && cached) {
+          expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+          expect(row.error).toContain('requires a fresh target call');
+          expect(judge).not.toHaveBeenCalled();
+        } else {
+          expect(row.response?.output).toBe('Last');
+          expect(row.response?.cached).not.toBe(true);
+        }
+      } finally {
+        judge.mockRestore();
+        fsSync.rmSync(directory, { recursive: true, force: true });
       }
     },
   );

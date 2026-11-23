@@ -264,6 +264,7 @@ interface RenderedRunEvalPrompt {
 }
 
 interface ProviderCallResult {
+  hadCachedTarget: boolean;
   latencyMs: number;
   response: ProviderResponse;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
@@ -507,6 +508,7 @@ async function callProviderForRunEval({
 }): Promise<ProviderCallResult> {
   const startTime = performance.now();
   let response: ProviderResponse | undefined;
+  let hadCachedTarget = false;
   let providerInvoked = false;
   let providerFailed = false;
 
@@ -519,7 +521,7 @@ async function callProviderForRunEval({
         cached: false,
       };
     } else {
-      response = await callActiveProvider({
+      ({ response, hadCachedTarget } = await callActiveProvider({
         abortSignal,
         pauseSignal,
         evalId,
@@ -537,7 +539,7 @@ async function callProviderForRunEval({
         testSuite,
         traceContext,
         vars,
-      });
+      }));
     }
 
     // The private response stays local until grading. JSON would discard
@@ -547,6 +549,7 @@ async function callProviderForRunEval({
     }
 
     return {
+      hadCachedTarget,
       // Results store whole milliseconds. Shared results land in integer columns, and
       // servers reject fractional values.
       latencyMs: Math.round(performance.now() - startTime),
@@ -682,7 +685,7 @@ async function callActiveProvider({
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
-}): Promise<ProviderResponse> {
+}): Promise<Pick<ProviderCallResult, 'response' | 'hadCachedTarget'>> {
   const originalProvider = maybeWrapMcpProviderForRedteam(provider, test);
   const cleanupOwner = isApiProvider(test.provider) ? test.provider : provider;
   const activeProvider =
@@ -715,6 +718,7 @@ async function callActiveProvider({
       : getPrivateTargetContext(context)
     : context;
   let completedResponse: ProviderResponse | undefined;
+  let hadCachedTarget = false;
   const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
   const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
     // A previous response belongs only to backoff until the next attempt starts.
@@ -749,6 +753,9 @@ async function callActiveProvider({
         rateLimitRegistry,
         rateLimitProvider: activeProvider,
         onTargetResponse: (prompt, response) => {
+          // A strategy may discard a turn or aggregate fresh and cached turns.
+          // Keep evidence freshness separate from the final response's accounting.
+          hadCachedTarget ||= response.cached === true;
           completedTargets.push({ prompt, response });
         },
       },
@@ -813,7 +820,7 @@ async function callActiveProvider({
 
   logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
   logger.debug(`Provider response cached property explicitly: ${response.cached}`);
-  return response;
+  return { response, hadCachedTarget };
 }
 
 function buildCallApiContext({
@@ -1498,7 +1505,7 @@ async function runEvalForTest(
             vars: state.vars,
           });
           providerCallCompleted = true;
-          capture(providerCall.response.cached);
+          capture(providerCall.hadCachedTarget || providerCall.response.cached);
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
