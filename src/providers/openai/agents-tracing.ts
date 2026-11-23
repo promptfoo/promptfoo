@@ -1018,10 +1018,10 @@ function argumentRedactor(context?: AttributeContext, native = false) {
 }
 
 function hasCredentialNamedPayload(value: string): boolean {
-  // MIME continuations start with a space or tab. Never cross the empty
-  // line separating a part's headers from its body.
+  // Source excerpts can indent every line, including the blank separator.
+  // Only a non-blank indented line can continue a MIME header.
   for (const [header] of value.matchAll(
-    /^content-disposition:[^\r\n]*(?:\r?\n[ \t][^\r\n]*)*/gim,
+    /^[ \t]*content-disposition:[^\r\n]*(?:\r?\n[ \t]+[^ \t\r\n][^\r\n]*)*/gim,
   )) {
     const unfolded = header.replace(/\r?\n[ \t]+/g, ' ');
     // Consume complete parameters. A quoted filename can itself contain
@@ -1222,9 +1222,13 @@ function hasCredentialTable(value: string): boolean {
   // TOML literal strings and JavaScript disagree about escaped apostrophes.
   // Check both readings so neither can hide a neighboring property.
   return (
-    // Inside strings and Markdown fences, strip closing group and index
-    // delimiters so static names such as [('k')] still precede their colon.
-    hasPrivateJwk(literalKeySegment(value).replace(/[\\"'`)\]]/g, '')) ||
+    // Keep word boundaries around escaped whitespace and grouped literals
+    // in quoted source text and Markdown fences.
+    hasPrivateJwk(
+      literalKeySegment(value)
+        .replace(/\\[bfnrtv]|["'`)\]]/g, ' ')
+        .replace(/\\/g, ''),
+    ) ||
     hasCredentialPath(value) ||
     (value.includes("\\'") && hasCredentialPath(value.replace(/\\'/g, '_')))
   );

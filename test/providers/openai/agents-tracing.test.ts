@@ -1781,6 +1781,33 @@ describe('OTLPTracingExporter', () => {
     },
   );
 
+  it.each(formats)('checks indented multipart headers in %s', async (format) => {
+    const publicPart = '  Content-Disposition: form-data; name="note"\n  \n  name="password"';
+    const payload = await exportSpans(format, [
+      {
+        spanData: {
+          type: 'function',
+          name: 'read_file',
+          input: publicPart,
+          output:
+            '  ```http\n  Content-Disposition: form-data; name="password"\n\n  opaque/value\n  ```',
+        },
+        traceMetadata: {
+          folded: '\tContent-Disposition: form-data;\r\n\t name="api_key"\r\n\t\r\n\topaque/folded',
+          later:
+            publicPart +
+            '\n  --part\n  Content-Disposition: form-data; name="token"\n  \n  opaque/later',
+        },
+      },
+    ]);
+    expect(getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0])).toMatchObject({
+      'tool.arguments': publicPart,
+      'tool.output': '<redacted>',
+      'trace.metadata.folded': '<redacted>',
+      'trace.metadata.later': '<redacted>',
+    });
+  });
+
   it.each(formats)('withholds private JWK literals in tool source text in %s', async (format) => {
     const sensitive = [
       "export const jwk = { kty: 'oct', k: 'opaque/symmetric' };",
@@ -1794,6 +1821,7 @@ describe('OTLPTracingExporter', () => {
       "```js\nconst jwk = { kty: 'oct', [('k')]: 'opaque/index' };\n```",
       "```js\nconst jwk = { [(('kty'))]: 'RSA', [( /* field */ 'd' )]: 'opaque/group' };\n```",
       String.raw`const example = "const jwk = { \"kty\": \"oct\", \"k\": \"opaque/quoted\" }";`,
+      'const text = ' + JSON.stringify('{\n"kty": "oct",\n"k": "opaque/lines"\n}'),
     ];
     const publicText = [
       "export const jwk = { kty: 'RSA', n: 'shown', e: 'AQAB' };",
@@ -1801,6 +1829,7 @@ describe('OTLPTracingExporter', () => {
       "const point = { k: 'shown', d: 'day', p: 1, q: 2 };",
       "```js\nconst jwk = { kty: 'RSA', n: 'shown', e: 'AQAB' };\n```",
       "```js\nconst jwk = { [(('kty'))]: 'RSA', [('n')]: 'shown', e: 'AQAB' };\n```",
+      'const text = ' + JSON.stringify('{\n"kty": "RSA",\n"n": "shown",\n"e": "AQAB"\n}'),
     ];
     const payload = await exportSpans(
       format,
