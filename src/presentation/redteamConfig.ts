@@ -7,10 +7,15 @@ import {
   type Severity,
   SeveritySchema,
 } from '../redteam/constants';
-import { RedteamConfigSchema } from '../validators/redteam';
+import { RedteamConfigSchema, RedteamStrategySchema } from '../validators/redteam';
 
 import type { RedteamPluginObject, SavedRedteamConfig } from '../redteam/types';
 import type { UnifiedConfig, Vars } from '../types/index';
+
+/** Show the generation schema's first validation error for an individual strategy. */
+export function getRedteamStrategyError(strategy: unknown): string | undefined {
+  return RedteamStrategySchema.safeParse(strategy).error?.issues[0].message;
+}
 
 export function getRiskCategorySeverityMap(
   plugins?: RedteamPluginObject[],

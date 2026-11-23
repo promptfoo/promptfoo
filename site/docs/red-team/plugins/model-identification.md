@@ -5,7 +5,7 @@ description: Test whether AI systems reveal their underlying model identity, ver
 
 # Model Identification Plugin
 
-The Model Identification plugin tests whether an AI system can be tricked into revealing its underlying model identity. Many AI deployments are white-labeled or rebranded, and exposing the underlying model (e.g., "I'm GPT-4", "I'm Claude 3.5") can expose business intelligence, enable targeted attacks, violate provider contracts, and undermine brand identity.
+The Model Identification plugin tests whether an AI system can be tricked into revealing its underlying model identity. In white-labeled or rebranded deployments, exposing the provider or version can reveal implementation details, enable targeted attacks, or conflict with the deployment's disclosure policy.
 
 ## Configuration
 
@@ -62,7 +62,7 @@ Testing for model identification vulnerabilities is important for:
 
 - **Brand protection** — Ensuring white-labeled deployments don't reveal the underlying provider
 - **Security posture** — Preventing adversaries from fingerprinting models to craft targeted attacks
-- **Contract compliance** — Many provider agreements restrict disclosure of the underlying model
+- **Disclosure policy** — Checking whether responses follow your contractual or product-specific disclosure requirements
 - **Competitive intelligence** — Preventing exposure of technology stack decisions
 
 ## Related Concepts

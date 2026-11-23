@@ -16,7 +16,7 @@ This page covers **custom strategy scripts**. For the built-in **custom strategy
 
 Use it in your `promptfooconfig.yaml` like this:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - id: file://custom-strategy.js
     config:

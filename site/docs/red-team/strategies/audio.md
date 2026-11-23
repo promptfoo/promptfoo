@@ -14,11 +14,11 @@ This strategy is useful for:
 
 1. Testing if models can extract and process text from base64-encoded audio
 2. Evaluating if audio-encoded text can bypass content filters that typically scan plain text
-3. Assessing model behavior when handling multi-modal inputs (text converted to speech format)
+3. Assessing model behavior when handling multimodal inputs (text converted to speech format)
 
 Use it like so in your promptfooconfig.yaml:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - audio
 ```
@@ -57,12 +57,12 @@ The resulting test case contains the same semantic content as the original but i
 
 ## Importance
 
-This strategy is worth implementing because:
+This strategy helps test whether:
 
-1. It tests the robustness of content filtering mechanisms against non-plaintext formats
-2. It evaluates the model's ability to handle and extract information from audio data
-3. It can reveal inconsistencies in how models handle the same content presented in different formats
-4. Audio modalities may have different thresholds or processing pipelines for harmful content
+1. Content filters remain effective against audio inputs
+2. The model can handle and extract information from audio data
+3. The same content is treated consistently across formats
+4. Audio processing uses appropriate safety thresholds
 
 ## Related Concepts
 

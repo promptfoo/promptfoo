@@ -352,7 +352,7 @@ jobs:
         run: |
           npx promptfoo@latest redteam generate \
             --plugins harmful,pii,contracts \
-            --strategies jailbreak,jailbreak-templates
+            --strategies jailbreak:meta,jailbreak-templates
           npx promptfoo@latest redteam run
 ```
 

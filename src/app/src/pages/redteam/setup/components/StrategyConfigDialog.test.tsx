@@ -12,7 +12,7 @@ describe('StrategyConfigDialog', () => {
     vi.clearAllMocks();
   });
 
-  it('should correctly filter layerPlugins when using the stable empty array for selectedPlugins', async () => {
+  it('requires an explicit choice to target all plugins after selecting Specific plugins only', async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <StrategyConfigDialog
@@ -38,6 +38,8 @@ describe('StrategyConfigDialog', () => {
     await user.keyboard('{Enter}');
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
+    expect(saveButton).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'All plugins' }));
     await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
@@ -1062,6 +1064,59 @@ describe('StrategyConfigDialog', () => {
       });
     });
 
+    it.each([{ plugins: null }, { plugins: 'pii' }, { plugins: [' '] }])(
+      'does not silently widen malformed plugin targeting $plugins',
+      async ({ plugins }) => {
+        const user = userEvent.setup();
+        renderWithProviders(
+          <StrategyConfigDialog
+            open
+            strategy="layer"
+            config={{ steps: ['rot13'], plugins: plugins as unknown as string[] }}
+            selectedPlugins={['intent']}
+            onClose={mockOnClose}
+            onSave={mockOnSave}
+            strategyData={null}
+          />,
+        );
+        const save = screen.getByRole('button', { name: 'Save' });
+        expect(save).toBeDisabled();
+        await user.click(screen.getByRole('button', { name: 'Remove invalid plugin selector' }));
+        expect(save).toBeDisabled();
+        await user.click(screen.getByRole('button', { name: 'All plugins' }));
+        await user.click(save);
+        expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['rot13'] });
+      },
+    );
+
+    it('round-trips mixed plugin selectors and lets the user remove just one', async () => {
+      const user = userEvent.setup();
+      const plugins = ['intent', 'toxicity', 'hijacking'];
+      const props = {
+        strategy: 'layer',
+        config: { steps: ['rot13'], plugins },
+        selectedPlugins: ['intent', 'harmful:hate'],
+        onClose: mockOnClose,
+        onSave: mockOnSave,
+        strategyData: null,
+      };
+      const { rerender } = renderWithProviders(<StrategyConfigDialog {...props} open />);
+      for (const selector of plugins) {
+        expect(screen.getByText(selector)).toBeInTheDocument();
+      }
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(mockOnSave).toHaveBeenLastCalledWith('layer', props.config);
+
+      rerender(<StrategyConfigDialog {...props} open={false} />);
+      rerender(<StrategyConfigDialog {...props} config={mockOnSave.mock.lastCall?.[1]} open />);
+      await user.click(screen.getByRole('button', { name: 'Remove toxicity' }));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(mockOnSave).toHaveBeenLastCalledWith('layer', {
+        steps: ['rot13'],
+        plugins: ['intent', 'hijacking'],
+      });
+    });
+
     it('should disable save button when no steps are configured', () => {
       renderWithProviders(
         <StrategyConfigDialog
@@ -1301,6 +1356,139 @@ describe('StrategyConfigDialog', () => {
 
       // The autocomplete should show that multi-modal must be last
       expect(screen.getByText(/Multi-modal strategies must be the last step/)).toBeInTheDocument();
+    });
+
+    it('should allow indirect-web-pwn after an orchestrating attack strategy', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['jailbreak:hydra'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+
+      expect(screen.getByRole('option', { name: 'indirect-web-pwn' })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'mischievous-user' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'jailbreak' })).not.toBeInTheDocument();
+    });
+
+    function renderLayer(steps: unknown[], isStrategyDisabled?: (id: string) => boolean) {
+      renderWithProviders(
+        <StrategyConfigDialog
+          open
+          strategy="layer"
+          config={{ steps }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          isStrategyDisabled={isStrategyDisabled}
+        />,
+      );
+    }
+
+    it.each(['mischievous-user', 'authoritative-markup-injection'])(
+      'keeps %s last when adding or moving steps',
+      async (id) => {
+        renderLayer(['base64', id]);
+        expect(screen.getByRole('combobox')).toBeDisabled();
+        expect(screen.getByPlaceholderText('Or type file://path/to/custom.js')).toBeDisabled();
+        expect(screen.getAllByLabelText('move step up')[1]).toBeDisabled();
+        expect(screen.getAllByLabelText('move step down')[0]).toBeDisabled();
+        await userEvent.click(screen.getAllByLabelText('move step up')[1]);
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+        expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64', id] });
+      },
+    );
+
+    it.each(['best-of-n', 'custom', 'custom:example'])(
+      'excludes incompatible providers after %s',
+      async (id) => {
+        renderLayer(id === 'best-of-n' ? [id] : [{ id, config: { strategyText: 'Say hello' } }]);
+        expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+        await userEvent.click(screen.getByRole('combobox'));
+        expect(screen.queryByRole('option', { name: 'indirect-web-pwn' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('option', { name: 'jailbreak:hydra' })).not.toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'base64' })).toBeInTheDocument();
+      },
+    );
+
+    it.each(['custom', { id: 'custom:example', config: { strategyText: ' ' } }])(
+      'requires strategy text before saving imported step %j',
+      (step) => {
+        renderLayer([step]);
+        expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+        expect(screen.getByText(/strategyText/)).toBeInTheDocument();
+      },
+    );
+
+    it.each([
+      null,
+      { id: 'rot13', config: 'bad' },
+      { id: 'rot13', config: { plugins: 'pii' } },
+      { id: 'rot13', config: { plugins: ['intent', { id: 'pii' }] } },
+    ])('lets an imported malformed step %j be removed before saving', async (step) => {
+      renderLayer([step, 'base64']);
+      const save = screen.getByRole('button', { name: 'Save' });
+      expect(save).toBeDisabled();
+      expect(screen.getByText(/Invalid layer step 1/)).toBeInTheDocument();
+      await userEvent.click(screen.getAllByLabelText('delete step')[0]);
+      await userEvent.click(save);
+      expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
+    });
+
+    it('applies the parent strategy restrictions to layer choices and saved steps', async () => {
+      renderLayer(['best-of-n'], (id) => id === 'best-of-n' || id === 'audio');
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+      await userEvent.click(screen.getByRole('combobox'));
+      expect(screen.queryByRole('option', { name: 'audio' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'multilingual' })).not.toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'base64' })).toBeInTheDocument();
+    });
+
+    it('should not allow an orchestrating attack strategy after indirect-web-pwn', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['indirect-web-pwn'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          allStrategies={[{ id: 'jailbreak:hydra', config: { maxTurns: 5 } }]}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+
+      expect(screen.queryByRole('option', { name: 'jailbreak:hydra' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'mischievous-user' })).not.toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'base64' })).toBeInTheDocument();
+    });
+
+    it('should prevent reordering indirect-web-pwn before an orchestrating attack strategy', () => {
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['jailbreak:hydra', 'indirect-web-pwn'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      const moveDownButtons = screen.getAllByLabelText('move step down');
+      const moveUpButtons = screen.getAllByLabelText('move step up');
+
+      expect(moveDownButtons[0]).toBeDisabled();
+      expect(moveUpButtons[1]).toBeDisabled();
     });
   });
 });

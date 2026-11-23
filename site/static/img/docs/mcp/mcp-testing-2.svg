@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 300" role="img" aria-labelledby="title desc">
+  <title id="title">Testing tool poisoning across multiple MCP servers</title>
+  <desc id="desc">Promptfoo discovers tools, generates attacks, and sends them through an application or model connected to first-party and third-party MCP servers. Both tool-call paths are graded.</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#64748b"/></marker></defs>
+  <style>text{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#0f172a}.title{font-size:17px;font-weight:650}.sub{font-size:14px;fill:#475569}.box{fill:#fff;stroke:#94a3b8;stroke-width:1.5}.blue{fill:#eff6ff;stroke:#2563eb;stroke-width:1.5}.red{fill:#fff1f2;stroke:#e11d48;stroke-width:1.5}.line{fill:none;stroke:#64748b;stroke-width:1.5;marker-end:url(#arrow)}</style>
+  <rect width="1160" height="300" rx="16" fill="#f8fafc"/>
+  <text x="32" y="42" class="title">Multi-server tool-poisoning test</text>
+  <text x="32" y="66" class="sub">Exercise trusted and untrusted tool paths together to surface shadowing, hidden instructions, and data exfiltration.</text>
+  <circle cx="909" cy="42" r="6" fill="#2563eb"/><text x="922" y="47" class="sub">First-party</text><circle cx="1020" cy="42" r="6" fill="#e11d48"/><text x="1033" y="47" class="sub">Third-party</text>
+  <rect x="32" y="128" width="126" height="78" rx="10" class="box"/><text x="95" y="161" text-anchor="middle" class="title">Promptfoo</text><text x="95" y="184" text-anchor="middle" class="sub">Red team</text>
+  <path d="M158 167H190" class="line"/>
+  <rect x="192" y="128" width="138" height="78" rx="10" class="blue"/><text x="261" y="160" text-anchor="middle" class="title">Discover tools</text><text x="261" y="184" text-anchor="middle" class="sub">tools/list</text>
+  <path d="M330 167H362" class="line"/>
+  <rect x="364" y="128" width="146" height="78" rx="10" class="box"/><text x="437" y="160" text-anchor="middle" class="title">Build attacks</text><text x="437" y="184" text-anchor="middle" class="sub">Plugins + strategies</text>
+  <path d="M510 167H542" class="line"/>
+  <rect x="544" y="128" width="164" height="78" rx="10" class="box"/><text x="626" y="160" text-anchor="middle" class="title">Target client</text><text x="626" y="184" text-anchor="middle" class="sub">Application or model</text>
+  <path d="M708 167H736V112H774" class="line"/><path d="M708 167H736V232H774" class="line"/>
+  <rect x="776" y="74" width="170" height="78" rx="10" class="blue"/><text x="861" y="106" text-anchor="middle" class="title">MCP server</text><text x="861" y="130" text-anchor="middle" class="sub">tools/call</text>
+  <rect x="776" y="194" width="170" height="78" rx="10" class="red"/><text x="861" y="226" text-anchor="middle" class="title">MCP server</text><text x="861" y="250" text-anchor="middle" class="sub">tools/call</text>
+  <path d="M946 112H974V167H1008" class="line"/><path d="M946 232H974V167H1008" class="line"/>
+  <rect x="1010" y="128" width="118" height="78" rx="10" class="box"/><text x="1069" y="161" text-anchor="middle" class="title">Grade</text><text x="1069" y="184" text-anchor="middle" class="sub">Both paths</text>
+</svg>

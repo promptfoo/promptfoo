@@ -4,8 +4,3 @@ export interface StrategyCardData {
   name: string;
   description: string;
 }
-
-export interface ConfigDialogState {
-  isOpen: boolean;
-  selectedStrategy: string | null;
-}

@@ -30,8 +30,8 @@ vi.mock('@app/hooks/useApiHealth', () => ({
 }));
 vi.mock('@app/hooks/useTelemetry');
 vi.mock('@app/hooks/useToast');
-vi.mock('./StrategyConfigDialog', () => ({
-  default: () => <div data-testid="strategy-config-dialog">Strategy Config Dialog</div>,
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: () => ({ data: { isEnabled: false } }),
 }));
 
 const mockUpdateConfig = vi.fn();
@@ -163,6 +163,111 @@ describe('Strategies', () => {
       expect(metaAgentCard).toBeDisabled();
       expect(metaAgentCard).toHaveAttribute('aria-disabled', 'true');
     });
+  });
+
+  describe('Imported layers', () => {
+    it.each([
+      { steps: ['unknown-id'], remote: true, valid: false },
+      { steps: [{ id: 'base64', config: 'bad' }], remote: true, valid: false },
+      { steps: [{ id: 'base64', config: { plugins: 'pii' } }], remote: true, valid: false },
+      { steps: [{ id: 'base64', config: { plugins: ['pii'] } }], remote: true, valid: true },
+      { steps: ['authoritative-markup-injection', 'base64'], remote: true, valid: false },
+      { steps: ['custom'], remote: true, valid: false },
+      { steps: [{ id: 'custom:greeting' }], remote: true, valid: false },
+      { steps: ['best-of-n'], remote: false, valid: false },
+      { steps: ['best-of-n'], remote: true, valid: true },
+      { steps: ['base64', 'rot13'], remote: false, valid: true },
+    ])('checks $steps before Next with remote=$remote', ({ steps, remote, valid }) => {
+      vi.mocked(useRedTeamConfig, { partial: true, deep: true }).mockReturnValue({
+        config: { strategies: [{ id: 'layer', config: { steps } }], plugins: [], numTests: 5 },
+        updateConfig: mockUpdateConfig,
+      });
+      vi.mocked(useApiHealth, { partial: true }).mockReturnValue({
+        data: { status: remote ? 'connected' : 'disabled', message: '' },
+      });
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      const next = screen.getByRole('button', { name: 'Next' });
+      if (valid) {
+        expect(next).toBeEnabled();
+      } else {
+        expect(next).toBeDisabled();
+      }
+    });
+
+    it('repairs an invalid plugin selector without dropping a valid category', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useRedTeamConfig, { partial: true, deep: true }).mockReturnValue({
+        config: {
+          strategies: [
+            { id: 'layer', config: { plugins: ['pii', { id: 'intent' }], steps: ['rot13'] } },
+          ],
+          plugins: ['intent', 'pii:direct'],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+      expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+      await user.click(screen.getByText('Show Advanced Strategies'));
+      await user.click(screen.getByRole('button', { name: /Configure .*Layer/i }));
+      const save = screen.getByRole('button', { name: 'Save' });
+      expect(save).toBeDisabled();
+      await user.click(screen.getByRole('button', { name: 'Remove invalid plugin selector' }));
+      await user.click(save);
+      expect(mockUpdateConfig).toHaveBeenCalledWith('strategies', [
+        { id: 'layer', config: { plugins: ['pii'], steps: ['rot13'] } },
+      ]);
+    });
+
+    it.each([false, true])(
+      'repairs a category-filtered layer without changing other strategies (choose All plugins: %s)',
+      async (chooseAll) => {
+        const user = userEvent.setup();
+        const first = {
+          id: 'layer',
+          config: { label: 'A', plugins: ['intent'], steps: ['base64'] },
+        };
+        const second = {
+          id: 'layer',
+          config: { label: 'B', plugins: ['pii'], steps: ['best-of-n', 'rot13'] },
+        };
+        const retry = { id: 'retry', config: { numTests: 2 } };
+        vi.mocked(useRedTeamConfig, { partial: true, deep: true }).mockReturnValue({
+          config: {
+            strategies: [first, second, retry],
+            plugins: ['intent', 'pii:direct'],
+            numTests: 5,
+          },
+          updateConfig: mockUpdateConfig,
+        });
+        vi.mocked(useApiHealth, { partial: true }).mockReturnValue({
+          data: { status: 'disabled', message: '' },
+        });
+        renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+        expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+        await user.click(screen.getByText('Show Advanced Strategies'));
+        await user.click(screen.getByRole('button', { name: /Configure .*Layer/i }));
+        const save = screen.getByRole('button', { name: 'Save' });
+        expect(save).toBeDisabled();
+        expect(screen.getByText(/unavailable strategy "best-of-n"/)).toBeInTheDocument();
+        expect(screen.getByText('pii')).toBeInTheDocument();
+        await user.click(screen.getAllByLabelText('delete step')[0]);
+        if (chooseAll) {
+          await user.click(screen.getByRole('button', { name: 'All plugins' }));
+        }
+        await user.click(save);
+        expect(mockUpdateConfig).toHaveBeenCalledWith('strategies', [
+          first,
+          {
+            id: 'layer',
+            config: { label: 'B', steps: ['rot13'], ...(chooseAll ? {} : { plugins: ['pii'] }) },
+          },
+          retry,
+        ]);
+      },
+    );
   });
 
   describe('Telemetry', () => {
