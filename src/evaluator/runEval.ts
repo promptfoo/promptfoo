@@ -719,6 +719,11 @@ async function callActiveProvider({
     : context;
   let completedResponse: ProviderResponse | undefined;
   let hadCachedTarget = false;
+  // A wrapper may discard or combine turns. Keep evidence freshness separate
+  // from the aggregate response's request and token accounting.
+  const onTargetCacheStatus = (cached: boolean) => {
+    hadCachedTarget ||= cached;
+  };
   const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
   const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
     // A previous response belongs only to backoff until the next attempt starts.
@@ -752,10 +757,9 @@ async function callActiveProvider({
         abortSignal,
         rateLimitRegistry,
         rateLimitProvider: activeProvider,
+        onTargetCacheStatus,
         onTargetResponse: (prompt, response) => {
-          // A strategy may discard a turn or aggregate fresh and cached turns.
-          // Keep evidence freshness separate from the final response's accounting.
-          hadCachedTarget ||= response.cached === true;
+          onTargetCacheStatus(response.cached === true);
           completedTargets.push({ prompt, response });
         },
       },

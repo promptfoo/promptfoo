@@ -12,6 +12,9 @@ import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { geminiFormatAndSystemInstructions } from '../../src/providers/google/util';
+import { PromptfooSimulatedUserProvider } from '../../src/providers/promptfoo';
+import { SequenceProvider } from '../../src/providers/sequence';
+import { SimulatedUser } from '../../src/providers/simulatedUser';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { callTargetProvider } from '../../src/redteam/providers/shared';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
@@ -121,13 +124,15 @@ describe('runEval', () => {
     },
   );
 
-  it.each([
-    { verifier: true, cached: true },
-    { verifier: true, cached: false },
-    { verifier: false, cached: true },
-  ])(
-    'checks all strategy turns for freshness (verifier=$verifier, cached=$cached)',
-    async ({ verifier, cached }) => {
+  it.each(
+    (['adaptive', 'sequence', 'simulation'] as const).flatMap((kind) => [
+      { kind, verifier: true, cached: true },
+      { kind, verifier: true, cached: false },
+      { kind, verifier: false, cached: true },
+    ]),
+  )(
+    'checks all $kind target turns for freshness (verifier=$verifier, cached=$cached)',
+    async ({ kind, verifier, cached }) => {
       const directory = fsSync.mkdtempSync(path.join(os.tmpdir(), 'nested-ledger-'));
       const connectorSinkLedgerPath = path.join(directory, 'ledger');
       const judge = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
@@ -143,19 +148,37 @@ describe('runEval', () => {
             .mockResolvedValueOnce({ output: 'First', cached })
             .mockResolvedValueOnce({ output: 'Last' }),
         };
-        const strategy: ApiProvider = {
+        const adaptive: ApiProvider = {
           id: () => 'promptfoo:redteam:hydra',
           callApi: async (prompt, context, options) => {
             await callTargetProvider(target, prompt, context, options);
             return callTargetProvider(target, prompt, context, options);
           },
         };
+        // Cached simulated users must not invalidate fresh target evidence.
+        vi.spyOn(PromptfooSimulatedUserProvider.prototype, 'callApi').mockResolvedValue({
+          output: 'Next',
+          cached: true,
+        });
+        const providers = {
+          adaptive,
+          sequence: new SequenceProvider({ id: 'sequence', config: { inputs: ['First', 'Last'] } }),
+          simulation: new SimulatedUser({
+            id: 'promptfoo:simulated-user',
+            config: { maxTurns: 2 },
+          }),
+        };
+        const expected = {
+          adaptive: 'Last',
+          sequence: 'First\n---\nLast',
+          simulation: 'User: Next\n---\nAssistant: First\n---\nUser: Next\n---\nAssistant: Last',
+        }[kind];
         const [row] = await runEval({
           ...defaultOptions,
           provider: target,
           prompt: { raw: 'Inspect local report', label: 'report' },
           test: {
-            provider: strategy,
+            provider: providers[kind],
             assert: verifier
               ? [
                   {
@@ -163,7 +186,7 @@ describe('runEval', () => {
                     value: { connectorSinkLedgerPath },
                   },
                 ]
-              : [{ type: 'equals', value: 'Last' }],
+              : [{ type: 'equals', value: expected }],
           },
         });
         expect(target.callApi).toHaveBeenCalledTimes(2);
@@ -173,8 +196,13 @@ describe('runEval', () => {
           expect(row.error).toContain('requires a fresh target call');
           expect(judge).not.toHaveBeenCalled();
         } else {
-          expect(row.response?.output).toBe('Last');
+          expect(row.response?.output).toBe(expected);
           expect(row.response?.cached).not.toBe(true);
+          if (kind !== 'adaptive') {
+            const usage = row.response?.tokenUsage;
+            expect(usage?.numRequests).toBe(kind === 'simulation' ? 4 : 2);
+            expect((usage?.incurredTokenUsage ?? usage)?.numRequests).toBe(cached ? 1 : 2);
+          }
         }
       } finally {
         judge.mockRestore();

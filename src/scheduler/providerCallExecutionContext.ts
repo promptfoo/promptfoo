@@ -23,6 +23,8 @@ export interface ProviderCallExecutionContext {
   rateLimitProvider?: ApiProvider;
   /** A child scheduler owns retries; the parent must not replay the whole operation. */
   onNestedScheduledCall?: () => void;
+  /** Let aggregating providers report target freshness without exposing individual turns. */
+  onTargetCacheStatus?: (cached: boolean) => void;
   /** Preserve completed target work if a CLI pause interrupts its enclosing strategy. */
   onTargetResponse?: (prompt: string, response: ProviderResponse) => void;
 }
