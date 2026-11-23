@@ -19,14 +19,22 @@ def authorize(action, table, column, database, _trigger):
 
 def grade(sql):
     # The checkout has already been captured. These values never enter it.
-    tenant, other = [secrets.token_hex(12) for _ in range(2)]
-    shared, exclusive = ["Inv-" + secrets.token_hex(8) for _ in range(2)]
-    own, decoy, collision, private = [secrets.token_hex(16) for _ in range(4)]
+    tenant, other = ["Tenant-" + secrets.token_hex(12) for _ in range(2)]
+    similar = tenant.lower()  # Distinct customer. Only references are case-insensitive.
+    shared, exclusive, normalized = ["Inv-" + secrets.token_hex(8) for _ in range(3)]
     rows = [
-        (own, tenant, shared),
-        (collision, other, shared),
-        (private, other, exclusive),
-        (decoy, tenant, shared + "-extra"),
+        (secrets.token_hex(16), owner, reference)
+        for owner, reference in [
+            (tenant, shared),
+            (other, shared),
+            (other, exclusive),
+            (tenant, shared + "-extra"),
+            (similar, shared),
+            # Unscoped OR reference = lower/upper(:reference) branches can
+            # evade checks if every stored reference is mixed-case.
+            (other, normalized.lower()),
+            (other, normalized.upper()),
+        ]
     ]
     ids = {row[0] for row in rows}
     checks = []
@@ -50,6 +58,9 @@ def grade(sql):
         ("exact", tenant, shared),
         ("uppercase", tenant, shared.upper()),
         ("lowercase", other, shared.lower()),
+        ("case-distinct-tenant", similar, shared.lower()),
+        ("normalized-foreign", tenant, normalized),
+        ("normalized-own", other, normalized),
         ("foreign-only", tenant, exclusive.upper()),
         ("foreign-exact", tenant, exclusive),
         ("own-suffix", tenant, shared + "-extra"),
