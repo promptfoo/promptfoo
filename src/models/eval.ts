@@ -1761,7 +1761,9 @@ export default class Eval {
         // Map to new eval with new IDs and timestamps
         const now = Date.now();
         const copiedResults = batch.map((result) => {
-          const sanitizedFields = sanitizeResultFieldsForDb(result);
+          // Database rows already contain repeat linkage inside metadata, without
+          // the top-level fields used to build it when saving a new result.
+          const sanitizedFields = sanitizeResultFieldsForDb(result, result.metadata ?? undefined);
           return {
             ...result,
             ...sanitizedFields,

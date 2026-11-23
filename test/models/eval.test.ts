@@ -1132,9 +1132,11 @@ describe('evaluator', () => {
       });
     });
 
-    it('drops trace linkage from copied results without copied trace records', async () => {
+    it('retains repeat identities and drops trace linkage without copied trace records', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
       const sourceResult = createEvaluateResult({
+        repeatIndex: 0,
+        repeatGroupId: 'copied-group',
         traceId: 'copy-source-trace',
         evaluationId: eval_.id,
         metadata: {
@@ -1158,6 +1160,8 @@ describe('evaluator', () => {
       const [copiedResult] = await EvalResult.findManyByEvalId(copy.id);
 
       expect(copiedResult.toEvaluateResult()).toMatchObject({
+        repeatIndex: 0,
+        repeatGroupId: 'copied-group',
         metadata: {
           source: 'copy-path',
           __promptfoo: { retained: 'internal-metadata' },
