@@ -3200,7 +3200,8 @@ const CURL_OPTIONS_WITH_VALUE = new Set([
   '--trace',
   '--trace-ascii',
   '--netrc-file',
-  '--oauth2-bearer',
+  '--noproxy',
+  '--preproxy',
   '--proxy-header',
   '-U',
   '--proxy-user',
@@ -3256,8 +3257,10 @@ function* curlRequestArgs(args: string): Generator<[option: string, value: strin
     // Common switches with no operand can precede a short option.
     const option = word.replace(/^-[fsSkLiIv]+(?=[a-zA-Z])/, '-');
     const arg =
-      /^(-[dFTXH])(.+)?$/.exec(option) ??
-      /^(--(?:url|upload-file|request|header|data(?:-\w+)?|form))(?:=(.*))?$/.exec(option);
+      /^(-[dFTXHu])(.+)?$/.exec(option) ??
+      /^(--(?:url|upload-file|request|header|user|oauth2-bearer|data(?:-\w+)?|form))(?:=(.*))?$/.exec(
+        option,
+      );
     if (arg) {
       const value = arg[2] ?? words.next().value?.[0];
       if (value !== undefined) {
@@ -3274,7 +3277,15 @@ function* curlRequestArgs(args: string): Generator<[option: string, value: strin
 }
 
 function emptyCurlGroup() {
-  return { urls: [] as string[], fileCount: 0, writeMethod: false, sendsData: false };
+  return {
+    urls: [] as string[],
+    files: [] as string[],
+    writeMethod: false,
+    sendsData: false,
+    customAuthorization: false,
+    secretUser: false,
+    secretBearer: undefined as boolean | undefined,
+  };
 }
 
 // Each -T file pairs with one URL in order. Keep unknown destinations in
@@ -3291,9 +3302,14 @@ function* curlRequestGroups(args: string) {
     } else if (option === '-X' || option === '--request') {
       group.writeMethod = /^(?:POST|PUT|PATCH)$/i.test(literal);
     } else if (option === '-T' || option === '--upload-file') {
-      group.fileCount++;
+      group.files.push(literal);
     } else if (option === '-H' || option === '--header') {
+      group.customAuthorization ||= /^Authorization[:;]/i.test(literal);
       group.sendsData ||= isSecretHeader(literal, value.startsWith("'"));
+    } else if (option === '-u' || option === '--user') {
+      group.secretUser = hasSecretExpansion(literal, value.startsWith("'"));
+    } else if (option === '--oauth2-bearer') {
+      group.secretBearer = hasSecretExpansion(literal, value.startsWith("'"));
     } else {
       group.sendsData = true;
     }
@@ -3303,10 +3319,22 @@ function* curlRequestGroups(args: string) {
 
 // A bare hostname can identify an explicit host trap. Otherwise require a
 // literal HTTP(S) authority before attributing a request to a destination.
-function curlTarget(url: string, traps: NetworkTarget[]): NetworkTarget | undefined {
+function curlTarget(url: string, traps: NetworkTarget[], file?: string): NetworkTarget | undefined {
   if (/^https?:\/\//i.test(url)) {
-    const hostname = URL.parse(url)?.hostname;
-    return hostname && !/[$`{}]/.test(hostname) ? { kind: 'url', value: url } : undefined;
+    const parsed = URL.parse(url);
+    if (!parsed || /[$`{}]/.test(parsed.hostname)) {
+      return undefined;
+    }
+    // For a directory URL, curl appends the paired file's basename. Do
+    // not infer a filename from stdin, expansion or glob syntax.
+    if (file && file !== '-' && file !== '.' && parsed.pathname.endsWith('/')) {
+      const basename = path.win32.basename(file);
+      if (/^[\w. ~-]+$/.test(basename) && basename !== '.' && basename !== '..') {
+        parsed.pathname += encodeURIComponent(basename);
+        return { kind: 'url', value: parsed.href };
+      }
+    }
+    return { kind: 'url', value: url };
   }
   const host = /^([\w.-]+(?::\d+)?)(?:[/?#]|$)/.exec(url)?.[1];
   if (host && !host.startsWith('-')) {
@@ -3324,15 +3352,19 @@ function curlExfilTarget(
   allowed: NetworkTarget[],
 ): NetworkTarget | undefined {
   for (const group of curlRequestGroups(args)) {
+    // Repeated credentials replace earlier values. An explicit Authorization
+    // header takes precedence over curl's generated Basic or Bearer header.
+    const secretAuth = !group.customAuthorization && (group.secretBearer ?? group.secretUser);
     for (const [index, word] of group.urls.entries()) {
       const url = word.replace(/^(['"])(.*)\1$/, '$2');
-      const target = curlTarget(url, traps);
+      const target = curlTarget(url, traps, group.files[index]);
       if (!target || networkTargetIsAllowed(target, allowed)) {
         continue;
       }
       const singleQuoted = word.startsWith("'");
       if (
-        index < group.fileCount ||
+        index < group.files.length ||
+        secretAuth ||
         group.writeMethod ||
         group.sendsData ||
         networkTargetIsAllowed(target, traps) ||
