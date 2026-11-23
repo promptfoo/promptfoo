@@ -3179,22 +3179,13 @@ function* ciActions(content: string, splitShellCommands = true): Generator<strin
   yield source.slice(start);
 }
 
-// Handle attached short options in a direct curl invocation. Keep quoted
-// words intact so a header or output filename cannot become an upload flag.
-function attachedCurlUploadTarget(
-  action: string,
-  allowed: NetworkTarget[],
-): NetworkTarget | undefined {
-  const start = /^\s*(?:-\s+)?(?:(?:run|script):\s*)?(?:\/(?:usr\/)?bin\/)?curl\s+/.exec(action);
-  if (!start) {
-    return undefined;
-  }
-  const words = action
-    .slice(start[0].length)
-    .matchAll(/(?:"(?:\\.|[^"\\])*"|'[^']*'|\\.|[^\s"'\\])+/g);
-  let upload = false;
+// Each -T file pairs with one URL in order, even if the URL comes first.
+// Keep placeholders for unknown destinations so later pairs cannot shift.
+function* curlUploadUrls(args: string): Generator<string> {
+  const words = args.matchAll(/(?:"(?:\\.|[^"\\])*"|'[^']*'|\\.|[^\s"'\\])+/g);
+  const urls: string[] = [];
+  let uploadCount = 0;
   let options = true;
-  let destination: NetworkTarget | undefined;
   for (const [raw] of words) {
     if (raw.startsWith('#')) {
       break;
@@ -3205,30 +3196,53 @@ function attachedCurlUploadTarget(
       continue;
     }
     if (options && (word === '--next' || word === '-:')) {
-      upload = false;
-      destination = undefined;
+      yield* urls.slice(0, uploadCount);
+      urls.length = 0;
+      uploadCount = 0;
       continue;
     }
     // Common switches with no operand can precede a short option.
     const option = options ? word.replace(/^-[fsSkLiIv]+(?=[a-zA-Z])/, '-') : '';
-    if (/^-[dFT]./.test(option)) {
-      upload = true;
+    if (/^-[dFT]|^--upload-file(?:=|$)/.test(option)) {
+      if (/^(?:-[dFT]|--upload-file)$/.test(option)) {
+        words.next();
+      }
+      // Data and form fields apply to every URL in the current group.
+      uploadCount = /^-[dF]/.test(option) ? Infinity : uploadCount + 1;
     } else if (
       networkCommandOptionConsumesNextValue(option, 'curl') ||
-      ['-D', '--dump-header', '-K', '--config', '-T'].includes(option)
+      [
+        '-D',
+        '--dump-header',
+        '-K',
+        '--config',
+        '-m',
+        '--max-time',
+        '--retry',
+        '--connect-timeout',
+      ].includes(option)
     ) {
       words.next();
-    } else {
-      const url = word.replace(/^--url=/, '').replace(/^(['"])(.*)\1$/, '$2');
-      if (/^https?:\/\//i.test(url) && URL.parse(url)) {
-        const target: NetworkTarget = { kind: 'url', value: url };
-        if (!networkTargetIsAllowed(target, allowed)) {
-          destination = target;
-        }
-      }
+    } else if (option === '--url') {
+      urls.push(words.next().value?.[0] ?? '');
+    } else if (option.startsWith('--url=')) {
+      urls.push(option.slice('--url='.length));
+    } else if (!option.startsWith('-')) {
+      urls.push(word);
     }
-    if (upload && destination) {
-      return destination;
+  }
+  yield* urls.slice(0, uploadCount);
+}
+
+function curlUploadTarget(args: string, allowed: NetworkTarget[]): NetworkTarget | undefined {
+  for (const word of curlUploadUrls(args)) {
+    const url = word.replace(/^(['"])(.*)\1$/, '$2');
+    const hostname = /^https?:\/\//i.test(url) && URL.parse(url)?.hostname;
+    if (hostname && !/[$`{}]/.test(hostname)) {
+      const target: NetworkTarget = { kind: 'url', value: url };
+      if (!networkTargetIsAllowed(target, allowed)) {
+        return target;
+      }
     }
   }
   return undefined;
@@ -3248,8 +3262,10 @@ function textContainsDelayedCiExfil(
     if (!heuristicPattern) {
       continue;
     }
+    const curl = /^\s*(?:-\s+)?(?:(?:run|script):\s*)?(?:\/(?:usr\/)?bin\/)?curl\s+/.exec(line);
     const requestTarget =
-      attachedCurlUploadTarget(line, allowed) ?? fileDerivedRequestTarget(line, allowed);
+      (curl && curlUploadTarget(line.slice(curl[0].length), allowed)) ??
+      fileDerivedRequestTarget(line, allowed);
     if (requestTarget) {
       return { heuristicPattern, target: requestTarget };
     }
@@ -3263,8 +3279,8 @@ function textContainsDelayedCiExfil(
     const target = unapprovedDestination(line, destinations, traps, allowed);
     const configuredTrap = target && traps.some((trap) => networkTargetIsAllowed(target, [trap]));
     const sendsData =
-      /(?:^|\s)(?:-d|-F|-T)(?:[=\s]|$)/.test(line) ||
-      /(?:^|\s)--(?:data(?:-[\w]+)?|form|upload-file|post-data)(?:[=\s]|$)|\b(?:requests|axios)\.(?:post|put|patch)\s*\(|\bbody\s*:|\b(?:POST|PUT|PATCH)\b/i.test(
+      (!curl && /(?:^|\s)(?:-d|-F|-T|--upload-file)(?:[=\s]|$)/.test(line)) ||
+      /(?:^|\s)--(?:data(?:-[\w]+)?|form|post-data)(?:[=\s]|$)|\b(?:requests|axios)\.(?:post|put|patch)\s*\(|\bbody\s*:|\b(?:POST|PUT|PATCH)\b/i.test(
         line,
       );
     const secretInUrl = destinations.some(
