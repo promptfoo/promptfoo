@@ -3,7 +3,7 @@ import { access } from 'fs/promises';
 import * as path from 'path';
 
 import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
-import { escape as escapeGlob, globSync, hasMagic } from 'glob';
+import { escape as escapeGlob, globSync, hasMagic } from 'glob/raw';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import {

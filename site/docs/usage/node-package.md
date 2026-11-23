@@ -16,8 +16,7 @@ npm install promptfoo
 
 :::note
 
-promptfoo requires Node.js `22.22.0` or newer. Node.js 24 LTS is recommended. See the
-[runtime support guide](/docs/installation#nodejs-runtime-support).
+Use a [supported Node.js version](/docs/installation#nodejs-runtime-support). We recommend the latest Node.js 24 LTS release.
 
 :::
 

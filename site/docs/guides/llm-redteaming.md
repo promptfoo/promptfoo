@@ -54,7 +54,7 @@ You can also dig into specific red team failure cases:
 
 ## Prerequisites
 
-First, install [Node.js](https://nodejs.org/en/download/package-manager/) `>=22.22.0`.
+First, install a [supported Node.js version](/docs/installation#nodejs-runtime-support).
 
 Then create a new project for your red teaming needs:
 

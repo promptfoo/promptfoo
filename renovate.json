@@ -25,11 +25,11 @@
       "enabled": false
     },
     {
-      "description": "Preserve the intentionally unsupported Node 20.20.0 and minimum-supported Node 22.22.0 binaries used by CLI runtime-boundary smoke tests; update these pins only when the published runtime support contract changes.",
+      "description": "Keep CI runtime pins aligned with the unsupported Node 20 probe and the minimum versions supported by the packed CLI.",
       "matchManagers": ["github-actions"],
       "matchFileNames": [".github/workflows/main.yml"],
       "matchPackageNames": ["node", "actions/node-versions"],
-      "matchCurrentValue": "/^(20\\.20\\.0|22\\.22\\.0)$/",
+      "matchCurrentValue": "/^(20\\.20\\.0|22\\.22\\.2|24\\.15\\.0|26\\.0\\.0)$/",
       "enabled": false
     },
     {
@@ -254,15 +254,9 @@
       "groupName": "socket.io"
     },
     {
-      "description": "Keep jsdom in sync across all workspaces, and hold it below 30. jsdom 30 requires node ^22.22.2 || ^24.15.0 || >=26.0.0, but this package publishes engines.node >=22.22.0 and .npmrc sets engine-strict=true, so `npm ci` fails EBADENGINE on the Node 22.22.0 lanes that exist precisely to test that floor (see the closed #10311). jsdom is a dev-only Vitest environment, so raising the published runtime floor for it would make promptfoo refuse to start on Node 22.22.0/22.22.1 for no user-facing gain. Lift this cap when engines.node moves past 22.22.2 for an independent reason.",
+      "description": "Keep jsdom in sync across all workspaces",
       "matchPackageNames": ["jsdom"],
-      "allowedVersions": "<30",
       "groupName": "jsdom"
-    },
-    {
-      "description": "Keep jsdom's CSS color parser below 7 while promptfoo supports Node 22.22.0. @asamuzakjp/css-color 7 requires node ^22.22.2 || ^24.15.0 || >=26.0.0, so engine-strict clean installs fail on the minimum supported Node version even though jsdom itself remains below 30. Lift this cap when engines.node moves past 22.22.2 for an independent reason.",
-      "matchPackageNames": ["@asamuzakjp/css-color"],
-      "allowedVersions": "<7"
     },
     {
       "description": "Keep undici in sync across root and code-scan-action, and below 8 until engines.node is >=26. Promptfoo hands undici dispatchers to Node's built-in fetch; on Node 22 and 24 that fetch rejects undici 8 dispatchers and every request hangs (test/fetch.compression.test.ts times out on those CI lanes).",
