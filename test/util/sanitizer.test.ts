@@ -1,4 +1,5 @@
 import Ajv from 'ajv';
+import Ajv2020 from 'ajv/dist/2020';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isCredentialHeader,
@@ -652,6 +653,81 @@ describe('assertion schema projection', () => {
     expect(new Ajv().compile(value)({ env })).toBe(true);
     expect(new Ajv().compile(safe)(safe.examples[0])).toBe(true);
   });
+
+  const itemRef = { $ref: '#/definitions/item' };
+  const envItem = {
+    type: 'object',
+    required: ['DBPWD'],
+    properties: { DBPWD: constraint, GITHUB_KEY: { const: 'opaque' }, PUBLIC: { const: 'ok' } },
+  };
+
+  it.each([
+    { items: envItem },
+    { items: itemRef },
+    { items: [itemRef] },
+    { items: [true], additionalItems: itemRef },
+    { contains: itemRef },
+    { prefixItems: [itemRef] },
+    { unevaluatedItems: itemRef },
+  ])('protects environment array constraints, samples and diagnostics (%j)', (rule) => {
+    const prefix = 'additionalItems' in rule ? ['first'] : [];
+    const example = (DBPWD: string) => ({
+      env: [...prefix, { DBPWD, GITHUB_KEY: DBPWD, PUBLIC: 'ok' }],
+    });
+    const value = {
+      ...(rule.items === envItem ? {} : { definitions: { item: envItem } }),
+      type: 'object',
+      properties: { env: { type: 'array', ...rule } },
+      examples: [example('opaque')],
+    };
+    const ajv = 'prefixItems' in rule || 'unevaluatedItems' in rule ? new Ajv2020() : new Ajv();
+    const live = ajv.compile(value);
+    expect(live(value.examples[0])).toBe(true);
+    expect(live(example('wrong'))).toBe(false);
+    expect(sanitizeSchemaValidationMessage(ajv.errorsText(live.errors), value)).not.toContain(
+      'opaque',
+    );
+    const safe = project(value);
+    expect(safe.examples[0]).toEqual(example('[REDACTED]'));
+    const validate = ajv.compile(safe);
+    expect(validate(safe.examples[0])).toBe(true);
+    expect(validate(value.examples[0])).toBe(false);
+  });
+
+  it('preserves sensitivity along pointers through environment arrays in literal data', () => {
+    const value = {
+      type: 'object',
+      properties: { item: { $ref: '#/default/env/0/DBPWD' } },
+      default: { env: [{ DBPWD: { $ref: '#/definitions/field' }, PUBLIC: 'ok' }] },
+      definitions: { field: constraint },
+    };
+    expect(new Ajv().compile(value)({ item: 'opaque' })).toBe(true);
+    const safe = project(value);
+    expect(safe.default).toEqual(value.default);
+    const validate = new Ajv().compile(safe);
+    expect(validate({ item: '[REDACTED]' })).toBe(true);
+    expect(validate({ item: 'opaque' })).toBe(false);
+  });
+
+  it.each(['default', 'examples', 'enum', 'const'])(
+    'propagates sensitivity through a reference into an env item under %s',
+    (keyword) => {
+      const list = keyword === 'examples' || keyword === 'enum';
+      const data = { DBPWD: { $ref: '#/definitions/field' }, PUBLIC: 'ok' };
+      const value = {
+        type: 'object',
+        properties: {
+          env: { type: 'array', items: itemRef },
+          alias: { $ref: `#/definitions/item/${keyword}/${list ? '0/' : ''}DBPWD` },
+        },
+        definitions: { item: { [keyword]: list ? [data] : data }, field: constraint },
+      };
+      expect(new Ajv().compile(value)({ alias: 'opaque' })).toBe(true);
+      const validate = new Ajv().compile(project(value));
+      expect(validate({ alias: '[REDACTED]' })).toBe(true);
+      expect(validate({ alias: 'opaque' })).toBe(false);
+    },
+  );
 
   it('checks host literals, nested credentials and duplicate JSON members before restoring text', () => {
     const formatted = '{ "label": "two words" }';

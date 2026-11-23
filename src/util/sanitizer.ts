@@ -711,19 +711,29 @@ const JSON_SCHEMA_MAP_KEYWORDS = new Set([
   'dependencies',
   'dependentRequired',
 ]);
-// These subschemas constrain the same instance, including an environment map.
-const JSON_SCHEMA_APPLICATORS = new Set(['allOf', 'anyOf', 'oneOf', 'if', 'then', 'else', 'not']);
-const JSON_SCHEMA_CHILD_KEYWORDS = new Set([
-  ...JSON_SCHEMA_APPLICATORS,
-  'additionalProperties',
-  'unevaluatedProperties',
-  'propertyNames',
+// Environment member names apply to the same instance and to elements
+// of an env array, matching the traversal of literal data.
+const ENV_SCHEMA_APPLICATORS = new Set([
+  'allOf',
+  'anyOf',
+  'oneOf',
+  'if',
+  'then',
+  'else',
+  'not',
   'items',
+  'prefixItems',
   'additionalItems',
   'unevaluatedItems',
   'contains',
+]);
+const SCHEMA_LITERALS = new Set(['const', 'default', 'enum', 'examples']);
+const JSON_SCHEMA_CHILD_KEYWORDS = new Set([
+  ...ENV_SCHEMA_APPLICATORS,
+  'additionalProperties',
+  'unevaluatedProperties',
+  'propertyNames',
   'contentSchema',
-  'prefixItems',
 ]);
 // These keywords describe structure or validation rules, rather than example data.
 const JSON_SCHEMA_STRUCTURAL_KEYWORDS = new Set([
@@ -1294,12 +1304,14 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
   function pointerTarget(fragment: string, resource: object, scope: string): unknown {
     let node: unknown = resource;
     let credential = false;
+    let env = false;
     const pointer = localSchemaPointer(fragment) ?? [];
     for (const [i, { raw, name }] of pointer.entries()) {
       if (!node || typeof node !== 'object' || !Object.prototype.hasOwnProperty.call(node, name)) {
         return resource;
       }
-      credential ||= credentialSchemaName(name, undefined, pointer[i - 1]?.name === 'env');
+      credential ||= credentialSchemaName(name, undefined, env);
+      env = name === 'env' || (env && Array.isArray(node));
       const child: unknown = (node as Record<string, unknown>)[name];
       const last = i === pointer.length - 1;
       if (isSchemaObject(child)) {
@@ -1334,14 +1346,30 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
     }
   }
 
-  // Follow references and applicators that still describe the env object.
+  // A pointer can promote a schema inside a credential's default or example
+  // before we learn that the enclosing item describes an environment.
+  function inspectEnvironmentLiteral(value: unknown) {
+    if (Array.isArray(value)) {
+      value.forEach(inspectEnvironmentLiteral);
+    } else if (isSchemaObject(value)) {
+      for (const [name, child] of Object.entries(value)) {
+        if (child && typeof child === 'object' && isSecretEnvVarName(name)) {
+          pending.push(child);
+        }
+      }
+    }
+  }
+
+  // Follow references and applicators that still describe environment values.
   // Only credential members enter the ordinary sensitivity traversal.
   function inspectEnvironment(schema: Record<string, unknown>) {
     const base = scopes.get(schema)!;
     for (const [keyword, value] of Object.entries(schema)) {
       if (SCHEMA_REFS.has(keyword) && typeof value === 'string') {
         addEnvironment(referenceTarget(value, base));
-      } else if (JSON_SCHEMA_APPLICATORS.has(keyword)) {
+      } else if (annotations.size && SCHEMA_LITERALS.has(keyword)) {
+        inspectEnvironmentLiteral(value);
+      } else if (ENV_SCHEMA_APPLICATORS.has(keyword)) {
         (Array.isArray(value) ? value : [value]).forEach(addEnvironment);
       } else if (isSchemaObject(value)) {
         if (keyword === 'dependentSchemas' || keyword === 'dependencies') {
@@ -1827,7 +1855,7 @@ function sanitizeAssertionJsonSchema(root: unknown, diagnostics?: SchemaDiagnost
     if (credentialSchemaName(keyword)) {
       return [key, redactLiteral(value, keyword, schema)];
     }
-    const env = index.environments.has(schema) && ['const', 'default', 'examples'].includes(key);
+    const env = index.environments.has(schema) && SCHEMA_LITERALS.has(key);
     return [key, projectData(value, env ? 'env' : key)];
   }
 
