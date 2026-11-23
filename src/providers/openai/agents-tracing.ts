@@ -556,7 +556,11 @@ function commandToString(value: unknown): string | undefined {
 type Container = ReturnType<typeof credentialContainer>;
 type AttributeContext = Container | 'curl' | 'operands' | 'omit';
 
-function sanitizeSerializedAttribute(value: unknown, context?: AttributeContext): string {
+function sanitizeSerializedAttribute(
+  value: unknown,
+  context?: AttributeContext,
+  parent = '',
+): string {
   if (typeof value !== 'string') {
     return '<redacted>';
   }
@@ -575,12 +579,12 @@ function sanitizeSerializedAttribute(value: unknown, context?: AttributeContext)
     try {
       const parsed = parseStructuredJson(trimmed);
       if (typeof parsed === 'string') {
-        const clean = sanitizeSerializedAttribute(parsed, context);
+        const clean = sanitizeSerializedAttribute(parsed, context, parent);
         return clean === parsed ? value : JSON.stringify(clean);
       }
       if (isRecord(parsed) || Array.isArray(parsed)) {
         // Parsing can discard earlier duplicate fields that still contain secrets in the source.
-        return JSON.stringify(sanitizeStructuredAttribute(parsed, context));
+        return JSON.stringify(sanitizeStructuredAttribute(parsed, context, parent));
       }
     } catch (error) {
       if (error instanceof RangeError) {
@@ -1065,7 +1069,7 @@ function credentialLiteralEnd(value: string, start: number, delimiter: string): 
 }
 
 function redactCredentialLiterals(value: string): string {
-  if (!/[="'`]/.test(value)) {
+  if (!/[:="'`]/.test(value)) {
     return value;
   }
   if (hasCredentialTable(value)) {
@@ -1082,34 +1086,58 @@ function redactCredentialLiterals(value: string): string {
     /(?<!\\)(["'`])(?:\\[\s\S]|(?!\1)[^\\])*\1|\/\*[\s\S]*?(?:\*\/|$)|(?<!:)\/\/[^\r\n\u2028\u2029]*/g,
     (token, quote) => (quote ? token : ' '),
   );
-  return joined !== masked && maskAssignedLiterals(joined) !== joined ? '<redacted>' : masked;
+  if (
+    joined !== masked &&
+    (hasCredentialTable(joined) || maskAssignedLiterals(joined) !== joined)
+  ) {
+    return '<redacted>';
+  }
+  return masked;
 }
 
 function literalKeySegment(key: string): string {
-  // Map TOML and JavaScript escapes to the shared classifier's Unicode spelling.
+  // Resolve static TOML and JavaScript key spellings before classification.
+  // Do this only within a key, never across a comment or value delimiter.
   return key
-    .replace(/\\U0000/g, '\\u')
-    .replace(/\\x/g, '\\u00')
-    .replace(/\\u\{0*([\da-fA-F]{1,4})\}/g, (_, hex: string) => '\\u' + hex.padStart(4, '0'));
+    .replace(/\\(?:\r\n|[\r\n\u2028\u2029])/g, '')
+    .replace(
+      /\\(?:x([\da-fA-F]{2})|(?:u|U0000)([\da-fA-F]{4})|u\{0*([\da-fA-F]{1,4})\})/g,
+      (_, byte, code, point) => String.fromCharCode(Number.parseInt(byte ?? code ?? point, 16)),
+    );
 }
 
-// Check TOML table paths without rewriting the file or interpreting its values.
+// Check TOML table paths and static object properties without interpreting their values.
 function hasCredentialTable(value: string): boolean {
-  if (!value.includes('=') || !/^[ \t\uFEFF]*\[|=\s*[[{]/m.test(value)) {
+  if (!/[:=]/.test(value) || !/^[ \t\uFEFF]*\[|[:=]\s*[[{]/m.test(value)) {
     return false;
   }
+  // TOML literal strings and JavaScript disagree about escaped apostrophes.
+  // Check both readings so neither can hide a neighboring property.
+  return (
+    hasCredentialPath(value) ||
+    (value.includes("\\'") && hasCredentialPath(value.replace(/\\'/g, '_')))
+  );
+}
+
+function hasCredentialPath(value: string): boolean {
   // Ignore structural characters in strings and comments. A multiline
   // description can contain an apparent table header or closing brace.
-  const names = value.replace(
-    /#[^\r\n]*|(?<!\\)"""(?:\\[\s\S]|(?!""")[^\\])*"{3,5}|'''[\s\S]*?'{3,5}|(?<!\\)"(?:\\.|[^"\\\r\n])*"|'[^'\r\n]*'/g,
-    (token) =>
-      token.startsWith('#') || token.startsWith('"""') || token.startsWith("'''")
-        ? ''
-        : literalKeySegment(token.slice(1, -1)).replace(/[^\w.\\-]/g, '_'),
-  );
+  const names = value
+    .replace(
+      /#[^\r\n]*|(?<!\\)"""(?:\\[\s\S]|(?!""")[^\\])*"{3,5}|'''[\s\S]*?'{3,5}|(?<!\\)"(?:\\(?:\r\n|[\s\S])|[^"\\\r\n])*"|'(?:\\\r?\n|\\\r|[^'\r\n])*'|(?<!\\)`(?:\\[\s\S]|[^`\\])*`|\\u(?:\{[\da-fA-F]+\}|[\da-fA-F]{4})/g,
+      (token) => {
+        if (token.startsWith('#') || token.startsWith('"""') || token.startsWith("'''")) {
+          return '';
+        }
+        const key = token.startsWith('\\') ? token : token.slice(1, -1);
+        return literalKeySegment(key).replace(/[^\w.\\-]/g, '_') || '_';
+      },
+    )
+    .replace(/(\S)\s+([:=])/g, '$1$2')
+    .replace(/\[\s*([\w$.\\-]+)\s*\](?=[ \t]*[[.:=])/g, '.$1');
   // A header resets the prefix. Inline tables and arrays inherit it.
   const entries =
-    /^[ \t]*\[\[?([\w.\\\t -]+)\]\]?[ \t]*$|(?:^|(?<=[{,]))([\w.\\\t -]+)=[ \t]*([[{]?)|([[\]{}])/gm;
+    /^[ \t]*\[\[?([\w.\\\t -]+)\]\]?[ \t]*$|(?:^|(?<=[{,;]))([\w$.\\\t -]+)[:=]\s*([[{]?)|([[\]{}])/gm;
   const parents: string[] = [];
   let path = '';
   let remaining = MAX_STRUCTURED_ATTRIBUTE_BYTES;
@@ -1125,7 +1153,10 @@ function hasCredentialTable(value: string): boolean {
     } else if (key !== undefined) {
       // Bound the work of checking long or deeply nested paths across rows.
       remaining -= path.length;
-      const name = key.replace(/[ \t]/g, '');
+      const name = key
+        .trimStart()
+        .replace(/^(?:export\s+)?(?:const|let|var)\s+/, '')
+        .replace(/[ \t]/g, '');
       const qualified = path ? path + '.' + name : name;
       // Standalone credential names already have scalar redaction below.
       if (
@@ -1164,10 +1195,16 @@ function isAmbiguousAssignment(value: string, start: number): boolean {
 }
 
 function maskAssignedLiterals(value: string): string {
+  // Treat identifier escapes and continued lines as part of their token. Keep
+  // offsets into the original text so only the assigned value gets replaced.
+  const tokens = value.replace(
+    /\\(?:u(?:[\da-fA-F]{4}|\{[\da-fA-F]+\})|\r\n|[\n\r\u2028\u2029])/g,
+    (escape) => '_'.repeat(escape.length),
+  );
   // Consume each segment once, including in a long dotted name with no assignment.
   // Follow dotted TOML keys and static JavaScript property access.
   const segments =
-    /(?:(?<!\\)"((?:\\.|[^"\\\r\n])*)"|'([^'\r\n]*)'|`([^`\r\n]*)`(?=\s*\])|(?<![\w$-])([\w$-]+))(\s*(?:\]\s*)?([.:]|(?:\+|\?\?|\|\||&&)?=|\[(?=\s*["'`])|\/[*/])\s*)/g;
+    /((?<!\\)"(?:\\.|[^"\\\r\n])*"|'[^'\r\n]*'|`[^`\r\n]*`(?=\s*\])|(?<![\w$-])[\w$-]+)(\s*(?:\]\s*)?([.:]|(?:\+|\?\?|\|\||&&)?=|\[(?=\s*["'`])|\/[*/])\s*)/g;
   const templateTag = /[\w$]+(?:\s*\.\s*[\w$]+)*\s*(?:\.\s*)?(?=`|\/[*/]|\[|\()/y;
   const continuation = /\s*(?:\+|\?\?|\|\||&&)/y;
   const delimiters = ['"""', "'''", '"', "'", '`'];
@@ -1177,17 +1214,19 @@ function maskAssignedLiterals(value: string): string {
   let qualified = false;
   let result = '';
   let copied = 0;
-  for (let match = segments.exec(value); match; match = segments.exec(value)) {
+  for (let match = segments.exec(tokens); match; match = segments.exec(tokens)) {
     if (match.index !== next) {
       parts.length = 0;
       qualified = false;
     }
-    const [, double, single, template, bare, separator, operator] = match;
+    const [, token, separator, operator] = match;
     if (operator === '//' && value[match.index - 1] === '=' && /[\r\n]/.test(separator)) {
       continue; // A .npmrc scalar can precede a //registry line.
     }
-    parts.push(bare ?? literalKeySegment(double ?? single ?? template));
-    qualified ||= bare === undefined || (operator === '.' && separator !== '.');
+    const raw = value.slice(match.index, match.index + token.length);
+    const key = raw.replace(/^["'`]|["'`]$/g, '');
+    parts.push(literalKeySegment(key));
+    qualified ||= key !== token || (operator === '.' && separator !== '.');
     if (operator === '.' || operator === '[') {
       next = segments.lastIndex;
       continue;
@@ -1201,7 +1240,7 @@ function maskAssignedLiterals(value: string): string {
     // A simple tag such as String.raw can precede a JavaScript template.
     templateTag.lastIndex = segments.lastIndex;
     const start =
-      hasTemplate && templateTag.test(value) ? templateTag.lastIndex : segments.lastIndex;
+      hasTemplate && templateTag.test(tokens) ? templateTag.lastIndex : segments.lastIndex;
     const delimiter = delimiters.find((candidate) => value.startsWith(candidate, start));
     if (!delimiter) {
       if (qualified || isAmbiguousAssignment(value, start)) {
@@ -1266,10 +1305,10 @@ function sanitizeAttributeByKey(
       return '<redacted>';
     }
     if (typeof value === 'string') {
-      return sanitizeSerializedAttribute(value, context);
+      return sanitizeSerializedAttribute(value, context, key);
     }
     if (Array.isArray(value) || isRecord(value)) {
-      return sanitizeStructuredAttribute(value, context);
+      return sanitizeStructuredAttribute(value, context, key);
     }
     return value;
   } catch {
@@ -1386,24 +1425,54 @@ function isJwe(value: unknown, budget: { remaining: number }): boolean {
 
 type StructuredValue = Record<string, unknown> | unknown[];
 
-function sanitizeStructuredAttribute(value: StructuredValue, context?: AttributeContext) {
+function isCredentialEntry(
+  source: StructuredValue,
+  key: string,
+  entry: unknown,
+  prefix: string,
+  context: Container,
+): boolean {
+  const headerLabel =
+    context === 'headers' &&
+    /^key$/i.test(key) &&
+    typeof entry === 'string' &&
+    isCredentialHeader(entry, '') &&
+    Object.keys(source).some((field) => /^value$/i.test(field));
+  return (
+    (!headerLabel &&
+      (isCredentialAttributeKey(key, context) ||
+        (prefix !== '' && isCredentialAttributeKey(prefix + key, context)))) ||
+    isCredentialParameter(source, key, context)
+  );
+}
+
+function sanitizeStructuredAttribute(
+  value: StructuredValue,
+  context?: AttributeContext,
+  parent = '',
+) {
   const budget = { remaining: MAX_STRUCTURED_ATTRIBUTE_NODES };
   let characters = MAX_STRUCTURED_ATTRIBUTE_BYTES;
 
-  function charge(nodes: number, size = 0) {
+  function charge(nodes: number, size = 0, entry?: unknown) {
     budget.remaining -= nodes;
-    characters -= size;
+    characters -= size + (typeof entry === 'string' ? entry.length : 0);
     if (budget.remaining < 0 || characters < 0) {
       throw new RangeError('Trace attribute exceeds sanitization limits');
     }
   }
 
-  function copyValue(value: unknown, context: AttributeContext, depth: number): unknown {
+  function copyValue(
+    value: unknown,
+    context: AttributeContext,
+    depth: number,
+    parent: string,
+  ): unknown {
     if (typeof value === 'function' || ArrayBuffer.isView(value)) {
       return '<redacted>';
     }
     if (typeof value === 'string') {
-      return sanitizeSerializedAttribute(value, context);
+      return sanitizeSerializedAttribute(value, context, parent);
     }
     if (value instanceof Date) {
       return new Date(Date.prototype.getTime.call(value));
@@ -1414,7 +1483,7 @@ function sanitizeStructuredAttribute(value: StructuredValue, context?: Attribute
       return rawJSON.startsWith('"') ? '<redacted>' : value;
     }
     if (Array.isArray(value) || isRecord(value)) {
-      return copy(value, context, depth);
+      return copy(value, context, depth, parent);
     }
     return typeof value === 'bigint' ? String(value) : value;
   }
@@ -1423,6 +1492,7 @@ function sanitizeStructuredAttribute(value: StructuredValue, context?: Attribute
     source: StructuredValue,
     context: AttributeContext,
     depth: number,
+    parent: string,
   ): StructuredValue | string {
     if (
       context === 'omit' ||
@@ -1438,24 +1508,20 @@ function sanitizeStructuredAttribute(value: StructuredValue, context?: Attribute
     const target = array ? new Array<unknown>(source.length) : {};
     const inherited = context === 'operands' || context === 'curl' ? undefined : context;
     const redactArgument = array ? argumentRedactor(context, true) : undefined;
+    const prefix = parent && !array ? parent + '.' : '';
     for (const [key, value] of structuredAttributeEntries(source)) {
-      charge(1, key.length + (typeof value === 'string' ? value.length : 0));
+      // Keep the immediate qualifier across arrays and serialized objects.
+      // Account for repeated prefixes in the same inspection budget.
+      charge(1, prefix.length + key.length, value);
       const entry = redactArgument?.(value) ?? value;
       const nested = attributeContext(key, array ? undefined : source) ?? inherited;
-      const headerLabel =
-        inherited === 'headers' &&
-        /^key$/i.test(key) &&
-        typeof entry === 'string' &&
-        isCredentialHeader(entry, '') &&
-        Object.keys(source).some((field) => /^value$/i.test(field));
       const sensitive =
-        nested === 'omit' ||
-        (!headerLabel && isCredentialAttributeKey(key, inherited)) ||
-        isCredentialParameter(source, key, inherited);
+        nested === 'omit' || isCredentialEntry(source, key, entry, prefix, inherited);
+      const qualifier = array ? parent : key;
       Object.defineProperty(target, sanitizeSerializedAttribute(key), {
         configurable: true,
         enumerable: true,
-        value: sensitive ? '<redacted>' : copyValue(entry, nested, depth + 1),
+        value: sensitive ? '<redacted>' : copyValue(entry, nested, depth + 1, qualifier),
         writable: true,
       });
     }
@@ -1463,7 +1529,7 @@ function sanitizeStructuredAttribute(value: StructuredValue, context?: Attribute
   }
 
   try {
-    const root = copy(value, context, 0);
+    const root = copy(value, context, 0, parent);
     return Buffer.byteLength(JSON.stringify(root), 'utf8') <= MAX_STRUCTURED_ATTRIBUTE_BYTES
       ? root
       : '<redacted>';

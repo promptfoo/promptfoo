@@ -351,11 +351,13 @@ describe('OTLPTracingExporter', () => {
       ].join('\n');
       const { attributes } = await exportCustomData(format, {
         dotted: '[private.keys]\nprod = "opaque/prod"',
+        empty: '[private.keys]\n"" = "opaque/empty"',
         poetry: '[pypi-token] # publishing\npypi = "pypi-opaque"',
         split: '[service.private]\n# key stored below\n"keys".stage = "opaque/split"',
         quoted: String.raw`[[service . "pri\U00000076ate" . 'keys']]` + '\nname = "opaque/array"',
         inline: 'service.credentials = {prod={value="first"},stage={value="opaque/other"}}',
         nested: 'private = { info = { region = "west" }, keys = {stage = "opaque/nested"} }',
+        path: String.raw`private = {path = 'C:\keys\', key = 'opaque/value'}`,
         array: 'service.api = [{name = "}", key = "opaque/array"}]',
         multiline: '[api]\nnote = """\n[cache]\n"""\nkey = "opaque/real"',
         rows: '[api]\nrows = [\n["cache"]\n]\nkey = "opaque/real"',
@@ -366,11 +368,13 @@ describe('OTLPTracingExporter', () => {
       expect(attributes).toMatchObject(
         redacted(
           'dotted',
+          'empty',
           'poetry',
           'split',
           'quoted',
           'inline',
           'nested',
+          'path',
           'array',
           'multiline',
           'rows',
@@ -436,6 +440,66 @@ describe('OTLPTracingExporter', () => {
     expect(text).toContain('process.env["API_KEY"] = "<redacted>";');
     expect(text).toContain('cfg["cache"]["key"] = "visible";');
     expect(text).toContain('cfg["token_count"] = 9;');
+  });
+
+  it.each(formats)(
+    'classifies escaped JavaScript identifiers and continued literal keys in %s',
+    async (format) => {
+      const publicKey = String.raw`cfg.cache\u{4B}ey = "visible"; cfg.token\u005Fcount = 12;`;
+      const output = [
+        String.raw`const api\u004Bey = "opaque/decl";`,
+        String.raw`cfg.api\u{4b}ey = "opaque/property";`,
+        String.raw`cfg.\u0070rivate.\u{6B}ey = 'opaque/compound';`,
+        publicKey,
+      ].join('\n');
+      const continued = ['\r\n', '\n', '\r', '\u2028', '\u2029'].flatMap((newline) =>
+        ['"', "'", '`'].map(
+          (quote) => 'cfg[' + quote + 'api\\' + newline + 'Key' + quote + '] = `opaque/template`;',
+        ),
+      );
+      const payload = await exportSpans(format, [
+        { spanData: { type: 'function', name: 'read_file', output } },
+        ...continued.map((text) => ({
+          spanData: { type: 'function', name: 'read_file', output: text },
+        })),
+      ]);
+      const [first, ...rest] = payload.resourceSpans[0].scopeSpans[0].spans;
+      expect(getAttributes(first)['tool.output']).toContain(publicKey);
+      for (const span of rest) {
+        expect(getAttributes(span)['tool.output']).toContain('<redacted>');
+      }
+    },
+  );
+
+  it.each(formats)('classifies inherited static object properties in %s', async (format) => {
+    const ordinary = 'const cfg = { cache: {key: "shown"}, token_count: 2 };';
+    const source = {
+      api: { key: 'opaque/nested' },
+      private: [{ keys: ['opaque/array'] }],
+      cache: { key: 'shown' },
+    };
+    const { attributes } = await exportCustomData(format, {
+      literal: 'const cfg = { private: { key: "opaque/object" } };',
+      qualified: String.raw`const cfg = { priva\u{74}e: [ { "key": "opaque/array" } ] };`,
+      spaced: 'const cfg = { api: /* note */ { key: "opaque/comment" } };',
+      member: 'cfg["api"] = { ["key"]: "opaque/member" };',
+      split: 'const cfg = { ["private"]\n:\n{ key\n:\n"opaque/split" }};',
+      declaration: 'const api = { label: `# info`, key: "opaque/key" };',
+      quoted: String.raw`const api = { note: 'don\'t close }', key: 'opaque/value' };`,
+      api: JSON.stringify({ key: 'opaque/root', status: 'ok' }),
+      native: source,
+      serialized: JSON.stringify(source),
+      ordinary,
+    });
+    expect(attributes.ordinary).toBe(ordinary);
+    expect(JSON.parse(attributes.api as string)).toEqual({ key: '<redacted>', status: 'ok' });
+    for (const field of [attributes.native, attributes.serialized]) {
+      expect(JSON.parse(field as string)).toEqual({
+        api: { key: '<redacted>' },
+        private: [{ keys: '<redacted>' }],
+        cache: { key: 'shown' },
+      });
+    }
   });
 
   it.each(formats)(
