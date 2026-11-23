@@ -221,6 +221,12 @@ export function addActiveSpanRoleAttribute(attributes: Attributes): Attributes {
   return role ? { ...attributes, [SPAN_ROLE_ATTRIBUTE]: role } : attributes;
 }
 
+/** Record a grader's final provider attributes before ending the local span. */
+export function endProviderSpan(span: Span, endTime?: number): void {
+  recordGraderChildSpan(span);
+  span.end(endTime);
+}
+
 /** Record tool execution beneath its existing target or grader span. */
 export async function withGenAIToolSpan<T>(
   tool: GenAIToolSpanContext,
@@ -295,8 +301,7 @@ export async function withGenAIToolSpan<T>(
         }
         throw error;
       } finally {
-        recordGraderChildSpan(span);
-        span.end();
+        endProviderSpan(span);
       }
     },
   );
@@ -447,8 +452,7 @@ export async function withGenAISpan<T>(
 
       throw error;
     } finally {
-      recordGraderChildSpan(span);
-      span.end();
+      endProviderSpan(span);
     }
   };
 
@@ -809,7 +813,7 @@ export function openTurnSpan(
         code: SpanStatusCode.ERROR,
         message: 'Turn span not properly closed before next turn started',
       });
-      state.activeTurnSpan.end(opts.eventTime);
+      endProviderSpan(state.activeTurnSpan, opts.eventTime);
     } catch {
       // ignore
     }
@@ -868,8 +872,7 @@ export function closeTurnSpan(
         ? { code: SpanStatusCode.ERROR, message: opts.errorMessage }
         : { code: SpanStatusCode.OK },
     );
-    recordGraderChildSpan(span);
-    span.end(opts.eventTime);
+    endProviderSpan(span, opts.eventTime);
   } catch (err) {
     logger.warn(`[${opts.logLabel ?? 'TurnSpan'}] Failed to end turn span: ${err}`);
   }
@@ -902,8 +905,7 @@ export function emitTurnMarkerSpan(opts: {
         ? { code: SpanStatusCode.ERROR, message: opts.errorMessage }
         : { code: SpanStatusCode.OK },
     );
-    recordGraderChildSpan(span);
-    span.end(opts.endTime);
+    endProviderSpan(span, opts.endTime);
   } catch (err) {
     logger.warn(`[${opts.logLabel ?? 'TurnSpan'}] Failed to emit turn span: ${err}`);
   }

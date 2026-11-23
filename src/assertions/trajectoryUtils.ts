@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { getLocalEvaluatorSpans, SPAN_ROLE_ATTRIBUTE } from '../tracing/spanRoles';
 import {
   COMMAND_ATTRIBUTE_KEYS,
@@ -295,7 +297,11 @@ function extractCommand(
   // Full span commands outrank short labels. A recorded shell input or command
   // line is an action even when the executable takes no arguments.
   const action =
-    actions.find((value) => value && /\s/.test(value)) ?? tool ?? lines.find(Boolean) ?? codex;
+    actions.find((value) => value && /\s/.test(value)) ??
+    tool ??
+    lines.find(Boolean) ??
+    codex ??
+    command;
   if (action) {
     return action;
   }
@@ -563,11 +569,21 @@ export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
     // Retain untrusted spans, target actions and unexpected attributes.
     const spans = trace.spans.filter((span) => {
       const local = localSpans.get(span.spanId);
-      return !(
-        local?.traceId === trace.traceId &&
-        local.name === span.name &&
-        span.attributes?.[SPAN_ROLE_ATTRIBUTE] === local.role &&
-        Object.keys(span.attributes).every((key) => local.attributes.includes(key))
+      if (
+        local?.traceId !== trace.traceId ||
+        local.name !== span.name ||
+        span.attributes?.[SPAN_ROLE_ATTRIBUTE] !== local.role ||
+        Object.keys(span.attributes).some((key) => !local.attributes.includes(key))
+      ) {
+        return true;
+      }
+      const { provider } = local;
+      return (
+        provider !== undefined &&
+        ((span.statusCode !== undefined && span.statusCode !== provider.statusCode) ||
+          Object.entries(provider.attributes).some(
+            ([key, value]) => !isDeepStrictEqual(span.attributes?.[key], value),
+          ))
       );
     });
     trace = { ...trace, spans };

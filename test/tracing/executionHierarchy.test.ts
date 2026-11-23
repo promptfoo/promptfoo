@@ -1,4 +1,4 @@
-import { SpanStatusCode } from '@opentelemetry/api';
+import { context, SpanStatusCode } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
@@ -7,6 +7,8 @@ import {
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectRedteamTrace } from '../../src/assertions/trajectoryUtils';
 import { HttpProvider } from '../../src/providers/http';
+import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
+import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import { callGradingProvider } from '../../src/redteam/providers/shared';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { generateTraceContextIfNeeded } from '../../src/tracing/evaluatorTracing';
@@ -196,6 +198,100 @@ describe('test-case execution trace hierarchy', () => {
       expect(projected.traceSummary).not.toContain('private-fixture');
     });
   });
+
+  it.each([
+    { name: 'Codex SDK', Provider: OpenAICodexSDKProvider },
+    { name: 'Codex App Server', Provider: OpenAICodexAppServerProvider },
+  ])(
+    'excludes native grader commands while retaining target commands and copied grader claims ($name)',
+    async ({ Provider }) => {
+      const provider = new Provider({ config: { apiKey: 'fixture' } });
+      const root = getGenAITracer().startSpan('test case');
+      let connectionContext = context.active();
+      async function emitCommand(role: 'target' | 'grader') {
+        const command = `fixture ${role}`;
+        if (provider instanceof OpenAICodexSDKProvider) {
+          const item = { type: 'command_execution', command, exit_code: 0 };
+          const events = [{ type: 'item.completed', item }, { type: 'turn.completed' }];
+          await provider['runStreaming']({ runStreamed: async () => ({ events }) }, 'fixture', {});
+        } else {
+          // A pooled connection's notifications can run in an earlier call's context.
+          if (role === 'grader') {
+            connectionContext = context.active();
+          }
+          const connection = {} as Parameters<(typeof provider)['createTurnState']>[0];
+          const state = provider['createTurnState'](connection, 'key', 'id', 'thread', [], {}, {});
+          provider['registerTurnState'](state);
+          context.with(connectionContext, () => {
+            provider['handleNotification']({
+              method: 'item/completed',
+              params: {
+                threadId: 'thread',
+                item: { type: 'commandExecution', command, exitCode: 0 },
+              },
+            });
+            provider['handleNotification']({
+              method: 'turn/completed',
+              params: { threadId: 'thread' },
+            });
+          });
+          provider['unregisterTurnState'](state);
+        }
+
+        return { output: 'done' };
+      }
+      const run = (role: 'target' | 'grader') =>
+        withTracedProviderCall({ provider, role }, () =>
+          withGenAISpan(
+            {
+              system: 'openai',
+              operationName: 'invoke_agent',
+              model: 'fixture',
+              providerId: provider.id(),
+            },
+            () => emitCommand(role),
+          ),
+        );
+      try {
+        await withTestCaseSpan(root, async () => {
+          await withGraderSpan({ graderId: 'fixture' }, () => run('grader'));
+          await run('target');
+          const spans = exporter.getFinishedSpans().map((span) => ({
+            spanId: span.spanContext().spanId,
+            name: span.name,
+            startTime: 1,
+            statusCode: span.status.code,
+            attributes: span.attributes,
+          }));
+          const grader = spans.find(
+            (span) => span.attributes['codex.command'] === 'fixture grader',
+          )!;
+          expect(grader.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('grader');
+          const copied = { ...grader, spanId: 'untrusted', parentSpanId: grader.spanId };
+          const altered = {
+            ...grader,
+            attributes: { ...grader.attributes, 'codex.command': 'fixture changed' },
+          };
+          const projected = projectRedteamTrace(
+            {
+              traceId: root.spanContext().traceId,
+              evaluationId: 'eval',
+              testCaseId: 'case',
+              spans: [...spans, copied, altered],
+            },
+            true,
+          );
+          expect(projected.traceData.spans).not.toContain(grader);
+          expect(
+            projected.localTraceActions?.map((action) => action.confirmedCommand).filter(Boolean),
+          ).toEqual(['fixture target', 'fixture grader', 'fixture changed']);
+          expect(projected.traceSummary).not.toContain('fixture');
+        });
+      } finally {
+        await provider.cleanup();
+      }
+    },
+  );
 
   it('honors an explicitly selected parent within the active trace', async () => {
     const root = getGenAITracer().startSpan('test case explicit parent');

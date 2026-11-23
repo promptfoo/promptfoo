@@ -463,6 +463,21 @@ describe('redteam output evidence', () => {
       });
     }
 
+    it('does not expand an explicit single-word command with arguments from the host', async () => {
+      const result = await gradeSpan(
+        {
+          command: 'fixture',
+          'command.name': 'fixture',
+          'process.command_line': `fixture ${marker}`,
+        },
+        'exec fixture',
+      );
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+      expect(result.metadata?.gradingIncomplete).toBe(true);
+      expect(result.metadata?.deterministicFailureKind).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain(marker);
+    });
+
     it('does not attribute an unrelated host process to a short command name', async () => {
       const result = await gradeSpan({
         'command.name': 'other',

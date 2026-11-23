@@ -8,10 +8,15 @@ export type PromptfooSpanRole = 'test_case' | 'target' | 'grader';
 const SPAN_ROLE_CONTEXT_KEY = createContextKey('promptfoo.span.role');
 const EVALUATOR_SPANS_KEY = createContextKey('promptfoo.local.evaluator.spans');
 
-type EvaluatorSpans = Map<
-  string,
-  { traceId: string; role: 'target' | 'grader'; name: string; attributes: string[] }
->;
+interface EvaluatorSpan {
+  traceId: string;
+  role: 'target' | 'grader';
+  name: string;
+  attributes: string[];
+  provider?: { attributes: ReadableSpan['attributes']; statusCode?: number };
+}
+
+type EvaluatorSpans = Map<string, EvaluatorSpan>;
 
 /** Sender-supplied role attributes cannot establish evaluator ownership. */
 export function getLocalEvaluatorSpans(): EvaluatorSpans | undefined {
@@ -23,6 +28,7 @@ export function recordEvaluatorSpan(
   role: 'target' | 'grader',
   name: string,
   attributes: string[],
+  provider?: EvaluatorSpan['provider'],
 ): void {
   const spans = getLocalEvaluatorSpans();
   if (spans && span.isRecording()) {
@@ -32,6 +38,7 @@ export function recordEvaluatorSpan(
       role,
       name,
       attributes: [...attributes, 'service.name', 'service.version'],
+      provider,
     });
   }
 }
@@ -41,9 +48,14 @@ export function recordGraderChildSpan(span: Span): void {
   if (getActiveSpanRole() !== 'grader') {
     return;
   }
-  const { attributes, name } = span as Span & Partial<ReadableSpan>;
-  if (name && attributes) {
-    recordEvaluatorSpan(span, 'grader', name, Object.keys(attributes));
+  const { attributes, name, status } = span as Span & Partial<ReadableSpan>;
+  if (name && attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {
+    // Native spans can contain commands. A changed command under the same
+    // span ID and attribute names must remain evidence.
+    recordEvaluatorSpan(span, 'grader', name, Object.keys(attributes), {
+      attributes,
+      statusCode: status?.code,
+    });
   }
 }
 
