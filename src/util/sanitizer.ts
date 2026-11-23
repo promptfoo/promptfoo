@@ -858,6 +858,11 @@ function schemaResourceId(path: string, base: string): string {
   }
   schemaResolver ??= new Ajv({ meta: false }).opts.uriResolver;
   try {
+    // The URI resolver accepts non-UTF-8 octets and can escape a credential
+    // prefix that we then cannot decode. Validate named fragments first.
+    if (path.startsWith('#')) {
+      decodeURIComponent(path);
+    }
     return schemaResolver.resolve(base, path);
   } catch {
     // An invalid URI cannot safely distinguish embedded and external resources.
@@ -1185,6 +1190,7 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
   const booleanTargets = new Map<object, Set<string>>();
   const references: { value: string; base: string; schema: object; keyword: string }[] = [];
   const ids = new Map<string, object | null>();
+  const documents = new Set<string>();
   const uris = new Set<string>();
   const scopes = new WeakMap<object, string>();
   const pending: unknown[] = [];
@@ -1209,6 +1215,7 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
     if (typeof schema.$id === 'string') {
       const [path, fragment] = splitResourceUri(schema.$id);
       base = schemaResourceId(path, base);
+      documents.add(base);
       if (base === REDACTED || schema.$id === REDACTED || localSchemaPointer(fragment) === null) {
         pending.push(REDACTED);
       }
@@ -1320,7 +1327,7 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
     if (!resource) {
       // A base introduced by an anchored $id may lack a root declaration.
       // Distinguish that lost local target from an unavailable external URI.
-      return id === base ? REDACTED : undefined;
+      return documents.has(id) ? REDACTED : undefined;
     }
     return pointer ? pointerTarget(pointer, resource, id) : REDACTED;
   }

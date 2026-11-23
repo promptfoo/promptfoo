@@ -105,6 +105,22 @@ describe('model-independent result processing', () => {
     },
   );
 
+  it.each(['#Bearer opaque %FF', '#token%3Dopaque%FF'])(
+    'withholds undecodable named fragments in declarations, references and diagnostics (%s)',
+    (fragment) => {
+      const value = { $defs: { field: { $id: fragment, const: 'opaque' } }, $ref: fragment };
+      const row = {
+        testCase: { assert: [{ type: 'is-json', value }] },
+        error: `can't resolve reference ${fragment} from id #`,
+      };
+      const safe = projectResultSchemas(row);
+      expect(JSON.stringify(safe)).not.toContain('opaque');
+      expect(safe.testCase.assert[0].value.$ref).toBe('[REDACTED]');
+      expect(safe.testCase.assert[0].value.$defs.field.$id).toBe('[REDACTED]');
+      expect(projectResultSchemas(safe)).toEqual(safe);
+    },
+  );
+
   it.each(['[REDACTED]', '#/examples/bad%zz', '#/examples/0##', '#/examples/1'])(
     'protects indirect credentials after losing a public reference (%s)',
     ($ref) => {
@@ -128,6 +144,7 @@ describe('model-independent result processing', () => {
   it.each([
     { $ref: '#missing' },
     { $ref: '#vars' },
+    { $ref: 'anchored.json#missing' },
     { allOf: [{ $ref: '#/$defs/missing' }] },
     { allOf: [{ $ref: 'vars.json' }] },
   ])('protects possible local targets of an unresolved environment reference (%j)', (env) => {
@@ -138,6 +155,7 @@ describe('model-independent result processing', () => {
         two: { $id: '#%76ars', ...vars },
         first: { $id: 'vars.json', ...vars },
         second: { $id: 'vars.json', ...vars },
+        anchored: { $id: 'anchored.json#part', ...vars },
       },
       properties: { env },
     };
