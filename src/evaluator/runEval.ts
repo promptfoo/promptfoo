@@ -1040,6 +1040,33 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
   TokenUsageTracker.getInstance().trackResponseUsage(trackingId, response);
 }
 
+/** Keep the cost of completed calls without retaining rejected output, metadata or raw evidence. */
+function rejectedEvidenceUsage(
+  provider: ApiProvider,
+  call: ProviderCallResult,
+  privateTest: boolean,
+) {
+  if (privateTest) {
+    return undefined;
+  }
+  const { cost, incurredCost, cached, tokenUsage, latencyMs } = normalizeCachedTargetResponse(
+    call.response,
+  );
+  const accounting = { cost, incurredCost, cached, tokenUsage };
+  const usage = createEmptyTokenUsage();
+  if (tokenUsage) {
+    accumulateResponseTokenUsage(usage, accounting);
+  }
+  trackProviderUsage(provider, accounting);
+  return {
+    cost,
+    incurredCost,
+    tokenUsage: usage,
+    response: accounting,
+    latencyMs: latencyMs ?? call.latencyMs,
+  };
+}
+
 async function applyRunEvalResponseOutcome({
   abortSignal,
   deferGrading,
@@ -1428,6 +1455,7 @@ async function runEvalForTest(
   let setup = state.setup;
   let latencyMs = 0;
   let providerCallCompleted = false;
+  let rejectedUsage: ReturnType<typeof rejectedEvidenceUsage>;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
   // The step's copy_working_dir workspace, removed once its assertions have run.
   let workspace: AgentWorkspace | undefined;
@@ -1509,7 +1537,12 @@ async function runEvalForTest(
             vars: state.vars,
           });
           providerCallCompleted = true;
-          capture(providerCall.hadCachedTarget || providerCall.response.cached);
+          try {
+            capture(providerCall.hadCachedTarget || providerCall.response.cached);
+          } catch (error) {
+            rejectedUsage = rejectedEvidenceUsage(provider, providerCall, privateTest);
+            throw error;
+          }
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
@@ -1655,6 +1688,7 @@ async function runEvalForTest(
       score: 0,
       namedScores: {},
       latencyMs,
+      ...rejectedUsage,
       promptIdx: promptIndex,
       ...(repeatGroupId !== undefined && { repeatGroupId, repeatIndex }),
       testIdx: testIndex,

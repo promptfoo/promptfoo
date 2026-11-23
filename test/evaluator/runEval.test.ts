@@ -27,6 +27,7 @@ import {
 } from '../../src/types/index';
 import * as fileExtensions from '../../src/util/fileExtensions';
 import { sleep } from '../../src/util/time';
+import { TokenUsageTracker } from '../../src/util/tokenUsage';
 import { TRUSTED_REDACTION_GRADER } from '../../src/util/traceRedaction';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
 
@@ -152,7 +153,19 @@ describe('runEval', () => {
           id: () => 'promptfoo:redteam:hydra',
           callApi: async (prompt, context, options) => {
             await callTargetProvider(target, prompt, context, options);
-            return callTargetProvider(target, prompt, context, options);
+            const last = await callTargetProvider(target, prompt, context, options);
+            return {
+              ...last,
+              cost: 0.2,
+              incurredCost: cached ? 0.1 : 0.2,
+              latencyMs: 123,
+              metadata: { evidence: 'Synthetic turn' },
+              tokenUsage: {
+                numRequests: 2,
+                total: 10,
+                incurredTokenUsage: { numRequests: cached ? 1 : 2, total: cached ? 5 : 10 },
+              },
+            };
           },
         };
         // Cached simulated users must not invalidate fresh target evidence.
@@ -173,6 +186,7 @@ describe('runEval', () => {
           sequence: 'First\n---\nLast',
           simulation: 'User: Next\n---\nAssistant: First\n---\nUser: Next\n---\nAssistant: Last',
         }[kind];
+        const track = vi.spyOn(TokenUsageTracker.getInstance(), 'trackResponseUsage');
         const [row] = await runEval({
           ...defaultOptions,
           provider: target,
@@ -194,15 +208,24 @@ describe('runEval', () => {
         if (verifier && cached) {
           expect(row.failureReason).toBe(ResultFailureReason.ERROR);
           expect(row.error).toContain('requires a fresh target call');
+          expect(row.response?.output).toBeUndefined();
+          expect(JSON.stringify(row)).not.toContain('Synthetic turn');
           expect(judge).not.toHaveBeenCalled();
+          expect(track).toHaveBeenCalledTimes(1);
         } else {
           expect(row.response?.output).toBe(expected);
-          expect(row.response?.cached).not.toBe(true);
-          if (kind !== 'adaptive') {
-            const usage = row.response?.tokenUsage;
-            expect(usage?.numRequests).toBe(kind === 'simulation' ? 4 : 2);
-            expect((usage?.incurredTokenUsage ?? usage)?.numRequests).toBe(cached ? 1 : 2);
-          }
+        }
+        expect(row.response?.cached).not.toBe(true);
+        const usage = row.response?.tokenUsage;
+        expect(usage?.numRequests).toBe(kind === 'simulation' ? 4 : 2);
+        expect((usage?.incurredTokenUsage ?? usage)?.numRequests).toBe(cached ? 1 : 2);
+        if (kind === 'adaptive') {
+          expect(row).toMatchObject({
+            cost: 0.2,
+            incurredCost: cached ? 0.1 : 0.2,
+            latencyMs: 123,
+            tokenUsage: { total: 10, incurredTokenUsage: { total: cached ? 5 : 10 } },
+          });
         }
       } finally {
         judge.mockRestore();
