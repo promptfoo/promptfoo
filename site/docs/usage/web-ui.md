@@ -62,6 +62,12 @@ Hover to reveal actions. Hold `Shift` for more:
 
 Ratings and comments persist and are included in exports—use them to build training datasets.
 
+### Edit and replay a prompt
+
+Open **Details** and choose **Edit & Replay** to send an edited prompt to the provider for that column. Model replay requires a verifiable endpoint in the saved eval. A model name alone can't establish whether the original run used a gateway.
+
+For OpenAI Chat or Responses, set the provider's `config.apiBaseUrl` or the eval's `env.OPENAI_BASE_URL` to the intended URL before running the eval. Keep API keys outside the configuration. If the viewer can't verify the destination or preserve the provider settings, check the original configuration and rerun the eval with `promptfoo eval`.
+
 ## Eval Actions
 
 ![Eval actions menu](/img/docs/web-ui-eval-actions.png)
