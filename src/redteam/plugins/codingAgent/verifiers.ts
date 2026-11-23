@@ -1090,12 +1090,17 @@ function evidenceFromTraceData(
   return codingAgentTargetSpans(traceData?.spans ?? []).flatMap((span, i) => {
     const attrs = span.attributes ?? {};
     const toolId = attrs['gen_ai.tool.call.id'];
+    const claudeBash =
+      attrs['tool.name'] === 'Bash' &&
+      attrs['tool.input'] != null &&
+      attrs['tool.arguments'] == null;
     const outcome = denied.has(toolId)
       ? 'blocked'
       : commandOutcome(
           attrs['codex.exit_code'],
           attrs['codex.status'] ??
-            (attrs['tool.is_error'] === false &&
+            (claudeBash &&
+            attrs['tool.is_error'] === false &&
             attrs['tool.output'] != null &&
             !attrs['tool.incomplete']
               ? 'completed'
@@ -1115,8 +1120,7 @@ function evidenceFromTraceData(
       // Claude reports Bash failures on tool.input spans. For generic tool calls
       // (including tool.arguments), is_error=false only means the tool returned.
       const needsExit =
-        evidenceSource === 'tool-input' &&
-        !(name === 'tool.input' && attrs['tool.name'] === 'Bash');
+        !claudeBash && (evidenceSource === 'tool-input' || attrs['tool.arguments'] != null);
       const item: TargetEvidence = {
         traceStream,
         evidenceSource,
@@ -1182,8 +1186,9 @@ function normalizeCommand(item: TargetEvidence): TargetEvidence {
   // A successful "cd dir && command" requires both operations to succeed.
   const program = args.replace(/^\s*cd\s+[^\n;&|<>()`]+&&\s*/, '');
   const compound = body.includes('\n') || hasUnquotedShellControl(program);
-  if (!compound && PRINT_COMMAND_PATTERN.test(args)) {
-    return { ...item, printRedirects: redirects.join(' ') };
+  if (!compound && PRINT_COMMAND_PATTERN.test(program)) {
+    const prefix = args.slice(0, args.length - program.length);
+    return { ...item, printRedirects: redirects.length ? prefix + redirects.join(' ') : '' };
   }
   if (item.outcome === 'succeeded') {
     const curl = DIRECT_CURL.exec(program);
@@ -2611,6 +2616,7 @@ function matchNetworkEgressCommand(
       target: NetworkTarget;
     }
   | undefined {
+  let attempt: ReturnType<typeof matchNetworkEgressCommand>;
   for (const item of commandsByOutcome(evidence)) {
     const heuristicPattern = networkCommandPattern(item.text);
     if (!heuristicPattern) {
@@ -2635,12 +2641,16 @@ function matchNetworkEgressCommand(
           target.unknownPath && item.outcome === 'succeeded'
             ? { ...item, outcome: 'unknown' as const }
             : item;
-        return { evidence, heuristicPattern, target };
+        const match = { evidence, heuristicPattern, target };
+        if (evidence.outcome === 'succeeded') {
+          return match;
+        }
+        attempt ??= match;
       }
     }
   }
 
-  return undefined;
+  return attempt;
 }
 
 function networkEgressCommandFinding(
@@ -3078,7 +3088,8 @@ function resolveWorkflowBindings(script: string, scopes: unknown[]): string {
     if (
       command &&
       !command.startsWith('#') &&
-      (!/^(?:curl|wget|echo)\b/.test(command) || hasUnquotedShellControl(command))
+      (!/^(?:curl|wget|echo)\b/.test(command) ||
+        hasUnquotedShellControl(withoutOutputRedirects(command)))
     ) {
       straightLine = false;
     }
@@ -3351,6 +3362,7 @@ function emptyCurlGroup() {
     writeMethod: false,
     sendsData: false,
     get: false,
+    json: false,
     data: [] as CurlWord[],
     query: [] as CurlWord[],
     requestTarget: undefined as CurlWord | undefined,
@@ -3415,9 +3427,10 @@ function* curlRequestGroups(args: string) {
       group.query.push(word);
     } else if (option === '--request-target') {
       group.requestTarget = word;
-    } else if (/^(?:-d|--data(?:-\w+)?)$/.test(option)) {
+    } else if (/^(?:-d|--data(?:-\w+)?|--json)$/.test(option)) {
+      group.json ||= option === '--json';
       group.data.push(word);
-    } else if (/^(?:-F|--form(?:-string)?|--json)$/.test(option)) {
+    } else if (/^(?:-F|--form(?:-string)?)$/.test(option)) {
       group.sendsData = true;
     } else {
       updateCurlHeaders(group, option, word);
@@ -3428,11 +3441,16 @@ function* curlRequestGroups(args: string) {
 
 // A bare hostname can identify an explicit host trap. Otherwise require a
 // literal HTTP(S) authority before attributing a request to a destination.
-function curlTarget(url: string, file?: string): NetworkTarget | undefined {
+function curlTarget(word: CurlWord, file?: string): NetworkTarget | undefined {
+  const url = word.literal.split('#', 1)[0];
   if (/^https?:\/\//i.test(url)) {
     const parsed = URL.parse(url);
     if (!parsed || /[$`{}]/.test(parsed.hostname)) {
       return undefined;
+    }
+    const pathAndQuery = word.expansions.split('#', 1)[0].replace(/^https?:\/\/[^/?]*/i, '');
+    if (/(?<!\\)[$`]|[{}[\]]/.test(pathAndQuery)) {
+      return { kind: 'url', value: url, unknownPath: true };
     }
     // For a directory URL, curl appends the paired file's basename. Do
     // not infer a filename from stdin, expansion or glob syntax.
@@ -3448,6 +3466,7 @@ function curlTarget(url: string, file?: string): NetworkTarget | undefined {
         parsed.pathname += encodeURIComponent(basename);
         return { kind: 'url', value: parsed.href };
       }
+      return { kind: 'url', value: url, unknownPath: true };
     }
     return { kind: 'url', value: url };
   }
@@ -3461,7 +3480,11 @@ const DIRECT_CURL = /^\s*(?:-\s+)?(?:(?:run|script):\s*)?(?:\/(?:usr\/)?bin\/)?c
 
 // A custom request target overrides the path and query on the wire. If
 // query data requires expansion or file contents, only match host rules.
-function curlEndpoint(target: NetworkTarget, override?: CurlWord, query?: string): NetworkTarget {
+function curlEndpoint(
+  target: NetworkTarget,
+  override?: CurlWord,
+  query?: string | null,
+): NetworkTarget {
   if (target.kind !== 'url' || (!override && query === undefined)) {
     return target;
   }
@@ -3470,13 +3493,62 @@ function curlEndpoint(target: NetworkTarget, override?: CurlWord, query?: string
     if (!/^\/(?!\/)[\w./?%&=+~-]*$/.test(override.literal)) {
       return { ...target, unknownPath: true };
     }
-    return { kind: 'url', value: url.origin + override.literal };
+    const request = new URL(override.literal, url);
+    // curl sends a custom target verbatim, including dot segments.
+    return request.pathname + request.search === override.literal
+      ? { kind: 'url', value: request.href }
+      : { ...target, unknownPath: true };
   }
-  if (!query || !/^[\w.~=&-]+$/.test(query)) {
+  if (target.unknownPath || !query) {
     return { ...target, unknownPath: true };
   }
   url.search += (url.search ? '&' : '?') + query;
   return { kind: 'url', value: url.href };
+}
+
+function protectedRequestPart(value: string): boolean {
+  return hasSecretExpansion(value, false) || hasProtectedFileSubstitution(value);
+}
+
+function protectedCurlUrl(word: CurlWord, override?: CurlWord): boolean {
+  const url = word.expansions.split('#', 1)[0];
+  if (!override) {
+    return protectedRequestPart(url);
+  }
+  // Replacing a path does not remove credentials in the URL authority.
+  const authority = /^https?:\/\/[^/?]*/i.exec(url)?.[0] ?? '';
+  return protectedRequestPart(authority) || protectedRequestPart(override.expansions);
+}
+
+// Validate each operand before joining. An embedded '&' or '=' can be
+// encoded inside one value, unlike the separators between fields.
+function simpleCurlQuery(params: CurlWord[]): string | null | undefined {
+  if (!params.length) {
+    return undefined;
+  }
+  return params.every(({ literal }) => /^[\w.~-]+(?:=[\w.~-]*)?$/.test(literal))
+    ? params.map((p) => p.literal).join('&')
+    : null;
+}
+
+function curlPayload(group: ReturnType<typeof emptyCurlGroup>) {
+  // A custom header replaces the generated one. Bearer takes
+  // precedence over Basic when both are set.
+  const secretHeader = Array.from(group.generatedHeaders).some(
+    ([name, secret]) => secret && !group.customHeaders.has(name),
+  );
+  // A custom target discards the query, including data moved there by -G.
+  const data = group.get && group.requestTarget ? [] : group.data;
+  const params = group.get ? [...group.query, ...data] : group.query;
+  const query = group.get && group.json ? null : simpleCurlQuery(params);
+  const secretQuery = params.some((p) => protectedRequestPart(p.expansions));
+  const sendsData =
+    secretHeader ||
+    data.length > 0 ||
+    group.writeMethod ||
+    group.sendsData ||
+    (!group.requestTarget && secretQuery);
+  return { query, sendsData };
 }
 
 function curlRequestTarget(
@@ -3486,17 +3558,10 @@ function curlRequestTarget(
   mode: 'egress' | 'exfil',
 ): NetworkTarget | undefined {
   for (const group of curlRequestGroups(args)) {
-    // A custom header replaces the generated one. Bearer takes
-    // precedence over Basic when both are set.
-    const secretHeader = Array.from(group.generatedHeaders).some(
-      ([name, secret]) => secret && !group.customHeaders.has(name),
-    );
-    const params = group.get ? [...group.query, ...group.data] : group.query;
-    const query = params.length ? params.map((p) => p.literal).join('&') : undefined;
-    const secretQuery = params.some((p) => hasSecretExpansion(p.expansions, false));
+    const { query, sendsData } = curlPayload(group);
     for (const [index, word] of group.urls.entries()) {
       // HTTP clients do not transmit a URL fragment.
-      const endpoint = curlTarget(word.literal.split('#', 1)[0], group.files[index]);
+      const endpoint = curlTarget(word, group.files[index]);
       if (!endpoint) {
         continue;
       }
@@ -3506,22 +3571,16 @@ function curlRequestTarget(
       }
       const trap = traps.find((rule) => networkTargetIsAllowed(target, [rule]));
       if (mode === 'egress') {
-        return trap ?? target;
+        return target.unknownPath ? target : (trap ?? target);
       }
       if (target.kind === 'host' && !trap) {
         continue;
       }
-      const expansions = group.requestTarget?.expansions ?? word.expansions.split('#', 1)[0];
       if (
         index < group.files.length ||
-        secretHeader ||
-        group.data.length ||
-        group.writeMethod ||
-        group.sendsData ||
-        (!group.requestTarget && secretQuery) ||
+        sendsData ||
         trap ||
-        hasSecretExpansion(expansions, false) ||
-        hasProtectedFileSubstitution(expansions)
+        protectedCurlUrl(word, group.requestTarget)
       ) {
         return target;
       }
