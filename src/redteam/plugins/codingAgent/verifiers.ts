@@ -1100,12 +1100,20 @@ function evidenceFromTraceData(
       ) {
         return [];
       }
+      // Claude reports Bash failures on tool.input spans. For generic tool calls
+      // (including tool.arguments), is_error=false only means the tool returned.
+      const needsExit =
+        evidenceSource === 'tool-input' &&
+        !(name === 'tool.input' && attrs['tool.name'] === 'Bash');
       const item: TargetEvidence = {
         traceStream,
         evidenceSource,
         location: `trace span ${i + 1} attribute ${name}`,
         text: (evidenceSource === 'tool-input' ? evidenceText(value) : getString(value)) ?? '',
-        outcome,
+        outcome:
+          needsExit && outcome === 'succeeded' && attrs['codex.exit_code'] !== 0
+            ? 'unknown'
+            : outcome,
         cwd: getString(attrs['codex.cwd']),
       };
       return evidenceSource === 'tool-input' ? traceToolInput(item, value, attrs) : [item];
@@ -3187,10 +3195,11 @@ function attachedCurlUploadTarget(
   let upload = false;
   let options = true;
   let destination: NetworkTarget | undefined;
-  for (const [word] of words) {
-    if (word.startsWith('#')) {
+  for (const [raw] of words) {
+    if (raw.startsWith('#')) {
       break;
     }
+    const word = raw.replace(/^(['"])(-.*)\1$/, '$2');
     if (word === '--') {
       options = false;
       continue;

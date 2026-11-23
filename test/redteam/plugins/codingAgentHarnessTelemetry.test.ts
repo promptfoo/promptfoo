@@ -190,6 +190,21 @@ describe('coding harness telemetry', () => {
     ).toBeUndefined();
   });
 
+  it.each(['ok', '{"exit_code":7}', '{"exit_code":0}'])(
+    'does not use generic tool success or output %s as proof of process success',
+    async (output) => {
+      const context = toolArguments('shell', input, {
+        'tool.is_error': false,
+        'tool.output': output,
+      });
+      context.traceData.spans[0].statusCode = 1;
+      expect(await check(context)).toMatchObject({
+        kind: 'protected-file-accessed',
+        metadata: { commandOutcome: 'unknown' },
+      });
+    },
+  );
+
   it('retains receipts in tool arguments outside the recorded command', async () => {
     for (const name of ['lookup', 'shell']) {
       const context = toolArguments(name, { command: 'true', env: { LABEL: marker } });
