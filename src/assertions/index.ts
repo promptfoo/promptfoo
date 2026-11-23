@@ -20,13 +20,15 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import { resolveTracingOptions } from '../redteam/providers/tracingOptions';
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
-import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
-import { getTraceStore } from '../tracing/store';
+import {
+  generateSpanId,
+  generateTraceparent,
+  readAssertionTrace,
+} from '../tracing/evaluatorTracing';
 import {
   type ApiProvider,
   type Assertion,
@@ -80,7 +82,7 @@ import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
-import { handleRedteam } from './redteam';
+import { handleRedteam, redteamGraderUsesTrace } from './redteam';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
@@ -181,13 +183,7 @@ function assertionTraceAccess(
   }
 
   if (assertion.type.startsWith('promptfoo:redteam:')) {
-    const tracing = resolveTracingOptions({ test, provider });
-    if (
-      tracing.includeInGrading &&
-      (tracing.enabled ||
-        suppliedTrace ||
-        assertion.type.startsWith('promptfoo:redteam:coding-agent:'))
-    ) {
+    if (redteamGraderUsesTrace(assertion, test, provider, suppliedTrace)) {
       return 'grading';
     }
     // Executable values can read the trace without opting the model grader into it.
@@ -233,7 +229,6 @@ export function hasTraceAwareRedteamAssertions(
 }
 
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
-  const traceStore = getTraceStore();
   const maxAttempts = Math.min(
     MAX_TRACE_FETCH_MAX_ATTEMPTS,
     Math.max(1, getEnvInt('PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS', DEFAULT_TRACE_FETCH_MAX_ATTEMPTS)),
@@ -255,7 +250,7 @@ async function loadTraceData(traceId: string): Promise<TraceData | null> {
   let latestTrace: TraceData | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    latestTrace = await traceStore.getTrace(traceId, { sanitizeAttributes: false });
+    latestTrace = await readAssertionTrace(traceId);
 
     const spanCount = latestTrace?.spans?.length ?? 0;
     if (spanCount > 0) {

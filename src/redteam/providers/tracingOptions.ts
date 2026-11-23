@@ -1,6 +1,6 @@
 import cliState from '../../cliState';
 import { isApiProvider, isProviderOptions } from '../../types/providers';
-import { getAttackProviderFullId } from '../shared/attackProviders';
+import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
 
 import type { ApiProvider, AtomicTestCase, UnifiedConfig } from '../../types/index';
 
@@ -119,6 +119,22 @@ function normalizeTracingOptions(
   };
 }
 
+/** Bind trace policy and stored grades to the same configured provider. */
+export function resolveStrategyProvider(test?: AtomicTestCase, fallbackProvider?: ApiProvider) {
+  const provider = test?.provider ?? fallbackProvider;
+  const id = isApiProvider(provider)
+    ? provider.id()
+    : isProviderOptions(provider)
+      ? provider.id
+      : provider;
+  const providerId = typeof id === 'string' ? id : undefined;
+  return {
+    provider,
+    providerId,
+    attack: isAttackProvider(providerId ?? ''),
+  };
+}
+
 export function resolveTracingOptions({
   strategyId,
   test,
@@ -137,16 +153,8 @@ export function resolveTracingOptions({
   const metadataStrategyConfig = (
     test?.metadata?.strategyConfig as Record<string, unknown> | undefined
   )?.tracing as RawTracingConfig | undefined;
-  const provider = test?.provider ?? fallbackProvider;
-  const providerId = isApiProvider(provider)
-    ? provider.id()
-    : isProviderOptions(provider)
-      ? provider.id
-      : provider;
-  const providerStrategy =
-    typeof providerId === 'string' && providerId.startsWith('promptfoo:redteam:')
-      ? providerId
-      : undefined;
+  const { provider, providerId } = resolveStrategyProvider(test, fallbackProvider);
+  const providerStrategy = providerId?.startsWith('promptfoo:redteam:') ? providerId : undefined;
   const providerStrategyConfig = (config?.tracing ??
     (providerStrategy && typeof provider === 'object' ? provider.config?.tracing : undefined)) as
     | RawTracingConfig

@@ -67,7 +67,8 @@ vi.mock('../../src/tracing/traceContext', async (importOriginal) => ({
 }));
 
 // Mock evaluatorTracing module
-vi.mock('../../src/tracing/evaluatorTracing', () => ({
+vi.mock('../../src/tracing/evaluatorTracing', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/evaluatorTracing')>()),
   generateTraceId: vi.fn(() => 'abcdef1234567890abcdef1234567890'),
   generateSpanId: vi.fn(() => '0123456789abcdef'),
   generateTraceparent: vi.fn((traceId, spanId) => `00-${traceId}-${spanId}-01`),
