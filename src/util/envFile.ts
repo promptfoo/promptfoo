@@ -2,6 +2,21 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+export function isTruthyEnvValue(value: string): boolean {
+  return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
+}
+
+function setEnvValue(env: NodeJS.ProcessEnv, key: string, value: string, override: boolean) {
+  if (!override && Object.prototype.hasOwnProperty.call(env, key)) {
+    return;
+  }
+  // An env file can disable sharing, but cannot lift a host or earlier file restriction.
+  if (key === 'PROMPTFOO_DISABLE_SHARING' && isTruthyEnvValue(env[key] ?? '')) {
+    return;
+  }
+  env[key] = value;
+}
+
 /*!
  * The .env parser below is adapted from dotenv (BSD-2-Clause).
  * Copyright (c) 2015, Scott Motte
@@ -43,7 +58,12 @@ function parseEnvFile(contents: string): Record<string, string> {
     if (quote === '"') {
       value = value.replace(/\\n/g, '\n').replace(/\\r/g, '\r');
     }
-    parsed[match[1]] = value;
+    // Windows process.env treats variable names as case-insensitive.
+    const key =
+      process.platform === 'win32' && match[1].toUpperCase() === 'PROMPTFOO_DISABLE_SHARING'
+        ? 'PROMPTFOO_DISABLE_SHARING'
+        : match[1];
+    setEnvValue(parsed, key, value, true);
   }
 
   return parsed;
@@ -75,9 +95,7 @@ export function loadEnvFiles(paths?: string[], options: LoadEnvOptions = {}): vo
       const resolved = file.startsWith('~') ? path.join(os.homedir(), file.slice(1)) : file;
       const values = parseEnvFile(fs.readFileSync(resolved, encoding as BufferEncoding));
       for (const key of Object.keys(values)) {
-        if (override || !Object.prototype.hasOwnProperty.call(parsed, key)) {
-          parsed[key] = values[key];
-        }
+        setEnvValue(parsed, key, values[key], override);
       }
     } catch {
       // As before, absent/unreadable defaults are optional and an unreadable file
@@ -87,8 +105,6 @@ export function loadEnvFiles(paths?: string[], options: LoadEnvOptions = {}): vo
 
   const destination = options.processEnv ?? process.env;
   for (const key of Object.keys(parsed)) {
-    if (override || !Object.prototype.hasOwnProperty.call(destination, key)) {
-      destination[key] = parsed[key];
-    }
+    setEnvValue(destination, key, parsed[key], override);
   }
 }

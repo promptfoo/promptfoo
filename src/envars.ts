@@ -3,7 +3,7 @@ import {
   getExplicitProviderEnv,
   getProviderEnvOverrides,
 } from './envOverrides';
-import { loadEnvFiles } from './util/envFile';
+import { isTruthyEnvValue, loadEnvFiles } from './util/envFile';
 
 import type { EnvOverrides } from './types/env';
 
@@ -588,7 +588,7 @@ export function parseEnvBool(input: string | undefined, defaultValue?: boolean):
     return value;
   }
   if (typeof value === 'string') {
-    return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
+    return isTruthyEnvValue(value);
   }
   return Boolean(defaultValue);
 }
