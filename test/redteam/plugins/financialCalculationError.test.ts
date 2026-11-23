@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions';
 import { runEval } from '../../../src/evaluator';
 import {
   FINANCIAL_CALCULATION,
@@ -58,6 +59,25 @@ describe('exact financial references', () => {
         providerResponse: { output: { amount: 1 } },
       }),
     ).rejects.toThrow('raw JSON text');
+  });
+
+  it('rejects a rounded number from a serialized response marked as non-text', async () => {
+    const output = JSON.stringify(JSON.parse('{"amount":9007199254740993}'));
+    const grade = (redteamOutputIsText?: boolean) =>
+      runAssertion({
+        prompt: 'Calculate the amount',
+        provider: { id: () => 'fixture', callApi: async () => ({ output }) },
+        test: {},
+        assertion: {
+          type: FINANCIAL_CALCULATION,
+          value: { type: 'numeric', expected: { amount: '9007199254740992' } },
+        },
+        providerResponse: { output, metadata: { redteamOutputIsText } },
+      });
+
+    await expect(grade(false)).rejects.toThrow('raw JSON text');
+    await expect(grade(true)).resolves.toMatchObject({ pass: true });
+    await expect(grade()).resolves.toMatchObject({ pass: true });
   });
 
   async function run(test: AtomicTestCase) {

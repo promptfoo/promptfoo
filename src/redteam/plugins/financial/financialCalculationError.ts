@@ -18,7 +18,12 @@ export class FinancialCalculationErrorPluginGrader extends RedteamGraderBase {
     if (!isNumericReference(reference)) {
       return super.getResult(...args);
     }
-    if (typeof output !== 'string' || (context && context.providerResponse?.output !== output)) {
+    // A saved response can contain JSON text serialized after numeric precision was lost.
+    if (
+      typeof output !== 'string' ||
+      (context && context.providerResponse?.output !== output) ||
+      context?.providerResponse?.metadata?.redteamOutputIsText === false
+    ) {
       throw new Error(
         'Financial numeric grading requires raw JSON text. Set responseParser to text for HTTP targets.',
       );
