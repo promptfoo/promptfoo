@@ -185,7 +185,7 @@ function confirmReportedInput(
   submitted: string,
   statefulText: boolean,
 ): string | undefined {
-  const message = Array.isArray(reported) ? reported.at(-1) : undefined;
+  const message = Array.isArray(reported) ? reported[reported.length - 1] : undefined;
   const text = message?.role === 'user' ? message.content : reported;
   if (typeof text !== 'string' || !text.trim()) {
     return undefined;
