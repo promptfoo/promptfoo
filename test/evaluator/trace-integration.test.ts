@@ -891,6 +891,33 @@ describe('evaluator trace integration', () => {
       expect(mockFetchTraceContext).not.toHaveBeenCalled();
     });
 
+    it.each([
+      { type: 'trajectory:tool-set', weight: 1 },
+      { type: 'not-trajectory:tool-set', weight: 1 },
+      { type: 'trajectory:tool-set', weight: 0 },
+    ] as const)('requires local evidence for $type at weight $weight', async ({ type, weight }) => {
+      const provider = createMockProvider();
+      const options = createRunOptions(provider, {
+        testSuite: { ...tracingSuite, tracing: { enabled: true } },
+      });
+      options.test.providerOutput = 'ok';
+      options.test.threshold = 0.5;
+      options.test.assert = [
+        { type: 'equals', value: 'ok' },
+        { type: 'assert-set', weight, assert: [{ type, value: [] }] },
+      ];
+
+      const [result] = await runEval(options);
+
+      expect(result.success).toBe(weight === 0);
+      if (weight > 0) {
+        expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(result.error).toContain('No trace data available for trajectory:tool-set');
+      }
+      expect(result.response?.output).toBe('ok');
+      expect(provider.callApi).not.toHaveBeenCalled();
+    });
+
     it.each(['Precomputed output', ''])(
       'skips provider setup for precomputed output %j',
       async (output) => {

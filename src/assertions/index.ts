@@ -152,13 +152,22 @@ function isTraceAssertionType(type: string): boolean {
   );
 }
 
-export function assertionRequiresTrace(assertion: AssertionOrSet): boolean {
+export class MissingRequiredTraceError extends Error {}
+
+function requiresAssertionType(
+  assertion: AssertionOrSet,
+  matches: (type: string) => boolean,
+): boolean {
   if (assertion.weight === 0) {
     return false;
   }
   return assertion.type === 'assert-set'
-    ? assertion.assert.some(assertionRequiresTrace)
-    : isTraceAssertionType(getAssertionBaseType(assertion));
+    ? assertion.assert.some((child) => requiresAssertionType(child, matches))
+    : matches(getAssertionBaseType(assertion));
+}
+
+export function assertionRequiresTrace(assertion: AssertionOrSet): boolean {
+  return requiresAssertionType(assertion, isTraceAssertionType);
 }
 
 export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
@@ -825,6 +834,18 @@ export async function runAssertions({
       logger.debug(`Failed to preload trace data for assertions: ${error}`);
       preloadedTraceData = null;
     }
+  }
+
+  // Missing evidence is an error even when other scores would meet the threshold.
+  if (
+    !preloadedTraceData &&
+    test.assert.some((assertion) =>
+      requiresAssertionType(assertion, (type) => type === 'trajectory:tool-set'),
+    )
+  ) {
+    throw new MissingRequiredTraceError(
+      'No trace data available for trajectory:tool-set assertion',
+    );
   }
 
   // Serialize when the grouping queue is active: concurrent dispatch can

@@ -2,6 +2,7 @@ import { LRUCache } from 'lru-cache';
 import {
   assertionRequiresTrace,
   hasTraceAwareAssertions,
+  MissingRequiredTraceError,
   runAssertions,
 } from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
@@ -1199,7 +1200,7 @@ async function gradeRunEvalResponse({
     );
     applyGradingResult(ret, checkResult);
   } catch (error) {
-    if (!isGradingAbort(error, abortSignal)) {
+    if (!(error instanceof MissingRequiredTraceError) && !isGradingAbort(error, abortSignal)) {
       throw error;
     }
     applyGradingError(ret, error, abortSignal);
