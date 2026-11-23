@@ -20,6 +20,7 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { resolveTracingOptions } from '../redteam/providers/tracingOptions';
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
@@ -163,17 +164,28 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
   return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
 }
 
-function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
+function assertionMayNeedTraceContext(
+  assertion: AssertionOrSet,
+  test: AtomicTestCase,
+  suppliedTrace = false,
+): boolean {
   if (assertionUsesTrace(assertion)) {
     return true;
   }
 
   if (assertion.type === 'assert-set') {
-    return assertion.assert.some(assertionMayNeedTraceContext);
+    return assertion.assert.some((item) => assertionMayNeedTraceContext(item, test));
   }
 
   if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
     return true;
+  }
+
+  if (assertion.type.startsWith('promptfoo:redteam:')) {
+    const tracing = resolveTracingOptions({ test, strategyId: test.metadata?.strategyId ?? '' });
+    if (tracing.includeInGrading && (tracing.enabled || suppliedTrace)) {
+      return true;
+    }
   }
 
   return typeof assertion.value === 'string'
@@ -181,8 +193,11 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     : false;
 }
 
-export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
-  return Boolean(assertions?.some(assertionMayNeedTraceContext));
+export function hasTraceAwareAssertions(
+  assertions?: AssertionOrSet[],
+  test: AtomicTestCase = {},
+): boolean {
+  return Boolean(assertions?.some((assertion) => assertionMayNeedTraceContext(assertion, test)));
 }
 
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
@@ -470,10 +485,11 @@ async function runAssertionInternal({
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
-  // Add trace data if traceId is available
-  if (traceId && assertionMayNeedTraceContext(assertion)) {
+  const suppliedTrace = !!traceData && assertion.type.startsWith('promptfoo:redteam:');
+  if ((traceId || suppliedTrace) && assertionMayNeedTraceContext(assertion, test, suppliedTrace)) {
     try {
-      const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
+      const resolvedTraceData =
+        traceId && traceData === undefined ? await loadTraceData(traceId) : traceData;
       if (resolvedTraceData) {
         context.trace = {
           traceId: resolvedTraceData.traceId,
@@ -808,10 +824,8 @@ export async function runAssertions({
     })
     .flat();
 
-  const shouldPreloadTrace =
-    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
   let preloadedTraceData: TraceData | null | undefined;
-  if (shouldPreloadTrace && traceId) {
+  if (traceId && hasTraceAwareAssertions(test.assert, test)) {
     try {
       preloadedTraceData = await loadTraceData(traceId);
     } catch (error) {
@@ -862,7 +876,11 @@ export async function runAssertions({
       latencyMs,
       assertIndex: index,
       traceId,
-      traceData: preloadedTraceData,
+      // A sibling's preload is not an explicit request to grade this assertion with a trace.
+      traceData:
+        preloadedTraceData && !assertionMayNeedTraceContext(assertion, test)
+          ? undefined
+          : preloadedTraceData,
       claimStoredGradingUsage,
     });
 

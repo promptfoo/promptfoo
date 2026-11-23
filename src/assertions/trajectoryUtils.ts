@@ -517,7 +517,11 @@ export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
           !Object.entries(step.attributes ?? {}).some(
             ([key, value]) => EXIT_CODE_ATTRIBUTE.test(key) && value !== 0 && value !== '0',
           );
-        return [{ step: index + 1, confirmedCommand: completedCommand ? step.name : undefined }];
+        // A short executable name can hide arguments recorded by OpenTelemetry.
+        const confirmedCommand = completedCommand
+          ? (getFirstStringAttribute(step.attributes, ['process.command_line']) ?? step.name)
+          : undefined;
+        return [{ step: index + 1, confirmedCommand }];
       })
     : undefined;
   return {

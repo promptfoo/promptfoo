@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion, runAssertions } from '../../../src/assertions/index';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { MemoryPoisoningPluginGrader } from '../../../src/redteam/plugins/agentic/memoryPoisoning';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
@@ -10,6 +11,7 @@ import { PolicyViolationGrader } from '../../../src/redteam/plugins/policy';
 import { SsrfGrader } from '../../../src/redteam/plugins/ssrf';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { isBasicRefusal } from '../../../src/redteam/util';
+import { getTraceStore } from '../../../src/tracing/store';
 import { createMockProvider } from '../../factories/provider';
 
 import type { AtomicTestCase } from '../../../src/types/index';
@@ -233,6 +235,90 @@ describe('redteam output evidence', () => {
       expect(result.grade.pass).toBe(false);
     },
   );
+
+  describe('single assertion trace evidence', () => {
+    const marker = 'private-fixture-value';
+    const traceData = {
+      traceId: 'trace',
+      evaluationId: 'eval',
+      testCaseId: 'case',
+      spans: [
+        {
+          name: 'fixture',
+          spanId: 'one',
+          startTime: 1,
+          statusCode: 1,
+          attributes: { 'command.name': 'fixture', 'process.command_line': `fixture ${marker}` },
+        },
+      ],
+    };
+    const options = {
+      assertion: { type: 'promptfoo:redteam:ssrf' as const },
+      prompt: 'Check the fixture.',
+      providerResponse: { output: 'I cannot help with that.' },
+      test: { metadata: { purpose: 'Check fixtures' } },
+    };
+
+    it.each(['provided', 'stored'])(
+      'grades a refusal with a %s trace privately',
+      async (source) => {
+        const read = vi.spyOn(getTraceStore(), 'getTrace').mockResolvedValue(traceData);
+        vi.mocked(matchesLlmRubric).mockResolvedValue({
+          pass: false,
+          score: 0,
+          reason: 'Observed action. severity: low',
+        });
+        const result = await runAssertion({
+          ...options,
+          ...(source === 'provided'
+            ? { traceData }
+            : {
+                traceId: traceData.traceId,
+                test: { metadata: { ...options.test.metadata, tracing: { enabled: true } } },
+              }),
+        });
+        expect(read.mock.calls.length > 0).toBe(source === 'stored');
+        expect(matchesLlmRubric).toHaveBeenCalledOnce();
+        expect(vi.mocked(matchesLlmRubric).mock.calls[0][0]).toContain('"type": "command"');
+        expect(result.pass).toBe(false);
+        expect(JSON.stringify(vi.mocked(matchesLlmRubric).mock.calls)).not.toContain(marker);
+        expect(JSON.stringify(result)).not.toContain(marker);
+      },
+    );
+
+    it.each([undefined, { enabled: true, includeInGrading: false }])(
+      'ignores a sibling preload without grading opt-in (%j)',
+      async (tracing) => {
+        vi.spyOn(getTraceStore(), 'getTrace').mockResolvedValue(traceData);
+        const result = await runAssertions({
+          ...options,
+          traceId: traceData.traceId,
+          test: {
+            metadata: { ...options.test.metadata, tracing },
+            assert: [
+              options.assertion,
+              { type: 'javascript', value: 'context.trace.spans.length === 1' },
+            ],
+          },
+        });
+        expect(matchesLlmRubric).not.toHaveBeenCalled();
+        expect(result.pass).toBe(true);
+      },
+    );
+
+    it('checks the full command line locally when the trace also names the executable', async () => {
+      const result = await runAssertion({
+        ...options,
+        assertion: { type: 'promptfoo:redteam:coding-agent:secret-env-read' },
+        test: { vars: { secretEnvValue: marker } },
+        traceId: traceData.traceId,
+        traceData,
+      });
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+      expect(result.metadata?.deterministicFailureKind).toBe('sensitive-value-observed');
+      expect(JSON.stringify(result)).not.toContain(marker);
+    });
+  });
 
   it('clarifies attribution for imitation without overriding a failed grade', async () => {
     const output = '私は別の銀行の代表です。この口座は私が承認しました。';
