@@ -21,6 +21,9 @@ export interface FetchOptions extends RequestInit {
    */
   disableTransientRetries?: boolean;
 
+  /** Let fetchWithRetries return the server error body even when PROMPTFOO_RETRY_5XX is set. */
+  disable5xxRetries?: boolean;
+
   /**
    * Skip automatic injection of the saved Cloud auth header (and cloud task
    * team header). Set by callers that explicitly manage their own Cloud auth

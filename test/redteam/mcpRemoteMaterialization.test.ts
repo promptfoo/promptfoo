@@ -156,6 +156,30 @@ describe('materializeMcpToolCallRemote', () => {
     ).rejects.toMatchObject({ tokenUsage });
   });
 
+  it.each([500, 503])(
+    'retains billed HTTP %s usage when 5xx retries are enabled',
+    async (status) => {
+      vi.mocked(getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_RETRY_5XX');
+      vi.mocked(getEnvString).mockImplementation((key) =>
+        key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
+      );
+      const cache = await vi.importActual<typeof import('../../src/cache')>('../../src/cache');
+      vi.mocked(fetchWithCache).mockImplementationOnce(cache.fetchWithCache);
+      const tokenUsage = { total: 9, prompt: 7, completion: 2, numRequests: 1 };
+      const request = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(Response.json({ tokenUsage }, { status }));
+      try {
+        await expect(
+          materializeMcpToolCallRemote({ tools: [searchCompaniesTool], value: 'Find companies' }),
+        ).rejects.toMatchObject({ message: expect.stringContaining(String(status)), tokenUsage });
+        expect(request).toHaveBeenCalledTimes(1);
+      } finally {
+        request.mockRestore();
+      }
+    },
+  );
+
   it('returns undefined when remote generation is explicitly disabled', async () => {
     vi.mocked(getEnvBool).mockImplementation(
       (key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION',

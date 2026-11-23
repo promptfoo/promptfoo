@@ -143,6 +143,8 @@ export async function materializeMcpToolCallRemote(
         method: 'POST',
         headers: getRemoteGenerationHeaders(),
         body: JSON.stringify(body),
+        // Even with zero retries, the 5xx policy would discard the billed response body.
+        disable5xxRetries: true,
         ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
       },
       getRequestTimeoutMs(),
