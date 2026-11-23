@@ -14,6 +14,7 @@ import { evaluateWithSource } from '../../../src/node';
 import { loadApiProviders } from '../../../src/providers/index';
 import { createApp } from '../../../src/server/server';
 import * as fetchUtils from '../../../src/util/fetch/index';
+import * as fileUtils from '../../../src/util/file';
 import * as providerRefs from '../../../src/util/providerRef';
 import { normalizeProviderRef } from '../../../src/util/providerRef';
 import * as templates from '../../../src/util/templates';
@@ -523,6 +524,63 @@ describe('POST /api/eval/replay provider boundary', () => {
     expect(evaluate.mock.calls[0][0].providers).toEqual([{ ...provider, prompts: ['Replay'] }]);
   });
 
+  it.each(['json', 'yaml'])(
+    'never expands nested references in a %s provider file',
+    async (ext) => {
+      const nested = 'file://{{ env.REPORT | lower }}';
+      const filename = `providers.${ext}`;
+      await fs.writeFile(
+        path.join(directory, filename),
+        ext === 'json'
+          ? JSON.stringify({ id: 'openai:codex-security', config: { report_file: nested } })
+          : `- id: http\n  config:\n    url: "${nested}"\n`,
+      );
+      const expand = vi.spyOn(fileUtils, 'maybeLoadConfigFromExternalFile');
+      const source = `file://${filename}`;
+      storedConfig([source], directory);
+      expect((await replay()).status).toBe(400);
+      storedConfig([source, 'echo'], directory, ['other', 'echo']);
+      expect((await replay(0, 1)).status).toBe(400);
+      expect(expand).not.toHaveBeenCalled();
+      expect(evaluate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refuses to redirect a saved column when file-backed labels change', async () => {
+    const file = path.join(directory, 'targets.json');
+    await fs.writeFile(
+      file,
+      JSON.stringify([
+        { id: 'echo', label: 'Second' },
+        { id: 'https://other.invalid', label: 'First', config: { body: '{{prompt}}' } },
+      ]),
+    );
+    storedConfig([`file://${file}`], directory, ['First', 'Second']);
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('supports plain YAML provider arrays with saved environment labels', async () => {
+    await fs.writeFile(
+      path.join(directory, 'providers.yml'),
+      '- id: echo\n  label: "{{ env.NAME }}"\n- id: openai:codex-security\n  config:\n    settings: file://private.json\n',
+    );
+    const readFile = vi.spyOn(providerRefs, 'readRawProviderConfigFile');
+    storedConfig(['file://providers.yml'], directory, ['Local', 'openai:codex-security'], {
+      NAME: 'Local',
+    });
+    expect((await replay(0, 0)).status).toBe(200);
+    expect(evaluate.mock.calls[0][0].providers).toEqual([
+      { id: 'echo', label: 'Local', prompts: ['Replay'] },
+    ]);
+    expect((await replay(0, 1)).status).toBe(400);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+    expect(readFile.mock.calls.map(([path]) => path)).toEqual([
+      'file://providers.yml',
+      'file://providers.yml',
+    ]);
+  });
+
   it.each([
     { id: 'file:///unresolved-provider.yaml' },
     '{{ env.PROVIDER }}',
@@ -596,6 +654,85 @@ describe('POST /api/eval/replay provider boundary', () => {
       expect(evaluate).toHaveBeenCalledTimes(1);
     },
   );
+
+  it('uses the pinned Cloud environment for local labels without swapping targets', async () => {
+    const providers = [
+      { id: 'promptfoo://provider/a', label: '{{ env.AWS_REGION }}' },
+      { id: 'promptfoo://provider/b', label: '{{ env.VERTEX_REGION }}' },
+    ];
+    const env = { AWS_REGION: 'east', VERTEX_REGION: 'west' };
+    let regions = { AWS_REGION: 'west', VERTEX_REGION: 'east' };
+    const lookup = mockCloudProvider({}).mockImplementation(async (url) =>
+      Response.json({
+        config: {
+          id: String(url).endsWith('/a') ? 'echo' : 'https://other.invalid',
+          env: regions,
+          config: { body: '{{prompt}}' },
+        },
+      }),
+    );
+    const loaded = await loadApiProviders(providers, { env });
+    const columns = loaded.map((provider) => provider.label || provider.id());
+    expect(columns).toEqual(['west', 'east']);
+    storedConfig(providers, undefined, columns, env);
+    lookup.mockClear();
+    evaluate.mockImplementationOnce(async (suite) => {
+      const [selected] = await loadApiProviders(suite.providers, { env: suite.env });
+      const response = { output: selected.id() };
+      return { toEvaluateSummary: async () => ({ results: [{ response }] }) } as unknown as Eval;
+    });
+    const result = await replay(0, 0);
+    expect(result.status).toBe(200);
+    expect(result.body.output).toBe('echo');
+    expect(lookup).toHaveBeenCalledTimes(2);
+    // A later change to Cloud must not redirect the same saved column.
+    regions = env;
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { id: '{{ env.TARGET }}', label: 'Saved' },
+    { id: 'echo', label: '{{ env.NAME | lower }}' },
+    { id: 'file://provider.yaml', label: 'Saved' },
+  ])('never renders or expands an indirect Cloud target: %j', async (target) => {
+    mockCloudProvider(target);
+    storedConfig(['promptfoo://provider/target'], undefined, ['Saved'], {
+      TARGET: 'openai:codex-security',
+      NAME: 'Saved',
+    });
+    const renderer = vi.spyOn(templates, 'getNunjucksEngine');
+    const expand = vi.spyOn(fileUtils, 'maybeLoadConfigFromExternalFile');
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(renderer).not.toHaveBeenCalled();
+    expect(expand).not.toHaveBeenCalled();
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('honors entry overrides for an inherited Cloud label and HTTP URL', async () => {
+    const label = '{{ env.AWS_REGION }}';
+    const url = '{{ env.OPENAI_BASE_URL }}';
+    const env = { AWS_REGION: 'suite', OPENAI_BASE_URL: 'https://suite.invalid' };
+    const provider = {
+      id: 'promptfoo://provider/test',
+      env: { AWS_REGION: 'local', OPENAI_BASE_URL: 'https://local.invalid' },
+    };
+    const lookup = mockCloudProvider({
+      id: 'http',
+      label,
+      env: { AWS_REGION: 'cloud', OPENAI_BASE_URL: 'https://cloud.invalid' },
+      config: { url, body: '{{prompt}}' },
+    });
+    storedConfig([provider], undefined, ['local'], env);
+    evaluate.mockImplementationOnce(async (suite) => {
+      const [selected] = await loadApiProviders(suite.providers, { env: suite.env });
+      expect(selected.label).toBe('local');
+      expect(selected.id()).toBe('https://local.invalid');
+      return { toEvaluateSummary: async () => ({ results: [] }) } as unknown as Eval;
+    });
+    expect((await replay(0, 0)).status).toBe(200);
+    expect(lookup).toHaveBeenCalledTimes(1);
+  });
 
   it('skips an unavailable cloud target only for an identifiable, unrelated column', async () => {
     vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(false);

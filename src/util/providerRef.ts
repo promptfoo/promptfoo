@@ -131,6 +131,15 @@ export function isProviderConfigFileReference(providerPath: string): boolean {
   );
 }
 
+/** Parse the outer document without expanding nested references or rendering templates. */
+export function readRawProviderConfigFile(providerPath: string, basePath?: string): unknown {
+  const relativePath = providerPath.slice('file://'.length);
+  const resolvedPath = path.isAbsolute(relativePath)
+    ? relativePath
+    : path.join(basePath || process.cwd(), relativePath);
+  return loadYaml(fs.readFileSync(resolvedPath, 'utf8'));
+}
+
 /**
  * Reads a provider config file and normalizes single-provider and multi-provider files.
  * An explicit base path also scopes nested configuration files; otherwise their
@@ -143,13 +152,9 @@ export function readProviderConfigFile(
   basePath?: string,
 ): ProviderConfigFile {
   const relativePath = providerPath.slice('file://'.length);
-  const resolvedPath = path.isAbsolute(relativePath)
-    ? relativePath
-    : path.join(basePath || process.cwd(), relativePath);
-
   let rawContent: unknown;
   try {
-    rawContent = loadYaml(fs.readFileSync(resolvedPath, 'utf8'));
+    rawContent = readRawProviderConfigFile(providerPath, basePath);
   } catch (err) {
     throw new Error(
       `Failed to load provider config ${relativePath}: ${err instanceof Error ? err.message : err}`,
