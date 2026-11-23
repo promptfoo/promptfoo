@@ -682,9 +682,20 @@ function convertErrorsToReadableMessage(
   return errors.map((error) => `${error.type} ${error.id}: ${error.message}`).join(', ');
 }
 
+function permissionCheckId(id: string): string {
+  // Cloud needs the actual target UUID, which log sanitization can mask as an opaque secret.
+  if (isCloudProvider(id)) {
+    return id.split(/[?#]/, 1)[0];
+  }
+  // An endpoint can carry credentials in any path segment or query parameter.
+  // Only the transport is needed for a local target, even inside a display name.
+  const transport = /\b(https?|wss?|webhook):/i.exec(id);
+  return transport ? transport[1].toLowerCase() : sanitizeProviderIdForLog(id);
+}
+
 function permissionCheckProvider(provider: unknown): string | ProviderOptions {
   if (typeof provider === 'string') {
-    return sanitizeProviderIdForLog(provider);
+    return permissionCheckId(provider);
   }
 
   const ref = normalizeProviderRef(provider);
@@ -702,9 +713,9 @@ function permissionCheckProvider(provider: unknown): string | ProviderOptions {
         : undefined;
   const linkedTargetId = isRecord(config) ? config.linkedTargetId : undefined;
   return {
-    id: sanitizeProviderIdForLog(id),
+    id: permissionCheckId(id),
     ...(typeof linkedTargetId === 'string'
-      ? { config: { linkedTargetId: sanitizeProviderIdForLog(linkedTargetId) } }
+      ? { config: { linkedTargetId: permissionCheckId(linkedTargetId) } }
       : {}),
   };
 }

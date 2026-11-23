@@ -2197,7 +2197,7 @@ describe('cloud utils', () => {
     });
 
     it('sends only provider identities and linked targets in the serialized permission request', async () => {
-      const linkedTargetId = 'promptfoo://provider/linked-target';
+      const linkedTargetId = 'promptfoo://provider/12345678-1234-4123-8123-123456789abc';
       const providerConfig = {
         linkedTargetId,
         apiKey: 'provider-secret',
@@ -2205,7 +2205,7 @@ describe('cloud utils', () => {
       };
       const config: Partial<UnifiedConfig> = {
         providers: [
-          'promptfoo://provider/cloud-target',
+          linkedTargetId,
           {
             id: 'openai:chat:fixture',
             config: providerConfig,
@@ -2243,11 +2243,11 @@ describe('cloud utils', () => {
       const payload = JSON.parse(body).config;
       expect(payload).toEqual({
         providers: [
-          'promptfoo://provider/cloud-target',
+          linkedTargetId,
           { id: 'openai:chat:fixture', config: { linkedTargetId } },
           { id: 'http', config: { linkedTargetId } },
           { id: 'promptfoo://provider/map-target' },
-          expect.stringContaining('example.test/path'),
+          'https',
           'webhook',
           { id: 'runtime-fixture', config: { linkedTargetId } },
         ],
@@ -2273,6 +2273,34 @@ describe('cloud utils', () => {
         'Content-Type': 'application/json',
       });
       expect(JSON.stringify(config)).toBe(original);
+    });
+
+    it('keeps network endpoint credentials out of permission checks for every provider form', async () => {
+      const endpoint = 'example.test/private-route?code=fixture-access-key#private-fragment';
+      const linkedTargetId = 'promptfoo://provider/87654321-4321-4321-8321-123456789abc';
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true }),
+      } as Response);
+      await checkCloudPermissions({
+        providers: [
+          `https://${endpoint}`,
+          { id: `http://${endpoint}`, config: { linkedTargetId } },
+          { [`ws://${endpoint}`]: {} },
+          { [`https://${endpoint}`]: { id: 'local-alias' } },
+          { id: () => `wss://${endpoint}` } as unknown as ProviderOptions,
+          { [linkedTargetId]: { id: 'display-name' } },
+        ],
+      });
+      const body = JSON.parse(mockFetchWithProxy.mock.calls[0][1]!.body as string);
+      expect(body.config.providers).toEqual([
+        'https',
+        { id: 'http', config: { linkedTargetId } },
+        { id: 'ws' },
+        { id: 'local-alias' },
+        { id: 'wss' },
+        { id: linkedTargetId },
+      ]);
     });
 
     it('should handle config with undefined providers', async () => {
