@@ -144,6 +144,9 @@
     "mongoose": {
       "gcp-metadata": "^9.2.3"
     },
+    "webpack-bundle-analyzer": {
+      "ws": "^7.5.14"
+    },
     "webpack-dev-server": {
       "express": "^4.22.3"
     },
@@ -182,7 +185,7 @@
     "ibm-cloud-sdk-core": "5.6.2"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.322",
+    "@anthropic-ai/claude-agent-sdk": "0.3.323",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -190,7 +193,7 @@
     "@aws-sdk/client-sagemaker-runtime": "^3.1045.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@aws/bedrock-token-generator": "^1.1.0",
-    "@biomejs/biome": "2.6.5",
+    "@biomejs/biome": "2.6.7",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.17",
     "@langfuse/client": "^6.1.0",
@@ -262,7 +265,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "1.8.0",
     "@apidevtools/json-schema-ref-parser": "^16.0.5",
-    "@hono/node-server": "2.1.7",
+    "@hono/node-server": "2.1.8",
     "@inquirer/checkbox": "^5.2.8",
     "@inquirer/confirm": "^6.3.5",
     "@inquirer/core": "^12.0.6",
@@ -332,7 +335,7 @@
     "tsx": "^4.23.11",
     "undici": ">=7.30.2 <8",
     "winston": "^3.19.0",
-    "ws": "^8.21.3",
+    "ws": "^8.23.0",
     "zod": "^4.6.7"
   },
   "madge": {

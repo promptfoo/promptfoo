@@ -123,10 +123,10 @@ function validateLayerDefinition(
     );
   }
 
-  layer.roots = layer.roots.map((root) => normalizeSourceRoot(repoRoot, root));
+  layer.roots = layer.roots.map((root: unknown) => normalizeSourceRoot(repoRoot, root));
   return layer.roots.map((root) => {
-    if (typeof root !== 'string' || !fs.existsSync(path.join(repoRoot, root))) {
-      throw new Error(`Architecture layer "${layer.name}" root "${String(root)}" does not exist.`);
+    if (!fs.existsSync(path.join(repoRoot, root))) {
+      throw new Error(`Architecture layer "${layer.name}" root "${root}" does not exist.`);
     }
     return { layerName: layer.name, root };
   });
