@@ -1660,7 +1660,12 @@ function readerCommand(text: string): string {
     return withoutLiteralRedirects(body);
   }
   const redirects: string[] = [];
-  const program = withoutLiteralRedirects(body, redirects, true);
+  // A leading line or byte count is not an input file. Leave status
+  // attribution to the original command, including the reader option.
+  const program = withoutLiteralRedirects(body, redirects, true).replace(
+    /^(\s*(?:\/(?:usr\/)?bin\/)?(?:head|tail))[ \t]+(?:-n|-c|--lines|--bytes)[ \t]+[+-]?\d+(?=\s|$)/,
+    '$1',
+  );
   const [exe, ...args] = shellLikeTokens(program);
   if (
     !SIMPLE_READER.test(path.basename(exe ?? '')) ||
