@@ -57,6 +57,7 @@ describe('trajectory:tool-set', () => {
     expect(check([], [span('llm.completion')]).pass).toBe(true);
     expect(check([], spans).pass).toBe(false);
     expect(() => check([], undefined, true)).toThrow('No trace data');
+    expect(() => check([], [])).toThrow('No trace data');
   });
   it.each([null, 'lookup', {}, [''], [' '], [1], { tools: ['lookup'], mode: 'subset' }])(
     'rejects invalid configuration %j',

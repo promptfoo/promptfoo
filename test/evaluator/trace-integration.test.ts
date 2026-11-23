@@ -893,6 +893,8 @@ describe('evaluator trace integration', () => {
 
     it.each([
       { type: 'trajectory:tool-set', weight: 1 },
+      { type: 'trace-error-spans', weight: 1 },
+      { type: 'trace-error-spans', weight: 0 },
       { type: 'not-trajectory:tool-set', weight: 1 },
       { type: 'trajectory:tool-set', weight: 0 },
     ] as const)('requires local evidence for $type at weight $weight', async ({ type, weight }) => {
@@ -904,7 +906,11 @@ describe('evaluator trace integration', () => {
       options.test.threshold = 0.5;
       options.test.assert = [
         { type: 'equals', value: 'ok' },
-        { type: 'assert-set', weight, assert: [{ type, value: [] }] },
+        {
+          type: 'assert-set',
+          weight,
+          assert: [type === 'trace-error-spans' ? { type } : { type, value: [] }],
+        },
       ];
 
       const [result] = await runEval(options);
@@ -912,10 +918,45 @@ describe('evaluator trace integration', () => {
       expect(result.success).toBe(weight === 0);
       if (weight > 0) {
         expect(result.failureReason).toBe(ResultFailureReason.ERROR);
-        expect(result.error).toContain('No trace data available for trajectory:tool-set');
+        expect(result.error).toContain(`No trace data available for ${type.replace(/^not-/, '')}`);
       }
       expect(result.response?.output).toBe('ok');
       expect(provider.callApi).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { mode: 'fresh', weight: 1, expected: true },
+      { mode: 'empty', weight: 1, expected: false },
+      { mode: 'cached', weight: 1, expected: false },
+      { mode: 'empty', weight: 0, expected: true },
+      { mode: 'cached', weight: 0, expected: true },
+    ])('grades $mode local tool evidence at weight $weight', async ({ mode, weight, expected }) => {
+      const provider = createMockProvider({
+        response: { output: 'ok', cached: mode === 'cached' },
+      });
+      const options = createRunOptions(provider, {
+        testSuite: { ...tracingSuite, tracing: { enabled: true } },
+      });
+      mockTraceStore.getTrace.mockResolvedValue({
+        traceId,
+        evaluationId: 'test-eval-id',
+        testCaseId: 'test-case-id',
+        spans: mode === 'empty' ? [] : [{ spanId: 'fixture', name: 'target.call', startTime: 1 }],
+      });
+      options.test.threshold = 0.5;
+      options.test.assert = [
+        { type: 'equals', value: 'ok' },
+        { type: 'trajectory:tool-set', value: [], weight },
+      ];
+      const [result] = await runEval(options);
+      expect(result.success).toBe(expected);
+      expect(result.response?.output).toBe('ok');
+      if (!expected) {
+        expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(result.error).toContain(
+          mode === 'empty' ? 'No trace data' : 'Retry without caching',
+        );
+      }
     });
 
     it.each(['Precomputed output', ''])(

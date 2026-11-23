@@ -3,18 +3,32 @@ import { getToolNameFromAttributes } from '../tracing/toolAttributes';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+export function getToolSetEvidenceError(spans: unknown, cached?: boolean) {
+  if (cached) {
+    return 'A cached response has no fresh tool-set evidence. Retry without caching.';
+  }
+  if (!Array.isArray(spans) || spans.length === 0) {
+    return 'No trace data available for trajectory:tool-set assertion';
+  }
+  return undefined;
+}
+
 export const handleTrajectoryToolSet = (params: AssertionParams): GradingResult => {
   const parsed = ToolNamesSchema.safeParse(params.renderedValue ?? params.assertion.value);
   if (!parsed.success) {
     throw new Error(toolSetMessage);
   }
-  const trace = params.assertionValueContext.trace;
-  if (!trace || !Array.isArray(trace.spans)) {
-    throw new Error('No trace data available for trajectory:tool-set assertion');
+  const spans = params.assertionValueContext.trace?.spans ?? [];
+  const error = getToolSetEvidenceError(
+    spans,
+    params.assertionValueContext.providerResponse?.cached,
+  );
+  if (error) {
+    throw new Error(error);
   }
   const expected = new Set(parsed.data.map((name) => name.trim()));
   const actual = new Set(
-    trace.spans
+    spans
       .map((span) => getToolNameFromAttributes(span.attributes ?? {}))
       .filter((name): name is string => name !== undefined),
   );

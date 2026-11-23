@@ -100,7 +100,7 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { handleTrajectoryToolSet } from './trajectoryToolSet';
+import { getToolSetEvidenceError, handleTrajectoryToolSet } from './trajectoryToolSet';
 import {
   coerceString,
   getFinalTest,
@@ -154,20 +154,27 @@ function isTraceAssertionType(type: string): boolean {
 
 export class MissingRequiredTraceError extends Error {}
 
-function requiresAssertionType(
-  assertion: AssertionOrSet,
-  matches: (type: string) => boolean,
-): boolean {
+function traceEvidenceError(
+  baseType: string,
+  trace: { spans?: unknown } | null | undefined,
+  cached?: boolean,
+): string | undefined {
+  if (baseType === 'trajectory:tool-set') {
+    return getToolSetEvidenceError(trace?.spans, cached);
+  }
+  if (!trace && (baseType.startsWith('trace-') || baseType.startsWith('trajectory:'))) {
+    return `No trace data available for ${baseType} assertion`;
+  }
+  return undefined;
+}
+
+export function assertionRequiresTrace(assertion: AssertionOrSet): boolean {
   if (assertion.weight === 0) {
     return false;
   }
   return assertion.type === 'assert-set'
-    ? assertion.assert.some((child) => requiresAssertionType(child, matches))
-    : matches(getAssertionBaseType(assertion));
-}
-
-export function assertionRequiresTrace(assertion: AssertionOrSet): boolean {
-  return requiresAssertionType(assertion, isTraceAssertionType);
+    ? assertion.assert.some(assertionRequiresTrace)
+    : isTraceAssertionType(getAssertionBaseType(assertion));
 }
 
 export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
@@ -506,8 +513,9 @@ async function runAssertionInternal({
   const failure = (reason: string): GradingResult =>
     applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
   const baseType = getAssertionBaseType(assertion);
-  if (!context.trace && (baseType.startsWith('trace-') || baseType.startsWith('trajectory:'))) {
-    return failure(`No trace data available for ${baseType} assertion`);
+  const evidenceError = traceEvidenceError(baseType, context.trace, providerResponse.cached);
+  if (evidenceError) {
+    return failure(evidenceError);
   }
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
@@ -837,15 +845,18 @@ export async function runAssertions({
   }
 
   // Missing evidence is an error even when other scores would meet the threshold.
-  if (
-    !preloadedTraceData &&
-    test.assert.some((assertion) =>
-      requiresAssertionType(assertion, (type) => type === 'trajectory:tool-set'),
-    )
-  ) {
-    throw new MissingRequiredTraceError(
-      'No trace data available for trajectory:tool-set assertion',
+  for (const { assertion, assertResult } of asserts) {
+    if (assertion.weight === 0 || assertResult.parentAssertionSet?.assertionSet.weight === 0) {
+      continue;
+    }
+    const error = traceEvidenceError(
+      getAssertionBaseType(assertion),
+      preloadedTraceData,
+      providerResponse.cached,
     );
+    if (error) {
+      throw new MissingRequiredTraceError(error);
+    }
   }
 
   // Serialize when the grouping queue is active: concurrent dispatch can
