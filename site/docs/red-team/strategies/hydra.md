@@ -58,7 +58,7 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 2. **Agent decisioning** – A coordinating agent in Promptfoo Cloud evaluates prior turns and chooses the next attack message.
 3. **Target probing** – The selected message is sent either as a replayed transcript or as the newest turn in a target-managed session.
 4. **Outcome grading** – Responses are graded with the configured plugin assertions and stored for later learning.
-5. **Adaptive branching** – On refusals, Hydra backtracks and explores alternate branches until it succeeds, exhausts `maxBacktracks`, or reaches `maxTurns`.
+5. **Adaptive branching** – In replay mode, Hydra can backtrack after a refusal until it succeeds, exhausts `maxBacktracks`, or reaches `maxTurns`. If the target ends the conversation with a final reply or guardrail result, Hydra grades that turn and stops.
 
 Hydra includes earlier text turns in grading only when the target provider reports the matching chat replay or reports each live user turn with the same session ID. Errors, cache hits and session changes interrupt stateful grading history.
 
