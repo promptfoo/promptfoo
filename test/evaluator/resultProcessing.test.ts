@@ -43,6 +43,12 @@ describe('model-independent result processing', () => {
       'data/password must match pattern "^opaque$"',
       'SyntaxError: Invalid regular expression: /[opaque/u: Unterminated character class',
       'Error: invalid anchor "quoted"\nBearer opaque %FF"',
+      "can't resolve reference #/$defs/https://example.test/\n\udfff?token=opaque from id #",
+      "can't resolve reference part from id token=opaque from id #",
+      'reference "quoted"\nBearer opaque" resolves to more than one schema',
+      'schema with key or id "quoted"opaque" already exists',
+      'strict mode: unknown keyword: "truncated opaque',
+      'unknown format "quoted"opaque" ignored in schema at path "#"',
       "data must have required property 'https://example.test/?token=opaque'",
       'YAMLException: bad indentation (2:11)\n\n 2 | password: opaque',
       'bad indentation (2:11)\n\n 2 | password: opaque',
@@ -50,6 +56,7 @@ describe('model-independent result processing', () => {
       const row = { testCase, error, gradingResult: null, response: { output: error } };
       const safe = projectResultSchemas(row);
       expect(safe.error).not.toContain('opaque');
+      expect(projectResultSchemas(safe)).toEqual(safe);
       expect(safe.response.output).toBe(error);
       expect(row.error).toBe(error);
       if (typeof value === 'string') {

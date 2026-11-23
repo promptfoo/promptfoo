@@ -1559,6 +1559,23 @@ export function schemaParseFailure(message: string): string {
     : 'Invalid inline assertion schema';
 }
 
+// AJV interpolates unescaped operands into compiler errors. Quotes, line
+// breaks and even the delimiters can come from a private name or reference.
+// Keep the failure category without trying to parse values from an old row.
+const SCHEMA_COMPILATION_ERRORS = [
+  ['invalid anchor "', 'Invalid JSON Schema anchor'],
+  ["can't resolve reference ", 'Unresolved JSON Schema reference'],
+  ['schema with key or ref ', 'Unresolved JSON Schema reference'],
+  ['schema with key or id ', 'Duplicate JSON Schema ID'],
+  ['reference "', 'Ambiguous JSON Schema reference'],
+  ['unknown format "', 'Unknown JSON Schema format'],
+  ['strict mode: unknown keyword', 'Unknown JSON Schema keyword'],
+  ['strict mode:', 'Invalid JSON Schema in strict mode'],
+  ['schema at path "', 'Invalid JSON Schema'],
+  ['schema is invalid:', 'Invalid JSON Schema'],
+  ['Invalid regular expression:', 'Invalid JSON Schema regular expression'],
+] as const;
+
 // AJV includes literal patterns, required names and JSON Pointer paths in
 // diagnostics. Share masks across a row but never apply them to provider output.
 export class SchemaDiagnostics {
@@ -1602,52 +1619,17 @@ export class SchemaDiagnostics {
     this.hasSchema = true;
   }
 
-  private uri(value: string): string {
-    return sanitizeSchemaUri(this.names.get(value) ?? value, {
-      renamed: this.names,
-      patterns: this.patterns,
-    });
-  }
-
-  private sanitizeCompilationError(message: string): string {
-    // AJV quotes an invalid $anchor or $dynamicAnchor without escaping it.
-    // The rejected value can span lines and may be absent from older schemas.
-    if (message.includes('invalid anchor "')) {
-      return 'Invalid JSON Schema anchor';
-    }
-    if (message.includes('Invalid regular expression: /')) {
-      message = message.replace(
-        /(Invalid regular expression: \/)(.*)(\/[a-z]*: )/s,
-        (_, prefix, pattern, suffix) => prefix + this.pattern(pattern) + suffix,
-      );
-    }
-    // AJV quotes format and keyword names and URI-encodes schema paths.
-    // Apply the same projection to quoted operands, including on older rows.
-    if (message.includes('schema at path') || message.includes('strict mode:')) {
-      message = message.replace(/"([^"\n]+)"/g, (_, operand: string) => {
-        const safe = operand.includes('#/')
-          ? this.uri(operand)
-          : (this.names.get(operand) ?? safeSchemaName(operand));
-        return `"${safe}"`;
-      });
-    }
-    // A legacy error can contain the resolved URI even if the saved schema no longer does.
-    message = message.replace(
-      /(schema with key or (?:id|ref)|reference) "([^"\n]+)"/g,
-      (_, prefix, uri) => `${prefix} "${this.uri(uri)}"`,
-    );
-    return message.replace(
-      /can't resolve reference (.+?) from id (.+)/g,
-      (_, ref, id) => `can't resolve reference ${this.uri(ref)} from id ${this.uri(id)}`,
-    );
-  }
-
   sanitize(message: string): string {
     if (!this.hasSchema) {
       return message;
     }
     if (message.includes('YAMLException:') || /\(\d+:\d+\)\r?\n\r?\n\s*\d+ \|/.test(message)) {
       return schemaParseFailure(message);
+    }
+    for (const [prefix, reason] of SCHEMA_COMPILATION_ERRORS) {
+      if (message.includes(prefix)) {
+        return reason;
+      }
     }
     const prefix = 'must match pattern "';
     if (message.includes(prefix)) {
@@ -1662,7 +1644,6 @@ export class SchemaDiagnostics {
         (_, pattern) => `${prefix}${this.pattern(pattern)}"`,
       );
     }
-    message = this.sanitizeCompilationError(message);
     for (const [name, safe] of [...this.names].sort(([a], [b]) => b.length - a.length)) {
       message = message.split(name).join(safe);
       message = message.split(escapePointerToken(name)).join(escapePointerToken(safe));
