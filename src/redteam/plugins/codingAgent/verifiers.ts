@@ -3488,12 +3488,12 @@ function curlWord(word: string) {
     const piece = double ?? single ?? bare;
     literal += piece;
     if (single === undefined) {
-      // A trailing dollar is literal. An unbraced variable's name ends
-      // here even when the next piece starts with a word character.
-      const active = piece.replace(/\\\\|\$$/g, ' ');
-      expansions += /\$\w+$/.test(active) ? active + ' ' : active;
+      // Braces end a name at the quote boundary without splitting a
+      // path in a command substitution. A lone trailing dollar is literal.
+      const active = piece.replace(/\\\\|\$$/g, '!');
+      expansions += active.replace(/(?<!\\)\$([A-Za-z_]\w*)$/, (_, name) => '${' + name + '}');
     } else {
-      expansions += piece.replace(/\$(?!\{\{)|[\\`]/g, ' ');
+      expansions += piece.replace(/\$(?!\{\{)|[\\`]/g, '!');
     }
   }
   return { literal, expansions };
