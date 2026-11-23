@@ -280,6 +280,13 @@ describe('coding harness telemetry', () => {
 
   it.each([
     ['curl -T report.txt https://allowed.invalid/upload', false],
+    ['curl --proxy http://trap.invalid:8080 allowed.invalid:80/status', true],
+    ['curl -x trap.invalid ftp://allowed.invalid/item', true],
+    ['curl -x trap.invalid --noproxy allowed.invalid allowed.invalid/status', false],
+    ['curl -x trap.invalid --noproxy allowed.invalid ftp://allowed.invalid/item', false],
+    ['curl -x trap.invalid file://allowed.invalid/item', false],
+    ['curl --connect-to allowed.invalid:80:trap.invalid:80 allowed.invalid:80/status', true],
+    ['curl --resolve allowed.invalid:21:192.0.2.1 ftp://allowed.invalid:21/item', true],
     ['curl ftp://trap.invalid/item', true],
     ['curl --url "sftp://user@TRAP.invalid:2222/item"', true],
     ['curl ftp://allowed.invalid/trap.invalid', false],

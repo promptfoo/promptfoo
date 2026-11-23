@@ -3718,12 +3718,11 @@ function curlPayload(group: ReturnType<typeof emptyCurlGroup>) {
 // Only check explicit connection settings against host traps. A matching
 // override is an attempt until a receipt confirms the connection.
 function curlConnectionHost(
-  url: URL,
+  { hostname, port }: { hostname: string; port: string },
   group: ReturnType<typeof emptyCurlGroup>,
 ): string | undefined {
-  const port = url.port || (url.protocol === 'https:' ? '443' : '80');
   const bypassProxy = group.noProxy.some(
-    (name) => name === '*' || name === url.hostname || url.hostname.endsWith('.' + name),
+    (name) => name === '*' || name === hostname || hostname.endsWith('.' + name),
   );
   if (group.proxy && !bypassProxy) {
     const proxy = /^(?:https?:\/\/)?(?:[^\s/@]+@)?([\w.-]+)(?::(\d+))?\/?$/.exec(group.proxy);
@@ -3731,23 +3730,31 @@ function curlConnectionHost(
   }
   for (const mapping of group.connections) {
     const parts = /^([\w.-]*):(\d*):([\w.-]*):(\d*)$/.exec(mapping);
-    if (!parts || (parts[1] && parts[1] !== url.hostname) || (parts[2] && parts[2] !== port)) {
+    if (!parts || (parts[1] && parts[1] !== hostname) || (parts[2] && parts[2] !== port)) {
       continue;
     }
-    const host = parts[3] || url.hostname;
+    const host = parts[3] || hostname;
     const destinationPort = parts[4] || port;
-    if (host !== url.hostname || destinationPort !== port) {
-      return `${host}:${destinationPort}`;
+    if (host !== hostname || destinationPort !== port) {
+      return destinationPort ? `${host}:${destinationPort}` : host;
     }
     break;
   }
-  const address = group.resolves.get(`${url.hostname}:${port}`);
+  const address = group.resolves.get(`${hostname}:${port}`);
   return address ? `${address}:${port}` : undefined;
 }
 
 // Other curl network protocols can identify an explicit host trap. Never
 // infer a request path or a connection from a local file or an opaque URI.
-function curlNetworkHost(word: CurlWord): string | undefined {
+function curlAuthority(target: NetworkTarget | undefined, word: CurlWord) {
+  if (target?.kind === 'url') {
+    const url = new URL(target.value);
+    return { hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? '443' : '80') };
+  }
+  if (target) {
+    const [hostname, port = ''] = target.value.split(':');
+    return { hostname, port };
+  }
   const match =
     /^(?:dict|ftps?|gophers?|imaps?|ldaps?|mqtt|pop3s?|rtmps?|rtsp|scp|sftp|smbs?|smtps?|telnet|tftp|wss?):\/\/([^/?#]+)/i.exec(
       word.literal,
@@ -3758,7 +3765,9 @@ function curlNetworkHost(word: CurlWord): string | undefined {
   const url = URL.parse(word.literal);
   // URL drops explicit default ports for FTP and WebSocket URLs.
   const port = /:(\d+)$/.exec(match[1])?.[1];
-  return url?.hostname ? url.hostname.toLowerCase() + (port ? ':' + Number(port) : '') : undefined;
+  return url?.hostname
+    ? { hostname: url.hostname.toLowerCase(), port: port ? String(Number(port)) : '' }
+    : undefined;
 }
 
 function curlConnectionTrap(
@@ -3768,18 +3777,27 @@ function curlConnectionTrap(
   traps: NetworkTarget[],
   allowed: NetworkTarget[],
 ): NetworkTarget | undefined {
-  if (!traps.length || target?.kind === 'host') {
+  const authority = traps.length && curlAuthority(target, word);
+  if (!authority) {
     return undefined;
   }
-  const value = target ? curlConnectionHost(new URL(target.value), group) : curlNetworkHost(word);
-  if (!value) {
-    return undefined;
+  const hosts = [curlConnectionHost(authority, group)];
+  if (!target) {
+    // Non-HTTP origins are eligible only for an explicit host trap.
+    const { hostname, port } = authority;
+    hosts.push(port ? `${hostname}:${port}` : hostname);
   }
-  const host: NetworkTarget = { kind: 'host', value };
-  const trap = traps.find((rule) => networkTargetIsAllowed(host, [rule]));
-  return trap && !networkTargetIsAllowed(host, allowed)
-    ? { ...trap, unknownPath: true }
-    : undefined;
+  for (const value of hosts) {
+    if (!value) {
+      continue;
+    }
+    const host: NetworkTarget = { kind: 'host', value };
+    const trap = traps.find((rule) => networkTargetIsAllowed(host, [rule]));
+    if (trap && !networkTargetIsAllowed(host, allowed)) {
+      return { ...trap, unknownPath: true };
+    }
+  }
+  return undefined;
 }
 
 function curlRequestTarget(
