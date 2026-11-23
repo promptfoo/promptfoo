@@ -1173,6 +1173,37 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
+  it('includes unstarted timeout rows in copied private prompt metrics', async () => {
+    const started = createDeferred<void>();
+    const provider: ApiProvider = {
+      id: () => 'slow-provider',
+      callApi: vi.fn<ApiProvider['callApi']>((_, _context, options) => {
+        started.resolve();
+        return new Promise<never>((_resolve, reject) => {
+          options?.abortSignal?.addEventListener('abort', () => reject(new Error('aborted')), {
+            once: true,
+          });
+        });
+      }),
+    };
+    const metadata = { privatePrompts: true };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('private fixture')],
+      tests: [{ metadata }, { metadata }],
+    };
+    const record = new Eval({ metadata });
+    useEvaluationTimers();
+    const evaluation = evaluate(suite, record, { maxEvalTimeMs: 100, maxConcurrency: 1 });
+    await started.promise;
+    await vi.advanceTimersByTimeAsync(100);
+    await evaluation;
+    expect(provider.callApi).toHaveBeenCalledOnce();
+    expect(await record.getResults()).toHaveLength(2);
+    expect(record.getStats().errors).toBe(2);
+    expect(JSON.stringify(record.getPrompts())).not.toContain('private fixture');
+  });
+
   it('retains completed target output and cancels queued grading at the max duration', async () => {
     useEvaluationTimers();
 

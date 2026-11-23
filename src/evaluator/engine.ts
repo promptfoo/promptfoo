@@ -3775,7 +3775,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     varNames: Set<string>;
     vars: Set<string>;
   }) {
-    await this.store.appendPrompts(prompts);
     cleanupProgressReporters(progressBarManager, ciProgressReporter);
 
     if (globalTimeout) {
@@ -3791,6 +3790,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       });
     }
 
+    // A private prompt catalog copies metrics. Include any timeout rows in that snapshot.
+    await this.store.appendPrompts(prompts);
     this.store.setVars(Array.from(vars));
     await this.runAfterAllExtensions(testSuite);
     this.recordEvalTelemetry({
