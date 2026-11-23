@@ -1039,6 +1039,67 @@ describe('importCommand', () => {
       },
     );
 
+    const prompt = { raw: 'Synthetic prompt' };
+    const validRow = {
+      prompt,
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      provider: { id: 'echo' },
+      success: true,
+      score: 1,
+    };
+
+    it.each([
+      ['null result', 'results', null],
+      ['missing provider', 'results', { ...validRow, provider: undefined }],
+      ['missing prompt', 'results', { ...validRow, prompt: {} }],
+      ['null prompt', 'prompts', null],
+      ['invalid label', 'prompts', { label: { text: 'invalid' } }],
+      [
+        'oversized verifier',
+        'results',
+        {
+          ...validRow,
+          testCase: {
+            assert: [{ type: 'promptfoo:redteam:coding-agent:connector-parameter-exfil' }],
+          },
+          vars: { values: Array(100_001).fill(0) },
+        },
+      ],
+    ] as const)(
+      'keeps the original rows on an invalid V3 replacement (%s)',
+      async (name, field, invalid) => {
+        const id = 'eval-import-preflight';
+        const results = { version: 3, prompts: [prompt], results: [validRow] };
+        tempFilePath = path.join(__dirname, `temp-v3-projection-${Date.now()}.json`);
+        fs.writeFileSync(
+          tempFilePath,
+          JSON.stringify({ id, config: { description: 'original' }, results }),
+        );
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', tempFilePath]);
+        expect(process.exitCode).toBeUndefined();
+        const [original] = await EvalResult.findManyByEvalId(id);
+
+        const incoming = { ...results, [field]: [...results[field], invalid] };
+        fs.writeFileSync(tempFilePath, JSON.stringify({ id, config: {}, results: incoming }));
+        const replacement = new Command();
+        importCommand(replacement);
+        await replacement.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+
+        expect(process.exitCode).toBe(1);
+        if (name === 'oversized verifier') {
+          expect(logger.error).toHaveBeenCalledWith(
+            expect.stringContaining('Verifier input is too large'),
+          );
+        }
+        expect((await Eval.findById(id))?.config.description).toBe('original');
+        expect(await EvalResult.findManyByEvalId(id)).toEqual([original]);
+        expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
+      },
+    );
+
     it('redacts both result copies when importing legacy privacy checks', async () => {
       const id = 'eval-legacy-privacy';
       tempFilePath = path.join(__dirname, `temp-legacy-privacy-${Date.now()}.json`);

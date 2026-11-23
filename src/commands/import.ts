@@ -1,15 +1,21 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 
+import { z } from 'zod';
 import { BLOB_MAX_SIZE, isSafeInlineBlobMimeType, recordBlobReference, storeBlob } from '../blobs';
 import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
 import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
+import { serializeResultProviderRefs } from '../evaluator/resultProcessing';
 import { parseImportFile } from '../importers/parse';
 import logger from '../logger';
 import Eval, { createEvalId, sanitizeLegacyResults } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
-import EvalResult, { stripTraceLinkageFromMetadata } from '../models/evalResult';
+import EvalResult, {
+  sanitizeBatchResultForDb,
+  stripTraceLinkageFromMetadata,
+} from '../models/evalResult';
+import { generateIdFromPrompt } from '../models/prompt';
 import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
 import { sha256 } from '../util/createHash';
@@ -24,6 +30,7 @@ import type {
   ExportedBlobAsset,
   TraceData,
   TraceSpan,
+  UnifiedConfig,
 } from '../types';
 
 function extractEvalId(evalData: any): string | undefined {
@@ -110,6 +117,44 @@ function isImportableV3Results(results: unknown): results is EvaluateSummaryV3 {
     Array.isArray(candidate.prompts) &&
     Array.isArray(candidate.results)
   );
+}
+
+// Check only fields needed by the DB and EvalResult constructor. Older exports
+// can omit optional fields and may contain metrics the current CLI doesn't know.
+const ImportedResultSchema = z.object({
+  promptIdx: z.int().nonnegative(),
+  testIdx: z.int().nonnegative(),
+  testCase: z.object({}),
+  provider: z.union([z.string(), z.object({})]),
+  prompt: z.object({}),
+  promptId: z.string().nullish(),
+  error: z.string().nullish(),
+  failureReason: z.int().optional(),
+  success: z.boolean(),
+  score: z.number(),
+  latencyMs: z.number().nullish(),
+  cost: z.number().nullish(),
+});
+
+function preflightV3Replacement(config: Partial<UnifiedConfig>, summary: EvaluateSummaryV3) {
+  // Eval.create needs the original tests for dataset identity. Validate the
+  // projected copy without replacing the original config or prompt metrics.
+  sanitizeConfigForPersistence(config);
+  for (const [idx, prompt] of summary.prompts.entries()) {
+    if (typeof (prompt?.label || prompt?.display || prompt?.raw) !== 'string') {
+      throw new Error(`Invalid catalog prompt at index ${idx}`);
+    }
+    generateIdFromPrompt(prompt);
+  }
+  for (const [idx, row] of summary.results.entries()) {
+    // Both verifier and credential projection can fail on an ordinary import.
+    // Check one row at a time without storing blobs or changing trace linkage.
+    const fields = row && sanitizeBatchResultForDb(serializeResultProviderRefs(row));
+    if (!fields || !ImportedResultSchema.safeParse(fields).success) {
+      throw new Error(`Invalid result at index ${idx}`);
+    }
+    generateIdFromPrompt(fields.prompt);
+  }
 }
 
 function isImportableLegacyResults(results: unknown): results is EvaluateSummaryV2 {
@@ -515,9 +560,7 @@ export function importCommand(program: Command) {
 
         const { traces, blobAssets } = prepareArtifacts();
         if (existingEval && importV3) {
-          // Eval.create needs the original tests for dataset identity and
-          // sanitizes its own copy. Check that projection before deletion.
-          sanitizeConfigForPersistence(evalData.config);
+          preflightV3Replacement(evalData.config, evalData.results);
         }
 
         // Restore embedded media before the destructive replace so a corrupt

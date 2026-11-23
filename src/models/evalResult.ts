@@ -41,6 +41,39 @@ import { sanitizeRedactionResult } from '../util/verifierPrivacy';
 import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
+/** Prepare a result for batch writes after serializing its provider references. */
+export function sanitizeBatchResultForDb(result: EvaluateResult) {
+  // See `createFromEvaluateResult` for why `testCase` and `prompt` go
+  // through the credential-redacting sanitizer while the other fields
+  // stay on the lighter `sanitizeForDb`. Trace and repeat linkage travel inside
+  // metadata; strip the top-level fields so the DB write only carries known-schema columns.
+  const {
+    traceId: _traceId,
+    evaluationId: _evaluationId,
+    repeatIndex: _repeatIndex,
+    repeatGroupId: _repeatGroupId,
+    ...rest
+  } = result;
+  return {
+    ...rest,
+    testCase: sanitizeForDbWithSecrets(result.testCase),
+    prompt: sanitizeForDbWithSecrets(result.prompt),
+    ...redactSensitiveResultFieldsForDb({
+      response: sanitizeForDb(result.response),
+      gradingResult: sanitizeForDb(result.gradingResult),
+      metadata: sanitizeForDb(
+        persistTraceMetadata(
+          persistRepeatMetadata(result.metadata, result.repeatIndex, result.repeatGroupId),
+          result.traceId,
+          result.evaluationId,
+        ),
+      ),
+    }),
+    namedScores: sanitizeForDb(result.namedScores),
+    provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
+  };
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -148,35 +181,7 @@ export default class EvalResult {
 
     await db.transaction(async (tx) => {
       for (const result of processedResults) {
-        // See `createFromEvaluateResult` for why `testCase` and `prompt` go
-        // through the credential-redacting sanitizer while the other fields
-        // stay on the lighter `sanitizeForDb`. Trace and repeat linkage travel inside
-        // metadata; strip the top-level fields so the DB write only carries known-schema columns.
-        const {
-          traceId: _traceId,
-          evaluationId: _evaluationId,
-          repeatIndex: _repeatIndex,
-          repeatGroupId: _repeatGroupId,
-          ...rest
-        } = result;
-        const sanitizedResult = {
-          ...rest,
-          testCase: sanitizeForDbWithSecrets(result.testCase),
-          prompt: sanitizeForDbWithSecrets(result.prompt),
-          ...redactSensitiveResultFieldsForDb({
-            response: sanitizeForDb(result.response),
-            gradingResult: sanitizeForDb(result.gradingResult),
-            metadata: sanitizeForDb(
-              persistTraceMetadata(
-                persistRepeatMetadata(result.metadata, result.repeatIndex, result.repeatGroupId),
-                result.traceId,
-                result.evaluationId,
-              ),
-            ),
-          }),
-          namedScores: sanitizeForDb(result.namedScores),
-          provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
-        };
+        const sanitizedResult = sanitizeBatchResultForDb(result);
         const dbResult = await tx
           .insert(evalResultsTable)
           .values({ ...sanitizedResult, evalId, id: crypto.randomUUID() })
