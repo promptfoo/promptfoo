@@ -111,15 +111,15 @@ export function createEvalId(createdAt: Date = new Date()) {
 
 type EvalRelationDb = Pick<Awaited<ReturnType<typeof getDb>>, 'insert'>;
 
+export function prepareEvalPrompt(prompt: Prompt) {
+  return { id: generateIdFromPrompt(prompt), prompt: prompt.label || prompt.display || prompt.raw };
+}
+
 export async function insertEvalPrompts(tx: EvalRelationDb, evalId: string, prompts: Prompt[]) {
   for (const prompt of prompts) {
-    const label = prompt.label || prompt.display || prompt.raw;
-    const promptId = generateIdFromPrompt(prompt);
-    await tx
-      .insert(promptsTable)
-      .values({ id: promptId, prompt: label })
-      .onConflictDoNothing()
-      .run();
+    const row = prepareEvalPrompt(prompt);
+    const promptId = row.id;
+    await tx.insert(promptsTable).values(row).onConflictDoNothing().run();
     await tx.insert(evalsToPromptsTable).values({ evalId, promptId }).onConflictDoNothing().run();
     logger.debug(`Inserting prompt ${promptId}`);
   }

@@ -751,13 +751,13 @@ async function callActiveProvider({
           return result;
         },
         abortSignal,
+        onTargetCacheStatus,
       );
     return withProviderCallExecutionContext(
       {
         abortSignal,
         rateLimitRegistry,
         rateLimitProvider: activeProvider,
-        onTargetCacheStatus,
         onTargetResponse: (prompt, response) => {
           onTargetCacheStatus(response.cached === true);
           completedTargets.push({ prompt, response });

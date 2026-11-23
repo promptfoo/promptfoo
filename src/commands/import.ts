@@ -14,13 +14,12 @@ import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
 import { parseImportFile } from '../importers/parse';
 import logger from '../logger';
-import Eval, { createEvalId, sanitizeLegacyResults } from '../models/eval';
+import Eval, { createEvalId, prepareEvalPrompt, sanitizeLegacyResults } from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
 import EvalResult, {
   prepareBatchResult,
   stripTraceLinkageFromMetadata,
 } from '../models/evalResult';
-import { generateIdFromPrompt } from '../models/prompt';
 import telemetry from '../telemetry';
 import { getTraceStore, TraceStore } from '../tracing/store';
 import { sha256 } from '../util/createHash';
@@ -146,17 +145,16 @@ async function prepareV3Replacement(
   deferReference: (write: BlobReferenceWrite) => void,
 ) {
   for (const [idx, prompt] of summary.prompts.entries()) {
-    if (typeof (prompt?.label || prompt?.display || prompt?.raw) !== 'string') {
+    if (!prompt || typeof prepareEvalPrompt(prompt).prompt !== 'string') {
       throw new Error(`Invalid catalog prompt at index ${idx}`);
     }
-    generateIdFromPrompt(prompt);
   }
   for (const [idx, row] of summary.results.entries()) {
     const prepared = row && (await prepareBatchResult(row, evalId, deferReference));
     if (!prepared || !ImportedResultSchema.safeParse(prepared).success) {
       throw new Error(`Invalid result at index ${idx}`);
     }
-    generateIdFromPrompt(prepared.prompt);
+    prepareEvalPrompt(prepared.prompt);
     summary.results[idx] = prepared;
   }
 }
