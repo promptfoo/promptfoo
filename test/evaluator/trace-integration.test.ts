@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 import { evaluate, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
+import * as agentWorkspace from '../../src/providers/agentWorkspace';
 import { resolveTracingOptions } from '../../src/redteam/providers/tracingOptions';
 import { getProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { getTraceStore } from '../../src/tracing/store';
+import { ResultFailureReason } from '../../src/types/index';
 import { createMockProvider } from '../factories/provider';
 import { createDeferred } from '../util/utils';
 
@@ -796,6 +798,52 @@ describe('evaluator trace integration', () => {
       },
     );
 
+    it('keeps a missing trace error local when the provider reuses a response', async () => {
+      const response = { output: 'Target output', cost: 0.01, tokenUsage: { total: 3 } };
+      const provider = createMockProvider({ callApi: async () => response });
+      const traced = createRunOptions(provider);
+      traced.test.assert = [{ type: 'trajectory:tool-set', value: [] }];
+      mockFetchTraceContext.mockResolvedValueOnce(null);
+
+      const [missing] = await runEval(traced);
+      expect(missing.error).toContain('Required external trace is unavailable');
+      expect(missing.response?.output).toBe(response.output);
+      expect(missing.cost).toBe(response.cost);
+      expect(missing.tokenUsage?.total).toBe(3);
+      expect(response).not.toHaveProperty('error');
+
+      const outputOnly = createRunOptions(provider);
+      outputOnly.test.assert = [{ type: 'equals', value: response.output }];
+      const [next] = await runEval(outputOnly);
+      expect(next.success).toBe(true);
+    });
+
+    it('keeps the completed turn and transformed output when required evidence is missing', async () => {
+      const provider = createMockProvider({
+        response: { output: { answer: 'Blue' }, conversationOutput: 'Previous answer' },
+        transform: 'output.answer',
+      });
+      const options = createRunOptions(provider, {
+        prompt: { raw: 'Prior: {{ _conversation[0].output }}', label: 'conversation' },
+        conversations: {},
+        registers: {},
+      });
+      options.test.options = { transform: 'output.toUpperCase()', storeOutputAs: 'answer' };
+      options.test.assert = [{ type: 'trace-error-spans' }];
+      mockFetchTraceContext.mockResolvedValueOnce(null);
+
+      const [missing] = await runEval(options);
+      const [next] = await runEval({ ...options, testIdx: 1, test: {} });
+
+      expect(missing.error).toContain('Required external trace is unavailable');
+      expect(missing.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(missing.response?.error).toBeUndefined();
+      expect(missing.response?.output).toBe('BLUE');
+      expect(options.registers?.answer).toBe('BLUE');
+      expect(next.prompt.raw).toBe('Prior: Previous answer');
+      expect(next.success).toBe(true);
+    });
+
     it.each([true, false])('keeps trace metrics optional with local evidence=%s', async (local) => {
       const provider = createMockProvider({ response: { output: 'Target output' } });
       const options = createRunOptions(provider);
@@ -843,17 +891,59 @@ describe('evaluator trace integration', () => {
       expect(mockFetchTraceContext).not.toHaveBeenCalled();
     });
 
-    it('skips external trace collection when no provider is invoked', async () => {
-      const provider = createMockProvider();
-      const options = createRunOptions(provider);
-      options.test.providerOutput = 'Precomputed output';
+    it.each(['Precomputed output', ''])(
+      'skips provider setup for precomputed output %j',
+      async (output) => {
+        const workspace = vi.spyOn(agentWorkspace, 'createAgentWorkspaceForConfig');
+        const provider = createMockProvider();
+        const options = createRunOptions(provider);
+        options.test.providerOutput = output;
+        options.test.assert = [
+          { type: 'equals', value: output },
+          { type: 'trace-error-spans', weight: 0 },
+        ];
 
-      const [result] = await runEval(options);
+        const [result] = await runEval(options);
 
-      expect(result.response?.output).toBe('Precomputed output');
-      expect(provider.callApi).not.toHaveBeenCalled();
-      expect(mockFetchTraceContext).not.toHaveBeenCalled();
-    });
+        expect(result.success).toBe(true);
+        expect(result.response?.output).toBe(output);
+        expect(workspace).not.toHaveBeenCalled();
+        expect(provider.callApi).not.toHaveBeenCalled();
+        expect(evaluatorTracing.generateTraceContextIfNeeded).not.toHaveBeenCalled();
+        expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      ['ok', undefined],
+      ['ok', 0.5],
+      ['', 0.5],
+    ] as const)(
+      'reports missing required evidence for precomputed output %j with threshold %s',
+      async (output, threshold) => {
+        const provider = createMockProvider();
+        const options = createRunOptions(provider);
+        options.test.providerOutput = output;
+        options.test.threshold = threshold;
+        options.test.assert = [
+          { type: 'equals', value: output },
+          { type: 'trajectory:tool-set', value: [] },
+        ];
+
+        const [result] = await runEval(options);
+
+        expect(result.success).toBe(false);
+        expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(result.score).toBe(0);
+        expect(result.error).toContain(
+          'Required external trace is unavailable. Remove providerOutput',
+        );
+        expect(result.response?.output).toBe(output);
+        expect(result.response?.error).toBeUndefined();
+        expect(provider.callApi).not.toHaveBeenCalled();
+        expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      },
+    );
 
     it('skips external trace collection after an evaluation is canceled', async () => {
       const controller = new AbortController();
@@ -963,9 +1053,9 @@ describe('evaluator trace integration', () => {
         throw new Error('cancelled by user');
       });
 
-      const [result] = await runEval(
-        createRunOptions(provider, { abortSignal: controller.signal }),
-      );
+      const options = createRunOptions(provider, { abortSignal: controller.signal });
+      options.test.assert = [{ type: 'trace-error-spans' }];
+      const [result] = await runEval(options);
 
       expect(result.error).toContain('cancelled by user');
       expect(mockFetchTraceContext).toHaveBeenCalledWith(
@@ -974,8 +1064,8 @@ describe('evaluator trace integration', () => {
       );
     });
 
-    it.each(['success', 'completed error'] as const)(
-      'retains completed %s when CLI pause cancels the real default trace query delay',
+    it.each(['success', 'completed error', 'missing trace'] as const)(
+      'records %s when CLI pause cancels the real default trace query delay',
       async (outcome) => {
         const { fetchTraceContext } = await vi.importActual<
           typeof import('../../src/tracing/traceContext')
@@ -1015,7 +1105,15 @@ describe('evaluator trace integration', () => {
             tracing: { ...tracingSuite.tracing!, queryDelay: undefined },
             providers: [provider],
             prompts: [{ raw: 'Test prompt', label: 'test' }],
-            tests: [{ metadata: { tracingEnabled: true, evaluationId: 'test-eval-id' } }],
+            tests: [
+              {
+                metadata: { tracingEnabled: true, evaluationId: 'test-eval-id' },
+                assert:
+                  outcome === 'success'
+                    ? []
+                    : [{ type: 'trace-error-spans', value: { pattern: 'external.*' } }],
+              },
+            ],
           },
           mockEval,
           {
@@ -1055,9 +1153,14 @@ describe('evaluator trace integration', () => {
             'Real trace delay cancellation must retain the completed target',
           ).toMatchObject(response);
           expect(row.cost).toBe(0.125);
+          expect(row.tokenUsage?.total).toBe(7);
           expect(row.success).toBe(outcome === 'success');
           if (outcome === 'completed error') {
             expect(row.error).toContain('Completed tool diagnostic');
+          } else if (outcome === 'missing trace') {
+            expect(row.error).toContain('Required external trace is unavailable');
+            expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+            expect(row.score).toBe(0);
           }
           await vi.advanceTimersByTimeAsync(1);
           expect(network).not.toHaveBeenCalled();
