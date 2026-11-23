@@ -48,6 +48,14 @@ export const expandPluginCollections = (
   return expandedPlugins;
 };
 
+export function getFrameworkPlugins(framework: string, stats: CategoryStats) {
+  const controls = Object.values(ALIASED_PLUGIN_MAPPINGS[framework] ?? {});
+  return expandPluginCollections(
+    controls.flatMap(({ plugins }) => plugins),
+    stats,
+  );
+}
+
 /**
  * Categorizes plugins into compliant, non-compliant, and untested based on pass rates
  */
@@ -124,7 +132,12 @@ export function getAiucCoverageGap(
   if (!controls.some(({ plugins }) => plugins.some(tested))) {
     return 'Not tested';
   }
-  if (controls.some(({ plugins }) => !plugins.length || !plugins.every(tested))) {
+  if (
+    controls.some(
+      ({ plugins, untestedBehavior }) =>
+        untestedBehavior || !plugins.length || !plugins.every(tested),
+    )
+  ) {
     return 'Partial coverage';
   }
 }

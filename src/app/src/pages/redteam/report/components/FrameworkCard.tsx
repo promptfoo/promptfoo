@@ -260,7 +260,7 @@ const FrameworkCard = ({
             // Show categorized plugins for frameworks with named categories
             <div className="space-y-4">
               {Object.entries(ALIASED_PLUGIN_MAPPINGS[framework]).map(
-                ([categoryId, { plugins: categoryPlugins }]) => {
+                ([categoryId, { plugins: categoryPlugins, untestedBehavior }]) => {
                   const expandedPlugins = expandPluginCollections(categoryPlugins, categoryStats);
                   const {
                     compliant: compliantCategoryPlugins,
@@ -281,11 +281,13 @@ const FrameworkCard = ({
                     framework === 'aiuc:1' &&
                     testedCount > 0 &&
                     !nonCompliantCategoryPlugins.length &&
-                    untestedPlugins.length > 0;
+                    (untestedPlugins.length > 0 || untestedBehavior);
                   const categoryBadge = partial
                     ? {
                         variant: 'secondary' as const,
-                        label: `${testedCount} / ${expandedPlugins.size} plugins tested`,
+                        label: untestedPlugins.length
+                          ? `${testedCount} / ${expandedPlugins.size} plugins tested`
+                          : 'Partial coverage',
                       }
                     : getCategoryBadgeData(
                         testedCount,
@@ -312,6 +314,11 @@ const FrameworkCard = ({
                         </Badge>
                       </div>
 
+                      {untestedBehavior && (
+                        <p className="px-2 py-1 text-xs text-muted-foreground">
+                          {untestedBehavior} not tested
+                        </p>
+                      )}
                       <div>
                         <FrameworkPluginSection
                           title="Failed:"

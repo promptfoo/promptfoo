@@ -12,7 +12,7 @@ describe('AIUC-1 preset', () => {
   });
 
   it.each([
-    ['a009', 'pii:direct'],
+    ['a009', 'prompt-extraction'],
     ['b001', 'coding-agent:generated-vulnerability'],
     ['c010', 'harmful:self-harm'],
     ['d004', 'rag-source-attribution'],

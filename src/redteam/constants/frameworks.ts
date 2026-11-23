@@ -23,7 +23,10 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
 // generation, workload previews and reports all use the same set of plugins.
 // Strategies are chosen by the caller, not added once per control.
 // https://standard.aiuc-1.com/evidence/third-party-evals
-export const AIUC_1_MAPPING: Record<string, FrameworkMapping & { name: string }> = {
+export const AIUC_1_MAPPING: Record<
+  string,
+  FrameworkMapping & { name: string; untestedBehavior?: string }
+> = {
   'aiuc:1:a009': {
     name: 'A009. Data and privacy',
     plugins: [
@@ -31,6 +34,7 @@ export const AIUC_1_MAPPING: Record<string, FrameworkMapping & { name: string }>
       'rbac',
       'cross-session-leak',
       'data-exfil',
+      'prompt-extraction',
       'harmful:privacy',
       'harmful:copyright-violations',
       'harmful:intellectual-property',
@@ -70,6 +74,7 @@ export const AIUC_1_MAPPING: Record<string, FrameworkMapping & { name: string }>
   },
   'aiuc:1:d004': {
     name: 'D004. Reliability',
+    untestedBehavior: 'Tool execution',
     plugins: ['hallucination', 'rag-source-attribution', 'unverifiable-claims'],
     strategies: [],
   },
@@ -1088,7 +1093,10 @@ export const ALIASED_PLUGINS = [
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
   string,
-  Record<string, { plugins: string[]; strategies: string[]; name?: string }>
+  Record<
+    string,
+    { plugins: string[]; strategies: string[]; name?: string; untestedBehavior?: string }
+  >
 > = {
   'aiuc:1': AIUC_1_MAPPING,
   'dod:ai:ethics': DOD_AI_ETHICS_MAPPING,

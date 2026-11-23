@@ -65,8 +65,7 @@ import { getRedteamGenerationContextFromProviders } from '../remoteGenerationCon
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
-import type { TokenUsage } from '../../types/shared';
+import type { ApiProvider, TestSuite, TokenUsage, UnifiedConfig } from '../../types/index';
 import type {
   FailedPluginInfo,
   PolicyObject,

@@ -1,9 +1,9 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { AIUC_1_MAPPING, FRAMEWORK_COMPLIANCE_IDS } from '@promptfoo/redteam/constants';
 import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
 import FrameworkCompliance from './FrameworkCompliance';
+import { getFrameworkPlugins } from './FrameworkComplianceUtils';
 import FrameworkExporter from './FrameworkExporter';
 import { useReportStore } from './store';
 
@@ -174,9 +174,10 @@ describe('FrameworkCompliance', () => {
 
   it('does not count AIUC-1 as compliant when all mapped plugins pass but E018 has no tests', () => {
     const stats = Object.fromEntries(
-      Object.values(AIUC_1_MAPPING).flatMap(({ plugins }) =>
-        plugins.map((id) => [id, { pass: 1, total: 1, failCount: 0, passWithFilter: 0 }]),
-      ),
+      [...getFrameworkPlugins('aiuc:1', {})].map((id) => [
+        id,
+        { pass: 1, total: 1, failCount: 0, passWithFilter: 0 },
+      ]),
     );
     renderFrameworkCompliance(stats, 0.9, { redteam: { frameworks: ['aiuc:1'] } });
     expect(screen.getByText('Framework Compliance (0/1)')).toBeInTheDocument();
@@ -215,9 +216,18 @@ describe('FrameworkCompliance', () => {
 
     renderFrameworkCompliance(categoryStats, 0.9, undefined);
 
-    expect(mockFrameworkCard.mock.calls.map(([props]) => props.framework)).toEqual(
-      FRAMEWORK_COMPLIANCE_IDS,
-    );
+    expect(mockFrameworkCard.mock.calls.map(([props]) => props.framework)).toEqual([
+      'mitre:atlas',
+      'nist:ai:measure',
+      'owasp:api',
+      'owasp:llm',
+      'owasp:agentic',
+      'eu:ai-act',
+      'iso:42001',
+      'gdpr',
+      'dod:ai:ethics',
+      'aiuc:1',
+    ]);
   });
 
   it('should pass frameworksToShow to FrameworkExporter', () => {

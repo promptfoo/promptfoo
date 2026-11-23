@@ -1181,6 +1181,9 @@ describe('PluginsTab', () => {
           expect(ids.length).toBe(new Set(ids).size);
           expect(ids).not.toContain('policy');
           expect(
+            screen.getByTestId('selected-plugin-needs-config-prompt-extraction'),
+          ).toBeInTheDocument();
+          expect(
             screen.getByTestId('selected-plugin-needs-config-indirect-prompt-injection'),
           ).toBeInTheDocument();
         });

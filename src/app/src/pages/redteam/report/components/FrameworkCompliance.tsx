@@ -5,7 +5,6 @@ import { cn } from '@app/lib/utils';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
-  ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_COMPLIANCE_IDS,
   type FrameworkComplianceId,
   riskCategorySeverityMap,
@@ -14,8 +13,8 @@ import {
 import FrameworkCard from './FrameworkCard';
 import {
   categorizePlugins,
-  expandPluginCollections,
   getAiucCoverageGap,
+  getFrameworkPlugins,
   type TestResultStats,
 } from './FrameworkComplianceUtils';
 import FrameworkExporter from './FrameworkExporter';
@@ -48,25 +47,11 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
 
   const getNonCompliantPlugins = React.useCallback(
     (framework: string) => {
-      const mappings = ALIASED_PLUGIN_MAPPINGS[framework];
-      if (!mappings) {
-        return [];
-      }
-
-      // First, collect all plugins from all subcategories
-      const allPlugins = new Set<string>();
-      Object.values(mappings).forEach(({ plugins }) => {
-        const expanded = expandPluginCollections(plugins, categoryStats);
-        expanded.forEach((plugin) => allPlugins.add(plugin));
-      });
-
-      // Then filter for non-compliant ones
-      const { nonCompliant } = categorizePlugins(
-        allPlugins,
+      return categorizePlugins(
+        getFrameworkPlugins(framework, categoryStats),
         categoryStats,
         pluginPassRateThreshold,
-      );
-      return nonCompliant;
+      ).nonCompliant;
     },
     [categoryStats, pluginPassRateThreshold],
   );
@@ -115,19 +100,9 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
 
   const pluginComplianceStats = React.useMemo(() => {
     // Collect all unique plugins across all frameworks to show
-    const allFrameworkPlugins = new Set<string>();
-
-    frameworksToShow.forEach((framework) => {
-      const mappings = ALIASED_PLUGIN_MAPPINGS[framework];
-      if (!mappings) {
-        return;
-      }
-
-      Object.values(mappings).forEach(({ plugins }) => {
-        const expanded = expandPluginCollections(plugins, categoryStats);
-        expanded.forEach((plugin) => allFrameworkPlugins.add(plugin));
-      });
-    });
+    const allFrameworkPlugins = new Set(
+      frameworksToShow.flatMap((framework) => [...getFrameworkPlugins(framework, categoryStats)]),
+    );
 
     // Filter for plugins that have test data
     const pluginsWithData = Array.from(allFrameworkPlugins).filter(

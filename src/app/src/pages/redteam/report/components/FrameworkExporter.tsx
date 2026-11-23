@@ -84,9 +84,13 @@ function getRows({
         categoryId,
         category,
       };
-      // Keep unsupported AIUC controls visible without inventing a plugin or a score.
-      if (frameworkId === 'aiuc:1' && !plugins.length) {
-        rows.push({ ...control, ...getPluginResult(null, undefined, 'Not Tested') });
+      const untestedBehavior = categoryId && mappings[categoryId].untestedBehavior;
+      if (untestedBehavior || (frameworkId === 'aiuc:1' && !plugins.length)) {
+        rows.push({
+          ...control,
+          category: untestedBehavior ? `${category} (${untestedBehavior})` : category,
+          ...getPluginResult(null, undefined, 'Not Tested'),
+        });
       }
       for (const [status, ids] of [
         ['Pass', compliant],
