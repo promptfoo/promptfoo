@@ -114,6 +114,12 @@ tests:
         value: 'context["vars"]["example"] in output'
 ```
 
+For an optional test variable, use `.get()` to supply a default. This uses `80` when the test case omits `threshold_percentage`.
+
+```py
+threshold = context["vars"].get("threshold_percentage", 80)
+```
+
 ## External .py
 
 To reference an external file, use the `file://` prefix:
