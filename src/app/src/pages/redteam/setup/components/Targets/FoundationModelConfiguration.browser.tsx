@@ -774,3 +774,41 @@ it('flags a different provider route and accepts a full Vertex Responses provide
     config: { projectId: 'preview-project' },
   });
 });
+
+it('routes a full Responses ID pasted into the standard Vertex editor', async () => {
+  renderEditor({
+    id: 'vertex:gemini-3.8-flash',
+    config: {
+      projectId: 'preview-project',
+      keyFilename: '/fixture-key.json',
+      apiBaseUrl: 'https://example.com/v1',
+      max_tokens: 48,
+    },
+  });
+  const model = page.getByLabelText('Model ID', { exact: false });
+  await model.fill('vertex:claude-sonnet-5-5');
+  const saved = page.getByTestId('saved-target');
+  expect(JSON.parse((await saved.element()).textContent ?? '{}')).toEqual({
+    id: 'vertex:claude-sonnet-5-5',
+    config: {
+      projectId: 'preview-project',
+      keyFilename: '/fixture-key.json',
+      apiBaseUrl: 'https://example.com/v1',
+      max_tokens: 48,
+    },
+  });
+
+  await model.fill('vertex:responses:gpt-6-luna');
+  await expect.element(page.getByLabelText('Vertex AI API')).toHaveValue('responses');
+  await expect.element(model).toHaveValue('gpt-6-luna');
+  expect(JSON.parse((await saved.element()).textContent ?? '{}')).toEqual({
+    id: 'vertex:responses:gpt-6-luna',
+    config: {
+      region: 'global',
+      projectId: 'preview-project',
+      keyFilename: '/fixture-key.json',
+      max_output_tokens: 48,
+      store: false,
+    },
+  });
+});

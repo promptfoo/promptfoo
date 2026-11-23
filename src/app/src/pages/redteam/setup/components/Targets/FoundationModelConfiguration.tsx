@@ -24,11 +24,10 @@ import {
   DEFAULT_OPENAI_TARGET_ID,
   DEFAULT_VERTEX_TARGET_ID,
   OPENAI_TARGET_PLACEHOLDER,
-  VERTEX_RESPONSES_PREFIX,
 } from '../constants';
 import { SetupSection } from '../SetupSection';
 import BedrockAuthentication from './BedrockAuthentication';
-import { getVertexResponsesModelIdError } from './helpers';
+import ModelTokenLimitField from './ModelTokenLimitField';
 
 import type { ProviderOptions } from '../../types';
 
@@ -36,6 +35,9 @@ interface FoundationModelConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
   providerType: string;
+  beforeModel?: React.ReactNode;
+  /** Return true when the owning editor handles the ID change itself. */
+  onModelIdChange?: (id: string) => boolean;
 }
 
 const BEDROCK_API_OPTIONS: { value: BedrockApiMode; label: string }[] = [
@@ -63,13 +65,6 @@ function resolveTokenLimit(
   modelId = '',
   config?: ProviderOptions['config'],
 ) {
-  if (modelId.startsWith(VERTEX_RESPONSES_PREFIX)) {
-    return {
-      key: 'max_output_tokens',
-      fields: ['max_output_tokens'],
-      value: config?.max_output_tokens,
-    };
-  }
   const openAiField = mode ? undefined : getOpenAiTokenLimitField(modelId, config);
   const key =
     openAiField ??
@@ -200,10 +195,10 @@ const FoundationModelConfiguration = ({
   selectedTarget,
   updateCustomTarget,
   providerType,
+  beforeModel,
+  onModelIdChange,
 }: FoundationModelConfigurationProps) => {
   const isBedrock = providerType === 'bedrock';
-  const isVertex = providerType === 'vertex';
-  const isVertexResponses = isVertex && selectedTarget.id?.startsWith(VERTEX_RESPONSES_PREFIX);
   const bedrockRoute = isBedrock ? getBedrockTextRoute(selectedTarget.id || 'bedrock:') : undefined;
   const [bedrockApiMode, setBedrockApiMode] = useState(bedrockRoute?.apiMode);
   const {
@@ -230,14 +225,11 @@ const FoundationModelConfiguration = ({
     modelId: isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
     providerId: selectedTarget.id || '',
   });
-  const modelId = isVertexResponses
-    ? modelDraft.providerId.slice(VERTEX_RESPONSES_PREFIX.length)
-    : modelDraft.modelId;
+  const { modelId } = modelDraft;
   const bedrockApiError =
     isBedrock && bedrockApiMode
       ? getBedrockApiError(bedrockApiMode, getBedrockModelFromId(modelDraft.providerId))
       : undefined;
-  const vertexModelError = getVertexResponsesModelIdError(selectedTarget.id);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isMcpOpen, setIsMcpOpen] = useState(Boolean(selectedTarget.config?.mcp?.servers?.length));
   const [isBedrockSettingsOpen, setIsBedrockSettingsOpen] = useState(
@@ -277,15 +269,11 @@ const FoundationModelConfiguration = ({
 
   const handleModelIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newId = e.target.value;
-    if (isVertex && !isVertexResponses && newId.trim().startsWith(VERTEX_RESPONSES_PREFIX)) {
-      switchVertexRoute(newId.trim());
+    if (onModelIdChange?.(newId)) {
       return;
     }
-    const providerId = isVertexResponses
-      ? VERTEX_RESPONSES_PREFIX + newId.trim().replace(/^vertex:responses:/, '')
-      : isBedrock && bedrockApiMode
-        ? buildBedrockProviderId(bedrockApiMode, newId)
-        : newId;
+    const providerId =
+      isBedrock && bedrockApiMode ? buildBedrockProviderId(bedrockApiMode, newId) : newId;
     setModelDraft({ modelId: newId, providerId });
     updateProviderId(providerId);
   };
@@ -311,30 +299,6 @@ const FoundationModelConfiguration = ({
       updateTokenLimit(destination.key, tokenLimit, destination.fields);
     }
     lastEditedTarget.current = { id, providerType };
-    updateCustomTarget('id', id);
-  };
-
-  const switchVertexRoute = (id: string) => {
-    // Don't carry endpoint overrides, API keys or tool settings across transports.
-    const { projectId, credentials, keyFilename, googleAuthOptions, scopes } =
-      selectedTarget.config ?? {};
-    // The OAuth options also accept an API key, which is not shared by these routes.
-    const { apiKey: _apiKey, ...oauthOptions } = googleAuthOptions ?? {};
-    const isResponses = id.startsWith(VERTEX_RESPONSES_PREFIX);
-    updateCustomTarget('config', {
-      region: 'global',
-      ...(projectId !== undefined && { projectId }),
-      ...(credentials !== undefined && { credentials }),
-      ...(keyFilename !== undefined && { keyFilename }),
-      ...(Object.keys(oauthOptions).length > 0 && { googleAuthOptions: oauthOptions }),
-      ...(scopes !== undefined && { scopes }),
-      ...(typeof tokenLimit === 'number' && {
-        [isResponses ? 'max_output_tokens' : 'max_tokens']: tokenLimit,
-      }),
-      ...(isResponses && { store: false }),
-    });
-    lastEditedTarget.current = { id, providerType };
-    setModelDraft({ modelId: id, providerId: id });
     updateCustomTarget('id', id);
   };
 
@@ -519,31 +483,7 @@ const FoundationModelConfiguration = ({
 
       <div className="rounded-lg border border-border p-4">
         <div className="space-y-2">
-          {isVertex && (
-            <div className="mb-4 space-y-2">
-              <Label htmlFor="vertex-api-mode">Vertex AI API</Label>
-              <select
-                id="vertex-api-mode"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-                value={isVertexResponses ? 'responses' : 'vertex'}
-                aria-describedby="vertex-api-help"
-                onChange={(event) =>
-                  switchVertexRoute(
-                    event.target.value === 'responses'
-                      ? VERTEX_RESPONSES_PREFIX
-                      : DEFAULT_VERTEX_TARGET_ID,
-                  )
-                }
-              >
-                <option value="vertex">Gemini, Claude, and other Vertex models</option>
-                <option value="responses">OpenAI Responses</option>
-              </select>
-              <p id="vertex-api-help" className="text-sm text-muted-foreground">
-                Switching APIs resets the model and API-specific settings.
-              </p>
-            </div>
-          )}
-
+          {beforeModel}
           {isBedrock && (
             <div className="mb-4 space-y-2">
               <Label htmlFor="bedrock-api-mode">
@@ -584,22 +524,18 @@ const FoundationModelConfiguration = ({
             value={modelId}
             onChange={handleModelIdChange}
             placeholder={
-              isVertexResponses
-                ? 'gpt-6-luna'
-                : isBedrock &&
-                    (bedrockApiMode === 'runtime-responses' || bedrockApiMode === 'runtime-chat')
-                  ? 'us.openai.gpt-5.6-sol'
-                  : providerInfo.placeholder
+              isBedrock &&
+              (bedrockApiMode === 'runtime-responses' || bedrockApiMode === 'runtime-chat')
+                ? 'us.openai.gpt-5.6-sol'
+                : providerInfo.placeholder
             }
-            aria-invalid={Boolean(bedrockApiError || vertexModelError)}
+            aria-invalid={Boolean(bedrockApiError)}
             aria-describedby={
               isBedrock
                 ? bedrockApiError
                   ? 'bedrock-model-help bedrock-model-error'
                   : 'bedrock-model-help'
-                : vertexModelError
-                  ? 'vertex-model-error'
-                  : undefined
+                : undefined
             }
           />
           {isBedrock && (
@@ -623,39 +559,6 @@ const FoundationModelConfiguration = ({
             <p id="bedrock-model-error" role="alert" className="text-sm text-destructive">
               {bedrockApiError}
             </p>
-          )}
-          {vertexModelError && (
-            <p id="vertex-model-error" role="alert" className="text-sm text-destructive">
-              {vertexModelError}
-            </p>
-          )}
-          {isVertexResponses && (
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">
-                Use the exact OpenAI model ID enabled for your Google Cloud project.
-              </p>
-              <Label htmlFor="vertex-responses-project">Google Cloud Project ID</Label>
-              <Input
-                id="vertex-responses-project"
-                value={selectedTarget.config?.projectId ?? ''}
-                placeholder="your-google-cloud-project"
-                aria-describedby="vertex-responses-auth"
-                onChange={(event) =>
-                  updateCustomTarget('projectId', event.target.value.trim() || undefined)
-                }
-              />
-              <p id="vertex-responses-auth" className="text-sm text-muted-foreground">
-                Uses Google OAuth, not an OpenAI or Gemini API key. If no Google credentials are
-                configured, it uses Application Default Credentials on the eval runner. Leave the
-                project blank to use <code>GOOGLE_CLOUD_PROJECT</code>.
-              </p>
-              {selectedTarget.config?.apiBaseUrl && (
-                <p className="text-sm text-muted-foreground">
-                  This config has a custom endpoint. Google OAuth credentials are sent to that
-                  endpoint. Only use an endpoint you trust.
-                </p>
-              )}
-            </div>
           )}
           <p className="text-sm text-muted-foreground">
             {isBedrock
@@ -862,62 +765,50 @@ const FoundationModelConfiguration = ({
                 </p>
               </div>
             )}
-            {!isVertexResponses && (
-              <div className="space-y-2">
-                <Label htmlFor="temperature">Temperature</Label>
-                <NumberInput
-                  id="temperature"
-                  min={0}
-                  max={2}
-                  step={0.1}
-                  allowDecimals
-                  value={selectedTarget.config?.temperature}
-                  onChange={(v) => updateCustomTarget('temperature', v)}
-                />
-                <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
-              </div>
-            )}
-
             <div className="space-y-2">
-              <Label htmlFor="max-tokens">
-                {tokenLimitKey === 'max_output_tokens' ? 'Max Output Tokens' : 'Max Tokens'}
-              </Label>
-              <Input
-                id="max-tokens"
-                type="number"
-                min={isBedrock ? 0 : 1}
-                value={tokenLimit ?? ''}
-                onChange={(e) => {
-                  const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
-                  if (hasAlternateTokenLimit) {
-                    updateTokenLimit(tokenLimitKey, value);
-                  } else {
-                    updateCustomTarget(tokenLimitKey, value);
-                  }
-                }}
+              <Label htmlFor="temperature">Temperature</Label>
+              <NumberInput
+                id="temperature"
+                min={0}
+                max={2}
+                step={0.1}
+                allowDecimals
+                value={selectedTarget.config?.temperature}
+                onChange={(v) => updateCustomTarget('temperature', v)}
               />
-              <p className="text-sm text-muted-foreground">Maximum number of tokens to generate</p>
+              <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
             </div>
 
-            {!isVertexResponses && (
-              <div className="space-y-2">
-                <Label htmlFor="top-p">Top P</Label>
-                <NumberInput
-                  id="top-p"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  allowDecimals
-                  value={selectedTarget.config?.top_p}
-                  onChange={(v) => updateCustomTarget('top_p', v)}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Nucleus sampling parameter (0.0 to 1.0)
-                </p>
-              </div>
-            )}
+            <ModelTokenLimitField
+              label={tokenLimitKey === 'max_output_tokens' ? 'Max Output Tokens' : 'Max Tokens'}
+              min={isBedrock ? 0 : 1}
+              value={tokenLimit}
+              onChange={(value) => {
+                if (hasAlternateTokenLimit) {
+                  updateTokenLimit(tokenLimitKey, value);
+                } else {
+                  updateCustomTarget(tokenLimitKey, value);
+                }
+              }}
+            />
 
-            {!isBedrock && !isVertexResponses && (
+            <div className="space-y-2">
+              <Label htmlFor="top-p">Top P</Label>
+              <NumberInput
+                id="top-p"
+                min={0}
+                max={1}
+                step={0.01}
+                allowDecimals
+                value={selectedTarget.config?.top_p}
+                onChange={(v) => updateCustomTarget('top_p', v)}
+              />
+              <p className="text-sm text-muted-foreground">
+                Nucleus sampling parameter (0.0 to 1.0)
+              </p>
+            </div>
+
+            {!isBedrock && (
               <div className="space-y-2">
                 <Label htmlFor="api-key">API Key</Label>
                 <Input
@@ -932,7 +823,7 @@ const FoundationModelConfiguration = ({
               </div>
             )}
 
-            {!isVertexResponses && (!isBedrock || isBedrockHttpApi) && (
+            {(!isBedrock || isBedrockHttpApi) && (
               <div className="space-y-2">
                 <Label htmlFor="api-base-url">API Base URL</Label>
                 <Input

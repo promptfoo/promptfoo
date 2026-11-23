@@ -26,6 +26,7 @@ import {
   withLocalProviderType,
 } from './helpers';
 import { getProviderEditorKind } from './providerCatalog';
+import VertexConfiguration from './VertexConfiguration';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -435,7 +436,7 @@ function ProviderConfigEditor({
       if (provider.config.max_cost_usd !== undefined && provider.config.max_cost_usd <= 0) {
         errors.push('Maximum scan cost must be greater than 0');
       }
-    } else if (editorKind === 'foundation') {
+    } else if (editorKind === 'foundation' || editorKind === 'vertex') {
       // Foundation model providers validation
       const modelError = provider.id?.trim()
         ? getVertexResponsesModelIdError(provider.id)
@@ -684,6 +685,13 @@ function ProviderConfigEditor({
       {editorKind === 'codex-security' && (
         <CodexSecurityConfiguration
           selectedTarget={provider}
+          updateCustomTarget={updateCustomTarget}
+        />
+      )}
+
+      {editorKind === 'vertex' && (
+        <VertexConfiguration
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
         />
       )}

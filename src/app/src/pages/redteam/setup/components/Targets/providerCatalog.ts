@@ -13,6 +13,7 @@ import type { ProviderOptions } from '../../types';
 type ProviderEditorKind =
   | 'custom'
   | 'foundation'
+  | 'vertex'
   | 'agent'
   | 'http'
   | 'websocket'
@@ -373,7 +374,7 @@ const providerCatalog: ProviderTypeOption[] = [
     tag: 'providers',
     defaultId: DEFAULT_VERTEX_TARGET_ID,
     createConfig: () => ({ region: 'global' }),
-    editor: 'foundation',
+    editor: 'vertex',
   },
   {
     value: 'bedrock',
