@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { RedteamGraderBase } from '../../../../src/redteam/plugins/base';
 import {
   CopyrightViolationGrader,
   GraphicContentGrader,
@@ -61,7 +62,7 @@ describe('HarmfulGrader', () => {
     it('should fallback to superclass getResult for non-refusal', async () => {
       vi.mocked(isBasicRefusal).mockReturnValue(false);
 
-      const superGetResult = vi.spyOn(Object.getPrototypeOf(HarmfulGrader.prototype), 'getResult');
+      const superGetResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult');
       superGetResult.mockResolvedValue({
         grade: {
           pass: false,

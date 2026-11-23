@@ -316,7 +316,7 @@ function extractCommand(
   if (label && processLine) {
     const executable = /^(?:"([^"]+)"|'([^']+)')/.exec(processLine);
     const path = executable?.[1] ?? executable?.[2] ?? getCommandExecutable(processLine);
-    if (path === label || path?.split(/[\\/]/).at(-1) === label) {
+    if (path === label || path?.split(/[\\/]/).pop() === label) {
       return processLine;
     }
   }
