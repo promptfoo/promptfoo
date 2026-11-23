@@ -133,3 +133,60 @@ describe('cache storage compatibility', () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('clearCache with disk storage', () => {
+  let cacheDirectory: string;
+  let restoreEnvironment: () => void;
+
+  beforeEach(() => {
+    vi.resetModules();
+    cacheDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-cache-clear-'));
+    restoreEnvironment = mockProcessEnv({
+      PROMPTFOO_CACHE_TYPE: 'disk',
+      PROMPTFOO_CACHE_PATH: cacheDirectory,
+      PROMPTFOO_CACHE_ENABLED: 'true',
+    });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    restoreEnvironment();
+    fs.rmSync(cacheDirectory, { recursive: true, force: true });
+  });
+
+  it('removes persisted responses when caching loads disabled', async () => {
+    const cacheFile = path.join(cacheDirectory, 'cache.json');
+
+    // Seed a real on-disk response while caching is enabled.
+    const seed = await import('../src/cache');
+    await seed.getCache().set('stale', 'stale response');
+    expect(fs.existsSync(cacheFile)).toBe(true);
+    await seed.getCache().disconnect();
+
+    // A fresh module that loads with caching disabled builds a memory cache;
+    // clearing it must still reach the stale file on disk.
+    const restoreDisabled = mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: 'false' });
+    vi.resetModules();
+    const disabled = await import('../src/cache');
+    expect(disabled.isCacheEnabled()).toBe(false);
+    await disabled.clearCache();
+    restoreDisabled();
+
+    // A later enabled process must not reuse the stale response.
+    vi.resetModules();
+    const later = await import('../src/cache');
+    await expect(later.getCache().get('stale')).resolves.toBeUndefined();
+    await later.getCache().disconnect();
+  });
+
+  it('still clears the active disk cache when caching is enabled', async () => {
+    const enabled = await import('../src/cache');
+    await enabled.getCache().set('fresh', 'value');
+    await expect(enabled.getCache().get('fresh')).resolves.toBe('value');
+
+    await enabled.clearCache();
+
+    await expect(enabled.getCache().get('fresh')).resolves.toBeUndefined();
+    await enabled.getCache().disconnect();
+  });
+});
