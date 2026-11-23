@@ -49,6 +49,7 @@ import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validat
 import {
   ADDITIONAL_STRATEGIES,
   DEFAULT_STRATEGIES,
+  FRAMEWORK_COMPLIANCE_IDS,
   type Plugin,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
@@ -64,8 +65,7 @@ import { getRedteamGenerationContextFromProviders } from '../remoteGenerationCon
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
-import type { TokenUsage } from '../../types/shared';
+import type { ApiProvider, TestSuite, TokenUsage, UnifiedConfig } from '../../types/index';
 import type {
   FailedPluginInfo,
   PolicyObject,
@@ -494,13 +494,19 @@ async function doGenerateRedteamInternal(
 
   // override plugins with command line options
   if (Array.isArray(options.plugins) && options.plugins.length > 0) {
-    plugins = options.plugins.map((plugin) => {
-      const pluginConfig = {
-        id: plugin.id,
-        numTests: plugin.numTests || options.numTests || redteamConfig?.numTests,
-        ...(plugin.config && { config: plugin.config }),
-      };
-      return pluginConfig;
+    // --plugins has already been expanded by the CLI. Match against concrete
+    // file plugins too, including overrides supplied on a control or collection.
+    const filePlugins =
+      RedteamConfigSchema.safeParse({ plugins, strategies: [] }).data?.plugins ?? plugins;
+    plugins = options.plugins.flatMap((plugin) => {
+      // Selecting a plugin by ID (including via a CLI preset) must not discard
+      // its fixture, severity or configured variants from the file.
+      const matches = plugin.config ? [] : filePlugins.filter((entry) => entry.id === plugin.id);
+      return (matches.length ? matches : [plugin]).map((entry) => ({
+        ...entry,
+        ...plugin,
+        numTests: plugin.numTests ?? options.numTests ?? entry.numTests ?? redteamConfig?.numTests,
+      }));
     });
   }
   invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
@@ -589,6 +595,7 @@ async function doGenerateRedteamInternal(
     resolvedConfig?.evaluateOptions?.maxConcurrency;
 
   const config = {
+    frameworks: options.frameworks ?? redteamConfig?.frameworks,
     injectVar: redteamConfig?.injectVar || options.injectVar,
     // Multi-variable inputs for test case generation (read from target)
     inputs: targetInputs,
@@ -831,6 +838,7 @@ async function doGenerateRedteamInternal(
           ? options.purpose
           : undefined;
     const updatedRedteamConfig = {
+      ...(parsedConfig.data.frameworks && { frameworks: parsedConfig.data.frameworks }),
       purpose: authoredPurpose ?? purpose,
       entities,
       strategies: strategyObjs || [],
@@ -1019,6 +1027,7 @@ async function doGenerateRedteamInternal(
       ret = writePromptfooConfig(
         {
           ...(options.description ? { description: options.description } : {}),
+          ...(parsedConfig.data.frameworks && { redteam: updatedRedteamConfig }),
           metadata: {
             ...((generationTokenUsage.numRequests ?? 0) > 0 ? { generationTokenUsage } : {}),
             generation,
@@ -1095,6 +1104,9 @@ export function redteamGenerateCommand(
 
         Optional:
         - ${Array.from(REDTEAM_ADDITIONAL_PLUGINS).sort().join(', ')}
+
+        Framework presets:
+        - ${FRAMEWORK_COMPLIANCE_IDS.join(', ')}
       `,
       (val) => val.split(',').map((x) => x.trim()),
     )
@@ -1181,7 +1193,7 @@ export function redteamGenerateCommand(
         if (opts.plugins && opts.plugins.length > 0) {
           const parsed = RedteamConfigSchema.safeParse({
             plugins: opts.plugins,
-            strategies: opts.strategies,
+            strategies: opts.strategies ?? [],
             numTests: opts.numTests,
           });
           if (!parsed.success) {
@@ -1193,6 +1205,12 @@ export function redteamGenerateCommand(
             return;
           }
           overrides = parsed.data;
+          // If the alias adds no strategies, inherit the file's selection.
+          if (!opts.strategies) {
+            overrides.strategies = overrides.strategies?.length
+              ? [...DEFAULT_STRATEGIES, ...overrides.strategies]
+              : undefined;
+          }
         }
         if (!opts.write && !opts.output) {
           logger.info('No output file specified, writing to redteam.yaml in the current directory');
@@ -1204,7 +1222,12 @@ export function redteamGenerateCommand(
           defaultConfig,
           defaultConfigPath,
         });
-        await doGenerateRedteam(validatedOpts);
+        // Use the already validated counts, so an omitted -n inherits the file's
+        // numTests rather than the standalone plugin-object schema default.
+        await doGenerateRedteam({
+          ...validatedOpts,
+          plugins: overrides.plugins ?? validatedOpts.plugins,
+        });
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');

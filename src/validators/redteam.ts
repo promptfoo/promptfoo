@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import {
+  AIUC_1_MAPPING,
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
   ALL_STRATEGIES,
@@ -97,6 +98,13 @@ function createPluginIdSchema() {
       }
     }),
     z.string().superRefine((val, ctx) => {
+      if (AIUC_1_MAPPING[val]?.plugins?.length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `${val} has no built-in tests yet. Select a supported AIUC-1 control or configure a custom policy.`,
+        });
+        return;
+      }
       if (!val.startsWith('file://')) {
         ctx.addIssue({
           code: 'custom',
@@ -391,6 +399,7 @@ export const RedteamConfigSchema = z
       pluginMap.set(key, pluginObject);
     };
 
+    const selectedIds = new Set(data.plugins.map((p) => (typeof p === 'string' ? p : p.id)));
     const expandCollection = (
       collection: string[] | ReadonlySet<Plugin>,
       config: PluginConfig | undefined,
@@ -398,6 +407,9 @@ export const RedteamConfigSchema = z
       severity?: Severity,
     ) => {
       (Array.isArray(collection) ? collection : Array.from(collection)).forEach((item) => {
+        if (!config && !severity && selectedIds.has(item)) {
+          return;
+        }
         // Only add the plugin if it doesn't already exist or if the existing one has undefined numTests
         const existingPlugin = pluginMap.get(`${item}:${JSON.stringify(config)}:${severity || ''}`);
         if (!existingPlugin || existingPlugin.numTests === undefined) {
@@ -441,6 +453,12 @@ export const RedteamConfigSchema = z
             };
 
       const expandPlugin = (id: string) => {
+        // A specific plugin (including its configured variants) overrides the preset
+        // regardless of declaration order. Don't also schedule an unconfigured copy.
+        const isAiuc = pluginObj.id === 'aiuc:1' || pluginObj.id.startsWith('aiuc:1:');
+        if (selectedIds.has(id) && (isAiuc || (!pluginObj.config && !pluginObj.severity))) {
+          return;
+        }
         if (COLLECTIONS.includes(id as Collection)) {
           handleCollectionExpansion(
             id as Collection,
@@ -454,10 +472,15 @@ export const RedteamConfigSchema = z
       };
 
       if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
-        Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {
+        for (const [control, { plugins, strategies }] of Object.entries(
+          ALIASED_PLUGIN_MAPPINGS[pluginObj.id],
+        )) {
+          if (pluginObj.id === 'aiuc:1' && selectedIds.has(control)) {
+            continue;
+          }
           plugins.forEach(expandPlugin);
           strategies.forEach((strategy) => strategySet.add(strategy as Strategy));
-        });
+        }
       } else if (COLLECTIONS.includes(pluginObj.id as Collection)) {
         handleCollectionExpansion(
           pluginObj.id as Collection,

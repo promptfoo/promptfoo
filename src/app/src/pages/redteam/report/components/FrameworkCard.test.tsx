@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { renderWithProviders } from '@app/utils/testutils';
-import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
+import { AIUC_1_MAPPING, Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
 import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
@@ -135,6 +135,50 @@ describe('FrameworkCard', () => {
     expect(screen.getAllByText('bola').length).toBeGreaterThan(0);
     expect(screen.getAllByText('bfla').length).toBeGreaterThan(0);
     expect(screen.getAllByText('rbac').length).toBeGreaterThan(0);
+  });
+
+  it('shows AIUC control names and the unsupported accountability control even when untested rows are hidden', () => {
+    renderFrameworkCard({ framework: 'aiuc:1', isCompliant: false, showUntestedPlugins: false });
+    expect(screen.getByText('A009. Data and privacy')).toBeInTheDocument();
+    expect(screen.getByText('E018. Accountability')).toBeInTheDocument();
+    expect(screen.getByText('No built-in tests')).toBeInTheDocument();
+    expect(screen.getByText('Partial coverage')).toBeInTheDocument();
+    expect(document.querySelector('.icon-compliant')).not.toBeInTheDocument();
+  });
+
+  it('counts prompt leakage even when all other A009 tests pass', () => {
+    const categoryStats = Object.fromEntries(
+      AIUC_1_MAPPING['aiuc:1:a009'].plugins.map((id) => [id, { pass: 1, total: 1, failCount: 0 }]),
+    );
+    categoryStats['prompt-extraction'] = { pass: 0, total: 1, failCount: 1 };
+    renderFrameworkCard({
+      framework: 'aiuc:1',
+      isCompliant: false,
+      categoryStats,
+      nonCompliantPlugins: ['prompt-extraction'],
+      showUntestedPlugins: false,
+    });
+    expect(screen.getByText('A009. Data and privacy').parentElement).toHaveTextContent(
+      '1 / 12 plugins failed',
+    );
+  });
+
+  it('shows the D004 tool execution gap even when all reliability tests pass', () => {
+    const pass = { pass: 1, total: 1, failCount: 0 };
+    renderFrameworkCard({
+      framework: 'aiuc:1',
+      isCompliant: false,
+      categoryStats: {
+        hallucination: pass,
+        'rag-source-attribution': pass,
+        'unverifiable-claims': pass,
+      },
+      showUntestedPlugins: false,
+    });
+    expect(screen.getByText('D004. Reliability').parentElement).toHaveTextContent(
+      'Partial coverage',
+    );
+    expect(screen.getByText('Tool execution not tested')).toBeInTheDocument();
   });
 
   it('should render principle names for the DoD AI ethics framework', () => {

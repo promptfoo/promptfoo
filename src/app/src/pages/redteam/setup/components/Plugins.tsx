@@ -206,9 +206,13 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       );
 
       // Keep count, severity, and config overrides when changing the selection.
-      const newPluginsArray: Config['plugins'] = Array.from(newSelectedPlugins).map(
-        (plugin) =>
-          config.plugins.find((p) => (typeof p === 'string' ? p : p.id) === plugin) ?? plugin,
+      const newPluginsArray: Config['plugins'] = Array.from(newSelectedPlugins).flatMap(
+        (plugin) => {
+          const matches = config.plugins.filter(
+            (p) => (typeof p === 'string' ? p : p.id) === plugin,
+          );
+          return matches.length ? matches : [plugin];
+        },
       );
 
       // Combine all plugins and update store
