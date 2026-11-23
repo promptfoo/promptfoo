@@ -5,6 +5,14 @@ export const SPAN_ROLE_ATTRIBUTE = 'promptfoo.span.role';
 export type PromptfooSpanRole = 'test_case' | 'target' | 'grader';
 
 const SPAN_ROLE_CONTEXT_KEY = createContextKey('promptfoo.span.role');
+const TARGET_SPANS_KEY = createContextKey('promptfoo.local.target.spans');
+
+type TargetSpans = Map<string, { traceId: string; name: string; attributes: string[] }>;
+
+/** The current execution's own wrappers. Sender-supplied role attributes cannot establish ownership. */
+export function getLocalTargetSpans(): TargetSpans | undefined {
+  return context.active().getValue(TARGET_SPANS_KEY) as TargetSpans | undefined;
+}
 
 /** Keep evaluator-owned grading activity distinct from the target's behavior. */
 export function getActiveSpanRole(): PromptfooSpanRole | undefined {
@@ -12,7 +20,11 @@ export function getActiveSpanRole(): PromptfooSpanRole | undefined {
 }
 
 export function withSpanRole<T>(role: PromptfooSpanRole, fn: () => T): T {
-  return context.with(context.active().setValue(SPAN_ROLE_CONTEXT_KEY, role), fn);
+  const active = context.active().setValue(SPAN_ROLE_CONTEXT_KEY, role);
+  return context.with(
+    role === 'test_case' ? active.setValue(TARGET_SPANS_KEY, new Map()) : active,
+    fn,
+  );
 }
 
 /** Return a usable traceparent only when the active span has a valid recorded context. */

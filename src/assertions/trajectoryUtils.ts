@@ -1,3 +1,4 @@
+import { getLocalTargetSpans, SPAN_ROLE_ATTRIBUTE } from '../tracing/spanRoles';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
@@ -503,6 +504,20 @@ export function summarizeTrajectoryForJudge(trace: TraceData): string {
 
 /** Only deterministic coding-agent checks may inspect full command arguments. */
 export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
+  const localTargets = codingAgent && getLocalTargetSpans();
+  if (localTargets && localTargets.size > 0) {
+    // Exclude only known bookkeeping. Retain child spans and extra action attributes.
+    const spans = trace.spans.filter((span) => {
+      const target = localTargets.get(span.spanId);
+      return !(
+        target?.traceId === trace.traceId &&
+        target.name === span.name &&
+        span.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'target' &&
+        Object.keys(span.attributes).every((key) => target.attributes.includes(key))
+      );
+    });
+    trace = { ...trace, spans };
+  }
   const steps = extractTrajectorySteps(trace);
   const localTraceActions = codingAgent
     ? steps.flatMap((step, index) => {

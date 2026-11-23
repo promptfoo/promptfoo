@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runAssertion, runAssertions } from '../../../src/assertions/index';
+import {
+  hasTraceAwareAssertions,
+  runAssertion,
+  runAssertions,
+} from '../../../src/assertions/index';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { MemoryPoisoningPluginGrader } from '../../../src/redteam/plugins/agentic/memoryPoisoning';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
@@ -297,6 +301,7 @@ describe('redteam output evidence', () => {
             metadata: { ...options.test.metadata, tracing },
             assert: [
               options.assertion,
+              { ...options.assertion, value: 'file://package.json' },
               { type: 'javascript', value: 'context.trace.spans.length === 1' },
             ],
           },
@@ -305,6 +310,66 @@ describe('redteam output evidence', () => {
         expect(result.pass).toBe(true);
       },
     );
+
+    it('honors grading opt-outs for supplied traces and static file values', async () => {
+      const assertion = { ...options.assertion, value: 'file://package.json' };
+      const test = {
+        metadata: {
+          ...options.test.metadata,
+          tracing: { enabled: true, includeInGrading: false },
+        },
+      };
+      expect(hasTraceAwareAssertions([assertion], test)).toBe(false);
+      expect(
+        hasTraceAwareAssertions([{ type: 'promptfoo:redteam:coding-agent:secret-env-read' }], test),
+      ).toBe(false);
+      const result = await runAssertion({ ...options, test, assertion, traceData });
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+      expect(result.pass).toBe(true);
+    });
+
+    it('allows a local value script to read the trace without sharing it with the grader', async () => {
+      const getResult = vi.spyOn(SsrfGrader.prototype, 'getResult');
+      vi.spyOn(getTraceStore(), 'getTrace').mockResolvedValue(traceData);
+      const result = await runAssertions({
+        ...options,
+        traceId: traceData.traceId,
+        test: {
+          ...options.test,
+          assert: [
+            {
+              ...options.assertion,
+              value:
+                'file://test/fixtures/file-script-assertions/rubric-generator.cjs:traceSpanName',
+            },
+          ],
+        },
+      });
+      expect(getResult.mock.calls[0][4]).toBe('fixture');
+      expect(getResult.mock.calls[0][7]?.traceData).toBeUndefined();
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+      expect(result.pass).toBe(true);
+    });
+
+    it.each([
+      'promptfoo:redteam:coppa',
+      'promptfoo:redteam:ferpa',
+      'promptfoo:redteam:wordplay',
+      'promptfoo:redteam:aegis',
+      'promptfoo:redteam:beavertails',
+    ] as const)('considers private action evidence before passing a %s refusal', async (type) => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Observed action',
+      });
+      const result = await runAssertion({ ...options, assertion: { type }, traceData });
+      expect(matchesLlmRubric).toHaveBeenCalledOnce();
+      expect(vi.mocked(matchesLlmRubric).mock.calls[0][0]).toContain('"type": "command"');
+      expect(result.pass).toBe(false);
+      expect(JSON.stringify(vi.mocked(matchesLlmRubric).mock.calls)).not.toContain(marker);
+      expect(JSON.stringify(result)).not.toContain(marker);
+    });
 
     it('checks the full command line locally when the trace also names the executable', async () => {
       const result = await runAssertion({

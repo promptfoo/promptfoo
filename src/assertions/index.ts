@@ -164,40 +164,58 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
   return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
 }
 
-function assertionMayNeedTraceContext(
+function assertionTraceAccess(
   assertion: AssertionOrSet,
   test: AtomicTestCase,
   suppliedTrace = false,
-): boolean {
+): 'grading' | 'script' | undefined {
   if (assertionUsesTrace(assertion)) {
-    return true;
+    return 'grading';
   }
 
   if (assertion.type === 'assert-set') {
-    return assertion.assert.some((item) => assertionMayNeedTraceContext(item, test));
-  }
-
-  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
-    return true;
+    return assertion.assert.some((item) => assertionTraceAccess(item, test))
+      ? 'grading'
+      : undefined;
   }
 
   if (assertion.type.startsWith('promptfoo:redteam:')) {
     const tracing = resolveTracingOptions({ test, strategyId: test.metadata?.strategyId ?? '' });
-    if (tracing.includeInGrading && (tracing.enabled || suppliedTrace)) {
-      return true;
+    if (
+      tracing.includeInGrading &&
+      (tracing.enabled ||
+        suppliedTrace ||
+        assertion.type.startsWith('promptfoo:redteam:coding-agent:'))
+    ) {
+      return 'grading';
     }
+    // Executable values can read the trace without opting the model grader into it.
+    const value = assertion.value;
+    if (typeof value === 'string') {
+      const file = value.startsWith('file://') ? value.slice(7).split(':')[0] : '';
+      if (
+        isPackagePath(value) ||
+        isJavascriptFile(file) ||
+        file.endsWith('.py') ||
+        file.endsWith('.rb')
+      ) {
+        return 'script';
+      }
+    }
+    return undefined;
   }
 
-  return typeof assertion.value === 'string'
-    ? assertion.value.startsWith('file://') || isPackagePath(assertion.value)
-    : false;
+  return typeof assertion.value === 'string' &&
+    (assertion.value.startsWith('file://') || isPackagePath(assertion.value))
+    ? 'grading'
+    : undefined;
 }
 
 export function hasTraceAwareAssertions(
   assertions?: AssertionOrSet[],
   test: AtomicTestCase = {},
 ): boolean {
-  return Boolean(assertions?.some((assertion) => assertionMayNeedTraceContext(assertion, test)));
+  return Boolean(assertions?.some((assertion) => assertionTraceAccess(assertion, test)));
 }
 
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
@@ -444,6 +462,7 @@ async function runAssertionInternal({
   providerResponse,
   traceId,
   traceData,
+  preloadedTraceData,
   claimStoredGradingUsage,
 }: {
   prompt?: string;
@@ -456,6 +475,7 @@ async function runAssertionInternal({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  preloadedTraceData?: TraceData | null;
   claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
@@ -486,10 +506,13 @@ async function runAssertionInternal({
   };
 
   const suppliedTrace = !!traceData && assertion.type.startsWith('promptfoo:redteam:');
-  if ((traceId || suppliedTrace) && assertionMayNeedTraceContext(assertion, test, suppliedTrace)) {
+  const traceAccess =
+    (traceId || suppliedTrace) && assertionTraceAccess(assertion, test, suppliedTrace);
+  if (traceAccess) {
     try {
+      const provided = traceData === undefined ? preloadedTraceData : traceData;
       const resolvedTraceData =
-        traceId && traceData === undefined ? await loadTraceData(traceId) : traceData;
+        traceId && provided === undefined ? await loadTraceData(traceId) : provided;
       if (resolvedTraceData) {
         context.trace = {
           traceId: resolvedTraceData.traceId,
@@ -657,7 +680,7 @@ async function runAssertionInternal({
     assertion,
     baseType: getAssertionBaseType(assertion),
     providerCallContext,
-    assertionValueContext: context,
+    assertionValueContext: traceAccess === 'script' ? { ...context, trace: undefined } : context,
     cost,
     inverse: isAssertionInverse(assertion),
     latencyMs,
@@ -698,16 +721,19 @@ async function runAssertionInternal({
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
-export async function runAssertion(
+export function runAssertion(
+  options: Omit<Parameters<typeof runAssertionInternal>[0], 'preloadedTraceData'>,
+): Promise<GradingResult> {
+  return dispatchAssertion(options);
+}
+
+async function dispatchAssertion(
   options: Parameters<typeof runAssertionInternal>[0],
 ): Promise<GradingResult> {
-  if (!options.traceId) {
-    return runAssertionInternal(options);
-  }
-
+  const run = () => runAssertionInternal(options);
   const tracingContext = getProviderCallTracingContext();
-  if (!tracingContext) {
-    return runAssertionInternal(options);
+  if (!options.traceId || !tracingContext) {
+    return run();
   }
 
   return tracingContext.withGraderSpan(
@@ -716,7 +742,7 @@ export async function runAssertion(
       evalId: options.test.metadata?.evaluationId as string | undefined,
       testIndex: tracingContext.testIndex,
     },
-    () => runAssertionInternal(options),
+    run,
   );
 }
 
@@ -866,7 +892,7 @@ export async function runAssertions({
       return;
     }
 
-    const result = await runAssertion({
+    const result = await dispatchAssertion({
       prompt,
       provider,
       providerResponse,
@@ -876,11 +902,7 @@ export async function runAssertions({
       latencyMs,
       assertIndex: index,
       traceId,
-      // A sibling's preload is not an explicit request to grade this assertion with a trace.
-      traceData:
-        preloadedTraceData && !assertionMayNeedTraceContext(assertion, test)
-          ? undefined
-          : preloadedTraceData,
+      preloadedTraceData,
       claimStoredGradingUsage,
     });
 

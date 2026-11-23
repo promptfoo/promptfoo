@@ -25,7 +25,7 @@ Red team strategies can grade responses during an attack. The final assertion ch
 
 When no final strategy prompt is available, a provider-reported chat array without a usable user message uses the original prompt fallback instead of unrelated saved messages. Historical strategy grading usage is counted once across matching assertions, including assertion sets. Replayed grading responses count their full token usage as cached.
 
-[Red team assertions with trace spans](/docs/tracing/#red-team-tracing) receive fresh grading. For SSRF, a text refusal alone no longer skips the judge when these spans are present.
+[Red team assertions with trace spans enabled for grading](/docs/tracing/#red-team-tracing) receive fresh grading. A standalone refusal cannot bypass the judge for SSRF, COPPA, FERPA, Wordplay, Aegis or BeaverTails when these spans are present.
 
 For [data-exfil red team assertions](/docs/red-team/plugins/data-exfil#grading), valid page tracking can supply deterministic evidence of exfiltration. Missing or malformed tracking identifiers leave model grading in place and do not automatically pass the test.
 

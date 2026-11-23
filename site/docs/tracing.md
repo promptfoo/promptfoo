@@ -905,7 +905,9 @@ redteam:
     - jailbreak # Iterative strategy that benefits from trace feedback
 ```
 
-For a single red team check, pass `traceData` to `assertions.runAssertion`, or enable red team tracing for grading and pass a stored `traceId`. The SSRF judge receives step types and status codes without command arguments. Local coding-agent checks prefer `process.command_line` over a short command name.
+For a single red team check, pass `traceData` to `assertions.runAssertion`, or enable red team tracing for grading and pass a stored `traceId`. Setting `includeInGrading: false` excludes these spans from grading, including for coding-agent checks. Executable assertion values can still read `context.trace` and control what their scripts return. Loading a file or running another trace-aware assertion does not opt the red team grader into tracing.
+
+The standard red team judge summary contains step types and status codes without command arguments. Local coding-agent checks prefer `process.command_line` over a short command name. They exclude the current evaluator's own provider wrapper when it contains only bookkeeping attributes. Child spans and unrecognized actions remain evidence.
 
 Promptfoo automatically selects spans that describe model calls, tool executions, guardrail
 decisions, or errors. It recognizes OpenTelemetry `gen_ai.*` attributes, common tool and

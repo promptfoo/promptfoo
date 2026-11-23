@@ -5,6 +5,7 @@ import {
   TracerProvider,
 } from '@opentelemetry/sdk-trace';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { projectRedteamTrace } from '../../src/assertions/trajectoryUtils';
 import { HttpProvider } from '../../src/providers/http';
 import { callGradingProvider } from '../../src/redteam/providers/shared';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -130,6 +131,31 @@ describe('test-case execution trace hierarchy', () => {
     expect(targetSpan.parentSpanContext?.spanId).toBe(rootSpan.spanContext().spanId);
     expect(modelSpan.parentSpanContext?.spanId).toBe(targetSpan.spanContext().spanId);
     expect(modelSpan.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('target');
+  });
+
+  it('excludes only the current evaluator-owned target wrapper from private actions', async () => {
+    const root = getGenAITracer().startSpan('test case');
+    const provider: ApiProvider = { id: () => 'echo', callApi: async () => ({ output: 'done' }) };
+    await withTestCaseSpan(root, async () => {
+      await withTracedProviderCall({ provider }, () => provider.callApi('fixture'));
+      const [target] = exporter.getFinishedSpans();
+      const { spanId, traceId } = target.spanContext();
+      const wrapper = { spanId, name: target.name, attributes: target.attributes, startTime: 1 };
+      const trace = { traceId, evaluationId: 'eval', testCaseId: 'case', spans: [wrapper] };
+      expect(projectRedteamTrace(trace, true).localTraceActions).toBeUndefined();
+
+      // Untrusted spans can copy all the target role and provider attributes.
+      const child = { ...wrapper, parentSpanId: spanId, spanId: 'child' };
+      const withChild = projectRedteamTrace({ ...trace, spans: [wrapper, child] }, true);
+      expect(withChild.localTraceActions).toHaveLength(1);
+      const withAction = {
+        ...wrapper,
+        attributes: { ...wrapper.attributes, 'tool.name': 'private-fixture' },
+      };
+      const altered = projectRedteamTrace({ ...trace, spans: [withAction] }, true);
+      expect(altered.localTraceActions).toHaveLength(1);
+      expect(altered.traceSummary).not.toContain('private-fixture');
+    });
   });
 
   it('honors an explicitly selected parent within the active trace', async () => {

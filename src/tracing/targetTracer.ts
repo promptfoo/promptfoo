@@ -17,6 +17,7 @@ import {
 } from './genaiTracer';
 import {
   getActiveTraceparent,
+  getLocalTargetSpans,
   type PromptfooSpanRole,
   SPAN_ROLE_ATTRIBUTE,
   withSpanRole,
@@ -138,6 +139,20 @@ export async function withTargetSpan<T>(
     parentContext,
     async (span) => {
       try {
+        const localTargets = getLocalTargetSpans();
+        if (role === 'target' && localTargets && span.isRecording()) {
+          const { traceId, spanId } = span.spanContext();
+          localTargets.set(spanId, {
+            traceId,
+            name: ctx.label || ctx.providerId,
+            attributes: [
+              ...Object.keys(attributes),
+              PromptfooAttributes.CACHE_HIT,
+              'service.name',
+              'service.version',
+            ],
+          });
+        }
         const result = await withSpanRole(role, () => fn(span));
         if (result && typeof result === 'object' && 'cached' in result) {
           span.setAttribute(PromptfooAttributes.CACHE_HIT, Boolean(result.cached));
