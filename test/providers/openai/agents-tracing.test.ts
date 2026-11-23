@@ -956,6 +956,21 @@ describe('OTLPTracingExporter', () => {
     },
   );
 
+  it.each(formats)('keeps curl options private after shell redirects in %s', async (format) => {
+    const ordinary = 'curl 2>&1 -HAccept:text/plain https://host';
+    const { attributes } = await exportCustomData(format, {
+      cmd: 'curl 2>&1 -HService-Key:opaque/value https://host',
+      combined: 'curl &>out -sSHService-Key:opaque/value https://host',
+      overwrite: 'curl >|out -u alice:opaque/user https://host',
+      quoted: 'curl 2>&1 -H "Service-Key: opaque/quoted" https://host',
+      native: ['curl', '2>&1', '-HService-Key:opaque/value', 'https://host'],
+      ordinary,
+    });
+    expect(attributes).toMatchObject(redacted('cmd', 'command', 'combined'));
+    expect(attributes.native).toEqual(wireStrings('curl', '2>&1', '-H<redacted>', 'https://host'));
+    expect(attributes.ordinary).toBe(ordinary);
+  });
+
   it.each(formats)('masks curl header operands in native arguments in %s', async (format) => {
     const argv = ['curl', '-sSHAuthorization:opaque/value', '-HIdempotency-Key:shown'];
     const native = await exportCustomData(format, {

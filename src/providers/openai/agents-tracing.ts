@@ -1007,6 +1007,9 @@ function isPrivateCurlHeader(header: string, tail?: string) {
 
 function argumentRedactor(context?: AttributeContext, command?: string) {
   const native = command === undefined;
+  // In redirects such as 2>&1 and >|file, a shell operator does not end the
+  // command. Keep curl's stricter option checks throughout ambiguous text.
+  const reliableSeparators = command !== undefined && !/[<>][&|]|&>|<</.test(command);
   let mode: 'start' | 'unknown' | 'operands' | 'curl' | 'expanded' =
     context === 'operands' || context === 'curl' ? context : 'start';
   let next: 'credential' | 'header' | undefined;
@@ -1067,7 +1070,7 @@ function argumentRedactor(context?: AttributeContext, command?: string) {
     if (
       typeof word === 'string' &&
       /^[;&|\r\n]+$/.test(word) &&
-      (!native || (!operand && mode !== 'expanded' && mode !== 'curl'))
+      (reliableSeparators || (!operand && mode !== 'expanded' && mode !== 'curl'))
     ) {
       mode = 'start';
       property = false;
