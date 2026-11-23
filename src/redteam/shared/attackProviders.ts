@@ -124,3 +124,21 @@ export function getAttackProviderFullId(id: string): string {
 
   return `promptfoo:redteam:${id}`;
 }
+
+/** Count independent variants before the first per-turn provider in a layer. */
+export function getLayerVariantCount(steps: unknown): number {
+  let count = 1;
+  if (Array.isArray(steps)) {
+    for (const step of steps) {
+      const id = typeof step === 'string' ? step : step?.id;
+      if (typeof id === 'string' && isAttackProvider(id)) {
+        break;
+      }
+      const n = step?.config?.n;
+      if (id === 'bijection' && Number.isInteger(n) && n >= 1 && n <= 20) {
+        count *= n;
+      }
+    }
+  }
+  return count;
+}
