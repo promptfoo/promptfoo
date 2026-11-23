@@ -499,14 +499,7 @@ async function callProviderForRunEval({
   let providerFailed = false;
 
   try {
-    if (test.providerOutput) {
-      response = {
-        output: test.providerOutput,
-        tokenUsage: createEmptyTokenUsage(),
-        cost: 0,
-        cached: false,
-      };
-    } else {
+    if (test.providerOutput == null) {
       response = await callActiveProvider({
         abortSignal,
         pauseSignal,
@@ -526,6 +519,13 @@ async function callProviderForRunEval({
         traceContext,
         vars,
       });
+    } else {
+      response = {
+        output: test.providerOutput,
+        tokenUsage: createEmptyTokenUsage(),
+        cost: 0,
+        cached: false,
+      };
     }
 
     sanitizeResponseMetadata(response);
@@ -1140,9 +1140,9 @@ async function gradeRunEvalResponse({
     // Local spans alone would make missing external evidence look like an empty trace.
     applyGradingError(
       ret,
-      test.providerOutput
-        ? 'Required external trace is unavailable. Remove providerOutput and retry without caching.'
-        : 'Required external trace is unavailable. Check the trace provider and retry without caching.',
+      test.providerOutput == null
+        ? 'Required external trace is unavailable. Check the trace provider and retry without caching.'
+        : 'Required external trace is unavailable. Remove providerOutput and retry without caching.',
     );
     return;
   }
@@ -1400,7 +1400,8 @@ export async function runEvalInternal(
       vars: state.vars,
     });
     setup = rendered.setup;
-    if (!test.providerOutput) {
+    const hasProviderOutput = test.providerOutput != null;
+    if (!hasProviderOutput) {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
       workspace = await createAgentWorkspaceForConfig(
         { ...activeProvider.config, ...rendered.setup.prompt.config },
@@ -1410,7 +1411,7 @@ export async function runEvalInternal(
     }
     const stepWorkspace = workspace;
 
-    traceContext = test.providerOutput
+    traceContext = hasProviderOutput
       ? null
       : await generateTraceContextIfNeeded(
           test,

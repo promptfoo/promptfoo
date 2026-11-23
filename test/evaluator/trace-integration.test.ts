@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 import { evaluate, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
+import * as agentWorkspace from '../../src/providers/agentWorkspace';
 import { resolveTracingOptions } from '../../src/redteam/providers/tracingOptions';
 import { getProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
@@ -934,31 +935,41 @@ describe('evaluator trace integration', () => {
       expect(mockFetchTraceContext).not.toHaveBeenCalled();
     });
 
-    it('skips external trace collection when no provider is invoked', async () => {
-      const provider = createMockProvider();
-      const options = createRunOptions(provider);
-      options.test.providerOutput = 'Precomputed output';
-      options.test.assert = [
-        { type: 'equals', value: 'Precomputed output' },
-        { type: 'trace-error-spans', weight: 0 },
-      ];
-
-      const [result] = await runEval(options);
-
-      expect(result.success).toBe(true);
-      expect(result.response?.output).toBe('Precomputed output');
-      expect(provider.callApi).not.toHaveBeenCalled();
-      expect(mockFetchTraceContext).not.toHaveBeenCalled();
-    });
-
-    it.each([undefined, 0.5])(
-      'reports missing required evidence for precomputed output with threshold %s',
-      async (threshold) => {
+    it.each(['Precomputed output', ''])(
+      'skips provider setup for precomputed output %j',
+      async (output) => {
+        const workspace = vi.spyOn(agentWorkspace, 'createAgentWorkspaceForConfig');
         const provider = createMockProvider();
         const options = createRunOptions(provider);
-        options.test.providerOutput = 'ok';
+        options.test.providerOutput = output;
+        options.test.assert = [
+          { type: 'equals', value: output },
+          { type: 'trace-error-spans', weight: 0 },
+        ];
+
+        const [result] = await runEval(options);
+
+        expect(result.success).toBe(true);
+        expect(result.response?.output).toBe(output);
+        expect(workspace).not.toHaveBeenCalled();
+        expect(provider.callApi).not.toHaveBeenCalled();
+        expect(evaluatorTracing.generateTraceContextIfNeeded).not.toHaveBeenCalled();
+        expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      ['ok', undefined],
+      ['ok', 0.5],
+      ['', 0.5],
+    ] as const)(
+      'reports missing required evidence for precomputed output %j with threshold %s',
+      async (output, threshold) => {
+        const provider = createMockProvider();
+        const options = createRunOptions(provider);
+        options.test.providerOutput = output;
         options.test.threshold = threshold;
-        options.test.assert = [{ type: 'equals', value: 'ok' }, { type: 'trace-error-spans' }];
+        options.test.assert = [{ type: 'equals', value: output }, { type: 'trace-error-spans' }];
 
         const [result] = await runEval(options);
 
@@ -968,7 +979,7 @@ describe('evaluator trace integration', () => {
         expect(result.error).toContain(
           'Required external trace is unavailable. Remove providerOutput',
         );
-        expect(result.response?.output).toBe('ok');
+        expect(result.response?.output).toBe(output);
         expect(result.response?.error).toBeUndefined();
         expect(provider.callApi).not.toHaveBeenCalled();
         expect(mockFetchTraceContext).not.toHaveBeenCalled();
