@@ -197,28 +197,22 @@ redteam:
 
 ### Step-Level Plugin Targeting
 
-Control which plugins each step applies to:
+During generation, each transform receives only the cases returned by the previous step. In this example, both groups reach `rot13`. Only `pii` cases reach `base64` and appear in the layer’s output.
 
 ```yaml
 redteam:
   strategies:
     - id: layer
       config:
-        plugins: ['harmful', 'pii'] # Default for all steps
+        plugins: ['harmful', 'pii']
         steps:
-          # Override for specific step
-          - id: jailbreak:meta
-            config:
-              plugins: ['harmful'] # Only apply to harmful plugin
-
-          # Uses default plugins from parent config
           - rot13
-
-          # Different plugin set
           - id: base64
             config:
-              plugins: ['pii', 'contracts']
+              plugins: ['pii']
 ```
+
+An attack provider such as `jailbreak:meta` receives every case that reaches it. Set `plugins` on the layer to limit those cases. The provider step does not apply its own plugin filter.
 
 ## Example Scenarios
 
