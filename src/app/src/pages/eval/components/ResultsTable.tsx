@@ -1441,7 +1441,7 @@ function ResultsTableBodyRow({
   return (
     <tr id={`row-${row.index % pageSize}`}>
       {row.getVisibleCells().map((cell) => {
-        const shouldDrawColBorder = !isMetadataColumn(String(cell.column.id)) && !colBorderDrawn;
+        const shouldDrawColBorder = !isMetadataColumn(cell.column.id) && !colBorderDrawn;
         if (shouldDrawColBorder) {
           colBorderDrawn = true;
         }
