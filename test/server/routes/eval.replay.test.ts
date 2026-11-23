@@ -49,7 +49,12 @@ describe('POST /api/eval/replay provider boundary', () => {
       .mockImplementation(async () => Response.json({ config }));
   }
 
-  function storedConfig(providers: unknown, basePath?: string, columnProviders?: string[]) {
+  function storedConfig(
+    providers: unknown,
+    basePath?: string,
+    columnProviders?: string[],
+    env?: Record<string, string>,
+  ) {
     vi.mocked(Eval.findById).mockResolvedValue({
       getPrompts: () =>
         (
@@ -61,6 +66,7 @@ describe('POST /api/eval/replay provider boundary', () => {
         ).map((provider) => ({ provider })),
       config: {
         basePath,
+        env,
         providers,
         prompts: [{ raw: 'original', config: { report_file: '/original/report.json' } }],
         tests: [{ options: { report_file: '/original/report.json' } }],
@@ -199,6 +205,43 @@ describe('POST /api/eval/replay provider boundary', () => {
     expect(evaluate).toHaveBeenCalledTimes(1);
   });
 
+  it('uses saved suite labels and refuses to infer provider order from mutable labels', async () => {
+    const providers = [
+      { id: 'echo', label: '{{ env.FIRST }}' },
+      { id: 'https://remote.invalid', label: '{{ env.SECOND }}', config: { body: {} } },
+    ];
+    const env = { FIRST: 'Local', SECOND: 'Remote' };
+    const loaded = await loadApiProviders(providers, { env });
+    const columns = loaded.map((provider) => provider.label || provider.id());
+    vi.stubEnv('FIRST', env.SECOND);
+    vi.stubEnv('SECOND', env.FIRST);
+    try {
+      storedConfig(providers, undefined, columns, env);
+      expect((await replay(0, 0)).status).toBe(200);
+      expect(evaluate.mock.calls[0][0].providers).toEqual([
+        { id: 'echo', label: 'Local', prompts: ['Replay'] },
+      ]);
+      storedConfig(providers, undefined, columns);
+      expect((await replay(0, 0)).status).toBe(400);
+      expect(evaluate).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('does not let an ambient echo selector replace a saved scanner', async () => {
+    vi.stubEnv('TARGET', 'echo');
+    try {
+      storedConfig([{ id: '{{ env.TARGET }}', label: 'Saved' }], undefined, ['Saved'], {
+        TARGET: 'openai:codex-security',
+      });
+      expect((await replay(0, 0)).status).toBe(400);
+      expect(evaluate).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it.each([
     { '{{ env.NAME | lower }}': { env: { NAME: 'echo' } } },
     { '{{ env.NAME }}': { id: '{{ env.DISPLAY }}', env: { NAME: 'echo' } } },
@@ -328,6 +371,53 @@ describe('POST /api/eval/replay provider boundary', () => {
     expect((await replay(0, 1)).status).toBe(400);
     expect(evaluate).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['http', 'websocket'])('binds scoped %s URLs before checking collisions', async (id) => {
+    const http = id === 'http';
+    const url = http ? 'https://a.invalid' : 'wss://a.invalid/?token=first';
+    const suiteEnv = { URL: http ? url : 'wss://other.invalid' };
+    const providers = [
+      {
+        id,
+        ...(!http && { env: { URL: url } }),
+        config: { url: '{{ env.URL }}', body: {}, messageTemplate: '{{prompt}}' },
+      },
+      {
+        id,
+        config: {
+          url: http ? url : 'wss://a.invalid/?token=second',
+          body: { different: true },
+          messageTemplate: 'different',
+        },
+      },
+    ];
+    const [a, b] = await loadApiProviders(providers, { env: suiteEnv });
+    expect(a.id()).toBe(b.id());
+    storedConfig([providers[0]], undefined, [a.id()], suiteEnv);
+    expect((await replay(0, 0)).status).toBe(200);
+    expect(evaluate.mock.calls[0][0].providers).toMatchObject([{ config: { url } }]);
+    storedConfig(providers, undefined, [a.id(), b.id()], suiteEnv);
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['{{ env.URL }}', '{{ env.URL | lower }}'])(
+    'does not treat an unbound URL template as an unrelated literal: %s',
+    async (url) => {
+      storedConfig(
+        [
+          { id: 'http', config: { url, body: {} } },
+          { id: 'echo', label: 'https://a.invalid' },
+        ],
+        undefined,
+        ['https://a.invalid', 'https://a.invalid'],
+      );
+      const renderer = vi.spyOn(templates, 'getNunjucksEngine');
+      expect((await replay(0, 0)).status).toBe(400);
+      expect(renderer).not.toHaveBeenCalled();
+      expect(evaluate).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not confuse a URL provider with another target using it as an alias', async () => {
     const a = 'https://a.invalid';
@@ -485,6 +575,15 @@ describe('POST /api/eval/replay provider boundary', () => {
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Codex Security does not support prompt-only replay');
     expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unresolved cloud URL even when its label matches', async () => {
+    mockCloudProvider({ id: 'http', label: 'Cloud', config: { url: '{{ env.URL }}', body: {} } });
+    storedConfig(['echo', 'promptfoo://provider/target'], undefined, ['echo', 'Cloud']);
+    expect((await replay(0, 1)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+    expect((await replay(0, 0)).status).toBe(200);
+    expect(evaluate.mock.calls[0][0].providers).toEqual(['echo']);
   });
 
   it('returns a bounded request error for an unavailable provider file', async () => {

@@ -629,17 +629,22 @@ function getReplayProviderError(reference: ProviderRefDescriptor): string | unde
   return undefined;
 }
 
-function replayEnvKey(template: string) {
+function replayEnvValue(template: string, env: ProviderOptions['env'], allowAmbient = false) {
   const match = /^\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/.exec(template);
   if (match?.[0] !== template || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     throw new Error('Cannot identify the replay provider safely');
   }
-  return match[1];
+  const key = match[1];
+  const value =
+    env && Object.hasOwn(env, key) ? env[key] : allowAmbient && getTemplateEnvValue(key);
+  if (typeof value !== 'string' || !value || TEMPLATE_MARKER.test(value)) {
+    throw new Error('Cannot identify the replay provider safely');
+  }
+  return value;
 }
 
 // An environment-selected provider can only replay a local echo without operational options.
-function replayEcho(path: string, options?: ProviderOptions) {
-  const key = replayEnvKey(path);
+function replayEcho(path: string, env: ProviderOptions['env'], options?: ProviderOptions) {
   const alias = options?.id === path ? undefined : options?.id;
   const dynamic = [alias, options?.label].some(
     (v) => v !== undefined && (typeof v !== 'string' || TEMPLATE_MARKER.test(v)),
@@ -649,34 +654,38 @@ function replayEcho(path: string, options?: ProviderOptions) {
       !['id', 'label', 'env', 'prompts'].includes(k) &&
       !(k === 'config' && isDeepStrictEqual(options?.config, {})),
   );
-  const env = options?.env;
-  if (
-    dynamic ||
-    extra ||
-    (env && Object.hasOwn(env, key) ? env[key] : getTemplateEnvValue(key)) !== 'echo'
-  ) {
+  if (dynamic || extra || replayEnvValue(path, env, true) !== 'echo') {
     throw new Error('Cannot identify the replay provider safely');
   }
   return { id: alias ?? 'echo', ...(options?.label && { label: options.label }) };
 }
 
+function replayUrlTransport(path: string) {
+  if (/^https?(?::|$)/.test(path)) {
+    return 'http';
+  }
+  if (path === 'websocket' || /^wss?(?::|$)/.test(path)) {
+    return 'websocket';
+  }
+  return undefined;
+}
+
 // Replace saved prompt filters while retaining routing and provider-specific options.
-function prepareReplayCandidate<T>(provider: T, column: string | undefined) {
+function prepareReplayCandidate<T>(
+  provider: T,
+  column: string | undefined,
+  suiteEnv: ProviderOptions['env'],
+  singleSource: boolean,
+) {
   const ref = normalizeProviderRef(provider);
   if (ref.kind !== 'options' && ref.kind !== 'map' && ref.kind !== 'named') {
     return provider;
   }
   let options = 'loadOptions' in ref ? ref.loadOptions : undefined;
+  const env = { ...suiteEnv, ...options?.env };
   if (options?.label && TEMPLATE_MARKER.test(options.label)) {
-    const key = replayEnvKey(options.label);
-    // An ambient value may only confirm an existing saved label, never supply a new one.
-    const label =
-      options.env && Object.hasOwn(options.env, key)
-        ? options.env[key]
-        : column && getTemplateEnvValue(key);
-    if (!label || TEMPLATE_MARKER.test(label)) {
-      throw new Error('Cannot identify the replay provider safely');
-    }
+    // Ambient labels can swap between sources. Only use one to confirm a sole provider.
+    const label = replayEnvValue(options.label, env, singleSource && !!column);
     options = { ...options, label };
   }
   if (column && options?.label && options.label !== column) {
@@ -684,11 +693,19 @@ function prepareReplayCandidate<T>(provider: T, column: string | undefined) {
   }
   let path = ref.loadProviderPath;
   if (TEMPLATE_MARKER.test(path)) {
-    options = replayEcho(path, options);
+    options = replayEcho(path, env, options);
     path = 'echo';
   } else if (ref.kind === 'named' && !isCloudProvider(path)) {
     // A bare string has no saved prompt filters. Wrapping it would override the native ID.
     return provider;
+  } else if (
+    options?.config?.url &&
+    replayUrlTransport(path) &&
+    TEMPLATE_MARKER.test(options.config.url)
+  ) {
+    // Inspect and execute the same destination, without rendering arbitrary template code.
+    const url = replayEnvValue(options.config.url, env);
+    options = { ...options, config: { ...options.config, url } };
   }
   return ref.kind === 'map'
     ? { [path]: { ...options, prompts: ['Replay'] } }
@@ -699,12 +716,13 @@ function replayProviderId(target: ProviderRefDescriptor) {
   if ('loadProviderPath' in target) {
     // URL providers ignore ID overrides. WebSocket columns also redact URL credentials.
     const path = target.loadProviderPath;
-    const url = ('loadOptions' in target && target.loadOptions.config?.url) || path;
-    if (/^https?(?::|$)/.test(path)) {
-      return url;
-    }
-    if (path === 'websocket' || /^wss?(?::|$)/.test(path)) {
-      return getSafeProviderId(url);
+    const transport = replayUrlTransport(path);
+    if (transport) {
+      const url = ('loadOptions' in target && target.loadOptions.config?.url) || path;
+      if (TEMPLATE_MARKER.test(url)) {
+        throw new Error('Cannot identify the replay provider safely');
+      }
+      return transport === 'websocket' ? getSafeProviderId(url) : url;
     }
   }
   return target.kind === 'named' ? (getNamedOpenAiTextId(target.id) ?? target.id) : target.id;
@@ -737,7 +755,16 @@ async function matchReplayTarget(
         config: { ...cloud.provider.config, ...cloud.options.config },
       })
     : ref;
-  if (column && column !== (target.label || replayProviderId(target))) {
+  if (column && target.label && target.label !== column && !TEMPLATE_MARKER.test(target.label)) {
+    return;
+  }
+  // Inspect the effective URL even when a label masks an unresolved cloud destination.
+  const id = replayProviderId(target);
+  const identity = target.label || id;
+  if (TEMPLATE_MARKER.test(identity)) {
+    throw new Error('Cannot identify the replay provider safely');
+  }
+  if (column && column !== identity) {
     return;
   }
   return { target, cloud };
@@ -764,9 +791,10 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
       throw error;
     }
   });
+  const singleSource = sources.length === 1 && resolved.length === 1;
   let selected;
   for (const provider of resolved) {
-    const candidate = prepareReplayCandidate(provider, name);
+    const candidate = prepareReplayCandidate(provider, name, eval_.config.env, singleSource);
     if (candidate === undefined) {
       continue;
     }

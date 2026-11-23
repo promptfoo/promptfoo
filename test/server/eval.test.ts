@@ -1,3 +1,6 @@
+import { once } from 'node:events';
+import { createServer } from 'node:http';
+
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -65,6 +68,44 @@ describe('eval routes', () => {
       expect(response.body.output).toBe('edited replay');
     },
   );
+
+  it('sends a replay only to the HTTP destination bound by the saved suite', async () => {
+    const requests: string[] = [];
+    const target = createServer((req, res) => {
+      requests.push(req.url!);
+      req.pipe(res);
+    }).listen(0, '127.0.0.1');
+    await once(target, 'listening');
+    onTestFinished(() => new Promise<void>((resolve) => target.close(() => resolve())));
+    const address = target.address();
+    invariant(address && typeof address !== 'string', 'Expected a loopback listener');
+    const base = `http://127.0.0.1:${address.port}`;
+    const url = `${base}/saved`;
+    onTestFinished(mockProcessEnv({ REPLAY_URL: `${base}/wrong` }));
+    const original = { raw: 'original', label: 'original' };
+    const saved = await Eval.create(
+      {
+        providers: [
+          {
+            id: 'http',
+            config: { url: '{{ env.REPLAY_URL }}', method: 'POST', body: '{{prompt}}' },
+          },
+        ],
+        env: { REPLAY_URL: url },
+      },
+      [original],
+      { completedPrompts: [{ ...original, provider: url }] },
+    );
+    testEvalIds.add(saved.id);
+    const response = await api.post('/api/eval/replay').send({
+      evaluationId: saved.id,
+      promptIndex: 0,
+      prompt: 'edited replay',
+    });
+    expect(response.status).toBe(200);
+    expect(requests).toEqual(['/saved']);
+    expect(response.body.output).toBe('edited replay');
+  });
 
   function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
     const originalStringify = JSON.stringify;
