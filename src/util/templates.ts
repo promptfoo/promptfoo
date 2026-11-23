@@ -751,11 +751,26 @@ function forLikeNodeReferencesVariable(
   // Nunjucks exposes the frame-local `loop` object alongside the explicit loop
   // variable. It is neither an external dependency nor an engine global.
   loopScope.add('loop');
-  return (
-    astChildReferencesVariable(node, 'arr', variableName, boundSymbols) ||
-    astChildReferencesVariable(node, 'body', variableName, loopScope) ||
-    astChildReferencesVariable(node, 'else_', variableName, boundSymbols)
-  );
+  if (astChildReferencesVariable(node, 'arr', variableName, boundSymbols)) {
+    return true;
+  }
+  const bodySummary = createConditionalSummary();
+  if (astChildReferencesVariable(node, 'body', variableName, loopScope, bodySummary)) {
+    return true;
+  }
+  if (boundSymbols instanceof LinkedScope) {
+    for (const name of bodySummary.setBindings) {
+      if (
+        boundSymbols.has(name) &&
+        (bodySummary.macroBindings.has(name) || boundSymbols.findMacroBinding(name))
+      ) {
+        // Assigning an existing outer name inside a loop updates that outer
+        // binding at runtime. Do not certify the pre-loop macro as the only one.
+        throw new TemplateAnalysisLimitError('Outer macro rebinding inside a loop');
+      }
+    }
+  }
+  return astChildReferencesVariable(node, 'else_', variableName, boundSymbols);
 }
 
 function isSuppliedParamName(
@@ -1976,6 +1991,11 @@ function switchCaseSelection(
   return { selectedCase, dynamicBeforeMatch };
 }
 
+function switchCaseHasBody(caseNode: NunjucksAstNode): boolean {
+  const body = caseNode.body;
+  return isNunjucksAstNode(body) && (!Array.isArray(body.children) || body.children.length > 0);
+}
+
 function switchNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
@@ -2024,11 +2044,22 @@ function switchNodeReferencesVariable(
   const mode = selectedCase >= 0 ? 'body' : dynamicBeforeMatch ? 'unknown' : 'else';
   const caseSummary = createConditionalSummary();
   if (mode === 'body') {
-    mergeConditionalBindings(
-      caseSummary,
-      caseSummaries[selectedCase]!,
-      boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined,
-    );
+    const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
+    let fallsIntoDefault = true;
+    for (let index = selectedCase; index < cases.length; index++) {
+      const currentCase = cases[index];
+      if (!isNunjucksAstNode(currentCase)) {
+        continue;
+      }
+      mergeConditionalBindings(caseSummary, caseSummaries[index]!, memo);
+      if (switchCaseHasBody(currentCase)) {
+        fallsIntoDefault = false;
+        break;
+      }
+    }
+    if (fallsIntoDefault) {
+      mergeConditionalBindings(caseSummary, defaultSummary, memo);
+    }
   }
   applyConditionalBindings(
     caseSummary,
@@ -2137,6 +2168,14 @@ function undefinedSafeOperandReferencesVariable(
   }
   if (node.typename === 'Not' && isNunjucksAstNode(node.target)) {
     return undefinedSafeOperandReferencesVariable(node.target, variableName, boundSymbols);
+  }
+  if (
+    node.typename === 'Group' &&
+    Array.isArray(node.children) &&
+    node.children.length === 1 &&
+    isNunjucksAstNode(node.children[0])
+  ) {
+    return undefinedSafeOperandReferencesVariable(node.children[0], variableName, boundSymbols);
   }
   if (node.typename === 'And' || node.typename === 'Or') {
     return booleanOperandsReferenceVariable(node, variableName, boundSymbols);

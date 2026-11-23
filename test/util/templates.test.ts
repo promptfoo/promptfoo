@@ -814,6 +814,52 @@ describe('analyzeTemplateReference', () => {
     });
   });
 
+  it('keeps outer macro rebinding analysis indeterminate inside loops', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% set f=a %}{% for i in [1] %}{% set f=h %}{% endfor %}{{f()}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+  });
+
+  it('follows empty switch cases into the body that executes', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% set f=a %}{% switch 1 %}{% case 1 %}{% case 2 %}{% set f=h %}{% endswitch %}{{f()}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('follows an empty selected switch case into default', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% set f=a %}{% switch 1 %}{% case 1 %}{% default %}{% set f=h %}{% endswitch %}{{f()}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('unwraps groups when checking undefined-safe operands', () => {
+    const value = "{{ (user) | default('anonymous') }}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('anonymous');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(
+      extractRequiredVariablesFromTemplate("{{ (user|trim) | default('anonymous') }}"),
+    ).toContain('user');
+  });
+
   it('allows missing direct inputs in inline truthiness conditions', () => {
     const value = "{{ 'member' if user else 'guest' }}";
     expect(getNunjucksEngine().renderString(value, {})).toBe('guest');

@@ -108,11 +108,6 @@ export function resolveVariables(
 // Nunjucks tags accept a whitespace-control dash on either side
 // ({%- raw -%}), so the scan cannot anchor on '{%' followed by whitespace.
 const SIMPLE_PLACEHOLDER_REGEX = /\{\{\s*(\w+)\s*\}\}/g;
-// Matches dotted-path placeholders like {{user.name}} for the dependency scrub.
-// firstUnprotectedPlaceholder intentionally uses SIMPLE_PLACEHOLDER_REGEX
-// because its substitution only handles bare names; the scrub needs to see
-// every path form that extractVariablesFromTemplate would report.
-const PATH_PLACEHOLDER_REGEX = /\{\{\s*([\w.]+)\s*\}\}/g;
 // Only quoted string literals joined by Nunjucks' concatenation operator are
 // safe to render without treating the rest of a runtime value as source.
 const PROTECTED_LITERAL_EXPRESSION_REGEX =
@@ -798,19 +793,9 @@ function referencesUndefinedVariables(
   const spans = collectRawSpans(template);
   let scrubbed = mapSpans(template, spans, () => '');
   scrubbed = mapSpans(scrubbed, collectCommentSpans(scrubbed), () => '');
-  // A quoted placeholder inside a surrounding expression or block tag is
-  // literal text too: {{ '{{x}}' }} renders to the text {{x}}, so x is not a
-  // dependency. Only actual literals are excluded: an overlapping opener in
-  // malformed source is not evidence that its inner placeholder is quoted.
-  const nested: Array<[number, number]> = [];
-  const literalPositions = new Uint8Array(scrubbed.length + 1);
-  computeNestingDepths(scrubbed, undefined, literalPositions);
-  for (const match of scrubbed.matchAll(PATH_PLACEHOLDER_REGEX)) {
-    if (literalPositions[match.index]) {
-      nested.push([match.index, match.index + match[0].length]);
-    }
-  }
-  scrubbed = mapSpans(scrubbed, nested, () => '');
+  // Keep quoted placeholders intact. The AST walker treats Literal values as
+  // data rather than variable reads, and switch selection depends on their exact
+  // contents. Deleting those literals can select a different execution branch.
   const unboundReferences = extractRequiredVariablesFromTemplate(scrubbed, nunjucksFilters);
   if (unboundReferences) {
     return unboundReferences.some(

@@ -3331,6 +3331,12 @@ describe('evaluatorHelpers', () => {
       expect(JSON.parse(rendered).text).toBe('ok' + '{#'.repeat(64000));
     }, 15000);
 
+    it('preserves quoted literal values during reference analysis', async () => {
+      const value =
+        "{% macro a() %}ok{% endmacro %}{% macro h(x=purpose|trim) %}{{x}}{% endmacro %}{% switch '{{token}}' %}{% case '' %}{% set f=a %}{% case '{{token}}' %}{% set f=h %}{% endswitch %}{{f()}}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: value })).toBe(value);
+    });
+
     it('allows missing operands in defined and undefined tests', async () => {
       expect(await renderPrompt(toPrompt('{{v}}'), { v: '{{ user is defined }}' })).toBe('false');
       expect(await renderPrompt(toPrompt('{{v}}'), { v: '{{ user is undefined }}' })).toBe('true');
