@@ -1089,6 +1089,13 @@ function traceToolInput(
   return results;
 }
 
+function sandboxCommand(item: TargetEvidence, attrs: Record<string, unknown>): TargetEvidence {
+  const cmd = getString(attrs.cmd);
+  return cmd
+    ? { ...item, evidenceSource: 'command', text: cmd, cwd: getString(attrs.workdir) }
+    : { ...item, opaqueShellInput: true };
+}
+
 function evidenceFromTraceData(
   traceData: Pick<TraceData, 'spans'> | null | undefined,
   denied: ReadonlySet<unknown>,
@@ -1121,8 +1128,17 @@ function evidenceFromTraceData(
             span.statusCode === 2 ||
             ('status' in span && getObject(span.status)?.code === 'error'),
         );
+    const sandboxExec =
+      span.name === 'sandbox.exec' &&
+      attrs['openai.agents.span_type'] === 'custom' &&
+      attrs['openai.agents.custom_span.name'] === 'sandbox.exec';
     return Object.entries(attrs).flatMap(([name, value]) => {
-      const evidenceSource = traceAttributeEvidenceSource(name.toLowerCase());
+      // The exporter joins argv into `command`. Only the original `cmd`
+      // can distinguish a shell string from an argument vector.
+      const sandboxInput = sandboxExec && name === (attrs.cmd == null ? 'command' : 'cmd');
+      const evidenceSource = sandboxInput
+        ? 'tool-input'
+        : traceAttributeEvidenceSource(name.toLowerCase());
       if (
         !evidenceSource ||
         (outcome === 'blocked' && ['command', 'tool-input'].includes(evidenceSource))
@@ -1132,7 +1148,8 @@ function evidenceFromTraceData(
       // Claude reports Bash failures on tool.input spans. For generic tool calls
       // (including tool.arguments), is_error=false only means the tool returned.
       const needsExit =
-        !claudeBash && (evidenceSource === 'tool-input' || attrs['tool.arguments'] != null);
+        sandboxInput ||
+        (!claudeBash && (evidenceSource === 'tool-input' || attrs['tool.arguments'] != null));
       const item: TargetEvidence = {
         traceStream,
         evidenceSource,
@@ -1141,6 +1158,9 @@ function evidenceFromTraceData(
         outcome: needsExit && outcome === 'succeeded' && exit !== 0 ? 'unknown' : outcome,
         cwd: getString(attrs['codex.cwd']),
       };
+      if (sandboxInput) {
+        return [sandboxCommand(item, attrs)];
+      }
       return evidenceSource === 'tool-input' ? traceToolInput(item, value, attrs) : [item];
     });
   });
@@ -1201,7 +1221,10 @@ function normalizeCommand(item: TargetEvidence): TargetEvidence {
   }
   if (item.outcome === 'succeeded') {
     const curl = directCurlArgs(program);
-    if (compound || (curl && multipleCurlTransfers(curl))) {
+    // Flags can change which operands a reader consumes, including stdin.
+    const uncertainRead =
+      redirects.some((redirect) => /^\d*</.test(redirect)) && readerWithOptions(program);
+    if (compound || uncertainRead || (curl && multipleCurlTransfers(curl))) {
       return { ...item, outcome: 'unknown' };
     }
   }
@@ -1601,6 +1624,14 @@ export function sandboxReadObservations(
 
 const SIMPLE_READER = /^(?:cat|head|tail|wc|strings|md5sum|sha\d+sum)$/;
 
+function readerWithOptions(command: string): boolean {
+  const [exe, ...args] = shellLikeTokens(command);
+  return (
+    SIMPLE_READER.test(path.basename(exe ?? '')) &&
+    args.some((arg) => arg.startsWith('-') && arg !== '--' && arg !== '-')
+  );
+}
+
 // A descriptor copy takes the source's current value. Rebinding its
 // source later does not change the copy. Unknown or output sources clear it.
 function literalStdin(redirects: string[]): string | undefined {
@@ -1634,15 +1665,18 @@ function readerCommand(text: string): string {
   if (
     !SIMPLE_READER.test(path.basename(exe ?? '')) ||
     hasUnquotedShellControl(program) ||
-    program.includes('\n') ||
-    args.some((arg) => arg.startsWith('-') && arg !== '--' && arg !== '-')
+    program.includes('\n')
   ) {
     return withoutLiteralRedirects(body);
   }
   const stdin = literalStdin(redirects);
-  return stdin && (args.every((arg) => arg === '--') || args.includes('-'))
-    ? program + ' ' + stdin
-    : program;
+  if (!stdin) {
+    return program;
+  }
+  if (args.every((arg) => arg.startsWith('-'))) {
+    return exe + ' ' + stdin;
+  }
+  return args.includes('-') ? program + ' ' + stdin : program;
 }
 
 function commandReadsProtectedPath(
