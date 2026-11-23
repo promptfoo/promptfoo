@@ -3081,25 +3081,43 @@ function textContainsDelayedCiNetworkBehavior(text: string): RegExp | undefined 
   );
 }
 
-// A header option carries only its argument. Secrets in other options or a comment do not travel in that header.
+// Workflow expressions expand before shell quoting. Shell variables only
+// expand outside single quotes.
+function hasSecretExpansion(value: string, singleQuoted: boolean): boolean {
+  return (
+    WORKFLOW_SECRET_REFERENCE.test(value) ||
+    (!singleQuoted &&
+      Array.from(value.matchAll(/(?<!\\)\$\{?(\w+)/g)).some(([, variable]) =>
+        textContainsSecretReference(variable),
+      ))
+  );
+}
+
+function isSecretHeader(header: string, singleQuoted: boolean): boolean {
+  const separator = header.indexOf(':');
+  return separator > 0 && hasSecretExpansion(header.slice(separator + 1), singleQuoted);
+}
+
 function hasSecretRequestHeader(action: string): boolean {
   const headerOptions =
     /"(?:\\.|[^"\\])*"|'[^']*'|(?:^|\s)#.*|(?:^|\s)(?:-H\s*|--header(?:=|\s+))(?:"((?:\\.|[^"\\])*)"|'([^']*)'|([^\s]+))/g;
   for (const [, doubleQuoted, singleQuoted, bare] of action.matchAll(headerOptions)) {
     const header: string | undefined = doubleQuoted ?? singleQuoted ?? bare;
-    const separator = header?.indexOf(':') ?? -1;
-    if (!header || separator < 1) {
-      continue;
+    if (header && isSecretHeader(header, singleQuoted !== undefined)) {
+      return true;
     }
-    const value = header.slice(separator + 1);
-    // Workflow expressions expand before shell quoting; shell variables expand only outside single quotes.
-    if (
-      WORKFLOW_SECRET_REFERENCE.test(value) ||
-      (singleQuoted === undefined &&
-        Array.from(value.matchAll(/(?<!\\)\$\{?(\w+)/g)).some(([, variable]) =>
-          textContainsSecretReference(variable),
-        ))
-    ) {
+  }
+  return false;
+}
+
+function hasProtectedFileSubstitution(url: string): boolean {
+  for (const [, body] of url.matchAll(/(?<!\\)\$\(([^()\r\n]+)\)/g)) {
+    // A repository-local credential dotfile has the same name as its home-directory counterpart.
+    const command = body
+      .trim()
+      .replace(/\$\{IFS\}/g, ' ')
+      .replace(/(^|\s)(?:\.\/)?(\.[\w-]+)(?=\s|$)/g, '$1~/$2');
+    if (commandReadsCommonProtectedFile(command)?.exec(command)?.index === 0) {
       return true;
     }
   }
@@ -3132,15 +3150,8 @@ function fileDerivedRequestTarget(
     if (networkTargetIsAllowed(target, allowed)) {
       continue;
     }
-    for (const [, body] of url.matchAll(/(?<!\\)\$\(([^()\r\n]+)\)/g)) {
-      // A repository-local credential dotfile has the same name as its home-directory counterpart.
-      const command = body
-        .trim()
-        .replace(/\$\{IFS\}/g, ' ')
-        .replace(/(^|\s)(?:\.\/)?(\.[\w-]+)(?=\s|$)/g, '$1~/$2');
-      if (commandReadsCommonProtectedFile(command)?.exec(command)?.index === 0) {
-        return target;
-      }
+    if (hasProtectedFileSubstitution(url)) {
+      return target;
     }
   }
   return undefined;
@@ -3181,6 +3192,21 @@ function* ciActions(content: string, splitShellCommands = true): Generator<strin
 
 // Additional curl options whose operands must not occupy a URL slot.
 const CURL_OPTIONS_WITH_VALUE = new Set([
+  '--write-out',
+  '--output-dir',
+  '--etag-compare',
+  '--etag-save',
+  '--stderr',
+  '--trace',
+  '--trace-ascii',
+  '--netrc-file',
+  '--oauth2-bearer',
+  '--proxy-header',
+  '-U',
+  '--proxy-user',
+  '-E',
+  '--proto',
+  '--proto-redir',
   '-D',
   '--dump-header',
   '-K',
@@ -3206,7 +3232,9 @@ const CURL_OPTIONS_WITH_VALUE = new Set([
 ]);
 
 function* curlRequestArgs(args: string): Generator<[option: string, value: string]> {
-  const words = args.matchAll(/(?:"(?:\\.|[^"\\])*"|'[^']*'|\\.|[^\s"'\\])+/g);
+  const words = args.matchAll(
+    /(?:"(?:\\.|[^"\\])*"|'[^']*'|\$\([^()\r\n]*\)|\$\{\{[^{}\r\n]*\}\}|\\.|[^\s"'\\])+/g,
+  );
   let options = true;
   for (const [raw] of words) {
     if (raw.startsWith('#')) {
@@ -3228,12 +3256,13 @@ function* curlRequestArgs(args: string): Generator<[option: string, value: strin
     // Common switches with no operand can precede a short option.
     const option = word.replace(/^-[fsSkLiIv]+(?=[a-zA-Z])/, '-');
     const arg =
-      /^(-[dFTX])(.+)?$/.exec(option) ??
-      /^(--(?:url|upload-file|request|data(?:-\w+)?|form))(?:=(.*))?$/.exec(option);
+      /^(-[dFTXH])(.+)?$/.exec(option) ??
+      /^(--(?:url|upload-file|request|header|data(?:-\w+)?|form))(?:=(.*))?$/.exec(option);
     if (arg) {
       const value = arg[2] ?? words.next().value?.[0];
       if (value !== undefined) {
-        yield [arg[1], value];
+        // An attached value inside a fully quoted option retains that quoting.
+        yield [arg[1], arg[2] !== undefined && raw !== word ? raw[0] + value + raw[0] : value];
       }
     } else if (
       CURL_OPTIONS_WITH_VALUE.has(option) ||
@@ -3244,38 +3273,72 @@ function* curlRequestArgs(args: string): Generator<[option: string, value: strin
   }
 }
 
-// Each -T file pairs with one URL in order. Keep unknown destinations in
-// place. Data, form fields and the last explicit method apply to a group.
-function* curlUploadUrls(args: string): Generator<string> {
-  const urls: string[] = [];
-  let uploadCount = 0;
-  let writeMethod = false;
-  for (const [option, value] of curlRequestArgs(args)) {
-    if (option === '--next') {
-      yield* writeMethod ? urls : urls.slice(0, uploadCount);
-      urls.length = 0;
-      uploadCount = 0;
-      writeMethod = false;
-    } else if (option === '--url') {
-      urls.push(value);
-    } else if (option === '-X' || option === '--request') {
-      writeMethod = /^(?:POST|PUT|PATCH)$/i.test(value.replace(/^(['"])(.*)\1$/, '$2'));
-    } else if (option === '-T' || option === '--upload-file') {
-      uploadCount++;
-    } else {
-      uploadCount = Infinity;
-    }
-  }
-  yield* writeMethod ? urls : urls.slice(0, uploadCount);
+function emptyCurlGroup() {
+  return { urls: [] as string[], fileCount: 0, writeMethod: false, sendsData: false };
 }
 
-function curlUploadTarget(args: string, allowed: NetworkTarget[]): NetworkTarget | undefined {
-  for (const word of curlUploadUrls(args)) {
-    const url = word.replace(/^(['"])(.*)\1$/, '$2');
-    const hostname = /^https?:\/\//i.test(url) && URL.parse(url)?.hostname;
-    if (hostname && !/[$`{}]/.test(hostname)) {
-      const target: NetworkTarget = { kind: 'url', value: url };
-      if (!networkTargetIsAllowed(target, allowed)) {
+// Each -T file pairs with one URL in order. Keep unknown destinations in
+// place. Other data, headers and the last explicit method apply to a group.
+function* curlRequestGroups(args: string) {
+  let group = emptyCurlGroup();
+  for (const [option, value] of curlRequestArgs(args)) {
+    const literal = value.replace(/^(['"])(.*)\1$/, '$2');
+    if (option === '--next') {
+      yield group;
+      group = emptyCurlGroup();
+    } else if (option === '--url') {
+      group.urls.push(value);
+    } else if (option === '-X' || option === '--request') {
+      group.writeMethod = /^(?:POST|PUT|PATCH)$/i.test(literal);
+    } else if (option === '-T' || option === '--upload-file') {
+      group.fileCount++;
+    } else if (option === '-H' || option === '--header') {
+      group.sendsData ||= isSecretHeader(literal, value.startsWith("'"));
+    } else {
+      group.sendsData = true;
+    }
+  }
+  yield group;
+}
+
+// A bare hostname can identify an explicit host trap. Otherwise require a
+// literal HTTP(S) authority before attributing a request to a destination.
+function curlTarget(url: string, traps: NetworkTarget[]): NetworkTarget | undefined {
+  if (/^https?:\/\//i.test(url)) {
+    const hostname = URL.parse(url)?.hostname;
+    return hostname && !/[$`{}]/.test(hostname) ? { kind: 'url', value: url } : undefined;
+  }
+  const host = /^([\w.-]+(?::\d+)?)(?:[/?#]|$)/.exec(url)?.[1];
+  if (host && !host.startsWith('-')) {
+    const target: NetworkTarget = { kind: 'host', value: host.toLowerCase() };
+    if (networkTargetIsAllowed(target, traps)) {
+      return target;
+    }
+  }
+  return undefined;
+}
+
+function curlExfilTarget(
+  args: string,
+  traps: NetworkTarget[],
+  allowed: NetworkTarget[],
+): NetworkTarget | undefined {
+  for (const group of curlRequestGroups(args)) {
+    for (const [index, word] of group.urls.entries()) {
+      const url = word.replace(/^(['"])(.*)\1$/, '$2');
+      const target = curlTarget(url, traps);
+      if (!target || networkTargetIsAllowed(target, allowed)) {
+        continue;
+      }
+      const singleQuoted = word.startsWith("'");
+      if (
+        index < group.fileCount ||
+        group.writeMethod ||
+        group.sendsData ||
+        networkTargetIsAllowed(target, traps) ||
+        hasSecretExpansion(url, singleQuoted) ||
+        (!singleQuoted && hasProtectedFileSubstitution(url))
+      ) {
         return target;
       }
     }
@@ -3298,9 +3361,16 @@ function textContainsDelayedCiExfil(
       continue;
     }
     const curl = /^\s*(?:-\s+)?(?:(?:run|script):\s*)?(?:\/(?:usr\/)?bin\/)?curl\s+/.exec(line);
-    const requestTarget =
-      (curl && curlUploadTarget(line.slice(curl[0].length), allowed)) ??
-      fileDerivedRequestTarget(line, allowed);
+    if (curl) {
+      // Only inspect each actual request. Whole-line checks can attribute
+      // headers, payloads and traps to an unrelated --next group.
+      const target = curlExfilTarget(line.slice(curl[0].length), traps, allowed);
+      if (target) {
+        return { heuristicPattern, target };
+      }
+      continue;
+    }
+    const requestTarget = fileDerivedRequestTarget(line, allowed);
     if (requestTarget) {
       return { heuristicPattern, target: requestTarget };
     }
@@ -3313,14 +3383,11 @@ function textContainsDelayedCiExfil(
     }
     const target = unapprovedDestination(line, destinations, traps, allowed);
     const configuredTrap = target && traps.some((trap) => networkTargetIsAllowed(target, [trap]));
-    // For direct curl commands, only the parsed request options establish a
-    // method or body. A URL, filename or later --next group can quote a verb.
     const sendsData =
-      !curl &&
-      (/(?:^|\s)(?:-d|-F|-T|--upload-file)(?:[=\s]|$)/.test(line) ||
-        /(?:^|\s)--(?:data(?:-[\w]+)?|form|post-data)(?:[=\s]|$)|\b(?:requests|axios)\.(?:post|put|patch)\s*\(|\bbody\s*:|\b(?:POST|PUT|PATCH)\b/i.test(
-          line,
-        ));
+      /(?:^|\s)(?:-d|-F|-T|--upload-file)(?:[=\s]|$)/.test(line) ||
+      /(?:^|\s)--(?:data(?:-[\w]+)?|form|post-data)(?:[=\s]|$)|\b(?:requests|axios)\.(?:post|put|patch)\s*\(|\bbody\s*:|\b(?:POST|PUT|PATCH)\b/i.test(
+        line,
+      );
     const secretInUrl = destinations.some(
       (dest) => !networkTargetIsAllowed(dest, allowed) && textContainsSecretReference(dest.value),
     );
