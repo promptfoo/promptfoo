@@ -142,6 +142,9 @@
     "mongoose": {
       "gcp-metadata": "^9.2.3"
     },
+    "webpack-bundle-analyzer": {
+      "ws": "^7.5.14"
+    },
     "webpack-dev-server": {
       "express": "^4.22.3"
     },
@@ -330,7 +333,7 @@
     "tsx": "^4.23.11",
     "undici": ">=7.30.2 <8",
     "winston": "^3.19.0",
-    "ws": "^8.21.3",
+    "ws": "^8.23.0",
     "zod": "^4.6.7"
   },
   "madge": {
