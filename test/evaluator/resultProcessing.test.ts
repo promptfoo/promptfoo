@@ -86,8 +86,8 @@ describe('model-independent result processing', () => {
     expect(projectResultSchemas(safe)).toEqual(safe);
   });
 
-  it.each(['#/[REDACTED]', '#%2F$defs%2Fbad%zz', '#/$defs/bad%zz'])(
-    'does not resolve an ambiguous environment pointer to a literal marker (%s)',
+  it.each(['#/[REDACTED]', '#%2F$defs%2Fbad%zz', '#/$defs/bad%zz', '#/$defs/vars#'])(
+    'does not guess which definition an ambiguous environment pointer identifies (%s)',
     ($ref) => {
       const value = {
         '[REDACTED]': { type: 'number' },

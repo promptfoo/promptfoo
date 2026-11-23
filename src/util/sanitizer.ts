@@ -822,10 +822,11 @@ function splitSchemaUri(uri: string): [string, string] {
   return hash === -1 ? [uri, ''] : [uri.slice(0, hash), uri.slice(hash)];
 }
 
-// AJV treats a trailing # or #/ as the resource itself. Keep the original
-// spelling for output and normalize only in-document lookup.
+// Only a whole # or #/ fragment names the resource itself. A trailing
+// fragment inside a literal URL pointer belongs to the referenced key.
 function splitResourceUri(uri: string): [string, string] {
-  return splitSchemaUri(uri.replace(/#\/?$/, ''));
+  const [path, fragment] = splitSchemaUri(uri);
+  return [path, /^#(?:\/|%2f)?$/i.test(fragment) ? '' : fragment];
 }
 
 // Resolve only in-memory IDs, with the same URI rules as validation (including URNs).
@@ -882,17 +883,18 @@ function localSchemaPointer(ref: string): SchemaPointer | undefined | null {
     // A literal URL is a single trailing key. Locate only the scheme so a
     // malformed suffix cannot trigger another scan at each embedded scheme.
     const scheme = ref.search(/\/[a-z][a-z0-9+.-]*:\/\//i);
-    const head = scheme < 0 ? ref : ref.slice(0, scheme + 1);
+    const head = scheme < 0 ? ref.slice(2) : ref.slice(2, scheme + 1);
     const tail = scheme < 0 ? '' : pointerToken(ref.slice(scheme + 1));
-    // A decoded fragment's percent signs are literal. Do not decode them twice.
-    ref = (encoded ? head.replace(/%/g, '%25') : head) + tail;
-    return ref
-      .slice(2)
-      .split('/')
-      .map((raw) => ({
-        raw,
-        name: decodeURIComponent(raw).replace(/~1/g, '/').replace(/~0/g, '~'),
-      }));
+    // AJV strips a raw trailing # or #/ from an ordinary pointer. Do not
+    // guess between the shortened and literal keys. Encoded hashes are data.
+    if (!encoded && !tail && /#\/?$/.test(head)) {
+      return null;
+    }
+    const body = (encoded ? head.replace(/[%#]/g, encodeURIComponent) : head) + tail;
+    return body.split('/').map((raw) => ({
+      raw,
+      name: decodeURIComponent(raw).replace(/~1/g, '/').replace(/~0/g, '~'),
+    }));
   } catch {
     // An undecodable key may hide credentials behind encoded delimiters.
     return null;

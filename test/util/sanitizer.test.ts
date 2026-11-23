@@ -1050,11 +1050,34 @@ describe('sanitizeConfigForOutput', () => {
     expect(validate({ alias: 'wrong' })).toBe(false);
   });
 
-  it('decodes an escaped percent sign once and preserves valid Unicode keys', () => {
-    const name = '%41🧪';
+  it.each(['#/', '#%2F'])('treats the whole %s fragment as the resource', ($ref) => {
+    const value = { '': true, const: 'opaque', properties: { password: { $ref } } };
+    const safe = projectAssertionSchemas({ type: 'is-json', value });
+    expect(safe.value.const).toBe('[REDACTED]');
+    expect(projectAssertionSchemas(safe)).toEqual(safe);
+  });
+
+  it.each(['#', '#/'])('preserves a literal URL key ending in %s during lookup', (suffix) => {
+    const url = 'https://example.test/line\nbreak';
     const value = {
       type: 'object',
-      $defs: { [name]: { type: 'number' }, 'A🧪': { type: 'string' } },
+      $defs: { [url]: { const: 'ordinary' }, [url + suffix]: { const: 'opaque' } },
+      properties: { password: { $ref: '#/$defs/' + url + suffix } },
+    };
+    const safe = projectAssertionSchemas({ type: 'is-json', value });
+    expect(JSON.stringify(safe)).not.toContain('opaque');
+    expect(safe.value.$defs[url]).toEqual(value.$defs[url]);
+    expect(projectAssertionSchemas(safe)).toEqual(safe);
+    const validate = new Ajv().compile(safe.value);
+    expect(validate({ password: '[REDACTED]' })).toBe(true);
+    expect(validate({ password: 'ordinary' })).toBe(false);
+  });
+
+  it('decodes an escaped percent sign once and preserves valid Unicode keys', () => {
+    const name = '%41🧪#';
+    const value = {
+      type: 'object',
+      $defs: { [name]: { type: 'number' }, 'A🧪#': { type: 'string' } },
       properties: { alias: { $ref: '#' + encodeURIComponent('/$defs/' + name) } },
     };
     const safe = projectAssertionSchemas({ type: 'is-json', value }).value;
