@@ -248,7 +248,7 @@ describe('eval routes', () => {
     expect(requests).toEqual(['/saved']);
   });
 
-  it.each(['openai', 'raw HTTP'])(
+  it.each(['openai', 'raw HTTP', 'inline HTTP request file'])(
     'binds a mutable %s endpoint even when both the stored ID and label stay unchanged',
     async (transport) => {
       const directory = await mkdtemp(join(tmpdir(), 'promptfoo-replay-'));
@@ -269,23 +269,20 @@ describe('eval routes', () => {
       };
       const first = await listen();
       const other = await listen();
-      const file = join(directory, 'provider.json');
+      const inline = transport === 'inline HTTP request file';
+      const file = join(directory, inline ? 'request.txt' : 'provider.json');
       const model = transport === 'openai';
-      const update = (host: string) =>
-        writeFile(
-          file,
-          JSON.stringify({
-            id: model ? 'openai:chat:gpt-4o' : 'http',
-            label: 'Saved',
-            config: model
-              ? { apiBaseUrl: `http://${host}/v1` }
-              : { request: `POST /ask HTTP/1.1\r\nHost: ${host}\r\n\r\n{{prompt}}` },
-          }),
-        );
+      const update = (host: string) => {
+        const request = `POST /ask HTTP/1.1\r\nHost: ${host}\r\n\r\n{{prompt}}`;
+        const config = model ? { apiBaseUrl: `http://${host}/v1` } : { request };
+        const provider = { id: model ? 'openai:chat:gpt-4o' : 'http', label: 'Saved', config };
+        return writeFile(file, inline ? request : JSON.stringify(provider));
+      };
       await update(first);
+      const reference = `file://${file}`;
       const saved = await evaluateWithSource(
         {
-          providers: [`file://${file}`],
+          providers: [inline ? { id: 'http', config: { request: reference } } : reference],
           env: { OPENAI_API_KEY: 'suite-fixture', OPENAI_BASE_URL: `http://${first}/fallback` },
           prompts: ['original'],
           tests: [{ vars: {} }],
@@ -301,13 +298,13 @@ describe('eval routes', () => {
           promptIndex: 0,
           prompt: 'edited',
         });
-      expect((await replay()).status).toBe(200);
+      expect((await replay()).status).toBe(inline ? 400 : 200);
       await update(other);
       const blocked = await replay();
       expect(blocked.status).toBe(400);
       expect(JSON.stringify(blocked.body)).not.toContain('suite-fixture');
       const expected = { host: first, authorization: model ? 'Bearer suite-fixture' : undefined };
-      expect(calls).toEqual([expected, expected]);
+      expect(calls).toEqual(inline ? [expected] : [expected, expected]);
     },
   );
 

@@ -362,7 +362,7 @@ describe('Eval Routes - Zod Validation', () => {
         const providerPath = path.join(directory, 'providers.json');
         const providers = [
           {
-            id: './echo.cjs',
+            id: 'echo',
             label: 'First',
             prompts: ['first'],
             config: { settings: 'file://./settings.json' },
@@ -371,12 +371,8 @@ describe('Eval Routes - Zod Validation', () => {
         ];
         writeFileSync(providerPath, JSON.stringify(providers));
         writeFileSync(path.join(directory, 'settings.json'), JSON.stringify({ greeting: 'Hello' }));
-        writeFileSync(
-          path.join(directory, 'echo.cjs'),
-          "module.exports = class { id() { return './echo.cjs'; } async callApi(prompt) { return { output: prompt }; } };",
-        );
         mockedEvalQueries.getReplayTarget.mockResolvedValue({
-          id: './echo.cjs',
+          id: 'echo',
           config: JSON.stringify({ settings: { greeting: 'Hello' } }),
           linkedTargetId: null,
           scanner: 0,
@@ -390,7 +386,6 @@ describe('Eval Routes - Zod Validation', () => {
           },
         });
         vi.mocked(evaluateWithSource).mockImplementation(async (suite) => {
-          // Exercise the native contained-file loader using the route's evaluation context.
           const [provider] = await loadApiProviders(suite.providers, { basePath: suite.basePath });
           const response = await provider.callApi('Hello World');
           return {

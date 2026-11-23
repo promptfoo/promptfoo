@@ -27,6 +27,7 @@ import {
   getReplayColumn,
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
+import { isJavascriptFile } from '../../util/fileExtensions';
 import invariant from '../../util/invariant';
 import {
   isProviderConfigFileReference,
@@ -783,6 +784,18 @@ function replayProviderId(target: ProviderRefDescriptor) {
       }
       return transport === 'websocket' ? getSafeProviderId(url) : url;
     }
+    if (target.kind === 'named') {
+      // Without an ID override these factories normalize the endpoint name.
+      if (/^anthropic:(?:messages|completion):.+/.test(path)) {
+        return path.replace(/^anthropic:[^:]+:/, 'anthropic:');
+      }
+      if (
+        path.startsWith('ollama:') &&
+        !/^ollama:(?:chat|completion|embeddings?)(?::|$)/.test(path)
+      ) {
+        return path.replace(/^ollama:/, 'ollama:completion:');
+      }
+    }
     const openAiId = getNamedOpenAiTextId(path);
     if (path === 'echo' || isCodexSecurityPath(path) || openAiId) {
       return target.kind === 'named' ? (openAiId ?? path) : target.id;
@@ -981,6 +994,15 @@ function verifySavedReplayTarget(selection: ReplaySelection) {
   }
 }
 
+// Redaction hides the original credential expression. Do not let a changed
+// definition run template code or read unrelated secrets from the process.
+function replayCredential(value: string, env: ProviderOptions['env']) {
+  if (TEMPLATE_MARKER.test(value)) {
+    replayEnvValue(value.replace(/^(?:bearer|basic)\s+/i, ''), env);
+  }
+  return REDACTED;
+}
+
 // A model ID or raw HTTP request ID doesn't identify the destination. Require
 // the entire static configuration to match, including nested settings and raw
 // request headers. Opaque settings (e.g. a redacted OAuth or session object)
@@ -988,6 +1010,7 @@ function verifySavedReplayTarget(selection: ReplaySelection) {
 function matchesRecordedSettings(
   config: Record<string, unknown>,
   recorded: string,
+  env: ProviderOptions['env'],
   basePath?: string,
 ) {
   const original = JSON.parse(recorded);
@@ -1002,7 +1025,7 @@ function matchesRecordedSettings(
   }
   const current = { ...config };
   if (original.apiKey === REDACTED && typeof current.apiKey === 'string') {
-    current.apiKey = REDACTED;
+    current.apiKey = replayCredential(current.apiKey, env);
   }
   if (current.headers && typeof current.headers === 'object') {
     current.headers = Object.fromEntries(
@@ -1011,7 +1034,7 @@ function matchesRecordedSettings(
         /^(?:authorization|x-api-key)$/i.test(key) &&
         typeof value === 'string' &&
         original.headers?.[key] === REDACTED
-          ? REDACTED
+          ? replayCredential(value, env)
           : value,
       ]),
     );
@@ -1019,17 +1042,76 @@ function matchesRecordedSettings(
   return isDeepStrictEqual(original, current);
 }
 
-// A removed environment override is invisible in saved model options.
-// Only an explicit endpoint can prove where this OpenAI target originally sent requests.
+// Runtime results omit provider controls such as transform. Only saved inline
+// overrides can supply those controls, even when the underlying provider is local.
+function verifyMutableControls({ fromFile, ref, cloud }: ReplaySelection) {
+  const allowed = new Set(['id', 'label', 'config', 'env', 'prompts']);
+  if (cloud && !fromFile) {
+    for (const key of ['transform', 'delay', 'inputs'] as const) {
+      if (cloud.options[key] != null) {
+        allowed.add(key);
+      }
+    }
+  }
+  const local = fromFile && 'loadOptions' in ref ? ref.loadOptions : undefined;
+  for (const options of [local, cloud?.provider]) {
+    if (options && Object.keys(options).some((key) => !allowed.has(key))) {
+      throw new Error('Cannot verify mutable provider controls');
+    }
+  }
+}
+
+// Results omit provider env. Only accept transports with a recorded explicit
+// destination and plain request settings, without callbacks or auxiliary endpoints.
+const REPLAY_REQUEST_SETTINGS = new Set([
+  'basePath',
+  'linkedTargetId',
+  'apiKey',
+  'headers',
+  'url',
+  'body',
+  'request',
+  'method',
+  'useHttps',
+  'messageTemplate',
+  'apiHost',
+  'apiBaseUrl',
+  'temperature',
+  'max_tokens',
+  'max_completion_tokens',
+  'top_p',
+  'seed',
+  'stop',
+  'stream',
+]);
+
 function hasStaticReplayRoute(path: string, config: Record<string, unknown>) {
+  if (path === 'echo') {
+    return true;
+  }
+  if (Object.keys(config).some((key) => !REPLAY_REQUEST_SETTINGS.has(key))) {
+    return false;
+  }
+  const transport = replayUrlTransport(path);
   let destination;
-  if (path === 'openai' || path.startsWith('openai:')) {
+  if (getNamedOpenAiTextId(path)) {
     destination = config.apiHost || config.apiBaseUrl;
-  } else if (replayUrlTransport(path) === 'http' && typeof config.request === 'string') {
+  } else if (transport === 'http' && typeof config.request === 'string') {
     // A raw request overrides even an explicit URL. The body can still use {{prompt}}.
     destination = config.request.split(/\r?\n\r?\n/, 1)[0];
+  } else if (transport === 'http' || (transport === 'websocket' && !isJavascriptFile(path))) {
+    // A WebSocket ID can redact part of the URL. Without a recorded URL
+    // setting, such an ID cannot attest to the original destination.
+    if (transport === 'websocket' && !config.url && getSafeProviderId(path) !== path) {
+      return false;
+    }
+    destination = config.url || path;
+    const protocol = transport === 'http' ? /^https?:\/\// : /^wss?:\/\//;
+    if (typeof destination !== 'string' || !protocol.test(destination)) {
+      return false;
+    }
   } else {
-    return true;
+    return false;
   }
   return (
     typeof destination === 'string' &&
@@ -1041,34 +1123,46 @@ function hasStaticReplayRoute(path: string, config: Record<string, unknown>) {
 
 function prepareReplaySettings(selection: ReplaySelection, basePath?: string) {
   const { fromFile, cloud, target, saved } = selection;
+  // Even an inline HTTP entry can reload a changed Host from a request file.
+  // Require a literal request-line prefix so a template cannot construct a file reference.
+  if ('loadOptions' in target && replayUrlTransport(target.loadProviderPath) === 'http') {
+    const request = target.loadOptions.config?.request;
+    if (
+      request != null &&
+      (typeof request !== 'string' || !/^\s*[a-z-]+[ \t]+(?:\/|https?:\/\/|\*)/i.test(request))
+    ) {
+      throw new Error('Cannot verify external HTTP request');
+    }
+  }
   if (!fromFile && !cloud) {
     return selection.candidate;
   }
   if (target.kind !== 'options') {
     throw new Error('Cannot verify mutable provider settings');
   }
+  verifyMutableControls(selection);
+  const path = target.loadProviderPath;
   let candidate = selection.candidate;
   let config = target.loadOptions.config;
-  if (fromFile && !cloud && config) {
-    // Resolve only the selected settings, once, without executing provider code.
-    replayFileData(config.url);
+  if (!hasStaticReplayRoute(path, config ?? {})) {
+    throw new Error('Cannot verify mutable provider destination');
+  }
+  if (fromFile && !cloud && path === 'echo' && config) {
+    // Only local echo has inert nested settings. Never resolve paths in
+    // credentials, headers, or destinations for a network transport.
     config = replayFileData(config, (path) =>
       replayFileData(readRawProviderConfigFile(path, basePath)),
     );
     candidate = { ...target.loadOptions, config };
+  } else {
+    replayFileData(config);
   }
-  const path = target.loadProviderPath;
-  if (path === 'echo') {
-    return candidate;
-  }
-  // A mutable environment can influence a native provider's endpoint without
-  // appearing in its recorded options. URL transports pin the resolved URL.
   const mutableEnv = fromFile ? target.loadOptions.env : cloud?.provider.env;
+  const recorded = saved?.config ?? (path === 'echo' ? '{}' : undefined);
   if (
-    (!replayUrlTransport(path) && Object.keys(mutableEnv ?? {}).length > 0) ||
-    !saved?.config ||
-    !hasStaticReplayRoute(path, config ?? {}) ||
-    !matchesRecordedSettings(config ?? {}, saved.config, basePath)
+    (path !== 'echo' && !replayUrlTransport(path) && Object.keys(mutableEnv ?? {}).length > 0) ||
+    !recorded ||
+    !matchesRecordedSettings(config ?? {}, recorded, mutableEnv, basePath)
   ) {
     throw new Error('Cannot verify mutable provider settings');
   }

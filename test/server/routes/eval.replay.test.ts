@@ -161,6 +161,20 @@ describe('POST /api/eval/replay provider boundary', () => {
     expect(evaluate).not.toHaveBeenCalled();
   });
 
+  it.each(['anthropic:messages:claude-sonnet-4-5', 'ollama:llama3', 'ollama:llama3:8b'])(
+    'preserves a recorded immutable shorthand and its native ID: %s',
+    async (selector) => {
+      const [provider] = await loadApiProviders([selector], {
+        env: { ANTHROPIC_API_KEY: 'fixture' },
+      });
+      recordedTarget(provider.id());
+      storedConfig([selector], undefined, [provider.id()]);
+      expect((await replay(0, 0)).status).toBe(200);
+      expect((await replay()).status).toBe(200);
+      expect(evaluate.mock.calls[0][0].providers).toEqual([selector]);
+    },
+  );
+
   it.each(['anthropic:messages:claude-sonnet-4-5', 'ollama:llama3'])(
     'rejects a collision with the native ID of %s without evaluating either source',
     async (selector) => {
@@ -591,8 +605,8 @@ describe('POST /api/eval/replay provider boundary', () => {
   });
 
   it('passes the inspected ordinary file config to evaluation instead of rereading its path', async () => {
-    recordedTarget('echo');
     const provider = { id: 'echo', config: { prefix: 'example' } };
+    recordedTarget('echo', 0, null, provider.config);
     const file = path.join(directory, 'provider.json');
     await fs.writeFile(file, JSON.stringify(provider));
     storedConfig([`file://${file}`]);
@@ -684,7 +698,7 @@ describe('POST /api/eval/replay provider boundary', () => {
         id: 'echo',
         label: 'Cloud target',
         prompts: ['original'],
-        transform: 'output + " cloud"',
+        transform: localOverride ? 'output + " cloud"' : undefined,
       });
       const provider = localOverride
         ? {
@@ -703,7 +717,7 @@ describe('POST /api/eval/replay provider boundary', () => {
       evaluate.mockImplementation(async (suite) => {
         const [loaded] = await loadApiProviders(suite.providers);
         expect(loaded.label).toBe(localOverride ? 'Local target' : 'Cloud target');
-        expect(loaded.transform).toBe(localOverride ? 'output + " local"' : 'output + " cloud"');
+        expect(loaded.transform).toBe(localOverride ? 'output + " local"' : undefined);
         const response = await loaded.callApi('edited prompt');
         return { toEvaluateSummary: async () => ({ results: [{ response }] }) } as unknown as Eval;
       });
@@ -757,7 +771,7 @@ describe('POST /api/eval/replay provider boundary', () => {
     const loaded = await loadApiProviders(providers, { env });
     const columns = loaded.map((provider) => provider.label || provider.id());
     expect(columns).toEqual(['west', 'east']);
-    recordedTarget(loaded[0].id());
+    recordedTarget(loaded[0].id(), 0, null, loaded[0].config);
     storedConfig(providers, undefined, columns, env);
     lookup.mockClear();
     evaluate.mockImplementationOnce(async (suite) => {
@@ -822,6 +836,78 @@ describe('POST /api/eval/replay provider boundary', () => {
     expect(lookup).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    'file://request.txt',
+    'file://{{ env.PATH }}',
+    '{{ env.REQUEST }}',
+    'f{{ env.REST }}',
+    'file {{- env.REST }}',
+  ])('never reloads an inline HTTP request path: %s', async (request) => {
+    storedConfig([{ id: 'https', config: { request } }]);
+    recordedTarget('https');
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it.each(['anthropic:messages:claude-sonnet-4-5', 'ollama:chat:llama3', './custom.cjs'])(
+    'refuses mutable %s whose saved ID and config cannot prove the endpoint',
+    async (id) => {
+      // A provider environment overriding the destination can disappear;
+      // result rows never contained that override.
+      const definition = { id, label: 'Saved' };
+      const file = path.join(directory, 'target.json');
+      await fs.writeFile(file, JSON.stringify(definition));
+      mockCloudProvider(definition);
+      recordedTarget(id, 0, null, {});
+      for (const source of [`file://${file}`, 'promptfoo://provider/target']) {
+        storedConfig([source], directory, ['Saved']);
+        expect((await replay(0, 0)).status).toBe(400);
+      }
+      expect(evaluate).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([{ transform: 'output + " changed"' }, { delay: 1 }, { inputs: { extra: 'new' } }])(
+    'rejects unrecorded mutable controls even on local echo: %j',
+    async (control) => {
+      const provider = { id: 'echo', ...control };
+      const file = path.join(directory, 'target.json');
+      await fs.writeFile(file, JSON.stringify(provider));
+      mockCloudProvider(provider);
+      recordedTarget('echo', 0, null, {});
+      for (const source of [`file://${file}`, 'promptfoo://provider/target']) {
+        storedConfig([source], directory, ['echo']);
+        expect((await replay(0, 0)).status).toBe(400);
+      }
+      expect(evaluate).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['{{ env.KEY | upper }}', '{{ env.UNRELATED }}'])(
+    'refuses an unrecorded template expression in a redacted credential: %s',
+    async (apiKey) => {
+      const id = 'openai:chat:gpt-4o';
+      const apiHost = 'saved.invalid';
+      mockCloudProvider({ id, config: { apiHost, apiKey } });
+      storedConfig(['promptfoo://provider/target'], undefined, [id]);
+      recordedTarget(id, 0, null, { apiHost, apiKey: '[REDACTED]' });
+      expect((await replay(0, 0)).status).toBe(400);
+      expect(evaluate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('requires a provable WebSocket URL and message template', async () => {
+    const url = 'wss://fixture.invalid/socket';
+    const config = { messageTemplate: '{{prompt}}' };
+    recordedTarget(url, 0, null, config);
+    mockCloudProvider({ id: url, config });
+    storedConfig(['promptfoo://provider/target'], undefined, [url]);
+    expect((await replay(0, 0)).status).toBe(200);
+    mockCloudProvider({ id: url, config: { messageTemplate: 'changed' } });
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+  });
+
   it('checks all mutable Cloud settings against the saved options before using credentials', async () => {
     const id = 'openai:chat:gpt-4o';
     const source = 'promptfoo://provider/target';
@@ -843,6 +929,7 @@ describe('POST /api/eval/replay provider boundary', () => {
   });
 
   it.each([
+    { id: 'https://saved.invalid', config: { body: '{{prompt}}', transformRequest: 'request' } },
     { id: 'openai:chat:gpt-4o', config: {} },
     { id: 'openai:chat:gpt-4o', config: { apiBaseUrl: 'https://saved.invalid/%5BREDACTED%5D' } },
     { id: 'http', config: { request: 'POST /ask HTTP/1.1\nHost: {{host}}\n\n{{prompt}}' } },
