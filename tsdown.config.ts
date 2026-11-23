@@ -11,23 +11,10 @@ const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
 
 // Normalize the package.json engines range into comparator sets that the zero-dependency
 // CLI entrypoint can evaluate before importing any other modules.
-const enginesNode: string = packageJson.engines?.node ?? '>=22.22.0';
-let nodeEngineComparatorSets: Array<
-  Array<{ operator: '' | '=' | '>' | '>=' | '<' | '<='; version: string }>
->;
-try {
-  nodeEngineComparatorSets = new semver.Range(enginesNode).set.map((comparatorSet) =>
-    comparatorSet.map((comparator) => ({
-      operator: comparator.operator,
-      version: comparator.semver.version,
-    })),
-  );
-} catch {
-  console.warn(
-    `[tsdown] Warning: Could not parse engines.node "${enginesNode}". Defaulting to >=22.22.0.`,
-  );
-  nodeEngineComparatorSets = [[{ operator: '>=', version: '22.22.0' }]];
-}
+const enginesNode: string = packageJson.engines.node;
+const nodeEngineComparatorSets = new semver.Range(enginesNode).set.map((set) =>
+  set.map(({ operator, semver: version }) => ({ operator, version: version.version })),
+);
 
 // Build-time constants injected into all builds
 // These replace the __PROMPTFOO_*__ placeholders in source files

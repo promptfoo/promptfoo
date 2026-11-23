@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
-import { globSync } from 'glob';
+import { globSync } from 'glob/raw';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
@@ -69,8 +69,8 @@ vi.mock('path', async () => {
   };
 });
 
-vi.mock('glob', async (importOriginal) => ({
-  escape: (await importOriginal<typeof import('glob')>()).escape,
+vi.mock('glob/raw', async (importOriginal) => ({
+  escape: (await importOriginal<typeof import('glob/raw')>()).escape,
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
