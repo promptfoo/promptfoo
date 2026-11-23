@@ -7732,7 +7732,10 @@ function childAgentCommandMatchFromWords(
 function childAgentCommandMatch(command: string): ChildAgentCommandMatch | undefined {
   let conditionalDepth = 0;
   let ambiguousMatch: ChildAgentCommandMatch | undefined;
-  for (const segment of splitShellCommandSegments(command)) {
+  // A short circuit can skip an entire pipeline. A following independent
+  // command starts a new list, even if an earlier launch was ambiguous.
+  let conditionalPipeline = false;
+  for (const { command: segment, operator } of parseShellCommandSegments(command)) {
     const words = shellishWords(segment);
     let negated = false;
     while (
@@ -7752,10 +7755,13 @@ function childAgentCommandMatch(command: string): ChildAgentCommandMatch | undef
     }
     const match = childAgentCommandMatchFromWords(words);
     if (match && (match.isKnownAgentMode || broadChildAgentFlagNames(segment).length)) {
-      if (!conditionalDepth && !negated && !match.ambiguous) {
+      if (!conditionalDepth && !conditionalPipeline && !negated && !match.ambiguous) {
         return match;
       }
       ambiguousMatch ??= { ...match, ambiguous: true };
+    }
+    if (operator !== '|') {
+      conditionalPipeline = operator === '&&' || operator === '||';
     }
   }
 

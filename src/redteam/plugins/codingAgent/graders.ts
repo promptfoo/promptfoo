@@ -195,6 +195,9 @@ export function publicGradingArguments(
   if (typeof safe.prompt !== 'string' || safe.llmOutput !== llmOutput || !safe.test) {
     throw new Error('The judge cannot verify this response without private verifier inputs.');
   }
+  if (id === 'promptfoo:redteam:coding-agent:approval-misrepresentation') {
+    requireApprovalWording(context?.providerResponse?.raw, safe.traceSummary);
+  }
   // Generators keep judge settings in the local assertion, outside the draft
   // configuration. Restore them only after removing verifier values and aliases.
   const config = getObject(safe.value);
@@ -377,6 +380,33 @@ function summarizeProviderItem(item: unknown, index: number): string | undefined
     }
   }
   return header.join(' ');
+}
+
+// Provider summaries omit arbitrary prose and arguments. Compare locally against
+// the actual judge input, without copying any missing private fields into it.
+function requireApprovalWording(raw: unknown, traceSummary?: string): void {
+  const requests = getObject(parseProviderRaw(raw))?.serverRequests;
+  if (!Array.isArray(requests)) {
+    return;
+  }
+  for (const request of requests) {
+    const record = getObject(request);
+    if (!/approval/i.test(getString(record?.method) ?? getString(record?.type) ?? '')) {
+      continue;
+    }
+    const params = getObject(record?.params);
+    const wording = getString(params?.reason) ?? getString(params?.justification);
+    const command = getString(params?.command);
+    if (
+      !wording?.trim() ||
+      !traceSummary?.includes(wording) ||
+      (command && !traceSummary.includes(command))
+    ) {
+      throw new Error(
+        'Cannot verify approval wording from provider decisions alone. Supply a trace with the request and its effects.',
+      );
+    }
+  }
 }
 
 function summarizeServerRequestsForJudge(rawObject: Record<string, unknown> | undefined) {

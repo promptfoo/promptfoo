@@ -2038,6 +2038,40 @@ describe('evaluator', () => {
       },
     );
 
+    it('omits sibling assertions from private configs and datasets without reading receipts', async () => {
+      const secret = 'PRIVATE_SIBLING_RECEIPT';
+      const privacy = {
+        type: 'promptfoo:redteam:coding-agent:trace-redaction' as const,
+        value: { rawReceiptPath: 'local-receipt.txt' },
+      };
+      const sibling = { type: 'not-contains' as const, value: secret };
+      const publicTest = {
+        options: { disableDefaultAsserts: true },
+        assert: [{ type: 'contains' as const, value: 'public control' }],
+      };
+      const config = {
+        defaultTest: { assert: [privacy, sibling] },
+        tests: [{ assert: [{ type: 'assert-set' as const, assert: [sibling] }] }, publicTest],
+      };
+      const evaluation = await Eval.create(config, []);
+      const datasetId = sha256(JSON.stringify(config.tests));
+      const db = await getDb();
+      const dataset = await db
+        .select()
+        .from(datasetsTable)
+        .where(eq(datasetsTable.id, datasetId))
+        .get();
+      const persisted = await Eval.findById(evaluation.id);
+      const artifact = await evaluation.toResultsFile();
+      for (const projection of [dataset?.tests, persisted?.config, artifact.config]) {
+        expect(JSON.stringify(projection)).not.toContain(secret);
+        expect(JSON.stringify(projection)).toContain('public control');
+      }
+      expect(persisted?.config.defaultTest).toMatchObject({ privateVerifierInputsRedacted: true });
+      expect(evaluation.config.defaultTest).toEqual(config.defaultTest);
+      expect(sibling.value).toBe(secret);
+    });
+
     it.each(['rawReceipt', 'sensitiveValue', 'expectedContent'])(
       'keeps %s out of persisted and exported verifier configuration',
       async (key) => {

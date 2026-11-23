@@ -8,6 +8,7 @@ import { isApiProvider } from '../types/providers';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider';
 import {
   configRequiresTraceRedaction,
+  getAssertionLeaves,
   REDACTED_PROMPT,
   sanitizeCodingAgentVerifierInputs,
 } from './verifierRedaction';
@@ -56,7 +57,17 @@ export function sanitizeConfigForPersistence(
     if (!shared && (!inherited || optedOut) && !configRequiresTraceRedaction(test)) {
       return test;
     }
-    const copy = { ...stripTestProviderPromptSelectors(test), ...('vars' in test && { vars: {} }) };
+    // Sibling expectations can repeat a file-backed receipt unavailable at save time.
+    // Mirror the type-only projection on private result rows and require live inputs for replay.
+    const copy = {
+      ...stripTestProviderPromptSelectors(test),
+      ...('vars' in test && { vars: {} }),
+      ...('assert' in test &&
+        Array.isArray(test.assert) && {
+          assert: getAssertionLeaves(test.assert).map(({ type }) => ({ type })),
+          privateVerifierInputsRedacted: true,
+        }),
+    };
     Reflect.deleteProperty(copy, 'prompts');
     Reflect.deleteProperty(copy, 'providerOutput');
     return copy;
