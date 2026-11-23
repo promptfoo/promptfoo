@@ -191,6 +191,28 @@ describe('POST /api/eval/replay provider boundary', () => {
     },
   );
 
+  it.each(['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'])(
+    'refuses an unbound ambient endpoint even without saved env: %s',
+    async (key) => {
+      vi.stubEnv(key, 'alternate.invalid');
+      try {
+        storedConfig(['openai:responses:gpt-4.1'], undefined, ['openai:gpt-4.1']);
+        expect((await replay(0, 0)).status).toBe(400);
+        expect(evaluate).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  it('rejects a legacy snapshot with an ambiguous OpenAI model ID', async () => {
+    const id = 'openai:gpt-4.1';
+    storedConfig([{ id, label: '', config: {} }]);
+    recordedTarget(id);
+    expect((await replay(0, 0)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
   it('rejects overlapping named OpenAI endpoints and shorthand IDs', async () => {
     storedConfig(['openai:responses:gpt-4.1', 'openai:gpt-4.1'], undefined, ['openai:gpt-4.1']);
     expect((await replay(0, 0)).status).toBe(400);
@@ -810,8 +832,9 @@ describe('POST /api/eval/replay provider boundary', () => {
     recordedTarget(loaded[0].id(), 0, null, loaded[0].config);
     storedConfig(providers, undefined, columns, env);
     lookup.mockClear();
-    evaluate.mockImplementationOnce(async (suite) => {
-      const [selected] = await loadApiProviders(suite.providers, { env: suite.env });
+    evaluate.mockImplementationOnce(async (suite, options) => {
+      expect(suite.env).toBeUndefined();
+      const [selected] = await loadApiProviders(suite.providers, { env: options?.providerEnv });
       const response = { output: selected.id() };
       return { toEvaluateSummary: async () => ({ results: [{ response }] }) } as unknown as Eval;
     });
@@ -862,8 +885,9 @@ describe('POST /api/eval/replay provider boundary', () => {
       config: { url, body: '{{prompt}}' },
     });
     storedConfig([provider], undefined, ['local'], env);
-    evaluate.mockImplementationOnce(async (suite) => {
-      const [selected] = await loadApiProviders(suite.providers, { env: suite.env });
+    evaluate.mockImplementationOnce(async (suite, options) => {
+      expect(suite.env).toBeUndefined();
+      const [selected] = await loadApiProviders(suite.providers, { env: options?.providerEnv });
       expect(selected.label).toBe('local');
       expect(selected.id()).toBe('https://local.invalid');
       return { toEvaluateSummary: async () => ({ results: [] }) } as unknown as Eval;

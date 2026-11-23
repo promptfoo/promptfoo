@@ -342,6 +342,8 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
 export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
   /** @internal Normalized value of --filter-providers or --filter-targets. */
   providerFilter?: string;
+  /** Live instances whose serialized display ID cannot recover the original loader and env. */
+  unreplayableProviderIndices?: number[];
 };
 
 const PromptMetricsSchema = z.object({

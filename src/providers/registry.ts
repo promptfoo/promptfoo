@@ -260,7 +260,7 @@ function getProviderEnvAliasGroups(
   return [];
 }
 
-function getProviderEndpointAliases(providerPath: string): readonly string[] {
+export function getProviderEndpointAliases(providerPath: string): readonly string[] {
   if (providerPath.startsWith('openai:') && !CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
     return ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'];
   }

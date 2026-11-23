@@ -9,7 +9,7 @@ import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { toSerializableProviderRef } from './models/evalResult';
 import { processPrompts } from './prompts/index';
-import { loadApiProviders, resolveProvider } from './providers/index';
+import { EchoProvider, loadApiProviders, resolveProvider } from './providers/index';
 import { providerRegistry } from './providers/providerRegistry';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
@@ -316,9 +316,12 @@ async function maybeShareEval(
   }
 }
 
+// Replay credentials must not enter the scope of prompt or test rendering.
+type SourceOptions = InternalEvaluateOptions & { providerEnv?: EnvOverrides };
+
 export async function evaluateWithSource(
   testSuite: EvaluateTestSuite,
-  options: InternalEvaluateOptions = {},
+  options: SourceOptions = {},
 ) {
   const { prompts: _prompts, providers: _providers, ...config } = testSuite;
   return cliState.withConfig(config, () =>
@@ -330,7 +333,10 @@ export async function evaluateWithSource(
   );
 }
 
-async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEvaluateOptions) {
+async function evaluateWithEnv(
+  testSuite: EvaluateTestSuite,
+  { providerEnv, ...options }: SourceOptions,
+) {
   const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
 
   if (testSuiteConfig.writeLatestResults) {
@@ -338,7 +344,7 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
   }
 
   const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
-    env: testSuiteConfig.env,
+    env: providerEnv ?? testSuiteConfig.env,
   });
   options.abortSignal?.throwIfAborted();
   const providerMap = buildConfiguredProviderMap(loadedProviders);
@@ -350,8 +356,23 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
     constructedTestSuite.prompts,
   );
   const author = getAuthor(suiteAuthor);
+  // A serialized instance carries its display ID, not its original provider
+  // path or private environment. Do not infer a network target from it.
+  const sources = Array.isArray(testSuiteConfig.providers)
+    ? testSuiteConfig.providers
+    : [testSuiteConfig.providers];
+  const unreplayableProviderIndices = sources.flatMap((source, index) =>
+    isApiProvider(source) && !(source instanceof EchoProvider && source.id() === 'echo')
+      ? [index]
+      : [],
+  );
   const evalRecord = testSuiteConfig.writeLatestResults
-    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
+    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, {
+        author,
+        ...(unreplayableProviderIndices.length && {
+          runtimeOptions: { unreplayableProviderIndices },
+        }),
+      })
     : new Eval(unifiedConfig, { author });
 
   const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>

@@ -10,6 +10,7 @@ import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { generateIdFromPrompt } from '../../src/models/prompt';
 import { evaluateWithSource } from '../../src/node';
+import { loadApiProviders } from '../../src/providers/index';
 import { createApp } from '../../src/server/server';
 import { ResultFailureReason } from '../../src/types';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
@@ -373,6 +374,99 @@ describe('eval routes', () => {
       expect(JSON.stringify(replay.body)).not.toContain('suite-fixture');
     },
   );
+
+  it('keeps saved credentials outside edited prompts and variables', async () => {
+    const secret = 'synthetic-saved-credential';
+    const saved = await evaluateWithSource(
+      {
+        providers: ['echo'],
+        prompts: ['original'],
+        tests: [{ vars: {} }],
+        env: { OPENAI_API_KEY: secret },
+        writeLatestResults: true,
+        sharing: false,
+      },
+      { cache: false, showProgressBar: false, eventSource: 'library' },
+    );
+    testEvalIds.add(saved.id);
+    const replay = (prompt: string, variables?: Record<string, unknown>) =>
+      api
+        .post('/api/eval/replay')
+        .send({ evaluationId: saved.id, promptIndex: 0, prompt, variables });
+    for (const [prompt, variables] of [
+      ['{{env.OPENAI_API_KEY}}', {}],
+      ['{{question}}', { question: '{{env.OPENAI_API_KEY}}' }],
+      ['{"text":"\\u007b\\u007benv.OPENAI_API_KEY}}"}', {}],
+      ['{% set key = env.OPENAI_API_KEY %}{{key}}', {}],
+      ['{"text":"{\\u0025 include file %}"}', {}],
+      ['{{question}}', { question: 'file://untrusted.js' }],
+    ] as const) {
+      const response = await replay(prompt, variables);
+      expect(JSON.stringify(response.body)).not.toContain(secret);
+      expect(response.status).toBe(400);
+    }
+    const valid = await replay('Hello {{ name }}', { name: 'World' });
+    expect(valid.status).toBe(200);
+    expect(valid.body.output).toBe('Hello World');
+  });
+
+  it('refuses an implicit model endpoint before sending a saved key to the current gateway', async () => {
+    const { calls, first, other } = await replayTargets();
+    vi.stubEnv('OPENAI_BASE_URL', 'http://' + first);
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    const saved = await evaluateWithSource(
+      {
+        providers: ['openai:chat:gpt-4o'],
+        prompts: ['original'],
+        tests: [{ vars: {} }],
+        env: { OPENAI_API_KEY: 'suite-fixture' },
+        writeLatestResults: true,
+        sharing: false,
+      },
+      { cache: false, showProgressBar: false, eventSource: 'library' },
+    );
+    testEvalIds.add(saved.id);
+    expect(calls.splice(0)).toEqual([{ host: first, authorization: 'Bearer suite-fixture' }]);
+    vi.stubEnv('OPENAI_BASE_URL', 'http://' + other);
+    const replay = await api.post('/api/eval/replay').send({
+      evaluationId: saved.id,
+      promptIndex: 0,
+      prompt: 'edited',
+    });
+    expect(calls).toEqual([]);
+    expect(replay.status).toBe(400);
+  });
+
+  it('does not reload a live Responses instance as Chat using its display ID', async () => {
+    const { calls, first, other } = await replayTargets();
+    const providers = await loadApiProviders(['openai:responses:gpt-4.1', 'echo'], {
+      env: { OPENAI_BASE_URL: 'http://' + first },
+    });
+    vi.spyOn(providers[0], 'callApi').mockResolvedValue({ output: 'original' });
+    const saved = await evaluateWithSource(
+      {
+        providers,
+        prompts: ['original'],
+        tests: [{ vars: {} }],
+        env: { OPENAI_API_KEY: 'suite-fixture', OPENAI_BASE_URL: 'http://' + other },
+        writeLatestResults: true,
+        sharing: false,
+      },
+      { cache: false, showProgressBar: false, eventSource: 'library' },
+    );
+    testEvalIds.add(saved.id);
+    const replay = (promptIndex: number) =>
+      api.post('/api/eval/replay').send({
+        evaluationId: saved.id,
+        promptIndex,
+        prompt: 'edited',
+      });
+    expect((await replay(0)).status).toBe(400);
+    expect((await replay(1)).body.output).toBe('edited');
+    expect(calls).toEqual([]);
+  });
 
   it('distinguishes graders from per-call options anywhere in the selected column', async () => {
     const saved = await evaluateWithSource(

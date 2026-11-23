@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
-import { getEnvBool } from '../../envars';
+import { getEnvBool, getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
@@ -11,6 +11,7 @@ import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import {
   getNamedOpenAiTextId,
+  getProviderEndpointAliases,
   getSafeProviderId,
   isWebSocketProviderPath,
 } from '../../providers/index';
@@ -880,20 +881,21 @@ function replaySources(eval_: Eval, allowsProvider: (id: string, label?: string)
   const sources = Array.isArray(providers) ? providers : [providers];
   let mutableIdentity = false;
   const resolved = sources
-    .flatMap((source) => {
+    .flatMap((source, sourceIndex) => {
       const ref = normalizeProviderRef(source);
       if (ref.kind !== 'file') {
         mutableIdentity ||=
           'loadProviderPath' in ref &&
           isCloudProvider(ref.loadProviderPath) &&
           (!ref.label || TEMPLATE_MARKER.test(ref.label));
-        return [{ provider: source, fromFile: false, ref }];
+        return [{ provider: source, fromFile: false, ref, sourceIndex }];
       }
       try {
         const entries = readReplayProviders(ref.loadProviderPath, eval_.config.basePath);
         mutableIdentity = true;
         return entries.map((entry) => ({
           provider: entry.loadOptions,
+          sourceIndex,
           fromFile: true,
           ref: entry,
         }));
@@ -905,6 +907,13 @@ function replaySources(eval_: Eval, allowsProvider: (id: string, label?: string)
     .filter(({ ref }) => allowsProvider(ref.id, ref.label));
   const singleSource = sources.length === 1 && resolved.length === 1;
   return { singleSource, mutableIdentity, resolved };
+}
+
+// Only skip a live instance when its saved column is known to be unrelated.
+function excludeReplayInstance(ref: ProviderRefDescriptor, column?: string, group?: string) {
+  if (!column || !group || group === column || (ref.label || ref.id) === column) {
+    throw new Error('Cannot recover the saved provider instance');
+  }
 }
 
 async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
@@ -928,8 +937,13 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
   );
   const saved = await EvalQueries.getReplayTarget(eval_.id, promptIndex, mutable);
   let selected;
-  for (const [index, { provider, fromFile, ref }] of resolved.entries()) {
+  const unavailable = new Set(eval_.runtimeOptions?.unreplayableProviderIndices);
+  for (const [index, { provider, fromFile, ref, sourceIndex }] of resolved.entries()) {
     const nativeGroup = complete ? groups[index] : undefined;
+    if (unavailable.has(sourceIndex)) {
+      excludeReplayInstance(ref, name, nativeGroup);
+      continue;
+    }
     const corroboratedEcho =
       saved?.id === 'echo' || (!ref.label && (name ?? nativeGroup) === 'echo');
     const candidate = prepareReplayCandidate(
@@ -1140,15 +1154,61 @@ function verifyReplayBindings(value: unknown, env: ProviderOptions['env']) {
   }
 }
 
-function verifyReplayDestination(target: ProviderRefDescriptor, suiteEnv: ProviderOptions['env']) {
-  if (!('loadOptions' in target) || target.loadProviderPath === 'echo') {
+// A runtime ID usually omits the endpoint. Never combine saved configuration
+// or credentials with an implicit destination, including a changed gateway.
+function verifyModelEndpoint(
+  path: string,
+  settings: Record<string, unknown>,
+  env: ProviderOptions['env'],
+) {
+  const aliases = path.startsWith('ollama:')
+    ? ['OLLAMA_BASE_URL']
+    : path.startsWith('anthropic:')
+      ? ['ANTHROPIC_BASE_URL']
+      : getProviderEndpointAliases(path);
+  const explicit = getNamedOpenAiTextId(path) && (settings.apiHost || settings.apiBaseUrl);
+  if (explicit) {
+    return; // Explicit templates are checked against saved bindings below.
+  }
+  const endpoints = aliases.map((key) => env?.[key]).filter(Boolean);
+  if (endpoints.length) {
+    if (endpoints.some((url) => typeof url !== 'string' || TEMPLATE_MARKER.test(url))) {
+      throw new Error('Cannot verify saved model destination');
+    }
     return;
   }
-  const settings = { ...target.loadOptions.config };
+  if (
+    Object.keys(env ?? {}).length ||
+    aliases.some((key) => getEnvString(key)) ||
+    Object.keys(settings).length
+  ) {
+    throw new Error('Cannot verify implicit model destination');
+  }
+}
+
+function verifyReplayDestination(target: ProviderRefDescriptor, suiteEnv: ProviderOptions['env']) {
+  if (!('loadProviderPath' in target) || target.loadProviderPath === 'echo') {
+    return;
+  }
+  const options = 'loadOptions' in target ? target.loadOptions : undefined;
+  const env = { ...suiteEnv, ...options?.env };
+  const settings = { ...options?.config };
   const transport = replayUrlTransport(target.loadProviderPath);
   if (transport) {
     delete settings.body;
     delete settings.messageTemplate;
+  } else {
+    // Older snapshots of live Chat and Responses instances have the same
+    // short model ID and options. Their original API cannot be inferred.
+    if (
+      options?.config &&
+      options.label !== undefined &&
+      /^openai:[^:]+$/.test(target.loadProviderPath) &&
+      !getNamedOpenAiTextId(target.loadProviderPath)
+    ) {
+      throw new Error('Cannot distinguish a saved model ID from a provider selector');
+    }
+    verifyModelEndpoint(target.loadProviderPath, settings, env);
   }
   if (transport === 'http' && settings.request != null) {
     // Raw HTTP takes its destination from the request line and Host header,
@@ -1166,7 +1226,7 @@ function verifyReplayDestination(target: ProviderRefDescriptor, suiteEnv: Provid
     }
     delete settings.request;
   }
-  verifyReplayBindings(settings, { ...suiteEnv, ...target.loadOptions.env });
+  verifyReplayBindings(settings, env);
 }
 
 function hasStaticReplayRoute(path: string, config: Record<string, unknown>) {
@@ -1246,6 +1306,30 @@ function prepareReplaySettings(
   return candidate;
 }
 
+// Replay accepts edited text and scalar values, never template programs or
+// external variable/prompt references. Only interpolate names supplied in this
+// request. A JSON prompt is decoded before rendering, including Unicode escapes.
+function validReplayInput(prompt: string, variables: Record<string, unknown> = {}) {
+  const literal = (value: string) =>
+    !TEMPLATE_MARKER.test(value) &&
+    !/\\u00(?:7b|25|23)|^(?:file|exec|portkey|langfuse|helicone):/i.test(value.trimStart());
+  for (const [name, value] of Object.entries(variables)) {
+    if (
+      name === 'env' ||
+      name.startsWith('__') ||
+      Object.hasOwn(Object.prototype, name) ||
+      (typeof value === 'string' ? !literal(value) : value !== null && typeof value === 'object')
+    ) {
+      return false;
+    }
+  }
+  return literal(
+    prompt.replace(/\{\{\s*([a-z_]\w*)\s*\}\}/gi, (expr, name) =>
+      Object.hasOwn(variables, name) ? ' ' : expr,
+    ),
+  );
+}
+
 evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = EvalSchemas.Replay.Request.safeParse(req.body);
   if (!bodyResult.success) {
@@ -1254,6 +1338,12 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
   }
 
   const { evaluationId, promptIndex, prompt, variables } = bodyResult.data;
+  if (!validReplayInput(prompt, variables)) {
+    res
+      .status(400)
+      .json({ error: 'Replay requires plain values and simple variable substitutions.' });
+    return;
+  }
 
   try {
     // Load the evaluation to get the provider configuration
@@ -1306,10 +1396,10 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
           prompts: [{ raw: prompt, label: 'Replay' }],
           providers: [candidate],
           basePath: eval_.config.basePath,
-          env: eval_.config.env,
           tests: [{ vars: (variables ?? {}) as Vars }],
         },
         {
+          providerEnv: eval_.config.env,
           maxConcurrency: 1,
           showProgressBar: false,
           eventSource: 'web',

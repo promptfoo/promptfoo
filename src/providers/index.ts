@@ -571,5 +571,10 @@ export function getProviderIds(providerPaths: ProvidersConfig): string[] {
   throw new Error('Invalid providers list');
 }
 
+export { EchoProvider } from './echo';
 export { getSafeProviderId } from './providerLogging';
-export { getNamedOpenAiTextId, isWebSocketProviderPath } from './registry';
+export {
+  getNamedOpenAiTextId,
+  getProviderEndpointAliases,
+  isWebSocketProviderPath,
+} from './registry';
