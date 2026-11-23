@@ -4,8 +4,10 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   containsSetupSecret,
+  localReviewField,
   sameProbeScope,
   targetExecutionIssue,
+  testSetupConnection,
 } from '../../../src/node/redteamSetupConnection';
 import { createApp } from '../../../src/server/server';
 import { RedteamSchemas } from '../../../src/types/api/redteam';
@@ -110,13 +112,55 @@ describe('local chat connection test', () => {
       });
       expect(res.body).toMatchObject({
         success: transformResponse === undefined,
-        paths: ['choices[0].message.content', 'id'],
+        paths: ['id', 'choices[0].message.content'],
       });
       expect(res.text).not.toMatch(/private message|secret_value|apiKey|unsafe/);
     }
     expect(
       (await test({ transformResponse: 'json.choices[0].message.content' })).body.success,
     ).toBe(true);
+  });
+
+  it('discovers reply paths past metadata and in later array elements without guessing a ranking', async () => {
+    const metadata = Object.fromEntries(
+      Array.from({ length: 21 }, (_, i) => ['field' + i, 'private metadata']),
+    );
+    const nested = Array.from({ length: 10 }).reduce<unknown>((child) => ({ inner: child }), {
+      'reply-text': 'private answer',
+    });
+    const response = {
+      metadata,
+      events: [{ type: 'notice' }, { data: nested }],
+      'X-Api-Key': { echo: 'private key' },
+    };
+    fetchTarget.mockImplementation(async () => Response.json(response));
+    const field = 'events[1].data.' + 'inner.'.repeat(9) + 'inner["reply-text"]';
+    const result = await test({ transformResponse: 'json.wrong' });
+    expect(result.body.paths).toEqual([
+      ...Object.keys(metadata).map((key) => 'metadata.' + key),
+      'events[0].type',
+      field,
+    ]);
+    expect(result.text).not.toContain('private');
+    expect((await test({ transformResponse: 'json.' + field })).body.success).toBe(true);
+  });
+
+  it('caps the serialized path evidence and tells the agent about omitted fields', async () => {
+    fetchTarget.mockResolvedValue(
+      Response.json(
+        Object.fromEntries(Array.from({ length: 500 }, (_, i) => ['row-' + i, 'private'])),
+      ),
+    );
+    const { body } = await test({ transformResponse: undefined });
+    expect(body.paths.length).toBeGreaterThan(16);
+    expect(JSON.stringify(body.paths).length).toBeLessThanOrEqual(2048);
+    expect(body.message).toContain('More fields omitted');
+    expect(
+      RedteamSchemas.SetupConnectionTest.Response.safeParse({
+        ...body,
+        paths: [...body.paths, 'a'.repeat(200)],
+      }).success,
+    ).toBe(false);
   });
 
   it('never passes an echoed credential from any header back as a discovered field', async () => {
@@ -148,6 +192,44 @@ describe('local chat connection test', () => {
     expect(url).toBe(target.url + '?q=Hello&lang=en');
     expect(options).toMatchObject({ method: 'GET', headers: {}, suppressLogging: true });
     expect(options?.body).toBeUndefined();
+  });
+
+  it('renders a custom prompt as data without evaluating templates or loading files in it', async () => {
+    vi.stubEnv('PRIVATE_TOKEN', 'private-value');
+    const prompt = '{{env.PRIVATE_TOKEN}} file:///etc/passwd';
+    const connection = RedteamSchemas.SetupConnectionTest.Request.parse({
+      id: 'http',
+      config: { ...target, queryParams: { q: '{{prompt}}' } },
+    });
+    fetchTarget.mockResolvedValue(Response.json({ result: { answer: 'OK' } }));
+    const result = await testSetupConnection(connection, new AbortController().signal, prompt);
+    expect(result.success).toBe(true);
+    const [url, options] = fetchTarget.mock.calls[0];
+    expect(new URL(String(url)).searchParams.get('q')).toBe(prompt);
+    expect(JSON.parse(String(options?.body))).toEqual({ input: prompt });
+  });
+
+  it('can check a static payload or GET endpoint without inventing a prompt variable', async () => {
+    fetchTarget.mockImplementation(async () => Response.json({ result: { answer: 'OK' } }));
+    expect((await test({ body: { input: 'status' } })).body.success).toBe(true);
+    expect(fetchTarget.mock.calls[0][1]?.body).toBe('{"input":"status"}');
+    expect((await test({ method: 'GET', body: undefined })).body.success).toBe(true);
+    expect(fetchTarget.mock.calls[1][1]?.body).toBeUndefined();
+  });
+
+  it('never silently sends a static request instead of a requested custom prompt', async () => {
+    const connection = RedteamSchemas.SetupConnectionTest.Request.parse({
+      id: 'http',
+      config: { ...target, body: { input: 'status' } },
+    });
+    const result = await testSetupConnection(
+      connection,
+      new AbortController().signal,
+      'test my order',
+    );
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Add {{prompt}}');
+    expect(fetchTarget).not.toHaveBeenCalled();
   });
 
   it('reproduces plain text requests without JSON quoting', async () => {
@@ -212,6 +294,26 @@ describe('local chat connection test', () => {
       'https://private@example.com/',
     ]) {
       expect(containsSetupSecret(value, 'assistant')).toBe(true);
+    }
+  });
+
+  it('recognizes standalone filtered and case-sensitive references without hiding adjacent literals', () => {
+    for (const value of [
+      '{{prompt | trim}}',
+      '{{requestToken | urlencode}}',
+      '{{env.mixedCase}}',
+      '$mixedCase',
+      'process.env.mixedCase',
+    ]) {
+      expect(containsSetupSecret('token: ' + value)).toBe(false);
+    }
+    for (const value of [
+      '{{prompt | trim}}SECRET',
+      'SECRET{{requestToken}}',
+      '{{env.secret}}-private',
+      '{{prompt | default("private")}}',
+    ]) {
+      expect(containsSetupSecret('token: ' + value)).toBe(true);
     }
   });
 
@@ -446,7 +548,7 @@ describe('local chat connection test', () => {
     { transformResponse: 'res()' },
     { body: { input: '{{prompt}}', token: '{{env.PRIVATE}}' } },
     { body: { input: '{{prompt}}', more: { $ref: 'local.json' } } },
-    { body: { input: 'Hello' } },
+    { body: { input: '{{unknown}}' } },
     { headers: { Authorization: 'Bearer secret' } },
     { headers: { 'X-Secret-Key': 'private-canary' } },
     { headers: { Authorization: 'Bearer {{env.APP_KEY}}' }, redirect: undefined },
@@ -527,12 +629,23 @@ describe('native target validation and permission to execute', () => {
 
   it('validates native configs without running any user code', () => {
     expect(RedteamSchemas.SetupConnectionTest.validationIssue(auth)).toBeUndefined();
+    for (const partial of [
+      { url },
+      { url, method: 'POST' },
+      { method: 'GET' },
+      { method: 'POST', body: '{{prompt}}' },
+    ]) {
+      const draft = { id: 'http', config: partial };
+      expect(RedteamSchemas.SetupConnectionTest.validationIssue(draft)).toBeUndefined();
+      expect(targetExecutionIssue(draft, initial)).toMatchObject({ repairable: false });
+      expect(RedteamSchemas.SetupConnectionTest.Request.safeParse(draft).success).toBe(false);
+    }
     expect(
-      RedteamSchemas.SetupConnectionTest.validationIssue({ id: 'http', config: { url } }),
+      RedteamSchemas.SetupConnectionTest.validationIssue({
+        id: 'http',
+        config: { url, method: 'GET', body: 'data' },
+      }),
     ).toContain('body');
-    expect(
-      RedteamSchemas.SetupConnectionTest.validationIssue({ id: 'http', config: { method: 'GET' } }),
-    ).toContain('URL');
     expect(
       RedteamSchemas.SetupConnectionTest.validationIssue({
         id: 'http',
@@ -570,6 +683,25 @@ describe('native target validation and permission to execute', () => {
     expect(
       targetExecutionIssue(auth, [url, 'X-Secret-Key=APP_KEY Acme-Access:$APP_TOKEN']),
     ).toBeUndefined();
+  });
+
+  it('asks for native syntax instead of sending a shell variable as a literal header', () => {
+    for (const value of ['$myToken', 'Bearer ${myToken}', 'process.env.myToken']) {
+      const connection = { ...auth, config: { ...auth.config, headers: { 'X-Custom': value } } };
+      expect(RedteamSchemas.SetupConnectionTest.validationIssue(connection)).toContain(
+        '{{env.name}}',
+      );
+      expect(RedteamSchemas.SetupConnectionTest.Request.safeParse(connection).success).toBe(false);
+    }
+  });
+
+  it('requires case-sensitive names for explicit lower-case credential references', () => {
+    const reference = {
+      ...auth,
+      config: { ...auth.config, headers: { 'X-Key': '{{env.myKey}}' } },
+    };
+    expect(targetExecutionIssue(reference, [url, 'X-Key=$myKey'])).toBeUndefined();
+    expect(targetExecutionIssue(reference, [url, 'X-Key=$MYKEY'])).toBeDefined();
   });
 
   it('requires a grounded URL and every credential even if a previous draft named them', () => {
@@ -631,11 +763,25 @@ describe('native target validation and permission to execute', () => {
     ['https://real.example', 'https://real.example.attacker.example'],
     ['https://real.example/other', 'https://real.example/chat'],
     ['http://real.example', 'real.example'],
+    ['http://real.example/chat', 'real.example/chat'],
+    ['https://evil.example/chat', 'https://real.example/?redirect=evil.example/chat'],
+    ['https://config.yaml', 'config.yaml'],
+    ['https://config.yaml/chat', 'config.yaml/chat'],
+    ['https://real.example/admin', 'real.example/chat'],
     ['http://localhost.example/chat', 'localhost.example/chat'],
   ])('rejects an invented URL %s from %s', (destination, typed) => {
     expect(
       targetExecutionIssue({ id: 'http', config: { ...target, url: destination } }, [typed]),
     ).toMatchObject({ repairable: true });
+  });
+
+  it('grounds an unambiguous bare DNS host and path using HTTPS', () => {
+    const destination = 'api.example.net/chat';
+    expect(
+      targetExecutionIssue({ ...auth, config: { ...auth.config, url: 'https://' + destination } }, [
+        'POST ' + destination + ' using APP_KEY and APP_TOKEN.',
+      ]),
+    ).toBeUndefined();
   });
 
   it('allows one message to authorize several destinations, without extending a grant to another turn’s host', () => {
@@ -706,6 +852,26 @@ describe('native target validation and permission to execute', () => {
     expect(
       targetExecutionIssue({ id: 'http', config: { ...target, url: demo + '/admin' } }, initial),
     ).toBeDefined();
+  });
+
+  it('accepts opaque model IDs on native inference routes and explicit provider switches', () => {
+    for (const id of [
+      'openai:chat:ft:gpt-4o-mini:org:orders:AB12',
+      'anthropic:messages:org/experimental-42',
+      'openrouter:vendor/model:free',
+      'groq:openai/gpt-oss-120b',
+      'google:chat:custom-model',
+    ]) {
+      expect(targetExecutionIssue(id, [id])).toBeUndefined();
+    }
+    expect(
+      targetExecutionIssue('anthropic:messages:future', ['Switch to Claude.'], 'openai:gpt-4o'),
+    ).toBeUndefined();
+    expect(targetExecutionIssue('openai:gpt-4o', ['Use openrouter:openai/gpt-4o'])).toBeDefined();
+    expect(
+      targetExecutionIssue('unknown:custom', ['Change providers'], 'openai:gpt-4o'),
+    ).toMatchObject({ repairable: false });
+    expect(localReviewField({ targets: ['openai:gpt-4o'] })).toBeUndefined();
   });
 
   it('lets the agent choose model versions and inference options within the named service', () => {
@@ -814,7 +980,13 @@ describe('native target validation and permission to execute', () => {
         changed({ url: url + '?q=Hello' }),
         changed({ queryParams: { q: '{{prompt}}' } }),
       ),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      sameProbeScope(
+        changed({ queryParams: { q: '{{prompt | trim}}' } }),
+        changed({ queryParams: { q: '{{prompt}}' } }),
+      ),
+    ).toBe(false);
     expect(sameProbeScope(undefined, auth)).toBe(false);
   });
 
@@ -847,6 +1019,14 @@ describe('native target validation and permission to execute', () => {
     'file://private.js',
     'anthropic:claude-code',
     'openai:codex',
+    'openai:codex-sdk:custom',
+    'openai:agents:example',
+    'anthropic:claude-agent-sdk:example',
+    'google:chat:../secret',
+    'azure:foundry-agent:example',
+    'openai:chat:file:///tmp/agent.js',
+    { id: 'openrouter:vendor/name', config: { apiKeyEnvar: 'OTHER_KEY' } },
+    { id: 'groq:responses:vendor/name', config: { apiBaseUrl: 'https://other.example' } },
     { id: 'openai:gpt-4o', config: { apiBaseUrl: 'https://attacker.example' } },
     { id: 'openai:gpt-4o', config: 'file://leak.json' },
     { id: 'http', label: '{{env.KEY}}', config: target },

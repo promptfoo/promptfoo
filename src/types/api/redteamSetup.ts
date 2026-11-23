@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { AnthropicMessagesConfigInputSchema } from '../../contracts/providerConfig/anthropic';
+import {
+  AnthropicMessagesConfigInputSchema,
+  AnthropicProviderOptionsInputSchema,
+} from '../../contracts/providerConfig/anthropic';
 import {
   HttpProviderConfigFieldsSchema,
   HttpProviderConfigInputJsonSchema,
@@ -7,6 +10,7 @@ import {
 } from '../../contracts/providerConfig/http';
 import {
   OpenAiChatConfigInputSchema,
+  OpenAiProviderOptionsInputSchema,
   OpenAiResponsesConfigInputSchema,
 } from '../../contracts/providerConfig/openai';
 
@@ -18,25 +22,41 @@ export function isSetupModelConfig(id: string, config: Record<string, unknown>) 
   if (Object.keys(config).some((key) => privilegedOption.test(key))) {
     return false;
   }
-  if (id.startsWith('openai:')) {
-    if (/^openai:responses(?::|$)/.test(id)) {
-      return OpenAiResponsesConfigInputSchema.safeParse(config).success;
-    }
-    return (
-      OpenAiChatConfigInputSchema.safeParse(config).success ||
-      (!/^openai:chat(?::|$)/.test(id) &&
-        OpenAiResponsesConfigInputSchema.safeParse(config).success)
-    );
-  }
-  if (id.startsWith('anthropic:')) {
-    return AnthropicMessagesConfigInputSchema.safeParse(config).success;
-  }
-  if (/^https?(?::|$)/.test(id)) {
+  if (/^https?(?::\/\/|$)/.test(id)) {
     // Prompt and test options can override any provider, including a gateway.
     return (
       OpenAiChatConfigInputSchema.safeParse(config).success ||
       OpenAiResponsesConfigInputSchema.safeParse(config).success
     );
+  }
+  // Match native API routes, not a model catalog. Provider prefixes alone
+  // are insufficient because some routes start local agents or load code.
+  if (!/^[\w.:-]+(?:\/[\w.:-]+)*$/.test(id) || /(?:^|[:/])\.{1,2}(?:[:/]|$)/.test(id)) {
+    return false;
+  }
+  if (id.startsWith('openai:')) {
+    if (/^openai:(?:gpt-|o\d|chatgpt-)[\w.-]*$/.test(id)) {
+      return (
+        OpenAiChatConfigInputSchema.safeParse(config).success ||
+        OpenAiResponsesConfigInputSchema.safeParse(config).success
+      );
+    }
+    return OpenAiProviderOptionsInputSchema.safeParse({ id, config }).success;
+  }
+  if (id.startsWith('anthropic:')) {
+    return /^anthropic:claude-(?!code|agent)[\w.-]+$/.test(id)
+      ? AnthropicMessagesConfigInputSchema.safeParse(config).success
+      : AnthropicProviderOptionsInputSchema.safeParse({ id, config }).success;
+  }
+  if (/^(?:openrouter|groq):.+/.test(id)) {
+    return (
+      id.startsWith('groq:responses:')
+        ? OpenAiResponsesConfigInputSchema
+        : OpenAiChatConfigInputSchema
+    ).safeParse(config).success;
+  }
+  if (!/^(?:ollama:.+|google:(?:chat:.+|gemini-[\w.-]+))$/.test(id)) {
+    return false;
   }
   // These adapters have no portable config schema. Limit overrides to their
   // inference controls and leave unknown options intact for CLI review.
@@ -103,6 +123,9 @@ export const localKeysSchema = z.record(
     .refine((v) => !unsafe.test(v) && !/[^\x20-\x7e]/.test(v)),
 );
 
+const shellReference =
+  /^(?:(?:Bearer|Basic|Token|ApiKey) )?(?:\$[a-z_]\w*|\$\{[a-z_]\w*\}|process\.env\.[a-z_]\w*)$/i;
+
 function safeHeader(name: string, value: string) {
   const normalized = name.toLowerCase().replace(/_/g, '-');
   if (
@@ -112,7 +135,7 @@ function safeHeader(name: string, value: string) {
   ) {
     return false;
   }
-  if (reservedPrefixes.test(normalized)) {
+  if (reservedPrefixes.test(normalized) || shellReference.test(value)) {
     return false;
   }
   if (headerVariable(value)) {
@@ -197,12 +220,9 @@ export const setupHttpTarget = z
     if (new Set(names).size !== names.length || !headers.every(([k, v]) => safeHeader(k, v))) {
       return false;
     }
-    const method = config.method ?? (config.multipart ? 'POST' : 'GET');
-    if (
-      ['GET', 'HEAD'].includes(method.toUpperCase())
-        ? config.body || config.multipart
-        : !config.body && !config.multipart
-    ) {
+    const method = config.method ?? (config.multipart ? 'POST' : undefined);
+    const payload = config.body || config.multipart;
+    if (payload ? !method || /^(?:GET|HEAD)$/i.test(method) : method !== 'GET') {
       return false;
     }
     if (
@@ -274,18 +294,54 @@ function httpTargetValidationIssue(target: unknown): string | undefined {
       ? 'Invalid HTTP target option config.' + field + '.'
       : 'Unknown or invalid HTTP target config option.';
   }
+  if (Object.values(fields.data.headers ?? {}).some((value) => shellReference.test(value))) {
+    return 'HTTP headers use {{env.name}} for environment variables. Preserve the exact spelling and case of the name.';
+  }
+  // Missing fields are normal during a conversation. Only complete, safe
+  // requests qualify for execution under setupHttpTarget.
+  if (
+    fields.data.body === undefined &&
+    fields.data.request === undefined &&
+    !fields.data.multipart
+  ) {
+    return;
+  }
   if (!HttpProviderConfigInputSchema.safeParse(config).success) {
     return 'An HTTP target needs a body, raw request, multipart upload, or explicit GET method.';
   }
   if (!fields.data.request && fields.data.body && !fields.data.method) {
     return 'Set an explicit HTTP method for the request body. The HTTP provider defaults to GET and would omit the body.';
   }
-  if (!fields.data.request && !fields.data.url && !value.id.includes('://')) {
-    return 'The HTTP target needs a URL.';
+  if (
+    !fields.data.request &&
+    fields.data.body &&
+    /^(?:GET|HEAD)$/i.test(fields.data.method ?? '')
+  ) {
+    return 'GET and HEAD requests cannot include a body.';
   }
 }
 
+function probeInputs(config: z.infer<typeof setupHttpTarget>['config']) {
+  const json = Object.entries(config.headers ?? {}).some(
+    ([name, value]) => name.toLowerCase() === 'content-type' && value.includes('application/json'),
+  );
+  let body = config.body;
+  if (json && typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return undefined;
+    }
+  }
+  const payload = JSON.stringify([body, config.queryParams, config.multipart]);
+  return Array.from(payload.matchAll(inputs), (match) => match[1]);
+}
+
+const pathBudget = 2048;
 export const SetupConnectionTest = {
+  pathBudget,
+  usesPrompt: (config: z.infer<typeof setupHttpTarget>['config']) =>
+    probeInputs(config)?.includes('prompt') ?? false,
   configSchema: HttpProviderConfigInputJsonSchema,
   validationIssue: httpTargetValidationIssue,
   Request: setupHttpTarget.refine(({ config }) => {
@@ -297,30 +353,17 @@ export const SetupConnectionTest = {
     ) {
       return false;
     }
-    // A Hello probe cannot reproduce per-test variables. Keep them intact for Run.
-    const json = Object.entries(config.headers ?? {}).some(
-      ([name, value]) =>
-        name.toLowerCase() === 'content-type' && value.includes('application/json'),
-    );
-    let body = config.body;
-    if (json && typeof body === 'string') {
-      try {
-        body = JSON.parse(body);
-      } catch {
-        return false;
-      }
+    // A probe cannot reproduce per-test variables. Keep them intact for Run.
+    const variables = probeInputs(config);
+    if (!variables) {
+      return false;
     }
-    const payload = JSON.stringify([body, config.queryParams, config.multipart]);
-    const variables = Array.from(payload.matchAll(inputs), (match) => match[1]);
-    return (
-      variables.includes('prompt') &&
-      variables.every(
-        (name) =>
-          name === 'prompt' ||
-          name === 'sessionId' ||
-          (name === 'tools' && config.tools !== undefined) ||
-          (name === 'tool_choice' && config.tool_choice !== undefined),
-      )
+    return variables.every(
+      (name) =>
+        name === 'prompt' ||
+        name === 'sessionId' ||
+        (name === 'tools' && config.tools !== undefined) ||
+        (name === 'tool_choice' && config.tool_choice !== undefined),
     );
   }),
   Response: z.strictObject({
@@ -329,7 +372,7 @@ export const SetupConnectionTest = {
     message: z.string().max(500),
     paths: z
       .array(z.union([z.literal('Plain text'), replyPath]))
-      .max(4)
+      .refine((paths) => JSON.stringify(paths).length <= pathBudget)
       .optional(),
   }),
 };
@@ -345,6 +388,7 @@ export const HostedSetupReplySchema = z.strictObject({
   message: z.string().trim().min(1).max(4000),
   config: SetupConfigSchema.optional(),
   testTarget: z.int().nonnegative().optional(),
+  testPrompt: z.string().min(1).max(16000).optional(),
 });
 
 export const RedteamSetupReplySchema = HostedSetupReplySchema.extend({

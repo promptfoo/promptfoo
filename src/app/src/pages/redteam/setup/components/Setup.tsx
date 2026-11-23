@@ -213,6 +213,14 @@ function ChatMessage({
             <strong className="block text-xs">
               Connection test {message.role === 'test' && '· ' + message.destination}
             </strong>
+            {message.role === 'test' && message.testPrompt !== undefined && (
+              <span className="block max-h-24 overflow-y-auto text-sm">
+                Prompt ·{' '}
+                <span>
+                  {message.testPrompt === '' ? '(empty message)' : displayKeys(message.testPrompt)}
+                </span>
+              </span>
+            )}
             {content}
           </span>
         ) : (
@@ -258,7 +266,7 @@ function SetupActions({
           >
             {choices.map((choice) => (
               <option key={choice.index} value={choice.index}>
-                {choice.index + 1}. {choice.target.label && choice.target.label + ' · '}
+                {choice.index + 1}. {choice.label && choice.label + ' · '}
                 {choice.url}
               </option>
             ))}
@@ -293,8 +301,9 @@ function SetupActions({
           id="connection-test-disclosure"
           className="mt-1.5 max-h-[12dvh] overflow-auto text-xs text-muted-foreground wrap-anywhere"
         >
-          Test connection sends one “Hello” via {selected.method} to {selected.url}
-          {headers.length > 0 && ' using ' + headers.join(', ')}
+          Sends one {selected.method} to {selected.url}
+          {headers.length > 0 && ' using ' + headers.join(', ')}. Uses “Hello” for{' '}
+          <code>{'{{prompt}}'}</code> if present.
         </p>
       )}
     </div>
@@ -311,7 +320,8 @@ function Introduction({ fresh }: { fresh: boolean }) {
       <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">What are we testing?</h2>
       <p className="mt-2 text-base text-muted-foreground">
         Describe your app or paste a configuration. Ask the agent to test and fix your connection
-        and it can send up to three “Hello” requests. You decide when to run the scan.
+        and it can send up to three requests. You can specify a test message. You decide when to run
+        the scan.
         {!fresh &&
           ' This chat starts a separate draft. Your manual configuration stays private and unchanged.'}
       </p>

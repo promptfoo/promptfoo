@@ -39,7 +39,7 @@ let configSchema: { config: object; http: object } | undefined;
 function installedSchema() {
   return (configSchema ??= {
     config: {
-      ...z.toJSONSchema(UnifiedConfigSchema, {
+      ...z.toJSONSchema(partialConfig, {
         target: 'draft-07',
         io: 'input',
         unrepresentable: 'any',
@@ -50,16 +50,22 @@ function installedSchema() {
     http: SetupConnectionTest.configSchema,
   });
 }
-const setupInput = z.strictObject({
-  ...partialConfig.shape,
-  redteam: RedteamConfigSchema.in
-    .strict()
-    .extend({
-      plugins: z.array(z.union([pluginId, pluginOptions.strict()])).optional(),
-      strategies: z.array(z.union([strategyId, strategyOptions.strict()])).optional(),
-    })
-    .optional(),
-});
+// A draft needn't be runnable. Use the CLI's field validators and expand
+// plugin/strategy defaults for validation only, leaving the authored file intact.
+const setupDraft = z
+  .strictObject({
+    ...partialConfig.shape,
+    redteam: RedteamConfigSchema.in
+      .strict()
+      .extend({
+        plugins: z.array(z.union([pluginId, pluginOptions.strict()])).optional(),
+        strategies: z.array(z.union([strategyId, strategyOptions.strict()])).optional(),
+      })
+      .optional(),
+  })
+  .refine((data) => hasValidConfigProviders(data, true), {
+    message: CONFIG_PROVIDER_INPUT_ERROR,
+  });
 
 // POST /api/redteam/generate-test
 
@@ -191,16 +197,16 @@ export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
 export const RedteamSchemas = {
   SetupConnectionTest: {
     ...SetupConnectionTest,
-    Payload: SetupConnectionTest.Request.safeExtend({ localKeys: localKeysSchema.optional() }),
+    Payload: SetupConnectionTest.Request.safeExtend({
+      localKeys: localKeysSchema.optional(),
+      testPrompt: HostedSetupReplySchema.shape.testPrompt,
+    }),
   },
   SetupPlan: {
     installedSchema,
     HostedReply: HostedSetupReplySchema,
-    Input: setupInput,
-    Draft: partialConfig.refine((data) => hasValidConfigProviders(data, true), {
-      message: CONFIG_PROVIDER_INPUT_ERROR,
-    }),
-    Complete: UnifiedConfigSchema,
+    Draft: setupDraft,
+    Redteam: RedteamConfigSchema,
     Provider: ProviderOptionsSchema.strict().extend({ id: z.string().min(1) }),
     ProviderMap: z.record(z.string(), ProviderOptionsSchema.strict()),
     Request: z.strictObject({
@@ -225,6 +231,7 @@ export const RedteamSchemas = {
       testContext: z
         .strictObject({
           remaining: z.int().min(0).max(3),
+          customPrompt: z.boolean().optional(),
           targetIndex: z.int().nonnegative().optional(),
           consentSince: z
             .int()

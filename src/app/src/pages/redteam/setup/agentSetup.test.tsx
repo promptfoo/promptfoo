@@ -145,8 +145,13 @@ describe('agent-led red team setup', () => {
     expect(document.body.textContent).not.toMatch(/foobar|PROMPTFOO_CHAT_KEY/);
     const planner = payloads().filter((_, i) => postCalls()[i][0].endsWith('setup-plan'));
     expect(JSON.stringify(planner)).not.toContain(suppliedKey);
-    expect(planner[2].testContext).toEqual({ remaining: 3, consentSince: 0 });
-    expect(planner[3].testContext).toEqual({ remaining: 2, targetIndex: 0, consentSince: 0 });
+    expect(planner[2].testContext).toEqual({ remaining: 3, consentSince: 0, customPrompt: true });
+    expect(planner[3].testContext).toEqual({
+      remaining: 2,
+      targetIndex: 0,
+      consentSince: 0,
+      customPrompt: true,
+    });
     expect(planner[4].testContext).toBeUndefined();
     expect(planner[4].config).toEqual(fixed);
     const probes = payloads().filter((_, i) => postCalls()[i][0].endsWith('connection-test'));
@@ -158,6 +163,41 @@ describe('agent-led red team setup', () => {
     expect(postCalls().some(([url]) => url.endsWith('/run'))).toBe(false);
     await user.click(button('Run Now'));
     expect(payloads().pop().config).toEqual(fixed);
+  });
+
+  it('sends the requested prompt through a repair, shows both attempts, then resets to Hello', async () => {
+    const { user } = setup();
+    const testPrompt = 'Bonjour, êtes-vous disponible ?';
+    const fixed = {
+      ...draft,
+      targets: [{ ...target, config: { ...target.config, transformResponse: 'json.answer' } }],
+    };
+    reply({ message: 'Checking.', config: draft, ...metadata, testTarget: 0, testPrompt });
+    reply({ success: false, retryable: true, message: 'Missing field.', paths: ['answer'] });
+    reply({ message: 'Trying the right field.', config: fixed, ...metadata, testTarget: 0 });
+    reply({ success: true, message: 'Got a response.' });
+    reply({ message: 'Connection verified.', ...metadata });
+    await send(user, endpointMessage + ' Send "' + testPrompt + '" to test and fix it.');
+    expect(await screen.findByText('Connection verified.')).toBeVisible();
+    expect(payloads()[0].testContext.customPrompt).toBe(true);
+    expect(payloads()[1]).toEqual({ ...target, testPrompt });
+    expect(payloads()[3]).toEqual({ ...fixed.targets[0], testPrompt });
+    expect(screen.getAllByText(testPrompt)).toHaveLength(2);
+    expect(payloads()[4].config).toEqual(fixed);
+    reply({ success: true, message: 'Default message received.' });
+    reply({ message: 'Checked again.', ...metadata });
+    await user.click(button('Test connection'));
+    expect(payloads()[5]).toEqual(fixed.targets[0]);
+    expect(postCalls().some(([url]) => url.endsWith('/run'))).toBe(false);
+  });
+
+  it('passes quoted native template references through instead of capturing them as secret values', async () => {
+    const { user } = setup();
+    const message =
+      'My API accepts {"key":"{{prompt}}","token":"{{tenant | trim}}"} and header X-Request-ID: "{{sessionId}}".';
+    await send(user, message);
+    expect(payloads()[0].messages).toEqual([userMessage(message)]);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('limits pending consent to untested turns and carries the same boundary into repairs', async () => {
@@ -211,7 +251,6 @@ describe('agent-led red team setup', () => {
 
   it.each([
     ['the identical request', target, 0],
-    ['another destination', second, 0],
     ['a different target index', target, 1],
     ['an unsupported target', { id: 'file://target.js' }, 0],
   ])('refuses an automatic retry of %s', async (_reason, proposed, index) => {
@@ -231,7 +270,26 @@ describe('agent-led red team setup', () => {
     expect(screen.getByRole('log')).toHaveTextContent('HTTP 422');
   });
 
-  it.each([403, 502, 'network'])(
+  it('stops if the agent cycles back to a request that already failed this turn', async () => {
+    const { user } = setup();
+    const revised = { ...target, config: { ...target.config, transformResponse: 'json.answer' } };
+    for (const [index, choice] of [target, revised, target].entries()) {
+      reply({
+        message: 'Checking.',
+        ...metadata,
+        config: { targets: [choice], redteam },
+        testTarget: 0,
+      });
+      if (index < 2) {
+        reply({ success: false, retryable: true, message: 'Missing field.' });
+      }
+    }
+    await send(user, endpointMessage + ' Check and repair this.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/repeated connection test/);
+    expect(postCalls().filter(([url]) => url.endsWith('connection-test'))).toHaveLength(2);
+  });
+
+  it.each([400, 403, 502, 'network'])(
     'never replays a test after %s failure, including on Retry agent reply',
     async (failure) => {
       const { user } = setup();
@@ -487,7 +545,7 @@ describe('agent-led red team setup', () => {
     expect(postCalls()).toHaveLength(1);
   });
 
-  it('requires server permission and a supported request shape before offering a test', async () => {
+  it('requires server permission and a destination before offering a test', async () => {
     const { user } = setup();
     reply({ message: 'Permission missing.', config: draft, ...incomplete });
     await send(user, endpointMessage);
@@ -496,13 +554,24 @@ describe('agent-led red team setup', () => {
       message: 'Custom target.',
       config: {
         redteam,
-        targets: [{ ...target, config: { ...target.config, transformResponse: 'process.exit()' } }],
+        targets: [{ id: 'http', config: {} }],
       },
       ...incomplete,
       testableTargets: [0],
     });
-    await send(user, 'What about a custom transform?');
+    await send(user, 'My second target is missing a URL.');
     expect(screen.queryByRole('button', { name: 'Test connection' })).toBeNull();
+  });
+
+  it('forwards a server-approved native request without applying a second browser schema', async () => {
+    const { user } = setup();
+    const updated = { ...target, config: { ...target.config, serverOption: 'keep-me' } };
+    reply({ message: 'Checking.', config: { targets: [updated] }, ...metadata, testTarget: 0 });
+    reply({ success: true, message: 'Found a reply.' });
+    reply({ message: 'Verified.', ...metadata });
+    await send(user, 'Check my configured endpoint.');
+    expect(await screen.findByText('Verified.')).toBeVisible();
+    expect(payloads()[1]).toEqual(updated);
   });
 
   it('reviews a partial draft and continues chatting without touching the editor', async () => {

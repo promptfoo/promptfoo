@@ -27,7 +27,7 @@ export interface SetupDraft {
   consentSince?: number;
   messages: (
     | { role: 'user' | 'assistant'; content: string }
-    | { role: 'test'; content: string; success: boolean; destination: string }
+    | { role: 'test'; content: string; success: boolean; destination: string; testPrompt?: string }
   )[];
   input: string;
   demo?: boolean;
@@ -73,7 +73,11 @@ function history(draft: SetupDraft, context?: TestContext, consentSince = 0) {
   return {
     messages: turns.slice(start),
     priorUserTurns: earlier.length ? earlier : undefined,
-    testContext: context && { ...context, consentSince: Math.max(0, consentSince - start) },
+    testContext: context && {
+      ...context,
+      consentSince: Math.max(0, consentSince - start),
+      customPrompt: true,
+    },
   };
 }
 
@@ -116,15 +120,13 @@ function applyReply(
   };
 }
 
-// Keep retries on the original destination. Never resend an identical failed
-// proposal, even if the model cycled through a different proposal in between.
+// The server enforces each retest’s destination, method and credentials.
+// The browser also knows if the agent cycled back to an earlier failed request.
 function canTest(choice: TestChoice, attempted: TestChoice[]) {
   return attempted.every(
     (previous) =>
       previous.index === choice.index &&
-      previous.url === choice.url &&
-      previous.method === choice.method &&
-      !isEqual(previous.target.config, choice.target.config),
+      !(previous.url === choice.url && isEqual(previous.target.config, choice.target.config)),
   );
 }
 
@@ -173,6 +175,7 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
     // lost agent reply or clicking Test connection never grants another request.
     let context: TestContext | undefined = captured ? { remaining: 3 } : undefined;
     let choice = 'test' in action ? action.test : undefined;
+    let testPrompt: string | undefined;
     const attempted: TestChoice[] = [];
     try {
       while (!signal.aborted) {
@@ -189,7 +192,7 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
           };
           setDraft(next);
           setProgress(`Testing ${method} ${url}…`);
-          const result = await probe(choice, next.localKeys, signal);
+          const result = await probe(choice, next.localKeys, signal, testPrompt);
           if (signal.aborted) {
             return;
           }
@@ -203,6 +206,7 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
                 content: result.message,
                 success: result.success,
                 destination: `${method} ${url}`,
+                testPrompt,
               },
             ],
           };
@@ -238,6 +242,11 @@ export function useSetupAgent(draft: SetupDraft, setDraft: (draft: SetupDraft) =
         if (reply.testTarget === undefined) {
           setDraft(next);
           return;
+        }
+        // Retest exactly the same input after repairs. The next user turn
+        // (and the manual Test button) starts fresh.
+        if (!attempted.length) {
+          testPrompt = reply.testPrompt;
         }
         choice = testChoices(targets(next.config), next.testableTargets).find(
           (item) => item.index === reply.testTarget,

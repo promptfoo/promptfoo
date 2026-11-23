@@ -1035,9 +1035,9 @@ export function createServerOpenApiRegistry() {
     path: '/api/redteam/setup/connection-test',
     operationId: 'testRedteamSetupConnection',
     tags: ['Redteam'],
-    summary: 'Test a supported HTTP target with one Hello from the local server',
+    summary: 'Test a supported HTTP target with one request from the local server',
     description:
-      'Tests the configured reply path, or suggests fields if it is missing. Requires a local caller. Does not send the reply to Cloud or start a scan.',
+      'Substitutes testPrompt (default Hello) for {{prompt}}. Tests the reply path or reports candidate fields. Requires a local caller. Does not send the reply to Cloud or start a scan.',
     request: { body: jsonBody(OpenApiConnectionTestPayload) },
     responses: {
       200: jsonResponse(RedteamSchemas.SetupConnectionTest.Response),

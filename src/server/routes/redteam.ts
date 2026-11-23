@@ -7,7 +7,6 @@ import {
   credentialOrigins,
   localReviewField,
   sameProbeScope,
-  sessionTransform,
   targetExecutionIssue,
   testSetupConnection,
 } from '../../node/redteamSetupConnection';
@@ -432,23 +431,35 @@ function probeContext(req: Request, input: SetupInput) {
 }
 
 function probeIssue(
-  index: number | undefined,
+  { testTarget: index, testPrompt }: z.infer<typeof schema.HostedReply>,
   context: SetupInput['testContext'],
   previous: Config | undefined,
   proposed: Config | undefined,
   status: Assessment,
   userTurns: string[],
 ) {
+  if (
+    testPrompt !== undefined &&
+    (index === undefined || !context?.customPrompt || context.targetIndex !== undefined)
+  ) {
+    return 'Omit testPrompt. Custom input is available only on an initial connection test when supported by the client.';
+  }
   if (index === undefined) {
     return;
   }
-  if (!context || !status.testableTargets.includes(index)) {
-    return (
-      'No permission to test this target in this turn. Omit testTarget. ' + (status.runIssue ?? '')
-    );
+  if (!context) {
+    return 'No permission to send a request in this turn. Omit testTarget.';
   }
   const before = targets(previous)[index];
   const after = targets(proposed)[index];
+  if (!status.testableTargets.includes(index)) {
+    const reason =
+      after === undefined
+        ? 'No target at that index.'
+        : (targetExecutionIssue(after, userTurns, before)?.message ??
+          'The connection test needs a self-contained HTTP request. It cannot resolve per-test variables, upload files or run a model provider.');
+    return reason + ' Nothing was sent. Keep the draft and clarify any missing details.';
+  }
   if (context.targetIndex === undefined) {
     // Do not let the agent introduce and exercise a destructive method in
     // one step unless the user specified it. Case and phrasing are immaterial.
@@ -479,10 +490,7 @@ function probeIssue(
 
 // Run the generation validators without executing plugin actions or loading files.
 async function validatePlan(redteam: RedteamFileConfig) {
-  if (!redteam.plugins?.length) {
-    return 'redteam.plugins is empty. An empty list would run the default suite.';
-  }
-  for (const plugin of redteam.plugins) {
+  for (const plugin of redteam.plugins ?? []) {
     const { id, config } = typeof plugin === 'string' ? { id: plugin, config: undefined } : plugin;
     try {
       Plugins.find((entry) => entry.key === id)?.validate?.(config ?? {});
@@ -521,21 +529,17 @@ async function assessSetup(
   if (!config) {
     return { runnable: false, testableTargets: [] };
   }
-  const input = schema.Input.safeParse(config);
-  if (!input.success) {
-    return invalid(issue(input.error));
-  }
   const list = targets(config);
-  const parsed =
-    list.length && config.redteam
-      ? schema.Complete.safeParse(config)
-      : schema.Draft.safeParse(config);
+  const parsed = schema.Draft.safeParse(config);
   if (!parsed.success) {
     return invalid(issue(parsed.error));
   }
-  const redteam = parsed.data.redteam;
-  if (redteam) {
-    const error = await validatePlan(redteam);
+  if (parsed.data.redteam) {
+    const redteam = schema.Redteam.safeParse(config.redteam);
+    if (!redteam.success) {
+      return invalid(issue(redteam.error));
+    }
+    const error = await validatePlan(redteam.data);
     if (error) {
       return invalid(error);
     }
@@ -561,30 +565,16 @@ async function assessSetup(
       testableTargets.push(index);
     }
   }
-  const defaultTest = parsed.data.defaultTest;
-  if (
-    testableTargets.some((i) => /\{\{\s*sessionId\s*\}\}/.test(JSON.stringify(list[i]))) &&
-    !(
-      typeof defaultTest === 'object' &&
-      (defaultTest.options?.transformVars || defaultTest.vars?.sessionId)
-    )
-  ) {
-    return invalid(
-      'To create the sessionId used by this HTTP target, set defaultTest.options.transformVars to ' +
-        JSON.stringify(sessionTransform) +
-        '.',
-    );
-  }
-  if (!list.length || !redteam) {
+  if (!list.length || !parsed.data.redteam) {
     runIssue ??= list.length
       ? 'The draft still needs a red team test plan.'
       : 'The draft still needs a target.';
   } else {
-    if (
-      !config.prompts ||
-      (typeof config.prompts === 'object' && !Object.keys(config.prompts).length)
-    ) {
-      return invalid('Provide at least one prompt template, typically ["{{prompt}}"].');
+    // The red team config loader supplies {{prompt}} for an omitted template.
+    if (typeof parsed.data.prompts === 'object' && !Object.keys(parsed.data.prompts).length) {
+      return invalid(
+        'The prompt list is empty. Omit prompts to use the CLI default or provide a template.',
+      );
     }
     const field = localReviewField(config);
     if (field) {
@@ -630,7 +620,7 @@ redteamRouter.post('/setup/connection-test', async (req, res) => {
   const disconnected = new AbortController();
   res.once('close', () => disconnected.abort());
   try {
-    const { localKeys, ...target } = input.data;
+    const { localKeys, testPrompt, ...target } = input.data;
     if (!hasLocalKeys(target, localKeys)) {
       res.json({
         success: false,
@@ -639,7 +629,7 @@ redteamRouter.post('/setup/connection-test', async (req, res) => {
       return;
     }
     const result = await cliState.withSetupKeys(localKeys, () =>
-      testSetupConnection(target, AbortSignal.any([timeout, disconnected.signal])),
+      testSetupConnection(target, AbortSignal.any([timeout, disconnected.signal]), testPrompt),
     );
     res.json(RedteamSchemas.SetupConnectionTest.Response.parse(result));
   } catch {
@@ -732,6 +722,7 @@ redteamRouter.post('/setup-plan', async (req, res) => {
       }
       if (
         containsSetupSecret(reply.data.message, 'assistant') ||
+        (reply.data.testPrompt && containsSetupSecret(reply.data.testPrompt)) ||
         (reply.data.config && containsSetupSecret(JSON.stringify(reply.data.config)))
       ) {
         feedback = {
@@ -742,8 +733,7 @@ redteamRouter.post('/setup-plan', async (req, res) => {
       const proposed = reply.data.config ?? config;
       const { validationError, ...status } = await assessSetup(proposed, userTurns, config);
       const problem =
-        validationError ??
-        probeIssue(reply.data.testTarget, testContext, config, proposed, status, userTurns);
+        validationError ?? probeIssue(reply.data, testContext, config, proposed, status, userTurns);
       if (!problem) {
         res.json(schema.Response.parse({ ...reply.data, ...status }));
         return;

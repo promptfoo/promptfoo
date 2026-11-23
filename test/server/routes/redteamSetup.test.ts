@@ -94,10 +94,11 @@ describe('native red team setup', () => {
       messages,
     });
     const reference = sent(0).configSchema;
+    expect(reference.config.required ?? []).not.toContain('prompts');
     expect(reference.config.properties).toHaveProperty('redteam');
     expect(reference.config.properties).toHaveProperty('evaluateOptions');
-    expect(JSON.stringify(reference.config.definitions)).toContain('testGenerationInstructions');
-    expect(JSON.stringify(reference.config.definitions)).toContain('crescendo');
+    expect(JSON.stringify(reference.config)).toContain('testGenerationInstructions');
+    expect(JSON.stringify(reference.config)).toContain('crescendo');
     expect(JSON.stringify(reference.http.definitions)).toContain('tokenEstimation');
     expect(JSON.stringify(reference).length).toBeLessThanOrEqual(128000);
     expect(mockedFetchWithProxy.mock.calls[0][1]?.redirect).toBe('error');
@@ -136,7 +137,6 @@ describe('native red team setup', () => {
     [{ redteam: { numProbes: 2 } }, /numProbes/],
     [{ redteam: { plugins: ['nonexistent'] } }, /plugins/],
     [{ redteam: { plugins: [{ id: 'bola', numberOfTests: 1 }] } }, /plugins/],
-    [{ redteam: { plugins: [] } }, /empty/],
     [{ redteam: { plugins: ['policy'] } }, /policy/],
     [{ redteam: { strategies: ['custom:my-strategy'] } }, /strategyText/],
     [{ targets: [{ ...target, providerOption: true }] }, /providerOption/],
@@ -146,17 +146,6 @@ describe('native red team setup', () => {
     [
       { targets: [{ id: 'http', config: { ...target.config, url: 'https://other.example' } }] },
       /endpoint|destination/,
-    ],
-    [
-      {
-        targets: [
-          {
-            id: 'http',
-            config: { ...target.config, body: { message: '{{prompt}}', sid: '{{sessionId}}' } },
-          },
-        ],
-      },
-      /transformVars/,
     ],
     [{ providers: ['echo'] }, /not both/],
     [{ prompts: [] }, /prompt/],
@@ -281,6 +270,48 @@ describe('native red team setup', () => {
     expect((await ask()).body.runnable).toBe(true);
   });
 
+  it.each([{}, { plugins: [] }])(
+    'leaves CLI defaults intact in draft and Run %#',
+    async (redteam) => {
+      const proposed = { targets: [target], redteam };
+      respond(proposed);
+      expect((await ask()).body).toMatchObject({ config: proposed, runnable: true });
+      expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
+      mockedDoRedteamRun.mockResolvedValue(undefined);
+      const result = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          fromAgent: true,
+          config: proposed,
+          userTurns: messages.map((m) => m.content),
+        });
+      expect(result.status).toBe(200);
+      expect(mockedDoRedteamRun.mock.calls[0][0].liveRedteamConfig).toEqual(proposed);
+    },
+  );
+
+  it('lets a session-aware target be tested before planning and accepts sessions from contexts', async () => {
+    const targets = [
+      {
+        ...target,
+        config: { ...target.config, body: { message: '{{prompt}}', sid: '{{sessionId}}' } },
+      },
+    ];
+    respond({ targets }, 0);
+    const draft = await ask({ testContext: { remaining: 3 } });
+    expect(draft.body).toMatchObject({ config: { targets }, testTarget: 0, runnable: false });
+    const proposed = {
+      targets,
+      redteam: {
+        ...config.redteam,
+        contexts: [{ id: 'guest', vars: { sessionId: 'guest-session' } }],
+      },
+    };
+    respond(proposed);
+    expect((await ask()).body).toMatchObject({ config: proposed, runnable: true });
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
+  });
+
   it('allows the fixed session template used by the manual editor and demo', async () => {
     const proposed = {
       ...config,
@@ -319,12 +350,56 @@ describe('native red team setup', () => {
       expect(mockedDoRedteamRun).not.toHaveBeenCalled();
     });
 
+    it('passes the requested probe message separately from the scan config', async () => {
+      const testPrompt = 'Can you check my order?';
+      mockedFetchWithProxy.mockResolvedValueOnce(
+        Response.json({ message: 'Testing', testTarget: 0, testPrompt }),
+      );
+      const result = await ask({ config, testContext: { ...testContext, customPrompt: true } });
+      expect(result.body).toMatchObject({ testTarget: 0, testPrompt });
+      expect(result.body.config).toBeUndefined();
+      expect(sent(0).testContext.customPrompt).toBe(true);
+      expect(mockedDoRedteamRun).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { testContext },
+      { testContext: { ...retry, customPrompt: true }, verification, messages: afterTest },
+    ])('rejects changing test input on old clients or during repairs %#', async (params) => {
+      mockedFetchWithProxy.mockResolvedValueOnce(
+        Response.json({ message: 'Testing', config: edited, testTarget: 0, testPrompt: 'changed' }),
+      );
+      respond(edited);
+      const result = await ask({ config, ...params });
+      expect(result.body.testTarget).toBeUndefined();
+      expect(sent(1).validationError).toContain('testPrompt');
+    });
+
     it('allows a repaired target to be retested within its original scope', async () => {
       respond(edited, 0);
       const result = await ask({ config, messages: afterTest, verification, testContext: retry });
       expect(result.body).toMatchObject({ testTarget: 0, config: edited });
       expect(sent(0).testContext).toEqual(retry);
       expect(sent(0).verification).not.toHaveProperty('retryable');
+    });
+
+    it('keeps an unfinished target and asks for the missing detail without claiming permission was denied', async () => {
+      const partial = {
+        targets: [{ id: 'http', config: { method: 'POST', body: { question: '{{prompt}}' } } }],
+      };
+      respond(partial, 0);
+      mockedFetchWithProxy.mockResolvedValueOnce(
+        Response.json({ message: 'Where should I send it?', config: partial }),
+      );
+      const result = await ask({ testContext });
+      expect(sent(1).validationError).toContain('endpoint URL');
+      expect(result.body).toMatchObject({
+        message: 'Where should I send it?',
+        config: partial,
+        runnable: false,
+        testableTargets: [],
+      });
+      expect(result.body.testTarget).toBeUndefined();
     });
 
     it('blocks moving a key between established targets without a fresh assignment', async () => {

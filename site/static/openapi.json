@@ -4901,6 +4901,7 @@
                     "type": "object",
                     "properties": {
                       "remaining": { "type": "integer", "minimum": 0, "maximum": 3 },
+                      "customPrompt": { "type": "boolean" },
                       "targetIndex": { "type": "integer", "minimum": 0 },
                       "consentSince": {
                         "type": "integer",
@@ -4925,8 +4926,7 @@
                             { "type": "string", "enum": ["Plain text"] },
                             { "type": "string" }
                           ]
-                        },
-                        "maxItems": 4
+                        }
                       },
                       "targetIndex": { "type": "integer", "minimum": 0 }
                     },
@@ -4951,6 +4951,7 @@
                     "message": { "type": "string", "minLength": 1, "maxLength": 4000 },
                     "config": { "type": "object", "additionalProperties": {} },
                     "testTarget": { "type": "integer", "minimum": 0 },
+                    "testPrompt": { "type": "string", "minLength": 1, "maxLength": 16000 },
                     "runnable": { "type": "boolean" },
                     "runIssue": { "type": "string" },
                     "testableTargets": {
@@ -5043,8 +5044,8 @@
       "post": {
         "operationId": "testRedteamSetupConnection",
         "tags": ["Redteam"],
-        "summary": "Test a supported HTTP target with one Hello from the local server",
-        "description": "Tests the configured reply path, or suggests fields if it is missing. Requires a local caller. Does not send the reply to Cloud or start a scan.",
+        "summary": "Test a supported HTTP target with one request from the local server",
+        "description": "Substitutes testPrompt (default Hello) for {{prompt}}. Tests the reply path or reports candidate fields. Requires a local caller. Does not send the reply to Cloud or start a scan.",
         "requestBody": {
           "description": "JSON request body",
           "required": true,
@@ -5235,7 +5236,8 @@
                   "localKeys": {
                     "type": "object",
                     "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 16000 }
-                  }
+                  },
+                  "testPrompt": { "type": "string", "minLength": 1, "maxLength": 16000 }
                 },
                 "required": ["id", "config"],
                 "additionalProperties": false
@@ -5261,8 +5263,7 @@
                           { "type": "string", "enum": ["Plain text"] },
                           { "type": "string" }
                         ]
-                      },
-                      "maxItems": 4
+                      }
                     }
                   },
                   "required": ["success", "message"],

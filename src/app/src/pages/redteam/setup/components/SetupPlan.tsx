@@ -2,7 +2,7 @@ import { cn } from '@app/lib/utils';
 import { isPlainObject } from '@app/utils/isPlainObject';
 import { CircleAlert, CircleCheck, CircleDashed } from 'lucide-react';
 import { credentialHeaders, type SetupDraft, targets } from '../hooks/useSetupAgent';
-import { riskName } from '../utils/plugins';
+import { defaultScanScope, riskName } from '../utils/plugins';
 
 function ConnectionStatus({ success }: { success?: boolean }) {
   const [Icon, label, color] =
@@ -73,8 +73,15 @@ export default function SetupPlan({
   }
   const entries = targets(config);
   const redteam = isPlainObject(config.redteam) ? config.redteam : {};
-  const plugins = names(redteam.plugins, true);
-  const strategies = names(redteam.strategies);
+  // Show the CLI defaults before Run without expanding them in the saved draft.
+  const defaults = review && isPlainObject(config.redteam);
+  const defaultPlugins =
+    defaults &&
+    (redteam.plugins === undefined || (Array.isArray(redteam.plugins) && !redteam.plugins.length));
+  const defaultStrategies = defaults && redteam.strategies === undefined;
+  const plugins = names(defaultPlugins ? defaultScanScope.plugins : redteam.plugins, true);
+  const strategies = names(defaultStrategies ? defaultScanScope.strategies : redteam.strategies);
+  const count = redteam.numTests ?? (defaults ? defaultScanScope.numTests : undefined);
   const languages =
     typeof redteam.language === 'string' ? [redteam.language] : names(redteam.language);
   return (
@@ -115,15 +122,25 @@ export default function SetupPlan({
           <div>
             <dt className="text-xs font-medium text-muted-foreground">
               Tests
-              {typeof redteam.numTests === 'number' &&
-                ' · ' + redteam.numTests + ' per plugin by default'}
+              {typeof count === 'number' && ' · ' + count + ' per plugin by default'}
             </dt>
-            <dd>{plugins.join(' · ')}</dd>
+            <dd>
+              {defaultPlugins ? (
+                <details>
+                  <summary className="cursor-pointer">{plugins.length} default plugins</summary>
+                  <p className="mt-1">{plugins.join(' · ')}</p>
+                </details>
+              ) : (
+                plugins.join(' · ')
+              )}
+            </dd>
           </div>
         )}
         {strategies.length > 0 && (
           <div>
-            <dt className="text-xs font-medium text-muted-foreground">Strategies</dt>
+            <dt className="text-xs font-medium text-muted-foreground">
+              {defaultStrategies ? 'Default strategies' : 'Strategies'}
+            </dt>
             <dd>{strategies.join(' · ')}</dd>
           </div>
         )}

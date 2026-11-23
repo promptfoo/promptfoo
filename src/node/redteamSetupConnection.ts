@@ -30,8 +30,8 @@ export function containsSetupSecret(input: string, source: 'assistant' | 'user' 
   const value = input
     .replace(/\\+"/g, '"')
     .replace(
-      /\{\{\s*(?:env(?:\.[A-Za-z_]\w*|\[["'][A-Za-z_]\w*["']\])|prompt|sessionId)\s*\}\}|\$\{?[A-Z_][A-Z0-9_]*\}?/g,
-      'ENV_REFERENCE',
+      /\{\{\s*(?:env(?:\.[A-Za-z_]\w*|\[["'][A-Za-z_]\w*["']\])|[A-Za-z_]\w*)(?:\s*\|\s*[A-Za-z_]\w*)*\s*\}\}|\$\{[A-Za-z_]\w*\}|(?:\$|\bprocess\.env\.)[A-Za-z_]\w*/g,
+      '<token>',
     );
   if (
     /:\/\/[^/\s?#]*@|\b(?:sk-[\w-]{8,}|gh[pousr]_\w{12,}|github_pat_\w+|eyJ[\w-]+\.[\w-]+\.[\w-]+)|-----BEGIN [\w ]*PRIVATE KEY-----/i.test(
@@ -98,10 +98,6 @@ export function containsSetupSecret(input: string, source: 'assistant' | 'user' 
   return false;
 }
 
-// Distinguish chat API routes from provider IDs that launch a local agent or SDK.
-// The chosen model and ordinary inference options are visible in Review.
-const modelId =
-  /^(?:openai:(?:(?:chat|responses)(?::[\w.-]+)?|(?:gpt-|o\d|chatgpt-)[\w.-]*)|anthropic:(?:messages:[\w.-]+|claude-(?!code|agent)[\w.-]+)|google:(?:chat:)?gemini-[\w.-]+|ollama:(?:chat:)?[\w.-]+(?:[/:][\w.-]+)*)$/;
 const loopback = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:[/?]|$)/i;
 const review = (message: string) => ({ message, repairable: false });
 const repair = (message: string) => ({ message, repairable: true });
@@ -117,9 +113,18 @@ function literals(input: string) {
   return input.split(/[\s"'\x60<>()]+/).flatMap((word) => [word, word.replace(/[.,;!?]+$/, '')]);
 }
 
+// A bare public host needs a path to distinguish it from filenames and
+// dotted config keys. Never infer plaintext HTTP for a public destination.
+const hostPath = /^((?:[a-z0-9-]+\.)+[a-z]{2,63})(?::\d+)?\//i;
+
 function endpoints(input: string) {
   return literals(input).flatMap((word) => {
-    const value = loopback.test(word) ? 'http://' + word : word;
+    const host = hostPath.exec(word)?.[1].toLowerCase();
+    const value = loopback.test(word)
+      ? 'http://' + word
+      : host && !/\.(?:ya?ml|jsonl?|[cm]?[jt]s|py|md|txt|csv)$/.test(host)
+        ? 'https://' + word
+        : word;
     return /^https?:\/\//i.test(value) && URL.canParse(value) ? [new URL(value)] : [];
   });
 }
@@ -146,11 +151,15 @@ function namesVariable(input: string, variable: string) {
   });
 }
 
-function modelIssue(target: Record<string, unknown>, id: string, userTurns: string[]) {
+function modelIssue(
+  target: Record<string, unknown>,
+  id: string,
+  userTurns: string[],
+  previous?: unknown,
+) {
   const config = record(target.config);
   if (
     (target.config !== undefined && config !== target.config) ||
-    !modelId.test(id) ||
     Object.keys(target).some(
       (key) => !['id', 'config', 'label', 'delay', 'prompts'].includes(key),
     ) ||
@@ -162,13 +171,26 @@ function modelIssue(target: Record<string, unknown>, id: string, userTurns: stri
   // A direct provider can use ambient API credentials. Require the user's choice
   // of service, without matching a particular model spelling or version.
   const provider = id.split(':')[0];
-  const brands: Record<string, RegExp> = {
-    openai: /\b(?:openai|chatgpt|gpt)\b/i,
-    anthropic: /\b(?:anthropic|claude)\b/i,
-    google: /\b(?:google|gemini)\b/i,
-    ollama: /\bollama\b/i,
+  const priorId = typeof previous === 'string' ? previous : record(previous).id;
+  const switching = typeof priorId === 'string' && !priorId.startsWith(provider + ':');
+  const turns = switching ? userTurns.slice(-1) : userTurns;
+  // A model name supplied for an HTTP payload doesn't authorize switching to
+  // the model vendor's own API. Look for an explicit choice of service.
+  const gateway = switching && /^https?(?::\/\/|$)/.test(priorId);
+  const aliases: Record<string, RegExp> = {
+    openai: /^(?:chatgpt|gpt)(?:-|$)|^o[134](?:-|$)/,
+    anthropic: /^claude(?:-|$)/,
+    google: /^gemini(?:-|$)/,
   };
-  if (!userTurns.some((turn) => brands[provider].test(turn))) {
+  const chosen = turns.some((turn) =>
+    literals(turn.toLowerCase()).some(
+      (word) =>
+        word === provider ||
+        word.startsWith(provider + ':') ||
+        (!gateway && aliases[provider]?.test(word)),
+    ),
+  );
+  if (!chosen) {
     return repair(
       'Ask which model provider the user wants to test directly before using its credentials.',
     );
@@ -299,18 +321,7 @@ export function targetExecutionIssue(
     return review(unsupported);
   }
   if (!/^https?(?::\/\/|$)/.test(value.id)) {
-    const priorId = typeof previousTarget === 'string' ? previousTarget : record(previousTarget).id;
-    const provider = value.id.split(':')[0];
-    if (
-      typeof priorId === 'string' &&
-      !priorId.startsWith(provider + ':') &&
-      !literals(userTurns.at(-1)?.toLowerCase() ?? '').some(
-        (word) => word === provider || word.startsWith(provider + ':'),
-      )
-    ) {
-      return repair('Confirm the provider before switching the target to a different service.');
-    }
-    return modelIssue(value, value.id, userTurns);
+    return modelIssue(value, value.id, userTurns, previousTarget);
   }
   if (/"__proto__":/.test(JSON.stringify(value))) {
     return review(unsupported);
@@ -319,6 +330,17 @@ export function targetExecutionIssue(
     return review('Credentials must be referenced through environment variables.');
   }
   const config = record(value.config);
+  if (!config.request && !config.url && !value.id.includes('://')) {
+    return review('Add the HTTP endpoint URL to test or run this target.');
+  }
+  if (
+    !config.request &&
+    !config.multipart &&
+    config.body === undefined &&
+    config.method !== 'GET'
+  ) {
+    return review('Add a request body or specify GET to test or run this target.');
+  }
   const headers = record(config.headers);
   if (
     Object.values(headers).some((v) => typeof v === 'string' && headerVariable(v)) &&
@@ -345,9 +367,13 @@ export function targetExecutionIssue(
 const methodOf = (config: SetupConnection['config']) =>
   config.method ?? (config.multipart ? 'POST' : 'GET');
 
-function probeVariables(config: SetupConnection['config'], sessionId = crypto.randomUUID()) {
+function probeVariables(
+  config: SetupConnection['config'],
+  prompt: string,
+  sessionId = crypto.randomUUID(),
+) {
   return {
-    prompt: 'Hello',
+    prompt,
     sessionId,
     tools: JSON.stringify(config.tools),
     tool_choice:
@@ -370,6 +396,9 @@ function probeUrl({ id, config }: SetupConnection, vars: ReturnType<typeof probe
 export function sameProbeScope(prior: unknown, next: unknown): boolean {
   // Compare the two requests with the same inputs, including session variables.
   const sessionId = crypto.randomUUID();
+  // A fixed sample (e.g. Hello) could match a literal query value even when
+  // the real prompt is different. Distinguish trim and URL encoding too.
+  const marker = ' ' + crypto.randomUUID() + ' +';
   const scope = (target: unknown) => {
     const parsed = SetupConnectionTest.Request.safeParse(target);
     if (!parsed.success) {
@@ -384,7 +413,7 @@ export function sameProbeScope(prior: unknown, next: unknown): boolean {
       }
     }
     return {
-      url: probeUrl(parsed.data, probeVariables(config, sessionId)),
+      url: probeUrl(parsed.data, probeVariables(config, marker, sessionId)),
       method: methodOf(config),
       headers,
       keys: JSON.stringify([...headers.values()].sort()),
@@ -445,7 +474,7 @@ const privilegedFields = new Set([
 ]);
 
 // This is the fixed session variable used by the manual red team editor.
-export const sessionTransform = '{ ...vars, sessionId: context.uuid }';
+const sessionTransform = '{ ...vars, sessionId: context.uuid }';
 
 function privilegedField(value: unknown, path = ''): string | undefined {
   if (typeof value === 'string') {
@@ -534,11 +563,14 @@ export function localReviewField(config: Record<string, unknown>): string | unde
   }
   // Bare paths/globs also load executable prompt and test files. Only inline
   // prompts and test cases are eligible for an agent-initiated browser run.
-  const prompts = Array.isArray(config.prompts)
-    ? config.prompts
-    : config.prompts && typeof config.prompts === 'object'
-      ? Object.keys(config.prompts)
-      : [config.prompts];
+  const prompts =
+    config.prompts === undefined
+      ? []
+      : Array.isArray(config.prompts)
+        ? config.prompts
+        : config.prompts && typeof config.prompts === 'object'
+          ? Object.keys(config.prompts)
+          : [config.prompts];
   for (const item of prompts) {
     const raw = typeof item === 'object' && item ? item.raw || item.id : item;
     if (
@@ -573,34 +605,39 @@ export function localReviewField(config: Record<string, unknown>): string | unde
 // Return field names only. Never put response values, headers or credentials into the chat.
 function replyPaths(json: unknown, secrets: string[]) {
   const paths: string[] = [];
-  function visit(value: unknown, path: string, depth: number) {
-    if (depth > 8 || paths.length >= 16) {
+  let remaining = SetupConnectionTest.pathBudget - 2; // brackets around the array
+  let truncated = false;
+  function visit(value: unknown, path: string) {
+    // The maximum path length also bounds recursion into nested responses.
+    if (path && (!isSetupReplyPath(path) || secrets.some((token) => path.includes(token)))) {
       return;
     }
-    if (typeof value === 'string' && value.trim() && isSetupReplyPath(path)) {
-      paths.push(path);
-    } else if (Array.isArray(value)) {
-      visit(value[0], path + '[0]', depth + 1);
-    } else if (value && typeof value === 'object') {
-      for (const [key, child] of Object.entries(value)) {
-        if (
-          !/^[a-z_]\w{0,63}$/i.test(key) ||
-          isSecretField(key) ||
-          looksLikeSecret(key) ||
-          secrets.some((token) => key.includes(token))
-        ) {
-          continue;
-        }
-        visit(child, path ? path + '.' + key : key, depth + 1);
+    if (typeof value === 'string' && value.trim() && path) {
+      const size = JSON.stringify(path).length + (paths.length ? 1 : 0);
+      if (size > remaining) {
+        truncated = true;
+        return;
       }
+      remaining -= size;
+      paths.push(path);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((child, i) => visit(child, path + '[' + i + ']'));
+      return;
+    }
+    for (const [key, child] of Object.entries(record(value))) {
+      if (isSecretField(key) || credentialField(key) || looksLikeSecret(key)) {
+        continue;
+      }
+      const childPath = /^[a-z_$][\w$]*$/i.test(key)
+        ? (path ? path + '.' : '') + key
+        : path + '[' + JSON.stringify(key) + ']';
+      visit(child, childPath);
     }
   }
-  visit(json, '', 0);
-  const likelyReply = /(?:^|\.)(?:answer|content|message|output|response|reply|text)$/i;
-  return paths
-    .filter((path) => !secrets.some((token) => path.includes(token)))
-    .sort((a, b) => Number(likelyReply.test(b)) - Number(likelyReply.test(a)))
-    .slice(0, 4);
+  visit(json, '');
+  return { paths, truncated };
 }
 
 function inspectReply(
@@ -642,7 +679,7 @@ function inspectReply(
       return { success: true, message: received + ` Found text at ${path}.` };
     }
   }
-  const paths = replyPaths(json, secrets);
+  const { paths, truncated } = replyPaths(json, secrets);
   const problem = path ? ` No text at ${path}.` : '';
   return {
     success: path === undefined && paths.length > 0,
@@ -650,7 +687,8 @@ function inspectReply(
     message:
       received +
       problem +
-      (paths.length ? ' Found candidate text fields.' : ' No readable text field found.'),
+      (paths.length ? ' Found candidate text fields.' : ' No readable text field found.') +
+      (truncated ? ' More fields omitted.' : ''),
     paths,
   };
 }
@@ -703,7 +741,11 @@ function probeBody(
   return body;
 }
 
-export async function testSetupConnection(connection: SetupConnection, signal: AbortSignal) {
+export async function testSetupConnection(
+  connection: SetupConnection,
+  signal: AbortSignal,
+  testPrompt?: string,
+) {
   if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return failure('Templates are disabled on this server. Enable them to send a test message.');
   }
@@ -711,6 +753,11 @@ export async function testSetupConnection(connection: SetupConnection, signal: A
     return failure('Reference secrets with environment variables.');
   }
   const { config } = connection;
+  if (testPrompt !== undefined && !SetupConnectionTest.usesPrompt(config)) {
+    return failure(
+      'No request sent. Add {{prompt}} to the payload or query to send a custom message, or test the static request as configured.',
+    );
+  }
   const headers: Record<string, string> = {};
   if (config.body) {
     headers['content-type'] =
@@ -742,7 +789,7 @@ export async function testSetupConnection(connection: SetupConnection, signal: A
     secrets.push(token);
     headers[name.toLowerCase()] = value.replace(/\{\{.*\}\}/, () => token);
   }
-  const vars = probeVariables(config);
+  const vars = probeVariables(config, testPrompt ?? 'Hello');
   const url = probeUrl(connection, vars);
   const body = probeBody(config, headers, vars);
   const transform = config.transformResponse ?? config.responseParser;

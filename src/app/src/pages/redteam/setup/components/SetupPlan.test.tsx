@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
+import { defaultScanScope } from '../utils/plugins';
 import SetupPlan from './SetupPlan';
 
 it('summarizes native targets, risks and strategies without executing or linking config values', () => {
@@ -68,4 +69,34 @@ it('discloses each credential mapping and test-count override before a multi-tar
   expect(screen.getByText(/Policy Compliance \(1 test\)/)).toBeVisible();
   expect(screen.getByText('German · French')).toBeVisible();
   expect(screen.getByText(/can multiply/)).toBeVisible();
+});
+
+it.each([{}, { plugins: [] }])(
+  'shows native defaults for %j before Run without changing the YAML',
+  (redteam) => {
+    const draft = { messages: [], input: '', config: { redteam } };
+    const original = structuredClone(draft);
+    render(<SetupPlan draft={draft} review />);
+    expect(screen.getByText(defaultScanScope.plugins.length + ' default plugins')).toBeVisible();
+    expect(screen.getByText(defaultScanScope.strategies.join(' · '))).toBeVisible();
+    expect(
+      screen.getByText(new RegExp(defaultScanScope.numTests + ' per plugin by default')),
+    ).toBeVisible();
+    expect(draft).toEqual(original);
+  },
+);
+
+it('does not assume default strategies for an explicitly empty list', () => {
+  render(
+    <SetupPlan
+      draft={{
+        messages: [],
+        input: '',
+        config: { redteam: { strategies: [], plugins: ['bola'] } },
+      }}
+      review
+    />,
+  );
+  expect(screen.queryByText(defaultScanScope.strategies.join(' · '))).toBeNull();
+  expect(screen.queryByText(/default plugins/)).toBeNull();
 });

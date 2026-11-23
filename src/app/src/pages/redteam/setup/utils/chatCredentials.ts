@@ -14,7 +14,14 @@ export function captureKeys(input: string, previous: Keys = {}) {
     const supplied: string = double ?? single ?? code ?? bare.replace(/[.!?]+$/, '');
     const raw = supplied.replace(/^(?:Bearer|Basic|Token|ApiKey) /i, '');
     const value = raw.replace(/\\(["'\\])/g, '$1');
-    if (!value || headerVariable(value) || /^\$\{?[A-Z_][A-Z0-9_]*\}?$/.test(value)) {
+    // Native template variables are references even in fields like "key".
+    if (
+      !value ||
+      headerVariable(value) ||
+      /^\{\{\s*[a-z_]\w*(?:\.\w+)*(?:\s*\|\s*\w+)*\s*\}\}$/i.test(value) ||
+      /^\$\{[a-z_]\w*\}$/i.test(value) ||
+      (bare ? /^\$[a-z_]\w*$/i : /^\$[A-Z_][A-Z0-9_]*$/).test(value)
+    ) {
       return match;
     }
     if (bare) {

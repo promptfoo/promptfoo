@@ -1,5 +1,18 @@
-import { displayNameOverrides, type Plugin } from '@promptfoo/redteam/constants';
+import {
+  DEFAULT_NUM_TESTS_PER_PLUGIN,
+  DEFAULT_PLUGINS,
+  DEFAULT_STRATEGIES,
+  displayNameOverrides,
+  type Plugin,
+} from '@promptfoo/redteam/constants';
 import { type Config } from '../types';
+
+// Values used by redteam run when the document leaves its test scope implicit.
+export const defaultScanScope = {
+  plugins: [...DEFAULT_PLUGINS],
+  strategies: DEFAULT_STRATEGIES,
+  numTests: DEFAULT_NUM_TESTS_PER_PLUGIN,
+};
 
 // Keep technical plugin names in the full catalog. Describe the risk in guided setup.
 const starterLabels: Partial<Record<Plugin, string>> = {
