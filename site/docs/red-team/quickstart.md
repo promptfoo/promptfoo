@@ -92,7 +92,9 @@ Ask in chat when you're ready to send a real request. Only test systems you have
 
 > Try the connection. If you picked the wrong reply field, fix it and try again.
 
-Promptfoo sends “Hello” from your local server and shows each result in the conversation. The agent can fix and retest a failed connection up to twice at the same endpoint. If the request times out, Promptfoo stops because your app may already have received it. You can also select **Test connection** to send a single request.
+You can choose the message. For example, ask “Test it with ‘Where is my order?’ and fix the connection if needed.” Promptfoo uses your message for `{{prompt}}` in the request and shows each result in chat. The message stays out of the scan config. **Test connection** sends one request using the default “Hello”.
+
+The agent can fix and retest a failed connection up to twice using the same input and endpoint. If the request times out, Promptfoo stops because your app may already have received it.
 
 Select **Review setup** to check the configuration before saving YAML or running the scan. [Learn what data leaves your machine](/docs/red-team/troubleshooting/data-handling/).
 
