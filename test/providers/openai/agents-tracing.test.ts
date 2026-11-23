@@ -219,6 +219,39 @@ describe('OTLPTracingExporter', () => {
   });
 
   it.each(formats)(
+    'redacts Stripe keys after encoded delimiters without decoding the trace in %s',
+    async (format) => {
+      const key = `sk_live_${'opaque'.repeat(4)}`;
+      const prefixes = [
+        encodeURIComponent('Error: '),
+        '%3a',
+        '%2520',
+        '\\u0020',
+        '\\x2f',
+        '%1B%5B32m',
+        't%61sk_test_results_',
+      ];
+      const publicText =
+        't%61sk_test_results w\\u006frk_test_provider_configurations %20pk_live_public';
+      const payload = await exportSpans(format, [
+        {
+          spanData: {
+            type: 'function',
+            name: 'lookup',
+            output: prefixes.map((prefix) => prefix + key).join(' ') + ' ' + publicText,
+          },
+          error: new Error(`https://host/Failure%20${key}?password=opaque`),
+        },
+      ]);
+      const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(getAttributes(span)['tool.output']).toBe(
+        prefixes.map((prefix) => prefix + '<redacted>').join(' ') + ' ' + publicText,
+      );
+      expect(span.status.message).toBe('https://host/Failure%20<redacted>?password=<redacted>');
+    },
+  );
+
+  it.each(formats)(
     'masks values before redacting Stripe-like field names in %s',
     async (format) => {
       const payload = await exportSpans(format, [

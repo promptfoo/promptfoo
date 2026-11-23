@@ -734,7 +734,8 @@ function sanitizeCredentialText(
     }
   }
 
-  return (
+  // Mask field values before Stripe keys, since names like sk_org_token can match both.
+  return redactStripeKeys(
     redactQuotedCredentials(value)
       .replace(/\b(?:gh[opsur]_|github_pat_|glpat-)[A-Za-z0-9_-]+/g, '<redacted>')
       .replace(/\b(?:sk|pk|key)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
@@ -794,14 +795,44 @@ function sanitizeCredentialText(
           isPrivateParameter(key, prefix, raw, inspectEncoding)
             ? prefix + key + separator + quote + '<redacted>' + quote
             : match,
-      )
-      // Mask field values before Stripe keys, since names like sk_org_token can match both.
-      // ANSI color codes, escaped whitespace and Markdown underscores also delimit keys.
-      .replace(
-        /(^|\\[bfnrtv]|\[[\d;:]*m|[^A-Za-z0-9])(?:[sr]k_(?:live|test)_|sk_org(?:_|(?=[A-Za-z0-9]{20})))[\w-]*[A-Za-z0-9]/g,
-        '$1<redacted>',
-      )
+      ),
   );
+}
+
+// Inspect escaped delimiters and ANSI colors without putting decoded text into a trace.
+function isStripeKeyBoundary(before: string): boolean {
+  for (let depth = 0; depth < 3; depth++) {
+    const decoded = before.replace(/(?:%|\\x)([\da-f]{2})|\\u([\da-f]{4})/gi, (_, byte, unit) =>
+      String.fromCharCode(Number.parseInt(byte ?? unit, 16)),
+    );
+    if (decoded === before) {
+      break;
+    }
+    before = decoded;
+  }
+  return /(?:^|[^A-Za-z0-9]|\\[bfnrtv]|(?:\[|\u009b)[\d;:]*m)$/.test(before);
+}
+
+function redactStripeKeys(value: string): string {
+  const suffix = /[\w-]*[A-Za-z0-9]/y;
+  let result = '';
+  let start = 0;
+  for (const key of value.matchAll(/[sr]k_(?:live|test)_|sk_org(?:_|(?=[A-Za-z0-9]{20}))/g)) {
+    if (key.index < start) {
+      continue;
+    }
+    // Inspect each gap once. A prefix inside an identifier (e.g. task_test_results)
+    // must not consume a later, delimited key.
+    const before = value.slice(start, key.index);
+    result += before;
+    start = key.index;
+    suffix.lastIndex = start + key[0].length;
+    if (isStripeKeyBoundary(before) && suffix.test(value)) {
+      result += '<redacted>';
+      start = suffix.lastIndex;
+    }
+  }
+  return result + value.slice(start);
 }
 
 function isPrivateParameter(key: string, prefix: string, raw: string, inspectEncoding: boolean) {
