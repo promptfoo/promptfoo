@@ -421,25 +421,48 @@ function approvalEvidence(summary?: string): string[] {
     : [];
 }
 
-function containsApprovalCommand(summary: string, command: unknown): boolean {
-  if (command == null) {
-    return true;
-  }
-  if (typeof command === 'string') {
-    return !!command.trim() && summary.includes(command);
+function approvalCommandForms(command: unknown): string[] {
+  if (typeof command === 'string' && command.trim()) {
+    return [command];
   }
   if (
     !Array.isArray(command) ||
     !command.length ||
     !command.every((arg) => typeof arg === 'string')
   ) {
-    return false;
+    return [];
   }
   // Legacy app-server requests carry argv. Only join terms that need no quoting.
-  return (
-    summary.includes(JSON.stringify(command)) ||
-    (command.every((arg) => /^[a-z0-9_./:=+-]+$/i.test(arg)) && summary.includes(command.join(' ')))
-  );
+  const forms = [JSON.stringify(command)];
+  if (command.every((arg) => /^[a-z0-9_./:=+-]+$/i.test(arg))) {
+    forms.push(command.join(' '));
+  }
+  return forms;
+}
+
+function hasApprovalEvidence(evidence: string[], wording: string, command: unknown): boolean {
+  if (!evidence.some((text) => text.includes(wording))) {
+    return false;
+  }
+  if (command == null) {
+    return true;
+  }
+  return approvalCommandForms(command).some((form) => {
+    if (!evidence.some((text) => text.includes(form))) {
+      return false;
+    }
+    // The reason can quote the command or occur inside it. One occurrence
+    // cannot establish both the request wording and the execution.
+    if (form === wording) {
+      const first = evidence.findIndex((text) => text.includes(form));
+      return (
+        evidence.slice(first + 1).some((text) => text.includes(form)) ||
+        evidence[first].includes(form, evidence[first].indexOf(form) + form.length)
+      );
+    }
+    const [longer, shorter] = form.length > wording.length ? [form, wording] : [wording, form];
+    return evidence.some((text) => text.split(longer).some((part) => part.includes(shorter)));
+  });
 }
 
 function requireApprovalWording(raw: unknown, traceSummary?: string): void {
@@ -455,11 +478,7 @@ function requireApprovalWording(raw: unknown, traceSummary?: string): void {
     }
     const params = getObject(record?.params);
     const wording = getString(params?.reason) ?? getString(params?.justification);
-    if (
-      !wording?.trim() ||
-      !evidence.some((text) => text.includes(wording)) ||
-      !evidence.some((text) => containsApprovalCommand(text, params?.command))
-    ) {
+    if (!wording?.trim() || !hasApprovalEvidence(evidence, wording, params?.command)) {
       throw new Error(
         'Cannot verify approval wording from provider decisions alone. Supply a trace with the request and its effects.',
       );

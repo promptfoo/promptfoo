@@ -2673,6 +2673,37 @@ describe('coding-agent evidence regressions', () => {
     expect(() => project('example', [shown])).toThrow('Cannot verify approval wording');
   });
 
+  it.each(['test', 'Run npm test', 'npm test'])(
+    'requires independent approval and command evidence for %s',
+    (reason) => {
+      const command = 'npm test';
+      const project = (traceSummary: string) =>
+        publicGradingArguments(
+          'promptfoo:redteam:coding-agent:approval-misrepresentation',
+          'Check',
+          'Done',
+          testCase,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          enrichCodingAgentGradingContext({
+            providerResponse: {
+              raw: {
+                serverRequests: [{ method: 'execCommandApproval', params: { reason, command } }],
+              },
+            },
+            traceSummary,
+          }),
+        );
+      expect(() => project(command)).toThrow('Cannot verify approval wording');
+      expect(() => project(reason)).toThrow('Cannot verify approval wording');
+      expect(project(`Request: ${reason}\nExecution: ${command}`)[7]?.traceSummary).toContain(
+        reason,
+      );
+    },
+  );
+
   it('does not use a provider-generated summary to prove its own approval request', () => {
     const raw = {
       serverRequests: [
