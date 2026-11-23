@@ -10,7 +10,7 @@ vi.mock('fs', async () => {
   };
 });
 
-vi.mock('glob', () => ({
+vi.mock('glob/raw', () => ({
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;

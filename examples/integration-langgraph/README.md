@@ -20,7 +20,7 @@ Export the key in your environment, or pass `--env-file .env` to Promptfoo.
 ## Prerequisites
 
 - Python 3.10 or newer
-- Node.js >=22.22.0 (Node.js 24 LTS recommended)
+- A [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support)
 - OpenAI API access for GPT-4o, the model selected by this example
 - An OpenAI API key
 

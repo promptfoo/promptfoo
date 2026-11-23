@@ -1,7 +1,7 @@
 import { stat } from 'fs/promises';
 import path from 'path';
 
-import { globSync } from 'glob';
+import { globSync } from 'glob/raw';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parsePathOrGlob } from '../util/index';

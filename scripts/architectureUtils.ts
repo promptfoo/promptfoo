@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { builtinModules } from 'node:module';
 import path from 'node:path';
 
-import { globSync } from 'glob';
+import { globSync } from 'glob/raw';
 import { type Node, parseSync, Visitor } from 'oxc-parser';
 
 export interface LayerDefinition {
@@ -101,7 +101,7 @@ function validateLayerDefinition(
     );
   }
 
-  return layer.roots.map((root) => {
+  return layer.roots.map((root: unknown) => {
     if (typeof root !== 'string' || !fs.existsSync(path.join(repoRoot, root))) {
       throw new Error(`Architecture layer "${layer.name}" root "${String(root)}" does not exist.`);
     }
