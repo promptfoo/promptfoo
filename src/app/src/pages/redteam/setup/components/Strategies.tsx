@@ -340,7 +340,11 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         if (index === editingIndex && getStrategyId(s) === strategyId) {
           return {
             id: strategyId,
-            config: { ...(typeof s === 'object' ? s.config : {}), ...newConfig },
+            // The layer dialog returns the complete config and omits fields the user cleared.
+            config:
+              strategyId === 'layer'
+                ? newConfig
+                : { ...(typeof s === 'object' ? s.config : {}), ...newConfig },
           };
         }
         return s;

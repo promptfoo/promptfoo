@@ -193,12 +193,15 @@ describe('Strategies', () => {
       }
     });
 
-    it('opens the layer that needs repair and preserves the other labelled layer on Save', async () => {
+    it('repairs a layer and clears its plugin filter without changing the other labelled layer', async () => {
       const user = userEvent.setup();
-      const first = { id: 'layer', config: { label: 'A', steps: ['base64'] } };
-      const second = { id: 'layer', config: { label: 'B', steps: ['best-of-n', 'rot13'] } };
+      const first = { id: 'layer', config: { label: 'A', plugins: ['intent'], steps: ['base64'] } };
+      const second = {
+        id: 'layer',
+        config: { label: 'B', plugins: ['pii:direct'], steps: ['best-of-n', 'rot13'] },
+      };
       vi.mocked(useRedTeamConfig, { partial: true, deep: true }).mockReturnValue({
-        config: { strategies: [first, second], plugins: [], numTests: 5 },
+        config: { strategies: [first, second], plugins: ['intent', 'pii:direct'], numTests: 5 },
         updateConfig: mockUpdateConfig,
       });
       vi.mocked(useApiHealth, { partial: true }).mockReturnValue({
@@ -213,6 +216,7 @@ describe('Strategies', () => {
       expect(save).toBeDisabled();
       expect(screen.getByText(/unavailable strategy "best-of-n"/)).toBeInTheDocument();
       await user.click(screen.getAllByLabelText('delete step')[0]);
+      await user.click(screen.getByRole('button', { name: 'All plugins' }));
       await user.click(save);
       expect(mockUpdateConfig).toHaveBeenCalledWith('strategies', [
         first,
