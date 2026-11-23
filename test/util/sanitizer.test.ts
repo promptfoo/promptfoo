@@ -662,6 +662,9 @@ describe('assertion schema projection', () => {
   it.each([
     ['#vars', '#vars#'],
     ['#vars', '#vars#/'],
+    ['#vars', '#%76ars'],
+    ['#vars', '#%76ars#'],
+    ['#%76ars', '#vars'],
     ['#vars#', '#vars'],
     ['#vars#/', '#vars'],
   ])('protects environment members through anchor %s and reference %s', ($id, $ref) => {

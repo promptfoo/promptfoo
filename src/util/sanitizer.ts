@@ -831,6 +831,11 @@ function splitSchemaUri(uri: string): [string, string] {
   if (suffix > 0 && !SCHEMA_URL_TAIL.test(fragment)) {
     fragment = fragment.slice(0, suffix);
   }
+  // AJV decodes unreserved characters in named anchors. JSON Pointer
+  // tokens use their own escaping and must only be decoded once.
+  if (fragment.includes('%') && !/^#(?:\/|%2f)/i.test(fragment)) {
+    fragment = schemaResourceId(fragment, '');
+  }
   return [uri.slice(0, hash), fragment];
 }
 
@@ -875,7 +880,11 @@ type SchemaPointer = { raw: string; name: string }[];
 function localSchemaPointer(ref: string): SchemaPointer | undefined | null {
   // After normalizing AJV's single delimiter, another raw hash outside
   // a URL is ambiguous. An encoded %23 is still a valid part of a key.
-  if (UNPAIRED_SURROGATE.test(ref) || (ref.includes('#', 1) && !SCHEMA_URL_TAIL.test(ref))) {
+  if (
+    ref === REDACTED ||
+    UNPAIRED_SURROGATE.test(ref) ||
+    (ref.includes('#', 1) && !SCHEMA_URL_TAIL.test(ref))
+  ) {
     return null;
   }
   try {
@@ -1301,23 +1310,19 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
     uris.add(ref);
     uris.add(id);
     const resource = ids.get(id);
-    if (id === REDACTED) {
-      return REDACTED;
-    }
-    if (resource === null) {
-      return root;
-    }
     const anchor = ids.get(id + fragment);
-    if (anchor === null) {
-      return resource ?? root;
+    if (id === REDACTED || resource === null || anchor === null) {
+      return REDACTED;
     }
     if (anchor) {
       return anchor;
     }
     if (!resource) {
-      return ids.has(REDACTED) ? root : undefined;
+      // A base introduced by an anchored $id may lack a root declaration.
+      // Distinguish that lost local target from an unavailable external URI.
+      return id === base ? REDACTED : undefined;
     }
-    return pointer ? pointerTarget(pointer, resource, id) : resource;
+    return pointer ? pointerTarget(pointer, resource, id) : REDACTED;
   }
 
   // AJV honors IDs along the pointer, even under examples or default.
@@ -1342,14 +1347,15 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
     return id ? schemaResourceId(splitResourceUri(id)[0], scope) : scope;
   }
 
-  // For an unknown fragment, conservatively protect the whole resource.
+  // Never substitute the root for an unknown fragment. Walking the root as
+  // an environment would skip possible credentials in its definitions.
   function pointerTarget(pointer: SchemaPointer, resource: object, scope: string): unknown {
     let node: unknown = resource;
     let credential = false;
     let env = false;
     for (const [i, { raw, name }] of pointer.entries()) {
       if (!node || typeof node !== 'object' || !Object.prototype.hasOwnProperty.call(node, name)) {
-        return resource;
+        return REDACTED;
       }
       credential ||= credentialSchemaName(name, undefined, env);
       env = name === 'env' || (env && Array.isArray(node));
@@ -1359,10 +1365,7 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
         scope = pointerScope(child, raw, scope, last, credential);
         if (last && scope !== scopes.get(child)) {
           // The same schema has two possible bases. Do not guess a target.
-          if (credential) {
-            pending.push(root);
-          }
-          return root;
+          return REDACTED;
         }
       } else if (typeof child === 'boolean' && last) {
         // Booleans have no object identity. Preserve only the referenced slot.
@@ -1372,7 +1375,7 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
       }
       node = child;
     }
-    return node ?? resource;
+    return isSchemaObject(node) || typeof node === 'boolean' ? node : REDACTED;
   }
 
   // Even an ordinary reference can reach an annotation containing credential

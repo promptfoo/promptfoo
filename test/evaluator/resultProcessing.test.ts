@@ -105,7 +105,7 @@ describe('model-independent result processing', () => {
     },
   );
 
-  it.each(['[REDACTED]', '#/examples/bad%zz', '#/examples/0##'])(
+  it.each(['[REDACTED]', '#/examples/bad%zz', '#/examples/0##', '#/examples/1'])(
     'protects indirect credentials after losing a public reference (%s)',
     ($ref) => {
       const value = {
@@ -124,6 +124,31 @@ describe('model-independent result processing', () => {
       expect(projectResultSchemas(safe)).toEqual(safe);
     },
   );
+
+  it.each([
+    { $ref: '#missing' },
+    { $ref: '#vars' },
+    { allOf: [{ $ref: '#/$defs/missing' }] },
+    { allOf: [{ $ref: 'vars.json' }] },
+  ])('protects possible local targets of an unresolved environment reference (%j)', (env) => {
+    const vars = { properties: { DBPWD: { pattern: '^opaque$' } } };
+    const value = {
+      $defs: {
+        one: { $id: '#vars', ...vars },
+        two: { $id: '#%76ars', ...vars },
+        first: { $id: 'vars.json', ...vars },
+        second: { $id: 'vars.json', ...vars },
+      },
+      properties: { env },
+    };
+    const row = {
+      testCase: { assert: [{ type: 'is-json', value }] },
+      error: 'data/env/DBPWD must match pattern "^opaque$"',
+    };
+    const safe = projectResultSchemas(row);
+    expect(JSON.stringify(safe)).not.toContain('opaque');
+    expect(projectResultSchemas(safe)).toEqual(safe);
+  });
 
   it('protects environment constraints after losing a local anchor declaration', () => {
     const value = {
