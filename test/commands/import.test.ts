@@ -288,6 +288,34 @@ describe('importCommand', () => {
       expect(importedEval!.evaluationDurationMs).toBe(4198);
     });
 
+    it('upgrades the original dataset when only an imported v3 result records privacy', async () => {
+      const marker = 'SYNTHETIC_PRIVATE_RESULT';
+      const data = JSON.parse(
+        fs.readFileSync(path.join(__dirname, '../__fixtures__/sample-export.json'), 'utf-8'),
+      );
+      data.results.results[0].testCase.metadata = { privatePrompts: true };
+      data.config.tests = [
+        { assert: [{ type: 'not-contains', value: marker }] },
+        { assert: [{ type: 'contains', value: 'public control' }] },
+      ];
+      const datasetId = sha256(JSON.stringify(data.config.tests));
+      const db = await getDb();
+      await db.run(
+        sql`INSERT INTO datasets (id, tests) VALUES (${datasetId}, ${JSON.stringify(data.config.tests)})`,
+      );
+      tempFilePath = path.join(__dirname, `temp-private-v3-${Date.now()}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify(data));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', tempFilePath]);
+      const saved = await Eval.findById(data.evalId);
+      expect(saved).toBeDefined();
+      const dataset = await db.get(sql`SELECT tests FROM datasets WHERE id = ${datasetId}`);
+      for (const value of [dataset, saved!.config]) {
+        expect(JSON.stringify(value)).not.toContain(marker);
+        expect(JSON.stringify(value)).toContain('public control');
+      }
+    });
+
     it('drops unowned attachments and applies inherited privacy before a v3 import', async () => {
       const marker = 'SYNTHETIC_IMPORT_RECEIPT';
       const data = JSON.parse(

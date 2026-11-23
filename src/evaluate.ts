@@ -350,6 +350,10 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
     testSuiteConfig,
     constructedTestSuite.prompts,
   );
+  // File-backed tests can make the shared catalog private even in memory-only runs.
+  if (configRequiresTraceRedaction(constructedTestSuite)) {
+    unifiedConfig.metadata = { ...unifiedConfig.metadata, privatePrompts: true };
+  }
   // The serialized file reference alone cannot tell the privacy projection
   // which inline tests inherit the resolved verifier. Keep only its types.
   const resolvedDefault = constructedTestSuite.defaultTest;
@@ -366,10 +370,7 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
   }
   const author = getAuthor(suiteAuthor);
   const evalRecord = testSuiteConfig.writeLatestResults
-    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, {
-        ...(configRequiresTraceRedaction(constructedTestSuite) && { privatePrompts: true }),
-        author,
-      })
+    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
     : new Eval(unifiedConfig, { author });
 
   const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>

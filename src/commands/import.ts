@@ -14,7 +14,12 @@ import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
 import { parseImportFile } from '../importers/parse';
 import logger from '../logger';
-import Eval, { createEvalId, prepareEvalPrompt, sanitizeLegacyResults } from '../models/eval';
+import Eval, {
+  configForLegacyResults,
+  createEvalId,
+  prepareEvalPrompt,
+  sanitizeLegacyResults,
+} from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
 import EvalResult, {
   prepareBatchResult,
@@ -418,7 +423,9 @@ function prepareImportArtifacts(
   if (!importV3 || privateImport) {
     evalData.results = sanitizeLegacyResults(evalData.results, evalData.config);
     if (!importV3) {
-      evalData.config = sanitizeConfigForPersistence(evalData.config ?? {});
+      evalData.config = sanitizeConfigForPersistence(
+        configForLegacyResults(evalData.config ?? {}, evalData.results),
+      );
     }
     // Legacy imports have no attachments. On private imports, trace IDs and
     // blob references do not prove which row owns their contents.
@@ -454,6 +461,7 @@ async function createImportedV3Eval(
     createdAt: context.importCreatedAt,
     author: context.importAuthor,
     completedPrompts: evalData.results.prompts,
+    ...(evalData.config?.metadata?.privatePrompts && { privacyRows: evalData.results.results }),
     vars: extractVars(evalData),
     runtimeOptions: evalData.runtimeOptions,
     ...extractDurations(evalData),

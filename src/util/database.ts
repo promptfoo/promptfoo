@@ -59,6 +59,7 @@ export async function writeResultsToDatabase(
   createdAt = createdAt || (results.timestamp ? new Date(results.timestamp) : new Date());
   const evalId = createEvalId(createdAt);
   const db = await getDb();
+  const datasetId = sha256(JSON.stringify(config.tests || []));
   config = configForLegacyResults(config, results);
   const persistedConfig = sanitizeConfigForPersistence(config);
   results = sanitizeLegacyResults(results, config);
@@ -86,7 +87,6 @@ export async function writeResultsToDatabase(
     await insertEvalPrompts(tx, evalId, results.table.head.prompts);
 
     // Record dataset relation
-    const datasetId = sha256(JSON.stringify(config.tests || []));
     const testsForStorage = Array.isArray(persistedConfig.tests) ? persistedConfig.tests : [];
 
     // Log when non-array tests are converted to empty array for database storage

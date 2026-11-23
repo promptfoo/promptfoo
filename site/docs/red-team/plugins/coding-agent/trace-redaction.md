@@ -50,7 +50,7 @@ These rules apply to `coding-agent:trace-redaction` and `harness:artifact-redact
 - During private evaluations Promptfoo disables normal logging and the response cache. It omits new trace contexts for private rows and withholds historical spans whose ownership cannot be verified.
 - Promptfoo disables replay for protected evaluations, even when a provider catalog is available. The MCP evaluation tool also hides prompt labels, provider IDs and filter text.
 - If an import includes protected rows, Promptfoo omits attachments, traces, the original author, descriptions, runtime options and variable names for the entire suite.
-- Stored and exported configurations hide receipt paths and local file references. They retain only the assertion types on protected tests, since other expectations can repeat a receipt. Keep the original configuration to rerun a protected eval.
+- Stored and exported configurations hide receipt paths and local file references. They retain only the assertion types on protected tests, since other expectations can repeat a receipt. When an older import records privacy only on its results or leaves the defaults unresolved, the saved configuration can omit expectations from all tests. Keep the original configuration to rerun a protected eval.
 - In the JavaScript API, the live `Eval.config` still holds your prompts, receipt locations and inline values. Use `await evalRecord.toResultsFile()` to obtain a redacted copy before sending results elsewhere.
 - Result hooks, saved results, exports, and sharing receive public rows. These omit rendered prompts, raw responses, mirrored metadata, and private grading details. Existing files and logs outside Promptfoo remain your responsibility.
 

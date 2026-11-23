@@ -2038,6 +2038,58 @@ describe('evaluator', () => {
       },
     );
 
+    it.each([undefined, 'file://private-default.yaml'])(
+      'protects a row-only legacy verifier with unresolved defaults (%s)',
+      async (defaultTest) => {
+        const secret = 'PRIVATE_IMPORTED_SIBLING';
+        const config = {
+          defaultTest,
+          tests: [{ assert: [{ type: 'not-contains' as const, value: secret }] }],
+        };
+        const summary = createLegacyRedactionSummary(
+          'promptfoo:redteam:coding-agent:trace-redaction',
+        );
+        const id = await writeResultsToDatabase(summary, config);
+        const db = await getDb();
+        const dataset = await db
+          .select()
+          .from(datasetsTable)
+          .where(eq(datasetsTable.id, sha256(JSON.stringify(config.tests))))
+          .get();
+        const evaluation = await Eval.findById(id);
+        expect(dataset).toBeDefined();
+        expect(evaluation).toBeDefined();
+        for (const copy of [
+          dataset!.tests,
+          evaluation!.config,
+          (await evaluation!.toResultsFile()).config,
+        ]) {
+          expect(JSON.stringify(copy)).not.toContain(secret);
+          expect(JSON.stringify(copy)).not.toContain('private-default.yaml');
+        }
+        expect(config.tests[0].assert[0].value).toBe(secret);
+      },
+    );
+
+    it('keeps explicit result ownership separate from public tests in a mixed legacy catalog', async () => {
+      const summary = createLegacyRedactionSummary(
+        'promptfoo:redteam:coding-agent:trace-redaction',
+      );
+      const config = {
+        tests: [
+          { assert: [{ type: 'not-contains' as const, value: 'PRIVATE_SIBLING' }] },
+          { assert: [{ type: 'contains' as const, value: 'ordinary output' }] },
+          { metadata: { privatePrompts: true } },
+        ],
+      };
+      const id = await writeResultsToDatabase(summary, config);
+      const evaluation = await Eval.findById(id);
+      const saved = JSON.stringify(evaluation!.config);
+      expect(saved).not.toContain('PRIVATE_SIBLING');
+      expect(saved).toContain('ordinary output');
+      expect(config.tests[0].assert![0].value).toBe('PRIVATE_SIBLING');
+    });
+
     it('omits sibling assertions from private configs and datasets without reading receipts', async () => {
       const secret = 'PRIVATE_SIBLING_RECEIPT';
       const privacy = {

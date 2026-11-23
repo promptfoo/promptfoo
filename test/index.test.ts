@@ -1291,6 +1291,30 @@ describe('evaluate with external defaultTest', () => {
     expect(result.testCase.assert).toEqual(externalDefaultTest.assert);
   });
 
+  it('protects the in-memory catalog when only the loaded test file declares privacy', async () => {
+    const secret = 'private shared assertion';
+    const reader = await import('../src/util/testCaseReader');
+    const read = vi
+      .spyOn(reader, 'readTests')
+      .mockResolvedValueOnce([
+        { assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }] },
+      ]);
+    try {
+      await evaluate({
+        providers: ['mock-provider'],
+        prompts: [secret],
+        defaultTest: { assert: [{ type: 'not-contains', value: secret }] },
+        tests: 'file://private-tests.yaml',
+      });
+      const evaluation = vi.mocked(doEvaluate).mock.calls[0][1] as Eval;
+      const projection = JSON.stringify(sanitizeConfigForPersistence(evaluation.config));
+      expect(projection).not.toContain(secret);
+      expect(projection).not.toContain('private-tests.yaml');
+    } finally {
+      read.mockRestore();
+    }
+  });
+
   it('carries resolved external default privacy into saved config without embedding the file', async () => {
     maybeLoadFromExternalFileSpy.mockResolvedValueOnce({
       assert: [

@@ -44,6 +44,11 @@ export function sanitizeConfigForPersistence(
   }
   Reflect.deleteProperty(safe, 'providerPromptMap');
   const inherited = configRequiresTraceRedaction(config.defaultTest);
+  // Old imports can mark only the suite or refer to defaults we cannot open.
+  // In that case no inline test can prove its sibling expectations are public.
+  const unknownOwnership =
+    typeof config.defaultTest === 'string' ||
+    (!inherited && !configRequiresTraceRedaction([config.tests, config.scenarios]));
   function omitPrivateInputs<T>(test: T, shared = false): T {
     if (!test || typeof test !== 'object') {
       return test;
@@ -54,7 +59,12 @@ export function sanitizeConfigForPersistence(
       typeof options === 'object' &&
       'disableDefaultAsserts' in options &&
       options.disableDefaultAsserts === true;
-    if (!shared && (!inherited || optedOut) && !configRequiresTraceRedaction(test)) {
+    if (
+      !shared &&
+      !unknownOwnership &&
+      (!inherited || optedOut) &&
+      !configRequiresTraceRedaction(test)
+    ) {
       return test;
     }
     // Sibling expectations can repeat a file-backed receipt unavailable at save time.
