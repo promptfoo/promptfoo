@@ -394,6 +394,95 @@ describe('HydraProvider', () => {
       expect(mockGrader.getResult.mock.lastCall[7].conversationTranscript).toBeUndefined();
     });
 
+    it.each(['structured', 'serialized', 'compact'] as const)(
+      'grades only the final user message of a %s stateful chat template',
+      async (format) => {
+        const { renderPrompt } = await vi.importActual<typeof evaluatorHelpers>(
+          '../../../../src/evaluatorHelpers',
+        );
+        vi.mocked(evaluatorHelpers.renderPrompt).mockImplementationOnce(renderPrompt);
+        mockAgentProvider.callApi.mockResolvedValue({ output: 'blue' });
+        mockTargetProvider.callApi.mockImplementation(async (request) => {
+          const messages = JSON.parse(request);
+          return {
+            prompt: {
+              structured: messages,
+              serialized: request,
+              compact: JSON.stringify(messages),
+            }[format],
+            output: 'A color',
+            sessionId: 'first',
+          };
+        });
+        const test: AtomicTestCase = {
+          provider: 'promptfoo:redteam:hydra',
+          assert: [{ type: 'promptfoo:redteam:pii' }],
+          metadata: { goal: 'Check color', pluginId: 'pii', strategyId: 'hydra' },
+        };
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1, stateful: true });
+        const response = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Check color' },
+          prompt: {
+            raw: JSON.stringify([
+              { role: 'system', content: 'Private fixture instructions' },
+              { role: 'user', content: 'Earlier example' },
+              { role: 'assistant', content: 'Earlier answer' },
+              { role: 'user', content: 'Describe {{input}}' },
+            ]),
+            label: 'chat',
+          },
+          test,
+        });
+        expect(response.error).toBeUndefined();
+        expect(response.metadata.redteamFinalPrompt).toBe('Describe blue');
+        expect(response.metadata).not.toHaveProperty('redteamVerifiedContext');
+        const grade = () => runAssertions({ prompt: 'test', test, providerResponse: response });
+        await grade();
+        expect(mockGrader.getResult).toHaveBeenCalledOnce();
+        delete response.metadata.storedGraderResult;
+        await grade();
+        expect(mockGrader.getResult).toHaveBeenCalledTimes(2);
+        for (const call of mockGrader.getResult.mock.calls) {
+          expect(call[0]).toBe('Describe blue');
+          expect(call[7].conversationTranscript).toBeUndefined();
+        }
+      },
+    );
+
+    it.each([
+      {
+        name: 'a match in system or history only',
+        submitted: [
+          { role: 'system', content: 'blue' },
+          { role: 'user', content: 'blue' },
+          { role: 'assistant', content: 'Earlier answer' },
+          { role: 'user', content: 'Describe amber' },
+        ],
+        reported: 'blue',
+      },
+      { name: 'an assistant reply', submitted: [{ role: 'assistant', content: 'blue' }] },
+      { name: 'media', submitted: [{ role: 'user', content: [{ type: 'image' }] }] },
+      {
+        name: 'an unrelated JSON field',
+        submitted: [{ note: 'Describe blue' }],
+        reported: 'Describe blue',
+      },
+    ])('rejects attribution from $name', async ({ submitted, reported }) => {
+      const request = JSON.stringify(submitted);
+      vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(request);
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'blue' });
+      mockTargetProvider.callApi.mockResolvedValue({ prompt: reported ?? request, output: 'Done' });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1, stateful: true });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Check color' },
+        prompt: { raw: '{{input}}', label: 'fixture' },
+      });
+      expect(result.error).toContain('current user turn');
+      expect(mockGrader.getResult).not.toHaveBeenCalled();
+    });
+
     it('keeps the last verified snapshot and reports a later target error separately', async () => {
       mockAgentProvider.callApi
         .mockResolvedValueOnce({ output: 'First' })

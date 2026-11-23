@@ -179,6 +179,48 @@ function scrubOutputForHistory(output: string): string {
   return output;
 }
 
+function confirmReportedInput(
+  reported: unknown,
+  generated: string,
+  submitted: string,
+  statefulText: boolean,
+): string | undefined {
+  if (typeof reported !== 'string' || !reported.trim()) {
+    return undefined;
+  }
+  const directMatch = reported === submitted || reported === generated ? reported : undefined;
+  if (!statefulText || !submitted.trimStart().startsWith('[')) {
+    return directMatch;
+  }
+
+  // A rendered chat template may be reported as messages or echoed as JSON.
+  // Never attribute instructions or example turns in that template to the current user.
+  let messages: unknown;
+  try {
+    messages = JSON.parse(submitted);
+  } catch {
+    return directMatch;
+  }
+  if (!Array.isArray(messages) || !messages.some((entry) => typeof entry?.role === 'string')) {
+    return directMatch;
+  }
+  const last = messages[messages.length - 1];
+  if (
+    !messages.every(
+      (entry) => typeof entry?.role === 'string' && typeof entry.content === 'string',
+    ) ||
+    last.role !== 'user' ||
+    !last.content.trim()
+  ) {
+    return undefined;
+  }
+  return reported === last.content ||
+    reported === submitted ||
+    reported === JSON.stringify(messages)
+    ? last.content
+    : undefined;
+}
+
 function extractAgentMessage(output: unknown): string | undefined {
   if (typeof output === 'string') {
     return output;
@@ -771,10 +813,14 @@ export class HydraProvider implements ApiProvider {
         ? reported.filter((message) => message?.role !== 'system')
         : undefined;
       const last = chat?.[chat.length - 1];
-      const reportedCurrent = last?.role === 'user' ? last.content : reported;
-      const confirmedRequest =
-        reportedCurrent === finalTargetPrompt && finalTargetPrompt.trim() !== '';
-      if (reported !== undefined && reportedCurrent !== currentPrompt && !confirmedRequest) {
+      const statefulText = this.stateful && !lastTransformResult;
+      const confirmedInput = confirmReportedInput(
+        last?.role === 'user' ? last.content : reported,
+        currentPrompt,
+        finalTargetPrompt,
+        statefulText,
+      );
+      if (reported !== undefined && confirmedInput === undefined) {
         lastTargetResponse = {
           ...targetResponse,
           error: 'Target-reported input does not identify the current user turn.',
@@ -783,7 +829,7 @@ export class HydraProvider implements ApiProvider {
       }
       if (
         !targetResponse.cached &&
-        reportedCurrent === currentPrompt &&
+        confirmedInput === currentPrompt &&
         this.conversationHistory[this.conversationHistory.length - 1]?.content === currentPrompt
       ) {
         if (this.stateful && targetResponse.sessionId) {
@@ -846,10 +892,7 @@ export class HydraProvider implements ApiProvider {
       completedResponse = targetResponse;
       // Stateful templates can omit part of the generated input. Grade and save the
       // confirmed text. Stateless replays and media envelopes can include earlier turns.
-      lastFinalAttackPrompt =
-        this.stateful && confirmedRequest && !lastTransformResult
-          ? finalTargetPrompt
-          : currentPrompt;
+      lastFinalAttackPrompt = statefulText ? (confirmedInput ?? currentPrompt) : currentPrompt;
       lastTransformDisplayVars = lastTransformResult?.displayVars;
       verifiedContext = undefined;
       const historyOutput =
