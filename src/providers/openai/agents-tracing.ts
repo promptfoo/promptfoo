@@ -736,7 +736,10 @@ function sanitizeCredentialText(
 
   return (
     redactQuotedCredentials(value)
-      .replace(/\b(?:gh[opsur]_|github_pat_|glpat-)[A-Za-z0-9_-]+/g, '<redacted>')
+      .replace(
+        /\b(?:gh[opsur]_|github_pat_|glpat-|[sr]k_(?:live|test)_)[A-Za-z0-9_-]+/g,
+        '<redacted>',
+      )
       .replace(/\b(?:sk|pk|key)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
       .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED_AWS_KEY>')
       .replace(/\bAIza[a-zA-Z0-9_-]{35}\b/g, '<redacted>')

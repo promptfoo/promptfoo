@@ -169,6 +169,29 @@ describe('OTLPTracingExporter', () => {
   });
 
   it.each(formats)(
+    'redacts Stripe secret and restricted keys in %s tool output and errors',
+    async (format) => {
+      const suffix = 'opaque'.repeat(4);
+      const publicText = `pk_live_${'x'.repeat(24)} task_test_results`;
+      const payload = await exportSpans(format, [
+        {
+          spanData: {
+            type: 'function',
+            name: 'lookup',
+            output: `Found sk_live_${suffix}, rk_test_${suffix} and ${publicText}`,
+          },
+          error: new Error(`Rejected sk_test_${suffix} and rk_live_${suffix}`),
+        },
+      ]);
+      const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(getAttributes(span)['tool.output']).toBe(
+        `Found <redacted>, <redacted> and ${publicText}`,
+      );
+      expect(span.status.message).toBe('Rejected <redacted> and <redacted>');
+    },
+  );
+
+  it.each(formats)(
     'redacts standalone authorization values and encoded form credentials in %s',
     async (format) => {
       const { attributes } = await exportCustomData(format, {
