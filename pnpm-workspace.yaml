@@ -15,6 +15,10 @@ minimumReleaseAgeExclude:
   - 'minimatch@11.0.8'
   - '@isaacs/nonrecursive-glob-match@1.1.0'
 
+# Match the npm override so Storybook uses the CLI's patched glob.
+overrides:
+  '@joshwooding/vite-plugin-react-docgen-typescript>glob': '$glob'
+
 # Build-script allowlist. pnpm 11 dropped the `pnpm` field in package.json ("The 'pnpm'
 # field in package.json is no longer read by pnpm") and renamed onlyBuiltDependencies to
 # this map, so pnpm 11+ reads only this file. package.json still carries
