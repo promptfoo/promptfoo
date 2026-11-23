@@ -1035,10 +1035,20 @@ function hasCredentialNamedPayload(value: string): boolean {
   return false;
 }
 
-// Stop at the closing literal or withhold ambiguous interpolation and truncated input.
+// Stop at an unambiguous terminator. Guessing wrong can consume the next
+// credential's name and opening quote while leaving its value in the trace.
 function credentialLiteralEnd(value: string, start: number, delimiter: string): number {
   for (let i = start + delimiter.length; i < value.length; i++) {
     if (value[i] === '\\') {
+      if (
+        delimiter[0] === "'" &&
+        value.startsWith(delimiter, i + 1) &&
+        !/\w/.test(value[i + 1 + delimiter.length] ?? '')
+      ) {
+        // TOML literal strings treat a backslash as data. Other formats can
+        // use it to escape a quote. Withhold both possible interpretations.
+        return -1;
+      }
       i++;
     } else if (delimiter === '`' && value.startsWith('${', i)) {
       return -1; // Interpolations can contain nested literals, including backticks.
@@ -1050,18 +1060,48 @@ function credentialLiteralEnd(value: string, start: number, delimiter: string): 
       }
     }
   }
-  return -1;
+  // A truncated ordinary quoted field can be masked through the end.
+  return delimiter === '"' || delimiter === "'" ? value.length : -1;
 }
 
 function redactCredentialLiterals(value: string): string {
   if (!/[="'`]/.test(value)) {
     return value;
   }
+  const masked = maskAssignedLiterals(value);
+  // JavaScript comments can split a key, an assignment, or a template tag.
+  // Check for additional credentials without comments, but never export this
+  // interpretation: the same characters can be data in another format.
+  const joined = masked.replace(/\/\*[\s\S]*?(?:\*\/|$)|(?<!:)\/\/[^\r\n\u2028\u2029]*/g, ' ');
+  return joined !== masked && maskAssignedLiterals(joined) !== joined ? '<redacted>' : masked;
+}
+
+function literalKeySegment(key: string): string {
+  // Map TOML and JavaScript escapes to the shared classifier's Unicode spelling.
+  return key
+    .replace(/\\U0000/g, '\\u')
+    .replace(/\\x/g, '\\u00')
+    .replace(/\\u\{0*([\da-fA-F]{1,4})\}/g, (_, hex: string) => '\\u' + hex.padStart(4, '0'));
+}
+
+function isAmbiguousAssignment(value: string, start: number): boolean {
+  return (
+    value[start] === '[' ||
+    value[start] === '(' ||
+    value.startsWith('/*', start) ||
+    value.startsWith('//', start)
+  );
+}
+
+function maskAssignedLiterals(value: string): string {
   // Consume each segment once, including in a long dotted name with no assignment.
-  // Quoted TOML keys can mix with bare names and whitespace on either side of a dot.
+  // Follow dotted TOML keys and static JavaScript property access.
   const segments =
-    /(?:(?<!\\)"((?:\\.|[^"\\\r\n])*)"|'([^'\r\n]*)'|(?<![\w$-])([\w$-]+))([ \t]*\.[ \t]*|\s*[:=]\s*)/g;
-  const templateTag = /[\w$.]+[ \t]*(?=`)/y;
+    /(?:(?<!\\)"((?:\\.|[^"\\\r\n])*)"|'([^'\r\n]*)'|`([^`\r\n]*)`(?=\s*\])|(?<![\w$-])([\w$-]+))(\s*(?:\]\s*)?([.:]|(?:\+|\?\?|\|\||&&)?=|\[(?=\s*["'`])|\/[*/])\s*)/g;
+  const templateTag = /[\w$]+(?:\s*\.\s*[\w$]+)*\s*(?:\.\s*)?(?=`|\/[*/]|\[|\()/y;
+  const continuation = /\s*(?:\+|\?\?|\|\||&&)/y;
+  const delimiters = ['"""', "'''", '"', "'", '`'];
+  const hasTemplate = value.includes('`');
   const parts: string[] = [];
   let next = -1;
   let qualified = false;
@@ -1072,31 +1112,36 @@ function redactCredentialLiterals(value: string): string {
       parts.length = 0;
       qualified = false;
     }
-    const [, double, single, bare, separator] = match;
-    // Use the shared classifier's Unicode spelling for TOML byte and long escapes.
-    parts.push(double?.replace(/\\U0000/g, '\\u').replace(/\\x/g, '\\u00') ?? single ?? bare);
-    qualified ||= bare === undefined || (separator.includes('.') && separator !== '.');
-    if (separator.includes('.')) {
-      next = segments.lastIndex;
-      continue;
+    const [, double, single, template, bare, separator, operator] = match;
+    if (operator === '//' && value[match.index - 1] === '=' && /[\r\n]/.test(separator)) {
+      continue; // A .npmrc scalar can precede a //registry line.
     }
-    // A simple tag such as String.raw can precede a JavaScript template.
-    templateTag.lastIndex = segments.lastIndex;
-    const start = templateTag.test(value) ? templateTag.lastIndex : segments.lastIndex;
-    const quote = value[start];
-    const triple = value.startsWith('"""', start) || value.startsWith("'''", start);
-    if (quote !== '`' && quote !== '[' && !triple && !(qualified && parts.length > 1)) {
+    parts.push(bare ?? literalKeySegment(double ?? single ?? template));
+    qualified ||= bare === undefined || (operator === '.' && separator !== '.');
+    if (operator === '.' || operator === '[') {
+      next = segments.lastIndex;
       continue;
     }
     if (!isCredentialAttributeKey(parts.join('.'))) {
       continue;
     }
-    if (quote !== '`' && quote !== '"' && quote !== "'") {
-      return '<redacted>'; // A credential array or table can span multiple lines.
+    if (operator.startsWith('/')) {
+      return '<redacted>';
     }
-    const delimiter = triple ? quote.repeat(3) : quote;
+    // A simple tag such as String.raw can precede a JavaScript template.
+    templateTag.lastIndex = segments.lastIndex;
+    const start =
+      hasTemplate && templateTag.test(value) ? templateTag.lastIndex : segments.lastIndex;
+    const delimiter = delimiters.find((candidate) => value.startsWith(candidate, start));
+    if (!delimiter) {
+      if (qualified || isAmbiguousAssignment(value, start)) {
+        return '<redacted>';
+      }
+      continue; // Unquoted scalars have format-specific delimiters.
+    }
     const end = credentialLiteralEnd(value, start, delimiter);
-    if (end === -1) {
+    continuation.lastIndex = end;
+    if (end === -1 || continuation.test(value)) {
       return '<redacted>';
     }
     result += value.slice(copied, start) + delimiter + '<redacted>' + delimiter;

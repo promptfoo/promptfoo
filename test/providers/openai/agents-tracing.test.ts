@@ -322,6 +322,8 @@ describe('OTLPTracingExporter', () => {
       'api. "keys" = """opaque "third"\nopaque/value"""',
       String.raw`"\u0061pi"."\U0000006Bey" = "opaque/escaped"`,
       String.raw`"\x61pi".key = 'opaque/byte'`,
+      String.raw`"api\U0000004Bey" = "opaque/long"`,
+      String.raw`"\x70assword" = 'opaque/short'`,
       '"cache"."key" = "visible"',
       "'token' . count = 12",
     ].join('\n');
@@ -338,11 +340,80 @@ describe('OTLPTracingExporter', () => {
     expect(span.status.message).toBe('<redacted>');
   });
 
+  it.each(formats)(
+    'withholds ambiguous TOML endings before another credential in %s',
+    async (format) => {
+      const next = "\npassword = 'opaque/adjacent'";
+      const { attributes } = await exportCustomData(format, {
+        quoted: String.raw`"private"."key" = 'C:\keys\'` + next,
+        bare: String.raw`apiKey = 'C:\keys\'` + next,
+        triple: String.raw`'api'.key = '''C:\keys\'''` + "\npassword = '''opaque/adjacent'''",
+        publicFirst: String.raw`path = 'C:\folder\'` + next,
+        ordinary: String.raw`path = 'C:\folder\'` + "\nregion = 'public'",
+      });
+      expect(attributes).toMatchObject(redacted('quoted', 'bare', 'triple'));
+      expect(attributes.publicFirst).toBe(
+        String.raw`path = 'C:\folder\'` + "\npassword = '<redacted>'",
+      );
+      expect(attributes.ordinary).toBe(String.raw`path = 'C:\folder\'` + "\nregion = 'public'");
+    },
+  );
+
   it('preserves long dotted names without an assignment', async () => {
     const path = '"name".'.repeat(6000) + '"item"';
     const { attributes } = await exportCustomData('json', { path });
     expect(attributes.path).toBe(path);
   });
+
+  it.each(formats)('masks static JavaScript property assignments in %s', async (format) => {
+    const output = [
+      'process.env["API_KEY"] = "opaque/property";',
+      "cfg[ 'apiKey' ] = `first\nopaque/template`;",
+      'cfg["private"]["key"] = "opaque/compound";',
+      'cfg[`apiKey`] ??= "opaque/default";',
+      String.raw`cfg['api\u{4B}ey'] = 'opaque/escaped';`,
+      'const password = String.raw\n`opaque/tagged`;',
+      'cfg["cache"]["key"] = "visible";',
+      'cfg["token_count"] = 9;',
+    ].join('\n');
+    const payload = await exportSpans(format, [
+      { spanData: { type: 'function', name: 'read_file', output } },
+    ]);
+    const { 'tool.output': text } = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
+    expect(text).toContain('process.env["API_KEY"] = "<redacted>";');
+    expect(text).toContain('cfg["cache"]["key"] = "visible";');
+    expect(text).toContain('cfg["token_count"] = 9;');
+  });
+
+  it.each(formats)(
+    'withholds ambiguous JavaScript credential assignments in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(format, {
+        before: 'const apiKey /* note */ = `opaque/first`;',
+        after: 'const password = /* note */ `opaque/second`;',
+        bracketed: 'cfg["apiKey"] // note\n = "opaque/third";',
+        compound: 'cfg["private"] /* note */ ["key"] = "opaque/compound";',
+        tagged: 'const password = String.raw /* note */ `opaque/fourth`;',
+        member: 'const password = String. /* note */ raw`opaque/fifth`;',
+        joined: 'cfg["apiKey"] = "first" + "opaque/suffix";',
+        continued: 'const password = `first` /* note */ + `opaque/second`;',
+        ordinary: 'const cacheKey = /* note */ `visible`;',
+      });
+      expect(attributes).toMatchObject(
+        redacted(
+          'before',
+          'after',
+          'bracketed',
+          'compound',
+          'tagged',
+          'member',
+          'joined',
+          'continued',
+        ),
+      );
+      expect(attributes.ordinary).toBe('const cacheKey = /* note */ `visible`;');
+    },
+  );
 
   it.each(formats)(
     'masks complete JavaScript credential template literals in %s',
