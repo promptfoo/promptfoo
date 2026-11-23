@@ -181,9 +181,31 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     return true;
   }
 
-  return typeof assertion.value === 'string'
-    ? assertion.value.startsWith('file://') || isPackagePath(assertion.value)
-    : false;
+  const { value } = assertion;
+  if (typeof value !== 'string') {
+    return false;
+  }
+  return value.startsWith('file://')
+    ? resolveAssertionFile(value).language !== undefined
+    : isPackagePath(value);
+}
+
+function resolveAssertionFile(value: string) {
+  const fileRef = value.slice('file://'.length);
+  const colonIndex = fileRef.indexOf(':');
+  const filePath = path.resolve(
+    cliState.basePath || '',
+    colonIndex === -1 ? fileRef : fileRef.slice(0, colonIndex),
+  );
+  const functionName = colonIndex === -1 ? undefined : fileRef.slice(colonIndex + 1);
+  const language = isJavascriptFile(filePath)
+    ? 'javascript'
+    : filePath.endsWith('.py')
+      ? 'python'
+      : filePath.endsWith('.rb')
+        ? 'ruby'
+        : undefined;
+  return { filePath, functionName, language };
 }
 
 export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
@@ -505,20 +527,8 @@ async function runAssertionInternal({
   }
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
-      const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const colonIndex = fileRef.indexOf(':');
-        filePath = fileRef.slice(0, colonIndex);
-        functionName = fileRef.slice(colonIndex + 1);
-      }
-
-      filePath = path.resolve(basePath, filePath);
-
-      if (isJavascriptFile(filePath)) {
+      const { filePath, functionName, language } = resolveAssertionFile(renderedValue);
+      if (language === 'javascript') {
         // Load errors (missing file or export) are config mistakes and still throw.
         const assertionFunction = await resolveJavaScriptFileFunction(filePath, functionName);
         try {
@@ -529,11 +539,10 @@ async function runAssertionInternal({
           );
         }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
-      } else if (filePath.endsWith('.py') || filePath.endsWith('.rb')) {
+      } else if (language === 'python' || language === 'ruby') {
         try {
-          const runScript = filePath.endsWith('.py')
-            ? runPython
-            : (await import('../ruby/rubyUtils.js')).runRuby;
+          const runScript =
+            language === 'python' ? runPython : (await import('../ruby/rubyUtils.js')).runRuby;
           valueFromScript = await runScript<ValueFromScriptType>(
             filePath,
             functionName || 'get_assert',

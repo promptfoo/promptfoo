@@ -8,6 +8,7 @@ import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { TempoProvider } from '../../src/tracing/providers/tempo';
 import { IncompleteTraceError } from '../../src/tracing/providers/types';
 import { getTraceStore } from '../../src/tracing/store';
+import { ResultFailureReason } from '../../src/types/index';
 import { createMockProvider } from '../factories/provider';
 import { createDeferred } from '../util/utils';
 
@@ -818,6 +819,32 @@ describe('evaluator trace integration', () => {
       expect(next.success).toBe(true);
     });
 
+    it('keeps the completed turn and transformed output when required evidence is missing', async () => {
+      const provider = createMockProvider({
+        response: { output: { answer: 'Blue' }, conversationOutput: 'Previous answer' },
+        transform: 'output.answer',
+      });
+      const options = createRunOptions(provider, {
+        prompt: { raw: 'Prior: {{ _conversation[0].output }}', label: 'conversation' },
+        conversations: {},
+        registers: {},
+      });
+      options.test.options = { transform: 'output.toUpperCase()', storeOutputAs: 'answer' };
+      options.test.assert = [{ type: 'trace-error-spans' }];
+      mockFetchTraceContext.mockResolvedValueOnce(null);
+
+      const [missing] = await runEval(options);
+      const [next] = await runEval({ ...options, testIdx: 1, test: {} });
+
+      expect(missing.error).toContain('Required external trace is unavailable');
+      expect(missing.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(missing.response?.error).toBeUndefined();
+      expect(missing.response?.output).toBe('BLUE');
+      expect(options.registers?.answer).toBe('BLUE');
+      expect(next.prompt.raw).toBe('Prior: Previous answer');
+      expect(next.success).toBe(true);
+    });
+
     it.each(['trace', 'script', 'output'] as const)(
       'retains completed work after an earlier rejected snapshot with %s grading',
       async (grading) => {
@@ -1027,9 +1054,9 @@ describe('evaluator trace integration', () => {
         throw new Error('cancelled by user');
       });
 
-      const [result] = await runEval(
-        createRunOptions(provider, { abortSignal: controller.signal }),
-      );
+      const options = createRunOptions(provider, { abortSignal: controller.signal });
+      options.test.assert = [{ type: 'trace-error-spans' }];
+      const [result] = await runEval(options);
 
       expect(result.error).toContain('cancelled by user');
       expect(mockFetchTraceContext).toHaveBeenCalledWith(
@@ -1038,8 +1065,8 @@ describe('evaluator trace integration', () => {
       );
     });
 
-    it.each(['success', 'completed error'] as const)(
-      'retains completed %s when CLI pause cancels the real default trace query delay',
+    it.each(['success', 'completed error', 'missing trace'] as const)(
+      'records %s when CLI pause cancels the real default trace query delay',
       async (outcome) => {
         const { fetchTraceContext } = await vi.importActual<
           typeof import('../../src/tracing/traceContext')
@@ -1079,7 +1106,15 @@ describe('evaluator trace integration', () => {
             tracing: { ...tracingSuite.tracing!, queryDelay: undefined },
             providers: [provider],
             prompts: [{ raw: 'Test prompt', label: 'test' }],
-            tests: [{ metadata: { tracingEnabled: true, evaluationId: 'test-eval-id' } }],
+            tests: [
+              {
+                metadata: { tracingEnabled: true, evaluationId: 'test-eval-id' },
+                assert:
+                  outcome === 'success'
+                    ? []
+                    : [{ type: 'trace-error-spans', value: { pattern: 'external.*' } }],
+              },
+            ],
           },
           mockEval,
           {
@@ -1119,9 +1154,14 @@ describe('evaluator trace integration', () => {
             'Real trace delay cancellation must retain the completed target',
           ).toMatchObject(response);
           expect(row.cost).toBe(0.125);
+          expect(row.tokenUsage?.total).toBe(7);
           expect(row.success).toBe(outcome === 'success');
           if (outcome === 'completed error') {
             expect(row.error).toContain('Completed tool diagnostic');
+          } else if (outcome === 'missing trace') {
+            expect(row.error).toContain('Required external trace is unavailable');
+            expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+            expect(row.score).toBe(0);
           }
           await vi.advanceTimersByTimeAsync(1);
           expect(network).not.toHaveBeenCalled();
