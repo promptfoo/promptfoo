@@ -239,6 +239,11 @@ function getBackgroundCacheIdentity(
   request: BackgroundRequest,
   responseId?: string,
 ): { key: string; cacheable: boolean; coalescable: boolean } {
+  // Request-time credentials do not identify a principal here. Gate creation,
+  // polling and billing together, even when a gateway reuses a job ID.
+  if (request.getAuthHeaders) {
+    return { key: '', cacheable: false, coalescable: false };
+  }
   const headerEntries = Object.entries(request.headers);
   const cacheHeaders = headerEntries
     .filter(
@@ -887,6 +892,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return undefined;
   }
 
+  protected getObservableToolCost(
+    data: unknown,
+    modelName: string,
+    config: OpenAiBillingConfig,
+  ): number {
+    return calculateObservableOpenAIToolCost(data, modelName, config);
+  }
+
   protected applyBilling(
     result: ProviderResponse,
     data: any,
@@ -953,7 +966,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
     const observableToolCost = cached
       ? 0
-      : calculateObservableOpenAIToolCost(data, billingLookupModel, config);
+      : this.getObservableToolCost(data, billingLookupModel, config);
 
     return {
       ...result,
