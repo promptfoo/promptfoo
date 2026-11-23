@@ -118,6 +118,14 @@ vi.mock('../../../../src/redteam/providers/traceFormatting', () => ({
 }));
 
 describe('HydraProvider', () => {
+  const blackPixel = {
+    data: 'R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAkQBADs=',
+    mimeType: 'image/gif',
+  };
+  const whitePixel = {
+    data: 'R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=',
+    mimeType: 'image/gif',
+  };
   let mockAgentProvider: MockApiProvider;
   let mockTargetProvider: MockApiProvider;
   let mockGrader: any;
@@ -945,6 +953,67 @@ describe('HydraProvider', () => {
   });
 
   describe('callApi() - backtracking', () => {
+    it.each([
+      ['hydra', 'image', true],
+      ['goblin', 'grading trace', true],
+      ['hydra', 'attack-only trace', false],
+      ['goblin', 'empty trace', false],
+      ['hydra', 'cached target', false],
+    ] as const)('handles a refusal with %s and %s evidence', async (strategy, evidence, grade) => {
+      const Provider =
+        strategy === 'goblin'
+          ? (await import('../../../../src/redteam/providers/goblin/index')).GoblinProvider
+          : HydraProvider;
+      const provider = new Provider({ injectVar: 'input', maxTurns: 1, maxBacktracks: 1 });
+      const images = evidence === 'image' ? [blackPixel] : undefined;
+      const trace = {
+        traceId: 'test-trace-id',
+        spans: evidence === 'empty trace' ? [] : [{ spanId: 'span1', name: 'fixture' }],
+        insights: [],
+        fetchedAt: Date.now(),
+      };
+      mockResolveTracingOptions.mockReturnValue({
+        ...createMockTracingOptions(),
+        includeInGrading: evidence !== 'attack-only trace' && !images,
+      });
+      mockFetchTraceContext.mockResolvedValue(trace);
+      mockIsBasicRefusal.mockReturnValue(true);
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Describe a fixture.' });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'I cannot help with that.',
+        images,
+        cached: evidence === 'cached target',
+      });
+      mockGrader.getResult.mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Fixture' },
+      });
+      const test: AtomicTestCase = {
+        assert: [{ type: 'promptfoo:redteam:ssrf' }],
+        metadata: { goal: 'fixture', pluginId: 'ssrf', strategyId: `jailbreak:${strategy}` },
+      };
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'fixture' },
+        prompt: { raw: 'fixture', label: 'fixture' },
+        test,
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      });
+      expect(result.metadata).toHaveProperty(`${strategy}BacktrackCount`, grade ? 0 : 1);
+      expect(mockGrader.getResult).toHaveBeenCalledTimes(grade ? 1 : 0);
+      if (grade) {
+        expect(mockGrader.getResult.mock.calls[0][7]).toMatchObject(
+          images ? { imageOutputs: images } : { traceContext: trace },
+        );
+        expect(result.metadata?.storedGraderResult?.pass).toBe(false);
+      }
+      if (images) {
+        expect(mockGrader.getResult.mock.calls[0][7]).not.toHaveProperty('traceContext');
+        expect(result.images).toEqual(images);
+        expect(JSON.stringify(mockAgentProvider.callApi.mock.calls)).not.toContain(images[0].data);
+        expect(JSON.stringify(result.metadata)).not.toContain(images[0].data);
+      }
+    });
+
     it('should backtrack when target refuses in stateless mode', async () => {
       // Import to trigger the mock
       await import('../../../../src/redteam/util');
@@ -1875,6 +1944,38 @@ describe('HydraProvider', () => {
         output: 'Target response',
         raw: JSON.stringify({ finalResponse: 'Target response', items: ['raw evidence'] }),
       });
+    });
+
+    it('reuses an image verdict only for the same returned image', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Describe a fixture.' });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'I cannot help with that.',
+        images: [blackPixel],
+      });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 });
+      const test: AtomicTestCase = {
+        provider: provider.id(),
+        assert: [{ type: 'promptfoo:redteam:ssrf' }],
+        metadata: { goal: 'fixture', pluginId: 'ssrf', strategyId: 'jailbreak:hydra' },
+      };
+      const providerResponse = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'fixture' },
+        prompt: { raw: 'fixture', label: 'fixture' },
+        test,
+      });
+      const grade = () => runAssertions({ prompt: 'fixture', test, providerResponse });
+      expect((await grade()).pass).toBe(true);
+      expect(mockGrader.getResult).toHaveBeenCalledTimes(1);
+      providerResponse.images = [whitePixel];
+      mockGrader.getResult.mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Updated' },
+      });
+      expect((await grade()).pass).toBe(false);
+      expect(mockGrader.getResult).toHaveBeenCalledTimes(2);
+      expect(mockGrader.getResult.mock.calls[1][7].providerResponse.images).toEqual(
+        providerResponse.images,
+      );
     });
   });
 

@@ -9,6 +9,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { hasTraceOrImages } from '../grading/evidence';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { redteamProviderManager } from '../providers/shared';
 import {
@@ -442,12 +443,7 @@ export abstract class RedteamGraderBase {
   }
 
   protected canPassRefusal(context?: RedteamGradingContext, skip?: boolean): boolean {
-    return (
-      !skip &&
-      !context?.traceData?.spans?.length &&
-      !context?.traceContext?.spans?.length &&
-      !(context?.imageOutputs ?? context?.providerResponse?.images)?.length
-    );
+    return !skip && !hasTraceOrImages(context);
   }
 
   getSuggestions({}: {

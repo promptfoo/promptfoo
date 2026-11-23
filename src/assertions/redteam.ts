@@ -208,6 +208,7 @@ export const handleRedteam = async (
     ['hydra', 'goblin', 'jailbreak:hydra', 'jailbreak:goblin'].includes(
       test.metadata?.strategyId ?? '',
     );
+  const gradedImages = gradesCurrentTurnOnly ? providerResponse.images : undefined;
 
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
   const hasStrategyGrade =
@@ -228,6 +229,7 @@ export const handleRedteam = async (
         outputString,
         gradesCurrentTurnOnly ? undefined : gradingMessages,
         test.metadata?.pluginId,
+        gradedImages,
       )
   ) {
     // Check if any turns had grader errors (even though we have a stored result)
@@ -340,6 +342,7 @@ export const handleRedteam = async (
               outputString,
               undefined,
               test.metadata?.pluginId,
+              gradedImages,
             ),
           },
     );

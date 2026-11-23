@@ -743,6 +743,7 @@ export function accumulateGraderResult(
     prompt: string;
     output: string;
     messages?: unknown;
+    images?: ProviderResponse['images'];
     pluginId?: string;
     assertion?: AssertionOrSet;
   },
@@ -758,6 +759,7 @@ export function accumulateGraderResult(
           input.output,
           input.messages,
           input.pluginId,
+          input.images,
         ),
       },
     };
