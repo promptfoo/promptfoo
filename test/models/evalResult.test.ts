@@ -695,18 +695,24 @@ describe('EvalResult', () => {
         vars: {},
         options: {
           provider: {
-            id: { env: { API_KEY: 'sk-map-secret' } },
+            id: { env: { API_KEY: 'sk-map-secret', GITHUB_TOKEN: 'fixture', REGION: 'local' } },
             label: { prompts: ['judge'] },
             config: { delay: 1 },
+            env: { config: { apiKey: 'fixture' } },
+            auth: { prompts: ['judge'] },
+            token: { delay: 2 },
           },
         },
       } as AtomicTestCase,
     });
 
     expect(result.testCase.options?.provider).toEqual({
-      id: { env: { API_KEY: '[REDACTED]' } },
+      id: { env: { API_KEY: '[REDACTED]', GITHUB_TOKEN: '[REDACTED]', REGION: 'local' } },
       label: { prompts: ['judge'] },
       config: { delay: 1 },
+      env: { config: { apiKey: '[REDACTED]' } },
+      auth: { prompts: ['judge'] },
+      token: { delay: 2 },
     });
   });
 

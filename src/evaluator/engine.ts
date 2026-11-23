@@ -111,7 +111,13 @@ import { TransformInputType, transform } from '../util/transform';
 import { compileDerivedMetricFormula } from './derivedMetricFormula';
 import { PromptSuggestionsRejectedError } from './errors';
 import { getResultIndexKey } from './resultIndex';
-import { PROMPTFOO_METADATA_KEY, sanitizeResultForJsonlArtifact } from './resultProcessing';
+import {
+  PROMPTFOO_METADATA_KEY,
+  projectPrompt,
+  projectProviderId,
+  sanitizeForDb,
+  sanitizeResultForJsonlArtifact,
+} from './resultProcessing';
 import {
   ABORTED_GRADING_PREFIX,
   applyGradingError,
@@ -683,6 +689,51 @@ function buildLivePromptColumns(testSuite: TestSuite): {
   return { prompts, columnsByProvider };
 }
 
+/** Reconnect persisted projections to live credentials without moving any saved metrics. */
+function restoreLivePromptReferences(
+  testSuite: TestSuite,
+  savedPrompts: CompletedPrompt[],
+): CompletedPrompt[] {
+  const providerIds = new Map<string, Set<string>>();
+  for (const provider of testSuite.providers) {
+    const id = getProviderIdentifier(provider);
+    const projected = projectProviderId(id);
+    const ids = providerIds.get(projected) ?? new Set<string>();
+    ids.add(id);
+    providerIds.set(projected, ids);
+  }
+
+  const configs = new Map<string, { prompt: Prompt; projected: unknown }[]>();
+  for (const prompt of testSuite.prompts) {
+    if (prompt.config !== undefined) {
+      const candidates = configs.get(prompt.label) ?? [];
+      candidates.push({ prompt, projected: sanitizeForDb(projectPrompt(prompt, false).config) });
+      configs.set(prompt.label, candidates);
+    }
+  }
+
+  return savedPrompts.map((saved) => {
+    const ids = providerIds.get(saved.provider);
+    invariant(!ids || ids.size === 1, AMBIGUOUS_PROVIDER_ID_MESSAGE);
+    const provider = ids?.values().next().value ?? saved.provider;
+    let live: Prompt | undefined;
+    for (const candidate of configs.get(saved.label) ?? []) {
+      if (
+        candidate.prompt.raw === saved.raw &&
+        isDeepStrictEqual(candidate.projected, saved.config)
+      ) {
+        invariant(
+          !live || isDeepStrictEqual(live.config, candidate.prompt.config),
+          'Saved prompt configuration is ambiguous after redaction. Assign unique prompt labels before retrying.',
+        );
+        live = candidate.prompt;
+      }
+    }
+    // Unprojected legacy and in-memory columns can already match the live definitions.
+    return { ...saved, provider, ...(live && { config: live.config }) };
+  });
+}
+
 function matchesSavedPromptLayout(
   prompts: CompletedPrompt[],
   savedPrompts: CompletedPrompt[],
@@ -767,10 +818,11 @@ function preparePromptRecovery(
   testSuite: TestSuite,
   store: EvaluationStore,
 ): PreparedPromptRecovery {
-  const canRestoreText = canRestoreSavedText(testSuite.prompts, store.prompts);
+  const savedPrompts = restoreLivePromptReferences(testSuite, store.prompts);
+  const canRestoreText = canRestoreSavedText(testSuite.prompts, savedPrompts);
   const identities = promptIdentityCandidates(testSuite.prompts);
   const live = buildLivePromptColumns(testSuite);
-  const exact = matchesSavedPromptLayout(live.prompts, store.prompts, canRestoreText);
+  const exact = matchesSavedPromptLayout(live.prompts, savedPrompts, canRestoreText);
   let mode: PreparedPromptRecovery['mode'] = canRestoreText ? 'snapshot' : 'live';
   let hookPrompts = testSuite.prompts;
 
@@ -794,7 +846,7 @@ function preparePromptRecovery(
     }
   }
   if (mode === 'snapshot') {
-    hookPrompts = store.prompts.map((saved) => {
+    hookPrompts = savedPrompts.map((saved) => {
       const ids = identities.get(JSON.stringify([saved.id, saved.raw, saved.label]));
       return { ...saved, id: ids?.size === 1 ? ids.values().next().value : undefined };
     });
@@ -842,14 +894,18 @@ function buildCompletedPrompts(
     recovery?.mode === 'snapshot'
       ? { prompts: [], columnsByProvider: [] }
       : buildLivePromptColumns(testSuite);
+  const savedPrompts =
+    cliState.resume && store.persisted && store.prompts.length
+      ? restoreLivePromptReferences(testSuite, store.prompts)
+      : store.prompts;
   const matchesSavedLayout = matchesSavedPromptLayout(
     prompts,
-    store.prompts,
+    savedPrompts,
     restorePromptColumns && canRestoreText,
   );
 
   const restoredPrompts = restorePromptColumns
-    ? store.prompts.map((saved) => {
+    ? savedPrompts.map((saved) => {
         const metrics = saved.metrics
           ? structuredClone(saved.metrics)
           : createDefaultPromptMetrics();

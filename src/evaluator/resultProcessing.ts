@@ -127,16 +127,17 @@ export function projectProviderResponse(
   return projectedResponse;
 }
 
+export function projectProviderId(id: string): string {
+  return sanitizeObject(id, { sanitizeUrls: true, redactStringValues: false });
+}
+
 export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
   const projected = { ...prompt };
   if (projected.config !== undefined) {
     projected.config = sanitizePromptConfig(projected.config);
   }
   if ('provider' in projected && typeof projected.provider === 'string') {
-    projected.provider = sanitizeObject(projected.provider, {
-      sanitizeUrls: true,
-      redactStringValues: false,
-    });
+    projected.provider = projectProviderId(projected.provider);
   }
   return stripPromptText
     ? {
@@ -355,9 +356,6 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
         ...sanitizeProvider({ id, label, config }),
       };
     }
-    if ('env' in provider) {
-      return sanitizeForDbWithSecrets(provider);
-    }
     const usedKeys = new Set<string>();
     return Object.fromEntries(
       Object.entries(descriptors)
@@ -365,15 +363,17 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
           ([key, descriptor]) => key !== 'toJSON' && descriptor.enumerable && 'value' in descriptor,
         )
         .map(([key, descriptor]) => {
-          const redactedKey = sanitizeObject(key, {
-            sanitizeUrls: true,
-            redactStringValues: false,
-          });
+          const redactedKey = projectProviderId(key);
           let uniqueKey = redactedKey;
           for (let suffix = 1; usedKeys.has(uniqueKey); suffix++) {
             uniqueKey = `${redactedKey}#${suffix}`;
           }
           usedKeys.add(uniqueKey);
+          // "env" can also be a provider ID. Keep environment-variable redaction
+          // local to this field so sibling provider IDs retain their options.
+          if (key === 'env') {
+            return [uniqueKey, sanitizeForDbWithSecrets({ env: descriptor.value }).env];
+          }
           return [
             uniqueKey,
             isSecretField(key) &&
