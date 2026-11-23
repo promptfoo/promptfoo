@@ -470,40 +470,25 @@ function redactCatalogPrompt<T extends Prompt>(prompt: T): T {
 }
 
 /**
- * Imports may declare privacy on a result but omit it from the test catalog.
- * Carry that ownership into the stored copy, including in mixed catalogs.
+ * A result index counts expanded tests. It cannot identify an input in the
+ * original catalog after repeats, filters, variable expansion or scenarios.
+ * Keep the source tests for dataset identity and project their inputs on save.
  */
 export function configForLegacyResults(
   config: Partial<UnifiedConfig>,
-  summary: { results?: readonly { testIdx?: number }[]; table?: EvaluateSummaryV2['table'] },
+  summary: { results?: readonly unknown[]; table?: EvaluateSummaryV2['table'] },
 ): Partial<UnifiedConfig> {
-  const privateIndices = new Set<number>();
-  const promptCount = summary.table?.head?.prompts?.length || 1;
-  for (const [index, row] of (summary.results ?? []).entries()) {
-    if (configRequiresTraceRedaction(row)) {
-      privateIndices.add(row.testIdx ?? Math.floor(index / promptCount));
-    }
+  if (
+    configRequiresTraceRedaction(config) ||
+    summary.results?.some(configRequiresTraceRedaction) ||
+    summary.table?.body?.some(configRequiresTraceRedaction)
+  ) {
+    return {
+      ...config,
+      metadata: { ...config.metadata, privatePrompts: true, privateTestCatalog: true },
+    };
   }
-  for (const [index, row] of (summary.table?.body ?? []).entries()) {
-    if (configRequiresTraceRedaction(row)) {
-      privateIndices.add(row.testIdx ?? index);
-    }
-  }
-  if (!privateIndices.size) {
-    return config;
-  }
-  const tests = config.tests;
-  return {
-    ...config,
-    metadata: { ...config.metadata, privatePrompts: true },
-    ...(Array.isArray(tests) && {
-      tests: tests.map((test, index) =>
-        privateIndices.has(index) && test && typeof test === 'object' && !('path' in test)
-          ? { ...test, metadata: { ...test.metadata, privatePrompts: true } }
-          : test,
-      ),
-    }),
-  };
+  return config;
 }
 
 /** Legacy summaries duplicate results in table cells; redact both public copies together. */
@@ -858,8 +843,6 @@ export default class Eval {
       completedPrompts?: CompletedPrompt[];
       /** Resolved tests may require privacy even when config.tests only references a file. */
       privatePrompts?: boolean;
-      /** V3 imports save the catalog before inserting the result batch separately. */
-      privacyRows?: EvaluateResult[];
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
@@ -874,11 +857,8 @@ export default class Eval {
     const db = await getDb();
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
-    // Hash the original tests before adding row ownership so a private import
-    // also upgrades an older copy of the same dataset.
-    const rows = opts?.results ?? opts?.privacyRows;
-    if (rows?.length) {
-      config = configForLegacyResults(config, { results: rows });
+    if (opts?.results?.length) {
+      config = configForLegacyResults(config, { results: opts.results });
     }
     if (opts?.privatePrompts) {
       config = { ...config, metadata: { ...config.metadata, privatePrompts: true } };

@@ -2071,23 +2071,32 @@ describe('evaluator', () => {
       },
     );
 
-    it('keeps explicit result ownership separate from public tests in a mixed legacy catalog', async () => {
+    it('does not treat expanded result indices as catalog positions', async () => {
       const summary = createLegacyRedactionSummary(
         'promptfoo:redteam:coding-agent:trace-redaction',
       );
+      summary.results[0].testIdx = 2;
+      summary.table.body[0].testIdx = 2;
       const config = {
         tests: [
+          { options: { repeat: 2 } },
           { assert: [{ type: 'not-contains' as const, value: 'PRIVATE_SIBLING' }] },
-          { assert: [{ type: 'contains' as const, value: 'ordinary output' }] },
-          { metadata: { privatePrompts: true } },
+          { assert: [{ type: 'contains' as const, value: 'unverified control' }] },
+        ],
+        scenarios: [
+          {
+            config: [{}],
+            tests: [{ assert: [{ type: 'equals' as const, value: 'PRIVATE_SIBLING' }] }],
+          },
         ],
       };
       const id = await writeResultsToDatabase(summary, config);
       const evaluation = await Eval.findById(id);
       const saved = JSON.stringify(evaluation!.config);
       expect(saved).not.toContain('PRIVATE_SIBLING');
-      expect(saved).toContain('ordinary output');
-      expect(config.tests[0].assert![0].value).toBe('PRIVATE_SIBLING');
+      expect(saved).not.toContain('unverified control');
+      expect(JSON.stringify(await evaluation!.getResults())).toContain('ordinary output');
+      expect(config.tests[1].assert![0].value).toBe('PRIVATE_SIBLING');
     });
 
     it('omits sibling assertions from private configs and datasets without reading receipts', async () => {

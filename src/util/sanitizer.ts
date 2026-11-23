@@ -47,6 +47,7 @@ export function sanitizeConfigForPersistence(
   // Old imports can mark only the suite or refer to defaults we cannot open.
   // In that case no inline test can prove its sibling expectations are public.
   const unknownOwnership =
+    config.metadata?.privateTestCatalog === true ||
     typeof config.defaultTest === 'string' ||
     (!inherited && !configRequiresTraceRedaction([config.tests, config.scenarios]));
   function omitPrivateInputs<T>(test: T, shared = false): T {

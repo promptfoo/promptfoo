@@ -312,7 +312,8 @@ describe('importCommand', () => {
       const dataset = await db.get(sql`SELECT tests FROM datasets WHERE id = ${datasetId}`);
       for (const value of [dataset, saved!.config]) {
         expect(JSON.stringify(value)).not.toContain(marker);
-        expect(JSON.stringify(value)).toContain('public control');
+        expect(JSON.stringify(value)).toContain('not-contains');
+        expect(JSON.stringify(value)).not.toContain('public control');
       }
     });
 

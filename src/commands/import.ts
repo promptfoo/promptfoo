@@ -29,7 +29,6 @@ import telemetry from '../telemetry';
 import { getTraceStore, TraceStore } from '../tracing/store';
 import { sha256 } from '../util/createHash';
 import { sanitizeConfigForPersistence } from '../util/sanitizer';
-import { configRequiresTraceRedaction } from '../util/verifierPrivacy';
 import type { Command } from 'commander';
 
 import type {
@@ -402,15 +401,10 @@ function prepareImportArtifacts(
   traces: TraceData[];
   blobAssets: PreparedBlobAsset[];
 } {
-  const privateImport =
-    configRequiresTraceRedaction(evalData.config) ||
-    configRequiresTraceRedaction(evalData.results?.results) ||
-    configRequiresTraceRedaction(evalData.results?.table?.body);
+  const config = configForLegacyResults(evalData.config ?? {}, evalData.results);
+  const privateImport = config.metadata?.privatePrompts === true;
   if (privateImport) {
-    evalData.config = {
-      ...evalData.config,
-      metadata: { ...evalData.config?.metadata, privatePrompts: true },
-    };
+    evalData.config = config;
     // Older exports can repeat protected text outside the rows. Derive
     // variable names from projected rows and discard unowned free text.
     delete evalData.vars;
@@ -423,9 +417,7 @@ function prepareImportArtifacts(
   if (!importV3 || privateImport) {
     evalData.results = sanitizeLegacyResults(evalData.results, evalData.config);
     if (!importV3) {
-      evalData.config = sanitizeConfigForPersistence(
-        configForLegacyResults(evalData.config ?? {}, evalData.results),
-      );
+      evalData.config = sanitizeConfigForPersistence(evalData.config ?? {});
     }
     // Legacy imports have no attachments. On private imports, trace IDs and
     // blob references do not prove which row owns their contents.
@@ -461,7 +453,6 @@ async function createImportedV3Eval(
     createdAt: context.importCreatedAt,
     author: context.importAuthor,
     completedPrompts: evalData.results.prompts,
-    ...(evalData.config?.metadata?.privatePrompts && { privacyRows: evalData.results.results }),
     vars: extractVars(evalData),
     runtimeOptions: evalData.runtimeOptions,
     ...extractDurations(evalData),
