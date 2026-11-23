@@ -519,7 +519,10 @@ export function sanitizeLegacyResults(
     const testIdx = row.testIdx ?? index;
     remember(testIdx, row.test);
     for (const output of row.outputs ?? []) {
-      remember(testIdx, output.testCase, output);
+      // Legacy tables keep empty cells so prompt indices stay aligned.
+      if (output != null) {
+        remember(testIdx, output.testCase, output);
+      }
     }
   }
   for (const [index, result] of (summary.results ?? []).entries()) {
@@ -582,6 +585,9 @@ export function sanitizeLegacyResults(
       test: projected.testCase,
       vars: row.vars?.map((_, i) => projected.vars[table.head?.vars?.[i]] ?? ''),
       outputs: row.outputs?.map((output) => {
+        if (output == null) {
+          return output;
+        }
         const redacted = redact({ ...output, prompt: { raw: output.prompt } }, testIdx);
         const privateResponse = configRequiresTraceRedaction(redacted.testCase);
         return {

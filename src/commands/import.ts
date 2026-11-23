@@ -379,14 +379,21 @@ function prepareImportArtifacts(
     delete evalData.runtimeOptions;
     delete evalData.description;
     delete evalData.config.description;
-    // Imported trace IDs and blob references do not prove which row owns
-    // their contents. Drop the attachments before touching disk or --force.
+  }
+  // Legacy tables can fail projection even without privacy assertions. Prepare
+  // the stored copy before --force can delete the original evaluation.
+  if (!importV3 || privateImport) {
     evalData.results = sanitizeLegacyResults(evalData.results, evalData.config);
+    if (!importV3) {
+      evalData.config = sanitizeConfigForPersistence(evalData.config ?? {});
+    }
+    // Legacy imports have no attachments. On private imports, trace IDs and
+    // blob references do not prove which row owns their contents.
     return { traces: [], blobAssets: [] };
   }
-  const traces = importV3 ? prepareTraces(evalData.traces) : [];
+  const traces = prepareTraces(evalData.traces);
   const blobAssets =
-    importV3 && Array.isArray(evalData.blobAssets) && evalData.blobAssets.length > 0
+    Array.isArray(evalData.blobAssets) && evalData.blobAssets.length > 0
       ? prepareBlobAssets(
           evalData.blobAssets,
           // Bound the scan: imported files are untrusted, and deeply
@@ -441,8 +448,8 @@ async function createImportedV2Eval(evalData: any, context: ImportedEvalContext)
       createdAt: context.importCreatedAt.getTime(),
       author: context.importAuthor,
       description: evalData.description || evalData.config?.description,
-      results: sanitizeLegacyResults(evalData.results, evalData.config),
-      config: sanitizeConfigForPersistence(evalData.config),
+      results: evalData.results,
+      config: evalData.config,
       isRedteam: evalData.config?.redteam !== undefined,
     })
     .run();
@@ -507,6 +514,11 @@ export function importCommand(program: Command) {
         }
 
         const { traces, blobAssets } = prepareArtifacts();
+        if (existingEval && importV3) {
+          // Eval.create needs the original tests for dataset identity and
+          // sanitizes its own copy. Check that projection before deletion.
+          sanitizeConfigForPersistence(evalData.config);
+        }
 
         // Restore embedded media before the destructive replace so a corrupt
         // artifact cannot delete the existing eval. blobAssets is empty for v2.

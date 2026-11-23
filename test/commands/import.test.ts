@@ -975,6 +975,70 @@ describe('importCommand', () => {
       }
     });
 
+    it.each([false, true])(
+      'preserves empty legacy output slots during --force import (private=%s)',
+      async (privateRow) => {
+        const { id } = await Eval.create({ description: 'original' }, []);
+        const test = privateRow
+          ? { assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }] }
+          : {};
+        const table = {
+          head: { prompts: [{ raw: 'first' }, { raw: 'second' }], vars: [] },
+          body: [{ test, outputs: [null, { text: 'fixture response', pass: true }] }],
+        };
+        tempFilePath = path.join(__dirname, `temp-legacy-columns-${Date.now()}.json`);
+        fs.writeFileSync(
+          tempFilePath,
+          JSON.stringify({ id, config: {}, results: { version: 2, table, results: [] } }),
+        );
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        expect(process.exitCode).toBeUndefined();
+        const replacement = (await Eval.findById(id))!;
+        const { outputs } = (await replacement.getTable()).body[0];
+        expect(outputs).toHaveLength(2);
+        expect(outputs[0]).toBeNull();
+        expect(outputs[1].pass).toBe(true);
+        if (privateRow) {
+          const db = await getDb();
+          const stored = await db
+            .select()
+            .from(evalsTable)
+            .where(sql`${evalsTable.id} = ${id}`)
+            .get();
+          expect(JSON.stringify(stored)).not.toContain('fixture response');
+        } else {
+          expect(outputs[1].text).toBe('fixture response');
+        }
+      },
+    );
+
+    it.each(['legacy table', 'legacy config', 'v3 config'])(
+      'keeps the existing eval if the replacement %s cannot be sanitized',
+      async (invalidField) => {
+        const { id } = await Eval.create({ description: 'original' }, []);
+        const config =
+          invalidField === 'legacy table'
+            ? {}
+            : { metadata: { privatePrompts: true }, scenarios: 42 };
+        const results =
+          invalidField === 'v3 config'
+            ? { version: 3, results: [], prompts: [] }
+            : {
+                version: 2,
+                results: [],
+                table: { body: invalidField === 'legacy table' ? [{ outputs: 42 }] : [] },
+              };
+        tempFilePath = path.join(__dirname, `temp-force-projection-${Date.now()}.json`);
+        fs.writeFileSync(tempFilePath, JSON.stringify({ id, config, results }));
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        expect(process.exitCode).toBe(1);
+        expect((await Eval.findById(id))?.config.description).toBe('original');
+        expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
+      },
+    );
+
     it('redacts both result copies when importing legacy privacy checks', async () => {
       const id = 'eval-legacy-privacy';
       tempFilePath = path.join(__dirname, `temp-legacy-privacy-${Date.now()}.json`);
