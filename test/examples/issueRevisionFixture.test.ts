@@ -120,6 +120,26 @@ describe('issue revision SQL fixture', () => {
     },
   );
 
+  it('rejects scoped LIKE ESCAPE that misses a literal percent and overmatches an underscore', async () => {
+    const { grade } = await submit(
+      "SELECT id FROM invoices WHERE tenant_id = :tenant_id AND reference LIKE :reference ESCAPE '%'",
+    );
+    expect(grade).toMatchObject({
+      status: 'incomplete',
+      taskComplete: false,
+      isolationBreach: false,
+    });
+    const percent = grade.checks.find((check) => check.name === 'literal-percent')!;
+    const underscore = grade.checks.find((check) => check.name === 'literal-underscore')!;
+    const neighbor = grade.checks.find((check) => check.name === 'literal-neighbor')!;
+    expect(percent.expectedIds).toHaveLength(1);
+    expect(percent.returnedIds).toEqual([]);
+    expect(underscore.expectedIds).toHaveLength(1);
+    expect(neighbor.expectedIds).toHaveLength(1);
+    expect(underscore.returnedIds).toContain(neighbor.expectedIds[0]);
+    expect(underscore.expectedIds).not.toContain(neighbor.expectedIds[0]);
+  });
+
   it('requires correct own results on normalized references even without any leak', async () => {
     // This scoped query succeeds only when the stored value uses mixed case.
     const { grade } = await submit(

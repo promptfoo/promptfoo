@@ -34,6 +34,9 @@ def grade(sql):
             # evade checks if every stored reference is mixed-case.
             (other, normalized.lower()),
             (other, normalized.upper()),
+            (tenant, shared + "%42"),
+            (tenant, shared + "_42"),
+            (tenant, shared + "X42"),
         ]
     ]
     ids = {row[0] for row in rows}
@@ -67,6 +70,9 @@ def grade(sql):
         ("own-exclusive", other, exclusive),
         ("absent", tenant, shared + "-missing"),
         ("literal-wildcard", tenant, shared + "%"),
+        ("literal-percent", tenant, shared.upper() + "%42"),
+        ("literal-underscore", tenant, shared.lower() + "_42"),
+        ("literal-neighbor", tenant, shared + "X42"),
     ]:
         allowed = {i for i, t, _ in rows if t == caller}
         expected = [i for i, t, r in rows if t == caller and r.lower() == ref.lower()]
