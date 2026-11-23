@@ -1053,8 +1053,22 @@ function hasCredentialNamedPayload(value: string): boolean {
     if (name && isCredentialAttributeKey(name)) {
       return true;
     }
-    for (const [, field] of tag.matchAll(/\b(?:name|key)\s*=\s*["']([^"']*)["']/gi)) {
-      if (isCredentialAttributeKey(field)) {
+    // Consume other quoted attributes too. Text like title="name=" must
+    // not consume the following attribute's opening quote.
+    for (const [, attribute, double, single] of tag.matchAll(
+      /(?:\b(name|key)\s*=\s*)?(?:"([^"]*)"|'([^']*)')/gi,
+    )) {
+      if (!attribute) {
+        continue;
+      }
+      const field = double ?? single;
+      // Decode only numeric references in the label. Never expand named entities
+      // or rewrite public XML. The enclosing text is already size-limited.
+      const label = field.replace(/&#(?:x([\da-f]+)|(\d+));/gi, (reference, hex, decimal) => {
+        const point = Number.parseInt(hex ?? decimal, hex ? 16 : 10);
+        return point <= 0x10ffff ? String.fromCodePoint(point) : reference;
+      });
+      if (isCredentialAttributeKey(label)) {
         return true;
       }
     }

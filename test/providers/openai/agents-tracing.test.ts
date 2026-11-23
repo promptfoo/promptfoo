@@ -1455,6 +1455,34 @@ describe('OTLPTracingExporter', () => {
     expect(JSON.stringify(payload)).not.toMatch(/opaque|suffix|credential/);
   });
 
+  it.each(formats)('checks XML numeric references in credential labels in %s', async (format) => {
+    const publicXml = '<entry note="key=" name="input_to&#107;ens" value="42"/>';
+    const payload = await exportSpans(format, [
+      {
+        spanData: {
+          type: 'function',
+          name: 'read_file',
+          input: publicXml,
+          output: '<entry key="pass&#119;ord">opaque/private</entry>',
+        },
+        traceMetadata: {
+          hexadecimal: "<property name='p&#x61;ssword' value='opaque/tool'/>",
+          mixed: '<item note="name=" NAME="api&#x00005F;&#000107;ey" value="opaque/alias"/>',
+          padded: `<field key="Authori&#x${'0'.repeat(1_024)}7a;ation">opaque/padded</field>`,
+          invalid: '<entry name="r&#x110000;gion">public</entry>',
+        },
+      },
+    ]);
+    expect(getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0])).toMatchObject({
+      'tool.arguments': publicXml,
+      'tool.output': '<redacted>',
+      'trace.metadata.hexadecimal': '<redacted>',
+      'trace.metadata.mixed': '<redacted>',
+      'trace.metadata.padded': '<redacted>',
+      'trace.metadata.invalid': '<entry name="r&#x110000;gion">public</entry>',
+    });
+  });
+
   it.each(formats)('redacts PGP armor and TLS private-key fields in %s', async (format) => {
     const keys = {
       'client-key-data': 'opaque/base64',
