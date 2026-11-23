@@ -94,7 +94,7 @@ export function clearAgentCache(): void {
   activeAgents.clear(); // Outstanding calls close their dispatcher on last release.
   for (const agent of idleAgents.values()) {
     if (typeof agent.close === 'function') {
-      agent.close();
+      void agent.close();
     }
   }
   idleAgents.clear();
