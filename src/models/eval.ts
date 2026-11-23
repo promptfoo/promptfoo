@@ -242,7 +242,7 @@ export class EvalQueries {
     if (rows.length > 1) {
       throw new Error('Conflicting providers in saved results');
     }
-    return rows.at(0);
+    return rows.length ? rows[0] : undefined;
   }
 
   static async getVarsFromEvals(evals: Eval[]) {
