@@ -5,6 +5,7 @@ export const DEFAULT_BEDROCK_TARGET_ID = 'bedrock:responses:openai.gpt-5.6-sol';
 export const OPENAI_TARGET_PLACEHOLDER =
   'openai:gpt-6.2-sol, openai:gpt-6-luna, openai:gpt-6.2-astra';
 export const DEFAULT_GOOGLE_TARGET_ID = 'google:gemini-3.8-flash';
+export const VERTEX_RESPONSES_PREFIX = 'vertex:responses:';
 export const DEFAULT_VERTEX_TARGET_ID = 'vertex:gemini-3.8-flash';
 
 export const predefinedTargets: RedteamUITarget[] = [

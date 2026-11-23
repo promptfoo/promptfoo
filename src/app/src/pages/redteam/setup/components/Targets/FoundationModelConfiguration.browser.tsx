@@ -665,3 +665,67 @@ it('preserves MCP while typing a Converse model ID', async () => {
     config,
   });
 });
+
+it('configures OpenAI Responses from the Vertex form without carrying over other API settings', async () => {
+  renderEditor({
+    id: 'vertex:claude-sonnet-5-5',
+    config: {
+      projectId: 'preview-project',
+      region: 'us-central1',
+      apiKey: 'not-a-responses-credential',
+      apiBaseUrl: 'https://example.com/v1',
+      max_tokens: 48,
+    },
+  });
+  await expect.element(page.getByLabelText('Vertex AI API')).toHaveValue('vertex');
+  await expect
+    .element(page.getByLabelText('Model ID', { exact: false }))
+    .toHaveValue('vertex:claude-sonnet-5-5');
+
+  await page.getByLabelText('Vertex AI API').selectOptions('responses');
+  await expect.element(page.getByLabelText('Model ID', { exact: false })).toHaveValue('');
+  await page.getByLabelText('Model ID', { exact: false }).fill('gpt-6-luna');
+  await page.getByLabelText('Google Cloud Project ID').fill('another-preview-project');
+  await page.getByRole('button', { name: /Advanced Configuration/ }).click();
+  await expect.element(page.getByLabelText('Max Output Tokens')).toHaveValue(48);
+  await expect.element(page.getByLabelText('API Key', { exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByLabelText('API Base URL')).not.toBeInTheDocument();
+
+  const saved = page.getByTestId('saved-target');
+  expect(JSON.parse((await saved.element()).textContent ?? '{}')).toEqual({
+    id: 'vertex:responses:gpt-6-luna',
+    config: {
+      region: 'global',
+      projectId: 'another-preview-project',
+      max_output_tokens: 48,
+      store: false,
+    },
+  });
+
+  await page.getByLabelText('Vertex AI API').selectOptions('vertex');
+  expect(JSON.parse((await saved.element()).textContent ?? '{}')).toEqual({
+    id: 'vertex:gemini-3.8-flash',
+    config: { region: 'global', projectId: 'another-preview-project', max_tokens: 48 },
+  });
+});
+
+it('reopens and edits the canonical output token cap on a saved Vertex Responses provider', async () => {
+  renderEditor({
+    id: 'vertex:responses:gpt-6-luna',
+    config: { max_output_tokens: 48, projectId: 'preview-project' },
+  });
+  await expect.element(page.getByLabelText('Vertex AI API')).toHaveValue('responses');
+  await expect.element(page.getByLabelText('Model ID', { exact: false })).toHaveValue('gpt-6-luna');
+  await expect
+    .element(page.getByLabelText('Google Cloud Project ID'))
+    .toHaveValue('preview-project');
+  await page.getByRole('button', { name: /Advanced Configuration/ }).click();
+  const cap = page.getByLabelText('Max Output Tokens');
+  await expect.element(cap).toHaveValue(48);
+  await cap.fill('64');
+  const saved = page.getByTestId('saved-target');
+  expect(JSON.parse((await saved.element()).textContent ?? '{}')).toEqual({
+    id: 'vertex:responses:gpt-6-luna',
+    config: { max_output_tokens: 64, projectId: 'preview-project' },
+  });
+});

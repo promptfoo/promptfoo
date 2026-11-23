@@ -5,6 +5,7 @@ import deepEqual from 'fast-deep-equal';
 import { AlertTriangle } from 'lucide-react';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
+import { VERTEX_RESPONSES_PREFIX } from '../constants';
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
@@ -435,7 +436,7 @@ function ProviderConfigEditor({
       }
     } else if (editorKind === 'foundation') {
       // Foundation model providers validation
-      if (!provider.id || provider.id.trim() === '') {
+      if (!provider.id || !provider.id.trim() || provider.id.trim() === VERTEX_RESPONSES_PREFIX) {
         errors.push('Model ID is required');
       }
       // Validate that temperature is within reasonable bounds if provided
@@ -448,6 +449,13 @@ function ProviderConfigEditor({
       // Validate that max_tokens is positive if provided
       if (provider.config?.max_tokens !== undefined && provider.config.max_tokens <= 0) {
         errors.push('Max tokens must be greater than 0');
+      }
+      if (
+        provider.id?.startsWith(VERTEX_RESPONSES_PREFIX) &&
+        provider.config?.max_output_tokens !== undefined &&
+        provider.config.max_output_tokens <= 0
+      ) {
+        errors.push('Max output tokens must be greater than 0');
       }
       // Validate that top_p is between 0 and 1 if provided
       if (
