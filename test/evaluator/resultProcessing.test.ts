@@ -62,6 +62,7 @@ describe('model-independent result processing', () => {
     const ref = '#/$defs/' + name;
     const value = {
       type: 'object',
+      '[REDACTED]': true,
       $defs: { [name]: { const: 'opaque' }, field: { type: 'integer' } },
       properties: { password: { $ref: ref }, public: { $ref: '#/$defs/field' } },
     };
@@ -72,11 +73,30 @@ describe('model-independent result processing', () => {
     const safe = projectResultSchemas(row);
     expect(JSON.stringify(safe)).not.toContain('opaque');
     const projected = JSON.parse(safe.testCase.assert[0].value);
-    expect(projected.properties.password.$ref).toBe('#/[REDACTED]');
+    expect(projected.properties.password.$ref).toBe('[REDACTED]');
     expect(projected.properties.public).toEqual(value.properties.public);
     expect(projected.$defs.field).toEqual(value.$defs.field);
     expect(projectResultSchemas(safe)).toEqual(safe);
   });
+
+  it.each(['#/[REDACTED]', '#%2F$defs%2Fbad%zz'])(
+    'does not resolve an ambiguous environment pointer to a literal marker (%s)',
+    ($ref) => {
+      const value = {
+        '[REDACTED]': { type: 'number' },
+        properties: { env: { $ref } },
+        $defs: { vars: { properties: { DBPWD: { pattern: '^opaque$' } } } },
+      };
+      const row = {
+        testCase: { assert: [{ type: 'is-json', value }] },
+        error: 'data/env/DBPWD must match pattern "^opaque$"',
+      };
+      const safe = projectResultSchemas(row);
+      expect(JSON.stringify(safe)).not.toContain('opaque');
+      expect(safe.testCase.assert[0].value.properties.env.$ref).toBe('[REDACTED]');
+      expect(projectResultSchemas(safe)).toEqual(safe);
+    },
+  );
 
   it('retains public diagnostics in nested results while protecting aggregate errors', () => {
     const assertion = {

@@ -852,7 +852,10 @@ function pointerToken(name: string): string {
 }
 
 // Return both the source spelling and decoded key so unchanged tokens stay intact.
-function localSchemaPointer(ref: string) {
+type SchemaPointer = { raw: string; name: string }[];
+
+// An absent pointer may be an anchor. A malformed pointer has no safe target.
+function localSchemaPointer(ref: string): SchemaPointer | undefined | null {
   try {
     if (/^#%2f/i.test(ref)) {
       ref = decodeURIComponent(ref);
@@ -863,6 +866,11 @@ function localSchemaPointer(ref: string) {
     if (!ref.startsWith('#/')) {
       return undefined;
     }
+    // Older exports used this pointer for an unknown key. It cannot safely
+    // identify a target, even if the resource has a member with that name.
+    if (ref === '#/' + REDACTED) {
+      return null;
+    }
     // A literal URL is a single trailing key. Locate only the scheme so a
     // malformed suffix cannot trigger another scan at each embedded scheme.
     const scheme = ref.search(/\/[a-z][a-z0-9+.-]*:\/\//i);
@@ -872,7 +880,7 @@ function localSchemaPointer(ref: string) {
   } catch {
     // Invalid percent escapes or lone surrogates have no unambiguous URI
     // spelling. Never restore the raw suffix or guess a different key.
-    return [{ raw: REDACTED, name: REDACTED }];
+    return null;
   }
   return ref
     .slice(2)
@@ -1078,7 +1086,7 @@ function schemaIdentifiers(uris: Iterable<string>) {
       }
       return name;
     });
-    if (fragment && !localSchemaPointer(fragment)) {
+    if (fragment && localSchemaPointer(fragment) === undefined) {
       identifiers.add(decodeSchemaName(fragment.slice(1)));
     }
   }
@@ -1263,6 +1271,10 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
       return REDACTED;
     }
     const [path, fragment] = splitResourceUri(ref);
+    const pointer = localSchemaPointer(fragment);
+    if (pointer === null) {
+      return REDACTED;
+    }
     const id = schemaResourceId(path, base);
     // A relative reference may inherit a credential route from its base.
     uris.add(ref);
@@ -1281,7 +1293,7 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
     if (!resource) {
       return ids.has(REDACTED) ? root : undefined;
     }
-    return pointerTarget(fragment, resource, id);
+    return pointer ? pointerTarget(pointer, resource, id) : resource;
   }
 
   // AJV honors IDs along the pointer, even under examples or default.
@@ -1307,11 +1319,10 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
   }
 
   // For an unknown fragment, conservatively protect the whole resource.
-  function pointerTarget(fragment: string, resource: object, scope: string): unknown {
+  function pointerTarget(pointer: SchemaPointer, resource: object, scope: string): unknown {
     let node: unknown = resource;
     let credential = false;
     let env = false;
-    const pointer = localSchemaPointer(fragment) ?? [];
     for (const [i, { raw, name }] of pointer.entries()) {
       if (!node || typeof node !== 'object' || !Object.prototype.hasOwnProperty.call(node, name)) {
         return resource;
@@ -1349,6 +1360,9 @@ function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
   function addEnvironment(value: unknown) {
     if (isSchemaObject(value)) {
       environments.add(value);
+    } else if (value === REDACTED) {
+      // The lost target could contain credential-bearing environment members.
+      pending.push(value);
     }
   }
 
@@ -1462,6 +1476,9 @@ function sanitizeSchemaUri(
     index.renamed.get(name) ?? (sensitive || safeSchemaName(name) !== name ? REDACTED_ID : name);
   safePath = projectPath(safePath, identifier);
   const pointer = localSchemaPointer(fragment);
+  if (pointer === null) {
+    return REDACTED;
+  }
   if (!pointer) {
     const name = decodeSchemaName(fragment.slice(1));
     const safe = identifier(name);
