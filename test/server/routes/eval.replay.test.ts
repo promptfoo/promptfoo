@@ -144,6 +144,57 @@ describe('POST /api/eval/replay provider boundary', () => {
     expect(evaluate).not.toHaveBeenCalled();
   });
 
+  it.each(['anthropic:messages:claude-sonnet-4-5', 'ollama:llama3'])(
+    'rejects a collision with the native ID of %s without evaluating either source',
+    async (selector) => {
+      const [native] = await loadApiProviders([selector], {
+        env: { ANTHROPIC_API_KEY: 'fixture' },
+      });
+      const identity = native.id();
+      expect(identity).not.toBe(selector);
+      const other = selector.startsWith('ollama:')
+        ? { id: identity, env: { OLLAMA_BASE_URL: 'https://other.invalid' } }
+        : { id: 'https://other.invalid', label: identity, config: { body: '{{prompt}}' } };
+      const providers = [selector, other];
+      storedConfig(providers, undefined, [identity, identity]);
+      expect((await replay(0, 0)).status).toBe(400);
+      expect((await replay(0, 1)).status).toBe(400);
+      // Prompt filters can hide a source, so even a unique name can be ambiguous.
+      storedConfig(providers, undefined, [identity]);
+      expect((await replay(0, 0)).status).toBe(400);
+      expect(evaluate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps a native selector that matches its repeated prompt columns', async () => {
+    const provider = 'ollama:completion:llama3';
+    const [native] = await loadApiProviders([provider]);
+    storedConfig([provider], undefined, [native.id(), native.id()]);
+    expect((await replay(0, 1)).status).toBe(200);
+    expect(evaluate.mock.calls[0][0].providers).toEqual([provider]);
+  });
+
+  it('does not load a script to discover an unknown column identity', async () => {
+    const file = path.join(directory, 'provider.cjs');
+    const marker = path.join(directory, 'loaded');
+    await fs.writeFile(file, `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "")`);
+    const selector = `file://${file}`;
+    storedConfig([selector], undefined, ['stale']);
+    expect((await replay(0, 0)).status).toBe(400);
+    storedConfig([selector, 'echo'], undefined, ['echo', 'echo']);
+    expect((await replay(0, 1)).status).toBe(400);
+    expect(evaluate).not.toHaveBeenCalled();
+    await expect(fs.access(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('keeps a distinct target next to a native selector across multiple prompts', async () => {
+    const selector = 'ollama:llama3';
+    const [native] = await loadApiProviders([selector]);
+    storedConfig([selector, 'echo'], undefined, [native.id(), native.id(), 'echo', 'echo']);
+    expect((await replay(0, 3)).status).toBe(200);
+    expect(evaluate.mock.calls[0][0].providers).toEqual(['echo']);
+  });
+
   it.each([0, 1, 7])('selects by prompt column independently of test row %s', async (testIndex) => {
     storedConfig(['openai:codex-security', 'echo'], undefined, [
       'openai:codex-security',

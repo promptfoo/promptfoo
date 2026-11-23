@@ -70,9 +70,13 @@ describe('eval routes', () => {
   );
 
   it('sends a replay only to the HTTP destination bound by the saved suite', async () => {
-    const requests: string[] = [];
+    const requests: { url?: string; authorization?: string; tenant?: string | string[] }[] = [];
     const target = createServer((req, res) => {
-      requests.push(req.url!);
+      requests.push({
+        url: req.url,
+        authorization: req.headers.authorization,
+        tenant: req.headers['x-tenant'],
+      });
       req.pipe(res);
     }).listen(0, '127.0.0.1');
     await once(target, 'listening');
@@ -81,17 +85,26 @@ describe('eval routes', () => {
     invariant(address && typeof address !== 'string', 'Expected a loopback listener');
     const base = `http://127.0.0.1:${address.port}`;
     const url = `${base}/saved`;
-    onTestFinished(mockProcessEnv({ REPLAY_URL: `${base}/wrong` }));
+    onTestFinished(mockProcessEnv({ REPLAY_URL: `${base}/wrong`, PF_TOKEN: 'ambient' }));
     const original = { raw: 'original', label: 'original' };
     const saved = await Eval.create(
       {
         providers: [
           {
             id: 'http',
-            config: { url: '{{ env.REPLAY_URL }}', method: 'POST', body: '{{prompt}}' },
+            env: { OPENAI_ORGANIZATION: 'provider' },
+            config: {
+              url: '{{ env.REPLAY_URL }}',
+              method: 'POST',
+              body: '{{prompt}}',
+              headers: {
+                Authorization: 'Bearer {{ env.PF_TOKEN }}',
+                'X-Tenant': '{{ env.OPENAI_ORGANIZATION }}',
+              },
+            },
           },
         ],
-        env: { REPLAY_URL: url },
+        env: { REPLAY_URL: url, PF_TOKEN: 'suite-fixture', OPENAI_ORGANIZATION: 'suite' },
       },
       [original],
       { completedPrompts: [{ ...original, provider: url }] },
@@ -103,7 +116,10 @@ describe('eval routes', () => {
       prompt: 'edited replay',
     });
     expect(response.status).toBe(200);
-    expect(requests).toEqual(['/saved']);
+    expect(requests).toEqual([
+      { url: '/saved', authorization: 'Bearer suite-fixture', tenant: 'provider' },
+    ]);
+    expect(JSON.stringify(response.body)).not.toContain('suite-fixture');
     expect(response.body.output).toBe('edited replay');
   });
 

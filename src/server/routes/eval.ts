@@ -609,12 +609,13 @@ evalRouter.post('/:id/results', async (req: Request, res: Response) => {
 
 const TEMPLATE_MARKER = /\{[{%#]/;
 
+function isCodexSecurityPath(path: string) {
+  return path === 'openai:codex-security' || path.startsWith('openai:codex-security:');
+}
+
 function getReplayProviderError(reference: ProviderRefDescriptor): string | undefined {
   const providerPath = 'loadProviderPath' in reference ? reference.loadProviderPath : undefined;
-  if (
-    providerPath === 'openai:codex-security' ||
-    providerPath?.startsWith('openai:codex-security:')
-  ) {
+  if (providerPath && isCodexSecurityPath(providerPath)) {
     return 'Codex Security does not support prompt-only replay. Rerun using the eval configuration to preserve operation and report settings.';
   }
   if (
@@ -724,14 +725,20 @@ function replayProviderId(target: ProviderRefDescriptor) {
       }
       return transport === 'websocket' ? getSafeProviderId(url) : url;
     }
+    const openAiId = getNamedOpenAiTextId(path);
+    if (path === 'echo' || isCodexSecurityPath(path) || openAiId) {
+      return target.kind === 'named' ? (openAiId ?? path) : target.id;
+    }
   }
-  return target.kind === 'named' ? (getNamedOpenAiTextId(target.id) ?? target.id) : target.id;
+  // Other factories can choose their own ID, even when given an override.
+  return undefined;
 }
 
 async function matchReplayTarget(
   ref: ProviderRefDescriptor,
   column: string | undefined,
   uniqueColumn: boolean,
+  nativeGroup: string | undefined,
 ) {
   let cloud;
   if ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) {
@@ -761,10 +768,17 @@ async function matchReplayTarget(
   // Inspect the effective URL even when a label masks an unresolved cloud destination.
   const id = replayProviderId(target);
   const identity = target.label || id;
-  if (TEMPLATE_MARKER.test(identity)) {
+  if (TEMPLATE_MARKER.test(identity ?? target.id)) {
     throw new Error('Cannot identify the replay provider safely');
   }
-  if (column && column !== identity) {
+  if (column && !identity) {
+    // An unknown native ID can collide with any other source. Require a
+    // distinct saved group per provider and corroborate the selected ID.
+    if (!nativeGroup || (nativeGroup === column && target.id !== column)) {
+      throw new Error('Ambiguous replay request');
+    }
+  }
+  if (column && column !== (identity || nativeGroup)) {
     return;
   }
   return { target, cloud };
@@ -779,6 +793,7 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
     throw new Error('Ambiguous replay request');
   }
   const unique = !!name && columns.every((col, i) => i === promptIndex || col.provider !== name);
+  let missingFile = false;
   const resolved = sources.flatMap((source) => {
     try {
       const definitions = resolveProviderConfigs([source], { basePath: eval_.config.basePath });
@@ -786,19 +801,32 @@ async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
     } catch (error) {
       // An unavailable file cannot supply a target. Require one positive column match below.
       if (unique && normalizeProviderRef(source).kind === 'file') {
+        missingFile = true;
         return [];
       }
       throw error;
     }
   });
   const singleSource = sources.length === 1 && resolved.length === 1;
+  // buildLivePromptColumns emits contiguous prompt groups in provider order.
+  // Filters can omit sources, and adjacent equal IDs can hide a second provider.
+  const groups = columns
+    .filter((entry, index) => !index || entry.provider !== columns[index - 1].provider)
+    .map((entry) => entry.provider);
+  const complete =
+    !missingFile && groups.length === resolved.length && new Set(groups).size === groups.length;
   let selected;
-  for (const provider of resolved) {
+  for (const [index, provider] of resolved.entries()) {
     const candidate = prepareReplayCandidate(provider, name, eval_.config.env, singleSource);
     if (candidate === undefined) {
       continue;
     }
-    const match = await matchReplayTarget(normalizeProviderRef(candidate), name, unique);
+    const match = await matchReplayTarget(
+      normalizeProviderRef(candidate),
+      name,
+      unique,
+      complete ? groups[index] : undefined,
+    );
     if (match) {
       if (selected) {
         throw new Error('Ambiguous replay request');
@@ -859,6 +887,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
           prompts: [{ raw: prompt, label: 'Replay' }],
           providers: [candidate],
           basePath: eval_.config.basePath,
+          env: eval_.config.env,
           tests: [{ vars: (variables ?? {}) as Vars }],
         },
         {
