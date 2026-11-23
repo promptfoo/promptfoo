@@ -4,6 +4,7 @@ import cliState from '../../cliState';
 import logger from '../../logger';
 import {
   containsSetupSecret,
+  credentialOrigins,
   localReviewField,
   sameProbeScope,
   sessionTransform,
@@ -541,6 +542,7 @@ async function assessSetup(
   }
 
   const prior = targets(previous);
+  const bindings = credentialOrigins(prior);
   const testableTargets: number[] = [];
   let runIssue: string | undefined;
   for (const [index, target] of list.entries()) {
@@ -549,7 +551,7 @@ async function assessSetup(
     if (targetError) {
       return invalid(path + ': ' + targetError);
     }
-    const restriction = targetExecutionIssue(target, userTurns, prior[index]);
+    const restriction = targetExecutionIssue(target, userTurns, prior[index], bindings);
     if (restriction?.repairable) {
       return invalid(path + ': ' + restriction.message);
     }

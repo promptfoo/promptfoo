@@ -327,6 +327,47 @@ describe('native red team setup', () => {
       expect(sent(0).verification).not.toHaveProperty('retryable');
     });
 
+    it('blocks moving a key between established targets without a fresh assignment', async () => {
+      const url = 'https://staging.example/chat';
+      const staging = {
+        ...target,
+        config: { ...target.config, url, headers: { 'X-Secret-Key': '{{env.STAGING_KEY}}' } },
+      };
+      const prior = { ...config, targets: [target, staging] };
+      const turns = [
+        {
+          role: 'user',
+          content: 'Use LOCAL_CHAT_KEY at ' + target.config.url + ' and STAGING_KEY at ' + url,
+        },
+        { role: 'user', content: 'Test staging.' },
+      ];
+      const shared = {
+        ...prior,
+        targets: [target, { ...target, config: { ...target.config, url } }],
+      };
+      respond(shared, 1);
+      respond(prior);
+      const result = await ask({ testContext, config: prior, messages: turns });
+      expect(sent(1).validationError).toContain('transfer a credential');
+      expect(result.body.testTarget).toBeUndefined();
+      expect(result.body.config).toEqual(prior);
+
+      const grant = { role: 'user', content: 'Use LOCAL_CHAT_KEY at ' + url + ' and test it.' };
+      respond(shared, 1);
+      expect(
+        (await ask({ testContext, config: prior, messages: [...turns, grant] })).body.testTarget,
+      ).toBe(1);
+
+      // Reordering or retaining an already shared key needs no new grant.
+      respond({ ...prior, targets: [staging, target] }, 0);
+      expect((await ask({ testContext, config: prior, messages: turns })).body.testTarget).toBe(0);
+      respond(shared, 1);
+      expect(
+        (await ask({ testContext, config: shared, messages: [...turns, grant, turns[1]] })).body
+          .testTarget,
+      ).toBe(1);
+    });
+
     it('never introduces and sends an unrequested destructive method in one step', async () => {
       const changed = {
         ...config,

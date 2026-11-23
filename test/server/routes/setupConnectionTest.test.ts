@@ -562,6 +562,16 @@ describe('native target validation and permission to execute', () => {
     expect(targetExecutionIssue(auth, [url + ' APP_KEY APP_TOKEN'])).toBeUndefined();
   });
 
+  it('accepts compact assignments for environment names and locally masked values', () => {
+    const name = 'PROMPTFOO_CHAT_KEY_' + 'A'.repeat(32);
+    const reference = '{{env.' + name + '}}';
+    const masked = { ...auth, config: { ...auth.config, headers: { 'X-Secret-Key': reference } } };
+    expect(targetExecutionIssue(masked, [url, 'X-Secret-Key:' + reference])).toBeUndefined();
+    expect(
+      targetExecutionIssue(auth, [url, 'X-Secret-Key=APP_KEY Acme-Access:$APP_TOKEN']),
+    ).toBeUndefined();
+  });
+
   it('requires a grounded URL and every credential even if a previous draft named them', () => {
     expect(targetExecutionIssue(auth, ['APP_KEY APP_TOKEN'], auth)).toMatchObject({
       repairable: true,
@@ -576,7 +586,18 @@ describe('native target validation and permission to execute', () => {
   });
 
   it('never treats a path, model identifier or nested property as a credential grant', () => {
-    for (const text of ['/APP_KEY', 'ollama:APP_KEY', 'payload.APP_KEY', 'APP_KEY.second']) {
+    for (const text of [
+      '/APP_KEY',
+      'ollama:APP_KEY',
+      'payload.APP_KEY',
+      'APP_KEY.second',
+      '/chat?X-Key=APP_KEY',
+      'https://other.example/?key=APP_KEY',
+      'ollama:chat:APP_KEY',
+      'payload.key=APP_KEY',
+      'property:APP_KEY',
+      '{"APP_KEY": "a property"}',
+    ]) {
       expect(targetExecutionIssue(auth, [url, text + ' APP_TOKEN'])).toMatchObject({
         repairable: true,
       });
@@ -745,6 +766,21 @@ describe('native target validation and permission to execute', () => {
       expect(targetExecutionIssue(proposal, initial)).toBeUndefined();
       expect(sameProbeScope(proposal, proposal)).toBe(false);
     }
+  });
+
+  it('compares the same session query across a response-field repair', () => {
+    const session = { ...auth, config: { ...auth.config, queryParams: { sid: '{{sessionId}}' } } };
+    const repaired = {
+      ...session,
+      config: { ...session.config, transformResponse: 'json.result' },
+    };
+    expect(sameProbeScope(session, repaired)).toBe(true);
+    expect(
+      sameProbeScope(session, {
+        ...repaired,
+        config: { ...repaired.config, queryParams: { sid: 'other' } },
+      }),
+    ).toBe(false);
   });
 
   it('limits an automatic repair to the same effective destination, method and credentials', () => {

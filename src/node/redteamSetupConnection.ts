@@ -128,15 +128,22 @@ function namesVariable(input: string, variable: string) {
   // Only standalone names or explicit environment references are grants.
   // Seeing a variable-shaped segment in a URL or model ID is not sufficient.
   const words = literals(
-    input.replace(/\{\{\s*env(?:\.([A-Za-z_]\w*)|\[['"]([A-Za-z_]\w*)['"]\])\s*\}\}/g, '$$$1$2'),
+    input
+      .replace(/\{\{\s*env(?:\.([A-Za-z_]\w*)|\[['"]([A-Za-z_]\w*)['"]\])\s*\}\}/g, '$$$1$2')
+      .replace(/(["'])\$?[A-Za-z_]\w*\1(?=\s*:)/g, ''),
   );
-  return words.some(
-    (word) =>
-      (word === variable && /^[A-Z_][A-Z0-9_]*$/.test(variable)) ||
-      word === '$' + variable ||
-      word === '${' + variable + '}' ||
-      word === 'process.env.' + variable,
-  );
+  return words.some((word) => {
+    // Compact header assignments count, but never split arbitrary URLs, model
+    // identifiers or property paths at their colons or equals signs.
+    const match = /^([\w-]+)[:=](.+)$/.exec(word);
+    const name = match && (credentialField(match[1]) || /^x-/i.test(match[1])) ? match[2] : word;
+    return (
+      (name === variable && /^[A-Z_][A-Z0-9_]*$/.test(variable)) ||
+      name === '$' + variable ||
+      name === '${' + variable + '}' ||
+      name === 'process.env.' + variable
+    );
+  });
 }
 
 function modelIssue(target: Record<string, unknown>, id: string, userTurns: string[]) {
@@ -168,6 +175,28 @@ function modelIssue(target: Record<string, unknown>, id: string, userTurns: stri
   }
 }
 
+// Key bindings span the whole draft. Target order can change between edits.
+export function credentialOrigins(targets: unknown[]) {
+  const bindings = new Map<string, Set<string>>();
+  for (const target of targets) {
+    const parsed = setupHttpTarget.safeParse(target);
+    if (!parsed.success) {
+      continue;
+    }
+    const { id, config } = parsed.data;
+    const origin = new URL(config.url ?? id).origin;
+    for (const value of Object.values(config.headers ?? {})) {
+      const name = headerVariable(value);
+      if (name) {
+        const origins = bindings.get(name) ?? new Set<string>();
+        origins.add(origin);
+        bindings.set(name, origins);
+      }
+    }
+  }
+  return bindings;
+}
+
 // Conversation history is the evidence of consent. A previous draft can itself
 // be review-only, so it cannot authorize a destination or a variable.
 function credentialGrant(
@@ -175,14 +204,18 @@ function credentialGrant(
   origins: Set<string>[],
   variable: string,
   origin: string,
+  transfer: boolean,
 ) {
-  // The explicit test/run action discloses each origin and its variables.
-  // A single message can describe multiple targets with different headers.
-  if (turns.some((turn, i) => origins[i].has(origin) && namesVariable(turn, variable))) {
+  // An old message naming multiple destinations cannot authorize a new
+  // pairing. Require a fresh assignment to one destination for a transfer.
+  if (
+    !transfer &&
+    turns.some((turn, i) => origins[i].has(origin) && namesVariable(turn, variable))
+  ) {
     return true;
   }
   const index = turns.map((turn) => namesVariable(turn, variable)).lastIndexOf(true);
-  if (index < 0) {
+  if (index < 0 || (transfer && index !== turns.length - 1)) {
     return false;
   }
   // Associate the name with the most recently stated origin, or the first
@@ -195,7 +228,12 @@ function credentialGrant(
   return grant?.size === 1 && grant.has(origin);
 }
 
-function httpIssue(connection: SetupConnection, turns: string[], previous?: unknown) {
+function httpIssue(
+  connection: SetupConnection,
+  turns: string[],
+  previous: unknown,
+  bindings?: Map<string, Set<string>>,
+) {
   const { config } = connection;
   const url = new URL(config.url ?? connection.id);
   const prior = typeof previous === 'string' ? { id: previous } : record(previous);
@@ -233,11 +271,12 @@ function httpIssue(connection: SetupConnection, turns: string[], previous?: unkn
   }
   for (const value of Object.values(config.headers ?? {})) {
     const variable = headerVariable(value);
-    if (
-      variable &&
-      (!credentialGrant(turns, origins, variable, url.origin) ||
-        (changedOrigin && !namesVariable(turns[turns.length - 1] ?? '', variable)))
-    ) {
+    if (!variable) {
+      continue;
+    }
+    const priorOrigins = bindings?.get(variable);
+    const transfer = priorOrigins ? !priorOrigins.has(url.origin) : changedOrigin;
+    if (!credentialGrant(turns, origins, variable, url.origin, transfer)) {
       return repair(
         'Ask the user to name the endpoint URL and its environment variable together. Never guess or transfer a credential to a different origin.',
       );
@@ -249,6 +288,7 @@ export function targetExecutionIssue(
   target: unknown,
   userTurns: string[],
   previousTarget?: unknown,
+  bindings?: Map<string, Set<string>>,
 ) {
   const value = typeof target === 'string' ? { id: target } : record(target);
   if (
@@ -299,16 +339,16 @@ export function targetExecutionIssue(
         : 'This HTTP request cannot be verified safely in chat. Check the method, URL, headers, body and transforms locally before running.',
     );
   }
-  return httpIssue(parsed.data, userTurns, previousTarget);
+  return httpIssue(parsed.data, userTurns, previousTarget, bindings);
 }
 
 const methodOf = (config: SetupConnection['config']) =>
   config.method ?? (config.multipart ? 'POST' : 'GET');
 
-function probeVariables(config: SetupConnection['config']) {
+function probeVariables(config: SetupConnection['config'], sessionId = crypto.randomUUID()) {
   return {
     prompt: 'Hello',
-    sessionId: crypto.randomUUID(),
+    sessionId,
     tools: JSON.stringify(config.tools),
     tool_choice:
       typeof config.tool_choice === 'string'
@@ -328,6 +368,8 @@ function probeUrl({ id, config }: SetupConnection, vars: ReturnType<typeof probe
 // A repair may correct header spelling, but cannot swap two keys, add a
 // credential or change the effective URL (including rendered parameters).
 export function sameProbeScope(prior: unknown, next: unknown): boolean {
+  // Compare the two requests with the same inputs, including session variables.
+  const sessionId = crypto.randomUUID();
   const scope = (target: unknown) => {
     const parsed = SetupConnectionTest.Request.safeParse(target);
     if (!parsed.success) {
@@ -342,7 +384,7 @@ export function sameProbeScope(prior: unknown, next: unknown): boolean {
       }
     }
     return {
-      url: probeUrl(parsed.data, probeVariables(config)),
+      url: probeUrl(parsed.data, probeVariables(config, sessionId)),
       method: methodOf(config),
       headers,
       keys: JSON.stringify([...headers.values()].sort()),
