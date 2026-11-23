@@ -2510,7 +2510,7 @@
         "summary": "Get media file metadata",
         "parameters": [
           {
-            "schema": { "type": "string", "enum": ["audio", "image", "video", "blob"] },
+            "schema": { "type": "string", "enum": ["audio", "image", "video", "document", "blob"] },
             "required": true,
             "name": "type",
             "in": "path"
@@ -2610,6 +2610,88 @@
         }
       }
     },
+    "/api/media": {
+      "get": {
+        "operationId": "getMediaByKey",
+        "tags": ["Media"],
+        "summary": "Fetch media bytes by storage provider key",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "pattern": "^(?!\\/|[a-zA-Z]:)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$))[^\\\\\\x00-\\x1f\\x7f\\u2028\\u2029]+$"
+            },
+            "required": true,
+            "name": "key",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Media bytes",
+            "content": {
+              "application/octet-stream": { "schema": { "type": "string", "format": "binary" } }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Media not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/media/{type}/{filename}": {
       "get": {
         "operationId": "getMedia",
@@ -2617,7 +2699,7 @@
         "summary": "Fetch media file bytes",
         "parameters": [
           {
-            "schema": { "type": "string", "enum": ["audio", "image", "video", "blob"] },
+            "schema": { "type": "string", "enum": ["audio", "image", "video", "document", "blob"] },
             "required": true,
             "name": "type",
             "in": "path"
@@ -4294,6 +4376,33 @@
                                     "config": {
                                       "type": "object",
                                       "properties": {
+                                        "template": {
+                                          "oneOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "source": { "type": "string", "enum": ["file"] },
+                                                "path": { "type": "string", "minLength": 1 }
+                                              },
+                                              "required": ["source", "path"]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "source": {
+                                                  "type": "string",
+                                                  "enum": ["generated"]
+                                                },
+                                                "description": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 4000
+                                                }
+                                              },
+                                              "required": ["source", "description"]
+                                            }
+                                          ]
+                                        },
                                         "benign": { "type": "boolean" },
                                         "inputPurpose": { "type": "string", "minLength": 1 },
                                         "injectionPlacements": {
@@ -4309,7 +4418,16 @@
                                       "enum": ["text", "pdf", "docx", "image"]
                                     }
                                   },
-                                  "required": ["description"]
+                                  "required": ["description"],
+                                  "if": {
+                                    "properties": { "type": { "const": "pdf" } },
+                                    "required": ["type"]
+                                  },
+                                  "else": {
+                                    "properties": {
+                                      "config": { "properties": { "template": false } }
+                                    }
+                                  }
                                 }
                               ]
                             }
@@ -4374,6 +4492,7 @@
                                     "config": {
                                       "type": "object",
                                       "properties": {
+                                        "template": { "type": "object", "not": {} },
                                         "benign": { "type": "boolean" },
                                         "inputPurpose": { "type": "string", "minLength": 1 },
                                         "injectionPlacements": {
@@ -4394,6 +4513,33 @@
                                     "config": {
                                       "type": "object",
                                       "properties": {
+                                        "template": {
+                                          "oneOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "source": { "type": "string", "enum": ["file"] },
+                                                "path": { "type": "string", "minLength": 1 }
+                                              },
+                                              "required": ["source", "path"]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "source": {
+                                                  "type": "string",
+                                                  "enum": ["generated"]
+                                                },
+                                                "description": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 4000
+                                                }
+                                              },
+                                              "required": ["source", "description"]
+                                            }
+                                          ]
+                                        },
                                         "benign": { "type": "boolean" },
                                         "inputPurpose": { "type": "string", "minLength": 1 },
                                         "injectionPlacements": {
@@ -4417,6 +4563,7 @@
                                     "config": {
                                       "type": "object",
                                       "properties": {
+                                        "template": { "type": "object", "not": {} },
                                         "benign": { "type": "boolean" },
                                         "inputPurpose": { "type": "string", "minLength": 1 },
                                         "injectionPlacements": {
@@ -4446,6 +4593,7 @@
                                     "config": {
                                       "type": "object",
                                       "properties": {
+                                        "template": { "type": "object", "not": {} },
                                         "benign": { "type": "boolean" },
                                         "inputPurpose": { "type": "string", "minLength": 1 },
                                         "injectionPlacements": {

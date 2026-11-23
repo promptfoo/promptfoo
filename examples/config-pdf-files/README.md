@@ -40,3 +40,5 @@ The `prompt.py` file handles provider-specific PDF formatting:
 - **Google Gemini**: Uses `inline_data` within message parts
 
 Each provider has different requirements for sending PDF documents, which is why a Python prompt function is used to dynamically format the request.
+
+For adversarial testing of a PDF upload application, see [redteam-pdf](../redteam-pdf) and the [PDF strategy guide](https://www.promptfoo.dev/docs/guides/pdf-red-team/).

@@ -8,10 +8,144 @@ import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
+import { sha256 } from '../../src/util/createHash';
+import { transform } from '../../src/util/transform';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator transforms', () => {
+  const invoice = Buffer.from('%PDF-1.7\nOriginal invoice');
+  const reference = Buffer.from('Fixture');
+  const inputs = {
+    document: `data:application/pdf;base64,${invoice.toString('base64')}`,
+    reference: `data:image/png;base64,${reference.toString('base64')}`,
+    question: 'What is the total?',
+  };
+
+  async function transformPdf(
+    changes: Record<string, string | undefined>,
+    defaultTransform = false,
+  ) {
+    const options = { transformVars: '({ ...vars })' };
+    vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
+      ...(vars as Record<string, unknown>),
+      ...changes,
+    }));
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{__prompt}}')],
+      defaultTest: defaultTransform ? { options } : undefined,
+      tests: [
+        {
+          vars: { ...inputs, __prompt: JSON.stringify(inputs) },
+          options: defaultTransform ? undefined : options,
+          metadata: {
+            strategyId: 'pdf',
+            pluginConfig: {
+              inputs: {
+                document: { type: 'pdf', description: 'Invoice' },
+                reference: { type: 'image', description: 'Reference' },
+                optional: { type: 'pdf', description: 'Optional attachment' },
+                question: 'Question',
+              },
+            },
+            pdf: {
+              input: 'document',
+              contentHash: `sha256:${sha256(invoice)}`,
+              companionHashes: { reference: `sha256:${sha256(reference)}`, optional: null },
+            },
+          },
+        },
+      ],
+    };
+    const evaluation = new Eval({});
+    await evaluate(suite, evaluation, {});
+    return (await evaluation.toEvaluateSummary()).results[0];
+  }
+
+  const changedInvoice = Buffer.from('%PDF-1.7\nChanged').toString('base64');
+  const changes = {
+    replaceDocument: { document: changedInvoice },
+    removeDocument: { document: undefined },
+    changeReference: { reference: 'Q2hhbmdlZA==' },
+    removeReference: { reference: undefined },
+    addFile: { optional: changedInvoice },
+  };
+  it.each(
+    ['default', 'test'].flatMap((scope) =>
+      Object.entries(changes).map(([name, patch]) => ({ scope, name, patch })),
+    ),
+  )(
+    'rejects $name in variables and in the envelope after a $scope transform',
+    async ({ scope, patch }) => {
+      for (const update of [patch, { __prompt: JSON.stringify({ ...inputs, ...patch }) }]) {
+        const row = await transformPdf(update, scope === 'default');
+        expect(row.error).toContain('PDF attachment differs from its generated artifact');
+        expect(row.success).toBe(false);
+      }
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([true, false])(
+    'checks serialized and plain tasks for a default transform of %s',
+    async (useDefault) => {
+      expect((await transformPdf({ __prompt: '{}' }, useDefault)).success).toBe(false);
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+      for (const __prompt of [JSON.stringify(inputs), inputs.question]) {
+        const row = await transformPdf({ __prompt }, useDefault);
+        expect(row.success).toBe(true);
+        expect(mockApiProvider.callApi).toHaveBeenLastCalledWith(
+          __prompt,
+          expect.objectContaining({ vars: expect.objectContaining(inputs) }),
+          expect.objectContaining({ onResponseHeaders: expect.any(Function) }),
+        );
+      }
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(['padded', 'unpadded', 'whitespace'])(
+    'allows edited text and equivalent attachment encodings: %s',
+    async (encoding) => {
+      const encode = (bytes: Buffer) => {
+        const raw = bytes.toString('base64');
+        return encoding === 'unpadded'
+          ? raw.replace(/=+$/, '')
+          : encoding === 'whitespace'
+            ? `\n${raw.replace(/.{8}/g, '$&\n')}\n`
+            : raw;
+      };
+      const updated = {
+        document: encode(invoice),
+        reference: encode(reference),
+        question: 'Explain the payment terms.',
+      };
+      const row = await transformPdf({ ...updated, __prompt: JSON.stringify(updated) });
+      expect(row.success).toBe(true);
+      expect(mockApiProvider.callApi).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(['document', 'reference'] as const)(
+    'rejects malformed %s even if Node decodes it',
+    async (key) => {
+      const raw = inputs[key].split(',')[1];
+      for (const invalid of [`${raw}!`, `${raw}===`, raw.slice(0, -1)]) {
+        expect(Buffer.from(invalid, 'base64')).toEqual(Buffer.from(raw, 'base64'));
+        for (const update of [
+          { [key]: invalid },
+          { __prompt: JSON.stringify({ ...inputs, [key]: invalid }) },
+        ]) {
+          const row = await transformPdf(update);
+          expect(row.error).toContain(`PDF attachment contains invalid base64 (${key})`);
+          expect(row.success).toBe(false);
+        }
+      }
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
   it('evaluate with transform option - default test', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

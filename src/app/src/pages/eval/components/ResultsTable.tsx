@@ -22,6 +22,7 @@ import {
   normalizeMediaText,
   resolveAudioSource,
   resolveBlobUri,
+  resolveDocumentUrl,
   resolveImageSource,
 } from '@app/utils/media';
 import {
@@ -463,6 +464,33 @@ function renderVariableCell({
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
   const row = info.row.original;
+  const pdf = row.test?.metadata?.pdf;
+  if (pdf?.input === varName) {
+    const attachment = row.test?.vars?.[varName] ?? info.getValue();
+    return (
+      <div className="cell space-y-2">
+        <div className="flex gap-3 text-sm">
+          {[
+            ['Download PDF', 'attack.pdf', resolveDocumentUrl(pdf.storageKey, attachment)],
+            ['Clean template', 'template.pdf', resolveDocumentUrl(pdf.templateStorageKey)],
+          ].map(([label, filename, href]) =>
+            href ? (
+              <a key={label} href={href} download={filename} className="text-primary underline">
+                {label}
+              </a>
+            ) : null,
+          )}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {pdf.mode === 'scanned' ? 'Scanned PDF' : 'Text PDF'}
+        </div>
+        <TruncatedText
+          text={String(row.test?.metadata?.originalText ?? '')}
+          maxLength={maxTextLength}
+        />
+      </div>
+    );
+  }
   let value = getVariableCellValue({
     row,
     varName,
@@ -1283,6 +1311,9 @@ function getImageSourceForCell({
   }
 
   const varName = getVariableNameForColumn(columnId, headVars);
+  if (varName && row.original.test?.metadata?.pdf?.input === varName) {
+    return undefined;
+  }
   const imageValue = varName
     ? getVariableCellValue({
         row: row.original,

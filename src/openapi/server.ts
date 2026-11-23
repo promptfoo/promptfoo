@@ -31,7 +31,7 @@ const SERVER_OPENAPI_VERSION = '3.1.0';
 // OpenAPI path parameters are independent fields; runtime media schemas also
 // enforce that blob uses a full hash while legacy types use short filenames.
 const OpenApiMediaParamsSchema = z.object({
-  type: z.enum(['audio', 'image', 'video', 'blob']),
+  type: z.enum([...MediaSchemas.Get.Params.shape.type.options, 'blob']),
   filename: z
     .union([MediaSchemas.Get.Params.shape.filename, BlobsSchemas.Get.Params.shape.hash])
     .describe('Full SHA256 for blob; 12-character hash plus extension for legacy media'),
@@ -721,6 +721,25 @@ export function createServerOpenApiRegistry() {
     },
   });
 
+  const mediaResponses = {
+    200: binaryResponse('Media bytes'),
+    400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+    404: jsonResponse(ErrorResponseSchema, 'Media not found'),
+    500: jsonResponse(ErrorResponseSchema, 'Server error'),
+  };
+
+  register({
+    method: 'get',
+    path: '/api/media',
+    operationId: 'getMediaByKey',
+    tags: ['Media'],
+    summary: 'Fetch media bytes by storage provider key',
+    request: {
+      query: MediaSchemas.Get.Query,
+    },
+    responses: mediaResponses,
+  });
+
   register({
     method: 'get',
     path: '/api/media/{type}/{filename}',
@@ -730,12 +749,7 @@ export function createServerOpenApiRegistry() {
     request: {
       params: OpenApiMediaParamsSchema,
     },
-    responses: {
-      200: binaryResponse('Media bytes'),
-      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
-      404: jsonResponse(ErrorResponseSchema, 'Media not found'),
-      500: jsonResponse(ErrorResponseSchema, 'Server error'),
-    },
+    responses: mediaResponses,
   });
 
   register({

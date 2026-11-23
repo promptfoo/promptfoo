@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { InputDefinitionSchema, type Inputs } from '@promptfoo/contracts';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import InputsEditor from './InputsEditor';
-import type { Inputs } from '@promptfoo/contracts';
 
 const renderWithProviders = (ui: React.ReactElement) => {
   return render(<TooltipProvider>{ui}</TooltipProvider>);
@@ -149,6 +149,61 @@ describe('InputsEditor', () => {
         },
       });
     });
+
+    const template = { source: 'file' as const, path: './invoice.pdf' };
+    const sharedConfig = { benign: true, injectionPlacements: ['body', 'header'] };
+
+    it.each([
+      {
+        from: 'pdf',
+        config: { ...sharedConfig, template },
+        to: 'DOCX',
+        expected: { type: 'docx', description: 'Invoice', config: sharedConfig },
+      },
+      { from: 'pdf', config: { template }, to: 'Text', expected: 'Invoice' },
+      {
+        from: 'image',
+        config: sharedConfig,
+        to: 'PDF',
+        expected: { type: 'pdf', description: 'Invoice', config: sharedConfig },
+      },
+      {
+        from: 'docx',
+        config: { injectionPlacements: ['header', 'footnote'] },
+        to: 'PDF',
+        expected: {
+          type: 'pdf',
+          description: 'Invoice',
+          config: { injectionPlacements: ['header'] },
+        },
+      },
+      {
+        from: 'text',
+        config: { injectionPlacements: ['footnote'] },
+        to: 'PDF',
+        expected: { type: 'pdf', description: 'Invoice' },
+      },
+    ])(
+      'preserves only compatible settings from $from to $to',
+      async ({ from, config, to, expected }) => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        const document = InputDefinitionSchema.parse({
+          type: from,
+          description: 'Invoice',
+          config,
+        });
+        renderWithProviders(
+          <ControlledInputsEditor initialInputs={{ document }} onChange={onChange} compact />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        await user.click(await screen.findByRole('option', { name: to }));
+
+        expect(onChange).toHaveBeenLastCalledWith({ document: expected });
+        expect(document).toEqual({ type: from, description: 'Invoice', config });
+      },
+    );
 
     it('should preserve structured text input config when editing descriptions', async () => {
       const user = userEvent.setup();

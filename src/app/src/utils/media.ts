@@ -113,6 +113,19 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
   return undefined;
 }
 
+export function resolveDocumentUrl(key: unknown, attachment?: unknown): string | undefined {
+  const inline = typeof attachment === 'string' ? attachment.trim() : '';
+  if (/^data:application\/pdf;base64,./i.test(inline)) {
+    return inline;
+  }
+  if (typeof key !== 'string' || !key || key.length > 2048) {
+    return undefined;
+  }
+  return /^(document\/[a-f0-9]{12}\.pdf|blob\/[a-f0-9]{64})$/i.test(key)
+    ? resolveBlobUri(STORAGE_REF_PREFIX + key)
+    : withApiBase(`/api/media?${new URLSearchParams({ key })}`);
+}
+
 export function resolveBlobRef(blobRef?: BlobLike | null): string | undefined {
   if (!blobRef) {
     return undefined;
