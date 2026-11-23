@@ -9,7 +9,11 @@ import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
-import { getNamedOpenAiTextId, getSafeProviderId } from '../../providers/index';
+import {
+  getNamedOpenAiTextId,
+  getSafeProviderId,
+  isWebSocketProviderPath,
+} from '../../providers/index';
 import { EvalSchemas } from '../../types/api/eval';
 import {
   getCloudDatabaseId,
@@ -27,7 +31,6 @@ import {
   getReplayColumn,
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
-import { isJavascriptFile } from '../../util/fileExtensions';
 import invariant from '../../util/invariant';
 import {
   isProviderConfigFileReference,
@@ -718,7 +721,7 @@ function replayUrlTransport(path: string) {
   if (/^https?(?::|$)/.test(path)) {
     return 'http';
   }
-  if (path === 'websocket' || /^wss?(?::|$)/.test(path)) {
+  if (isWebSocketProviderPath(path)) {
     return 'websocket';
   }
   return undefined;
@@ -1099,7 +1102,7 @@ function hasStaticReplayRoute(path: string, config: Record<string, unknown>) {
   } else if (transport === 'http' && typeof config.request === 'string') {
     // A raw request overrides even an explicit URL. The body can still use {{prompt}}.
     destination = config.request.split(/\r?\n\r?\n/, 1)[0];
-  } else if (transport === 'http' || (transport === 'websocket' && !isJavascriptFile(path))) {
+  } else if (transport) {
     // A WebSocket ID can redact part of the URL. Without a recorded URL
     // setting, such an ID cannot attest to the original destination.
     if (transport === 'websocket' && !config.url && getSafeProviderId(path) !== path) {

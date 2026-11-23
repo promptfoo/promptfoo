@@ -849,23 +849,25 @@ describe('POST /api/eval/replay provider boundary', () => {
     expect(evaluate).not.toHaveBeenCalled();
   });
 
-  it.each(['anthropic:messages:claude-sonnet-4-5', 'ollama:chat:llama3', './custom.cjs'])(
-    'refuses mutable %s whose saved ID and config cannot prove the endpoint',
-    async (id) => {
-      // A provider environment overriding the destination can disappear;
-      // result rows never contained that override.
-      const definition = { id, label: 'Saved' };
-      const file = path.join(directory, 'target.json');
-      await fs.writeFile(file, JSON.stringify(definition));
-      mockCloudProvider(definition);
-      recordedTarget(id, 0, null, {});
-      for (const source of [`file://${file}`, 'promptfoo://provider/target']) {
-        storedConfig([source], directory, ['Saved']);
-        expect((await replay(0, 0)).status).toBe(400);
-      }
-      expect(evaluate).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    'anthropic:messages:claude-sonnet-4-5',
+    'ollama:chat:llama3',
+    './custom.cjs',
+    'wss://fixture.invalid/module.ts',
+  ])('refuses mutable %s whose saved ID and config cannot prove the endpoint', async (id) => {
+    // A provider environment overriding the destination can disappear;
+    // result rows never contained that override.
+    const definition = { id, label: 'Saved' };
+    const file = path.join(directory, 'target.json');
+    await fs.writeFile(file, JSON.stringify(definition));
+    mockCloudProvider(definition);
+    recordedTarget(id, 0, null, {});
+    for (const source of [`file://${file}`, 'promptfoo://provider/target']) {
+      storedConfig([source], directory, ['Saved']);
+      expect((await replay(0, 0)).status).toBe(400);
+    }
+    expect(evaluate).not.toHaveBeenCalled();
+  });
 
   it.each([{ transform: 'output + " changed"' }, { delay: 1 }, { inputs: { extra: 'new' } }])(
     'rejects unrecorded mutable controls even on local echo: %j',

@@ -137,6 +137,12 @@ export function getNamedOpenAiTextId(path: string) {
   return match ? `openai:${match[1] || DEFAULT_OPENAI_TEXT_MODEL}` : undefined;
 }
 
+// The JavaScript file factory precedes WebSocket in the registry. A URL
+// ending in a module extension must not be identified as a WebSocket target.
+export function isWebSocketProviderPath(path: string) {
+  return (path === 'websocket' || /^wss?(?::|$)/.test(path)) && !isJavascriptFile(path);
+}
+
 const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|codex-desktop)(?::|$)/;
 
 /** Aliases read together by these providers must keep their original scope priority. */
@@ -1838,12 +1844,7 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) =>
-      providerPath.startsWith('ws:') ||
-      providerPath.startsWith('wss:') ||
-      providerPath === 'websocket' ||
-      providerPath === 'ws' ||
-      providerPath === 'wss',
+    test: isWebSocketProviderPath,
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,

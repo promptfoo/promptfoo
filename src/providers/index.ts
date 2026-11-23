@@ -572,4 +572,4 @@ export function getProviderIds(providerPaths: ProvidersConfig): string[] {
 }
 
 export { getSafeProviderId } from './providerLogging';
-export { getNamedOpenAiTextId } from './registry';
+export { getNamedOpenAiTextId, isWebSocketProviderPath } from './registry';
