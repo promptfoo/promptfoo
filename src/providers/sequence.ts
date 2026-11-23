@@ -47,6 +47,8 @@ export class SequenceProvider implements ApiProvider {
     const nunjucks = getNunjucksEngine();
     const responses: string[] = [];
     const accumulatedTokenUsage = createEmptyTokenUsage();
+    let cost: number | undefined = 0;
+    let incurredCost: number | undefined = 0;
 
     // Send each input to the original provider
     for (const input of this.sequenceInputs) {
@@ -66,11 +68,21 @@ export class SequenceProvider implements ApiProvider {
       responses.push(response.output);
 
       accumulateResponseTokenUsage(accumulatedTokenUsage, response);
+
+      // A partial sum would understate costs if any response did not report them.
+      cost = cost === undefined || response.cost === undefined ? undefined : cost + response.cost;
+      const responseIncurredCost = response.incurredCost ?? (response.cached ? 0 : response.cost);
+      incurredCost =
+        incurredCost === undefined || responseIncurredCost === undefined
+          ? undefined
+          : incurredCost + responseIncurredCost;
     }
 
     return {
       output: responses.join(this.separator),
       tokenUsage: accumulatedTokenUsage,
+      cost,
+      incurredCost,
     };
   }
 
