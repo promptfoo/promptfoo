@@ -1313,6 +1313,23 @@ describe('evalTableUtils', () => {
       return chunks.join('');
     }
 
+    it('preserves scalar provider outputs in the CSV output column', async () => {
+      const csv = await runStreamEvalCsv({
+        vars: [],
+        prompts: [createCompletedPrompt()],
+        results: [false, true, 0, null, { count: 0 }].map((output, testIdx) => ({
+          testIdx,
+          promptIdx: 0,
+          testCase: {},
+          response: { output },
+          success: true,
+        })),
+      });
+
+      const [, ...rows] = parseCsv(csv) as string[][];
+      expect(rows.map(([output]) => output)).toEqual(['false', 'true', '0', '', '{"count":0}']);
+    });
+
     it('should include dedicated metric columns when streaming CSV', async () => {
       const csv = await runStreamEvalCsv({
         vars: ['name'],
