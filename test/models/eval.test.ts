@@ -12,7 +12,7 @@ import Eval, {
   escapeJsonPathKey,
   getEvalSummaries,
 } from '../../src/models/eval';
-import { getCachedResultsCount } from '../../src/models/evalPerformance';
+import { getCachedResultsCount, queryRepeatGroups } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
@@ -75,6 +75,62 @@ describe('evaluator', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('pages repeat summaries by expanded test and loads only the selected group of runs', async () => {
+    const evaluation = await Eval.create({}, []);
+    const testCase = { description: 'Shared description' };
+    await evaluation.addResult(createEvaluateResult({ testIdx: 0, testCase }));
+    for (const [testIdx, groupId, repeatIndex, failureReason] of [
+      [1, 'A', 0, ResultFailureReason.NONE],
+      [2, 'B', 0, ResultFailureReason.ASSERT],
+      [3, 'A', 1, ResultFailureReason.ERROR],
+    ] as const) {
+      await evaluation.addResult(
+        createEvaluateResult({
+          testIdx,
+          testCase,
+          repeatGroupId: groupId,
+          repeatIndex,
+          failureReason,
+          success: failureReason === ResultFailureReason.NONE,
+        }),
+      );
+    }
+    await evaluation.addResult(
+      createEvaluateResult({
+        testIdx: 1,
+        promptIdx: 1,
+        testCase,
+        repeatGroupId: 'A',
+        repeatIndex: 0,
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
+      }),
+    );
+    expect(await queryRepeatGroups(evaluation.id, 0, 1)).toEqual({
+      hasMore: true,
+      groups: [
+        {
+          id: 'A',
+          description: testCase.description,
+          firstTestIdx: 1,
+          prompts: [
+            { promptIdx: 0, passed: 1, failed: 0, errors: 1 },
+            { promptIdx: 1, passed: 0, failed: 1, errors: 0 },
+          ],
+        },
+      ],
+    });
+    expect(await queryRepeatGroups(evaluation.id, 1, 1)).toMatchObject({
+      hasMore: false,
+      groups: [{ id: 'B', prompts: [{ passed: 0, failed: 1, errors: 0 }] }],
+    });
+    const details = await evaluation.getTablePage({ repeatGroupId: 'A', offset: 1, limit: 1 });
+    expect(details.filteredCount).toBe(2);
+    expect(details.body).toMatchObject([
+      { testIdx: 3, outputs: [{ repeatGroupId: 'A', repeatIndex: 1 }] },
+    ]);
   });
 
   describe('repeat stability export', () => {

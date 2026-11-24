@@ -425,6 +425,8 @@ export interface EvaluateResult {
 }
 
 export interface EvaluateTableOutput {
+  repeatGroupId?: string;
+  repeatIndex?: number;
   cost: number;
   failureReason: ResultFailureReason;
   gradingResult?: GradingResult | null;

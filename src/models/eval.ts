@@ -1270,6 +1270,7 @@ export default class Eval {
   }
 
   async getTablePage(opts: {
+    repeatGroupId?: string;
     offset?: number;
     limit?: number;
     filterMode?: EvalResultsFilterMode;
@@ -1313,6 +1314,7 @@ export default class Eval {
         // Use optimized query for better performance
         logger.debug('Using optimized query for table page');
         queryResult = await queryTestIndicesOptimized(this.id, {
+          repeatGroupId: opts.repeatGroupId,
           offset: opts.offset,
           limit: opts.limit,
           filterMode: opts.filterMode,

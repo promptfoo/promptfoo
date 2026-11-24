@@ -57,6 +57,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
+import RepeatGroupsDialog from './RepeatGroupsDialog';
 import { isFilterApplied, useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import { useHeaderCollapse } from './useHeaderCollapse';
@@ -1635,6 +1636,22 @@ function ResultsTable({
     return config?.redteam !== undefined;
   }, [config?.redteam]);
 
+  const hasRepeatedTests = React.useMemo(() => {
+    if ((config?.evaluateOptions?.repeat ?? 1) > 1) {
+      return true;
+    }
+    if (
+      Array.isArray(config?.tests) &&
+      config.tests.some(
+        (test) =>
+          test && typeof test === 'object' && 'options' in test && (test.options?.repeat ?? 1) > 1,
+      )
+    ) {
+      return true;
+    }
+    return body.some((row) => row.outputs?.some((output) => output?.repeatGroupId));
+  }, [body, config]);
+
   const visiblePromptCount = React.useMemo(
     () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
     [head.prompts, columnVisibility],
@@ -2369,6 +2386,11 @@ function ResultsTable({
       {filteredResultsCount === 0 && !isFetching && isFilteringActive && (
         <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
           <p>No results found for the current filters.</p>
+        </div>
+      )}
+      {evalId && !inComparisonMode && !isFilteringActive && hasRepeatedTests && (
+        <div className="pt-2">
+          <RepeatGroupsDialog key={evalId} evalId={evalId} prompts={head.prompts} />
         </div>
       )}
       <div className="h-4" />

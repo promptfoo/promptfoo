@@ -650,6 +650,16 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.queryByText('Avg Tokens:')).not.toBeInTheDocument();
   });
 
+  it('offers repeat groups for a configured repeated test beyond the loaded page only in the unfiltered view', () => {
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({ table: mockTable, config: { tests: [{ options: { repeat: 20 } }] } }),
+    );
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(screen.getByRole('button', { name: 'Repeated tests' })).toBeInTheDocument();
+    rerender(<ResultsTable {...defaultProps} filterMode="failures" />);
+    expect(screen.queryByRole('button', { name: 'Repeated tests' })).not.toBeInTheDocument();
+  });
+
   it('renders sparse prompt outputs as empty cells', () => {
     const mockTableWithSparseOutput = {
       body: [

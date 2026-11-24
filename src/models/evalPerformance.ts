@@ -3,7 +3,9 @@ import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import logger from '../logger';
+import { ResultFailureReason } from '../types/results';
 
+import type { RepeatGroup, RepeatGroupsResponse } from '../types/api/eval';
 import type { EvalResultsFilterMode } from '../types/index';
 
 /** Result from COUNT queries using db.all() - count is always a number in result array */
@@ -91,6 +93,61 @@ export function clearCountCache(evalId?: string) {
   }
 }
 
+// Use only evaluator-owned linkage. A test description or variable value can be shared
+// by independent tests. SQLite aggregates metadata without fetching response payloads.
+const repeatGroupIdSql = sql`CASE WHEN json_valid(metadata)
+  AND json_type(metadata, '$.__promptfoo.repeatLinkage.repeatIndex') = 'integer'
+  AND json_extract(metadata, '$.__promptfoo.repeatLinkage.repeatIndex') >= 0
+  THEN json_extract(metadata, '$.__promptfoo.repeatLinkage.repeatGroupId') END`;
+
+export async function queryRepeatGroups(
+  evalId: string,
+  offset: number,
+  limit: number,
+): Promise<RepeatGroupsResponse> {
+  const db = await getDb();
+  const records = await db.all<{
+    id: string;
+    firstTestIdx: number;
+    description: string | null;
+    promptIdx: number;
+    passed: number;
+    failed: number;
+    errors: number;
+  }>(sql`
+    WITH repeats AS MATERIALIZED (
+      SELECT ${repeatGroupIdSql} AS group_id, test_idx, prompt_idx, success, failure_reason,
+        json_extract(test_case, '$.description') AS description
+      FROM ${evalResultsTable}
+      WHERE eval_id = ${evalId}
+    ), page AS (
+      SELECT group_id, MIN(test_idx) AS first_idx
+      FROM repeats WHERE typeof(group_id) = 'text' AND group_id != ''
+      GROUP BY group_id ORDER BY first_idx, group_id LIMIT ${limit + 1} OFFSET ${offset}
+    )
+    SELECT page.group_id AS id, page.first_idx AS firstTestIdx, MIN(r.description) AS description,
+      r.prompt_idx AS promptIdx,
+      SUM(r.failure_reason != ${ResultFailureReason.ERROR} AND r.success = 1) AS passed,
+      SUM(r.failure_reason != ${ResultFailureReason.ERROR} AND r.success = 0) AS failed,
+      SUM(r.failure_reason = ${ResultFailureReason.ERROR}) AS errors
+    FROM page JOIN repeats r ON r.group_id = page.group_id
+    GROUP BY page.group_id, r.prompt_idx ORDER BY page.first_idx, page.group_id, r.prompt_idx
+  `);
+  const groups = new Map<string, RepeatGroup>();
+  for (const { id, description, firstTestIdx, ...prompt } of records) {
+    let group = groups.get(id);
+    if (!group) {
+      if (groups.size === limit) {
+        return { groups: [...groups.values()], hasMore: true };
+      }
+      group = { id, description, firstTestIdx, prompts: [] };
+      groups.set(id, group);
+    }
+    group.prompts.push(prompt);
+  }
+  return { groups: [...groups.values()], hasMore: false };
+}
+
 // Optimized query for test indices without heavy JSON search
 export async function queryTestIndicesOptimized(
   evalId: string,
@@ -99,6 +156,7 @@ export async function queryTestIndicesOptimized(
     limit?: number;
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
+    repeatGroupId?: string;
     filters?: string[];
   },
 ): Promise<{ testIndices: number[]; filteredCount: number }> {
@@ -109,6 +167,10 @@ export async function queryTestIndicesOptimized(
 
   // Build base query with efficient filtering
   let baseQuery = sql`eval_id = ${evalId}`;
+
+  if (opts.repeatGroupId) {
+    baseQuery = sql`${baseQuery} AND ${repeatGroupIdSql} = ${opts.repeatGroupId}`;
+  }
 
   // Add mode filter (these can use indexes)
   if (mode === 'errors') {

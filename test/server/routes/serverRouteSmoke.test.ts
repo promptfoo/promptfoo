@@ -472,6 +472,12 @@ const smokeCases: SmokeCase[] = [
   },
   {
     method: 'get',
+    openApiPath: '/api/eval/{id}/repeat-groups',
+    path: '/api/eval/eval-1/repeat-groups?limit=0',
+    expectedStatus: 400,
+  },
+  {
+    method: 'get',
     openApiPath: '/api/eval/{id}/table',
     path: '/api/eval/eval-1/table?limit=abc',
     expectedStatus: 400,

@@ -4,6 +4,7 @@ import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
+import { queryRepeatGroups } from '../../models/evalPerformance';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
@@ -301,6 +302,21 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
 
 const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
 
+evalRouter.get('/:id/repeat-groups', async (req: Request, res: Response): Promise<void> => {
+  const params = EvalSchemas.RepeatGroups.Params.safeParse(req.params);
+  const query = EvalSchemas.RepeatGroups.Query.safeParse(req.query);
+  if (!params.success || !query.success) {
+    res.status(400).json({ error: 'Invalid repeat group request' });
+    return;
+  }
+  if (!(await Eval.findById(params.data.id))) {
+    res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+  const page = await queryRepeatGroups(params.data.id, query.data.offset, query.data.limit);
+  res.json(EvalSchemas.RepeatGroups.Response.parse(page));
+});
+
 evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = EvalSchemas.Table.Params.safeParse(req.params);
   if (!paramsResult.success) {
@@ -360,6 +376,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   }
 
   const table = await eval_.getTablePage({
+    ...(queryResult.data.repeatGroupId && { repeatGroupId: queryResult.data.repeatGroupId }),
     offset,
     limit,
     filterMode,
