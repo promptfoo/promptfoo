@@ -25,6 +25,11 @@ function validateGoogleModelRoute(
   serviceType?: string,
   allowNativeInteractions = false,
 ): void {
+  if (serviceType === 'responses' || (serviceType === undefined && modelName === 'responses')) {
+    throw new Error(
+      'OpenAI Responses on Google Cloud requires vertex:responses:<model> and Google OAuth credentials.',
+    );
+  }
   if (modelName === GEMINI_DECISION_MODEL) {
     throw new Error(
       `Model "${modelName}" requires the Gemini Decisions API. Use google:decisions:${modelName}.`,
@@ -62,6 +67,14 @@ export const googleProviderFactories: ProviderFactory[] = [
     create: async (providerPath, providerOptions, context) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
+      if (firstPart === 'responses') {
+        const modelName = splits.slice(2).join(':');
+        if (!modelName) {
+          throw new Error('Missing model name. Use vertex:responses:<model>.');
+        }
+        const { VertexResponsesProvider } = await import('../google/responses');
+        return new VertexResponsesProvider(modelName, providerOptions);
+      }
       if (firstPart === 'decisions') {
         throw new Error(
           `The Gemini Decisions API requires the native Gemini API. Use google:decisions:${GEMINI_DECISION_MODEL}.`,

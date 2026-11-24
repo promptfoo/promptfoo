@@ -17,7 +17,7 @@ The provided link opens the [web viewer](/docs/usage/web-ui) interface, which al
 
 ## Using the GitHub Action
 
-Here's an example action that watches a PR for modifications. If any file in the `prompts/` directory is modified, we automatically run the eval and post a link to the results using the `promptfoo/promptfoo-action@v1`. The action requires Node.js `>=22.22.0` on the runner; Node.js 24 LTS is recommended:
+Here's an example action that watches a PR for modifications. If any file in the `prompts/` directory is modified, we automatically run the eval and post a link to the results using the `promptfoo/promptfoo-action@v1`. Configure the runner with a [supported Node.js version](/docs/installation#nodejs-runtime-support).
 
 ```yml
 name: 'Prompt Evaluation'

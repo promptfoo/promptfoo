@@ -40,6 +40,8 @@ describe('getStrategyId', () => {
 
 describe('getEstimatedProbes', () => {
   it.each([
+    // Three reliability plugins, with an explicit count on one of them.
+    { plugins: [{ id: 'hallucination', numTests: 1 }, 'aiuc:1:d004'], numTests: 2, expected: 5 },
     { plugins: [{ id: 'toxicity', numTests: 2 }], numTests: 5, expected: 12 },
     { plugins: [{ id: 'bola', numTests: -2 }], numTests: 5, expected: 5 },
     { plugins: [{ id: 'bola', numTests: 1.5 }], numTests: 5, expected: 5 },

@@ -17,7 +17,7 @@ Install promptfoo globally:
 npm install -g promptfoo
 ```
 
-Install and run promptfoo with Node.js 24 or later for full-repository scans. On Node.js 22.22 or later, you can scan changed lines with `promptfoo code-scans run --diffs-only`.
+Full-repository scans require Node.js `^24.15.0 || >=26`. Diff-only scans also support Node.js `^22.22.2`. Use `promptfoo code-scans run --diffs-only` to scan changed lines.
 
 During a full scan, the hosted scanner can read eligible text files throughout the selected directory at the Git revision being compared (`--compare`, default `HEAD`). The CLI builds a private snapshot from committed regular files. It excludes working-tree edits, untracked files, symlinks, submodules, generated or oversized files, and recognized credential filenames and content. Each file is limited to 500 KiB. Full scans stop if eligible paths exceed 30,000 files or 256 MiB in total. Full scans send the commit IDs for the comparison and omit commit subjects and author names. These checks cannot identify every secret. Use `--diffs-only` to share only the Git diff.
 

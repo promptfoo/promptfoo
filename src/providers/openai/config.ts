@@ -75,6 +75,7 @@ export type OpenAiResponsesConfig = Omit<
 
 /** Billing hooks consume rates and routing, not unresolved endpoint authoring fields. */
 export type OpenAiBillingConfig = OpenAiSharedOptions & {
+  backgroundCompletionWindow?: string;
   passthrough?: object;
   service_tier?: string | null;
 };

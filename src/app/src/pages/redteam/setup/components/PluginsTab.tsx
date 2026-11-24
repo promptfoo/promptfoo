@@ -11,6 +11,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import {
+  AIUC_1_MAPPING,
   categoryAliases,
   DEFAULT_PLUGINS,
   DOD_AI_ETHICS_MAPPING,
@@ -130,6 +131,10 @@ const STANDARD_PRESETS: PluginPreset[] = [
   {
     name: 'EU AI Act',
     plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'AIUC-1',
+    plugins: new Set(Object.values(AIUC_1_MAPPING).flatMap((v) => v.plugins)),
   },
   {
     name: 'ISO 42001',
