@@ -4,7 +4,6 @@ import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
-import { queryRepeatGroups } from '../../models/evalPerformance';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
@@ -309,11 +308,12 @@ evalRouter.get('/:id/repeat-groups', async (req: Request, res: Response): Promis
     res.status(400).json({ error: 'Invalid repeat group request' });
     return;
   }
-  if (!(await Eval.findById(params.data.id))) {
+  const evaluation = await Eval.findById(params.data.id);
+  if (!evaluation) {
     res.status(404).json({ error: 'Eval not found' });
     return;
   }
-  const page = await queryRepeatGroups(params.data.id, query.data.offset, query.data.limit);
+  const page = await evaluation.getRepeatGroups(query.data.offset, query.data.limit);
   res.json(EvalSchemas.RepeatGroups.Response.parse(page));
 });
 

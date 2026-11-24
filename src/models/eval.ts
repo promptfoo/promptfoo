@@ -29,6 +29,8 @@ import {
   type EvaluateTable,
   type EvaluateTableRow,
   type Prompt,
+  type RepeatGroup,
+  type RepeatGroupsResponse,
   type RepeatStabilitySummary,
   ResultFailureReason,
   type ResultsFile,
@@ -61,6 +63,7 @@ import {
   getCachedResultsCount,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
+  repeatGroupIdSql,
 } from './evalPerformance';
 import EvalResult, {
   getResultIndexKey,
@@ -1267,6 +1270,50 @@ export default class Eval {
       numPrompts: this.prompts.length,
       whereSql,
     });
+  }
+
+  async getRepeatGroups(offset: number, limit: number): Promise<RepeatGroupsResponse> {
+    const db = await getDb();
+    const records = await db.all<{
+      id: string;
+      firstTestIdx: number;
+      description: string | null;
+      promptIdx: number;
+      passed: number;
+      failed: number;
+      errors: number;
+    }>(sql`
+    WITH repeats AS MATERIALIZED (
+      SELECT ${repeatGroupIdSql} AS group_id, test_idx, prompt_idx, success, failure_reason,
+        json_extract(test_case, '$.description') AS description
+      FROM ${evalResultsTable}
+      WHERE eval_id = ${this.id}
+    ), page AS (
+      SELECT group_id, MIN(test_idx) AS first_idx
+      FROM repeats WHERE typeof(group_id) = 'text' AND group_id != ''
+      GROUP BY group_id ORDER BY first_idx, group_id LIMIT ${limit + 1} OFFSET ${offset}
+    )
+    SELECT page.group_id AS id, page.first_idx AS firstTestIdx, MIN(r.description) AS description,
+      r.prompt_idx AS promptIdx,
+      SUM(r.failure_reason != ${ResultFailureReason.ERROR} AND r.success = 1) AS passed,
+      SUM(r.failure_reason != ${ResultFailureReason.ERROR} AND r.success = 0) AS failed,
+      SUM(r.failure_reason = ${ResultFailureReason.ERROR}) AS errors
+    FROM page JOIN repeats r ON r.group_id = page.group_id
+    GROUP BY page.group_id, r.prompt_idx ORDER BY page.first_idx, page.group_id, r.prompt_idx
+  `);
+    const groups = new Map<string, RepeatGroup>();
+    for (const { id, description, firstTestIdx, ...prompt } of records) {
+      let group = groups.get(id);
+      if (!group) {
+        if (groups.size === limit) {
+          return { groups: [...groups.values()], hasMore: true };
+        }
+        group = { id, description, firstTestIdx, prompts: [] };
+        groups.set(id, group);
+      }
+      group.prompts.push(prompt);
+    }
+    return { groups: [...groups.values()], hasMore: false };
   }
 
   async getTablePage(opts: {

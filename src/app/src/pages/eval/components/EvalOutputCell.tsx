@@ -1244,7 +1244,18 @@ function renderOutputActions({
   );
 }
 
-export function EvalOutputContent({
+export function EvalRunOutput({ output }: { output: EvaluateTableOutput }) {
+  const verdict =
+    output.failureReason === ResultFailureReason.ERROR ? 'ERROR' : output.pass ? 'PASS' : 'FAIL';
+  return (
+    <>
+      <strong>{verdict}</strong>
+      <EvalOutputContent output={output} maxTextLength={250} />
+    </>
+  );
+}
+
+function EvalOutputContent({
   output,
   text = stringifyOutputText(output.text),
   maxTextLength,

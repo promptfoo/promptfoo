@@ -12,7 +12,7 @@ import Eval, {
   escapeJsonPathKey,
   getEvalSummaries,
 } from '../../src/models/eval';
-import { getCachedResultsCount, queryRepeatGroups } from '../../src/models/evalPerformance';
+import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
@@ -108,7 +108,7 @@ describe('evaluator', () => {
         failureReason: ResultFailureReason.ASSERT,
       }),
     );
-    expect(await queryRepeatGroups(evaluation.id, 0, 1)).toEqual({
+    expect(await evaluation.getRepeatGroups(0, 1)).toEqual({
       hasMore: true,
       groups: [
         {
@@ -122,7 +122,7 @@ describe('evaluator', () => {
         },
       ],
     });
-    expect(await queryRepeatGroups(evaluation.id, 1, 1)).toMatchObject({
+    expect(await evaluation.getRepeatGroups(1, 1)).toMatchObject({
       hasMore: false,
       groups: [{ id: 'B', prompts: [{ passed: 0, failed: 1, errors: 0 }] }],
     });

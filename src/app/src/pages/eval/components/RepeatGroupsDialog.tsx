@@ -12,12 +12,10 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import useApiConfig from '@app/stores/apiConfig';
 import { useUserStore } from '@app/stores/userStore';
 import { callApi, getApiBaseUrl } from '@app/utils/api';
-import { ResultFailureReason } from '@promptfoo/types/results';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { EvalOutputContent } from './EvalOutputCell';
-import type { CompletedPrompt, EvalTableDTO } from '@promptfoo/types';
-import type { RepeatGroupsResponse } from '@promptfoo/types/api/eval';
+import { EvalRunOutput } from './EvalOutputCell';
+import type { CompletedPrompt, EvalTableDTO, RepeatGroupsResponse } from '@promptfoo/types';
 
 const PAGE_SIZE = 20;
 
@@ -118,16 +116,9 @@ function GroupRuns({ evalId, groupId }: { evalId: string; groupId: string }) {
                       </td>
                     );
                   }
-                  const status =
-                    output.failureReason === ResultFailureReason.ERROR
-                      ? 'ERROR'
-                      : output.pass
-                        ? 'PASS'
-                        : 'FAIL';
                   return (
                     <td key={index} className="p-2">
-                      <strong>{status}</strong>
-                      <EvalOutputContent output={output} maxTextLength={250} />
+                      <EvalRunOutput output={output} />
                     </td>
                   );
                 })}
