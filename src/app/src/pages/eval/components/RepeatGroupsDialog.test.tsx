@@ -73,6 +73,44 @@ it('fetches group totals on open and loads run outputs only when expanded', asyn
   expect(screen.queryByText('first line indented line')).not.toBeInTheDocument();
 });
 
+it('opens the image preview outside the repeat dialog and returns to the group on Escape', async () => {
+  const user = userEvent.setup();
+  mockCallApiResponseOnce({
+    groups: [{ id: 'images', firstTestIdx: 0, prompts: [] }],
+    hasMore: false,
+  });
+  mockCallApiResponseOnce({
+    table: {
+      head: { prompts: [prompt], vars: [] },
+      body: [
+        {
+          testIdx: 0,
+          outputs: [
+            {
+              repeatGroupId: 'images',
+              repeatIndex: 0,
+              pass: true,
+              prompt: 'Image output',
+              images: [{ data: 'aW1hZ2U=', mimeType: 'image/png' }],
+            },
+          ],
+        },
+      ],
+    },
+    filteredCount: 1,
+  });
+  renderOverview();
+  await user.click(screen.getByRole('button', { name: 'Repeated tests' }));
+  const overview = screen.getByRole('dialog', { name: 'Repeated tests' });
+  await user.click(await within(overview).findByRole('button', { name: /Test 1/ }));
+  await user.click(await within(overview).findByRole('img', { name: 'Image output' }));
+  const preview = screen.getByRole('dialog', { name: 'Image preview' });
+  expect(overview).not.toContainElement(preview);
+  await user.keyboard('{Escape}');
+  expect(preview).not.toBeInTheDocument();
+  expect(within(overview).getByRole('rowheader', { name: '1' })).toBeVisible();
+});
+
 it('pages recorded runs independently from group summaries', async () => {
   const user = userEvent.setup();
   const group = {

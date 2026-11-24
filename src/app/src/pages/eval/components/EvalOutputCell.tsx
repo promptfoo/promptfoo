@@ -1,5 +1,6 @@
 import React, { useCallback, useId, useMemo } from 'react';
 
+import { Dialog, DialogClose, DialogContent, DialogTitle } from '@app/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useCopyFeedback } from '@app/hooks/useCopyFeedback';
@@ -1271,16 +1272,13 @@ function EvalOutputContent({
   searchText?: string;
 }) {
   const { renderMarkdown, prettifyJson } = useResultsViewSettingsStore();
-  const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
 
   // Memoized to maintain stable reference across renders, preventing
   // unnecessary re-renders of markdown components that use this callback.
-  // Uses functional update to avoid stale closure issues.
   // @see https://github.com/promptfoo/promptfoo/issues/969
   const toggleLightbox = useCallback((url?: string) => {
     setLightboxImage(url ?? null);
-    setLightboxOpen((prev) => !prev);
   }, []);
 
   // Memoized components object for ReactMarkdown to prevent re-renders.
@@ -1334,10 +1332,30 @@ function EvalOutputContent({
             : maxTextLength
         }
       />
-      {lightboxOpen && lightboxImage && (
-        <div className="lightbox" onClick={() => toggleLightbox()}>
-          <img src={lightboxImage} alt="Lightbox" />
-        </div>
+      {lightboxImage && (
+        <Dialog open onOpenChange={(open) => !open && setLightboxImage(null)}>
+          <DialogContent className="w-fit max-w-[90vw] p-0" hideCloseButton>
+            <DialogTitle className="sr-only">Image preview</DialogTitle>
+            <DialogClose asChild>
+              <button
+                type="button"
+                aria-label="Close image preview"
+                className="cursor-zoom-out"
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    setLightboxImage(null);
+                  }
+                }}
+              >
+                <img
+                  src={lightboxImage}
+                  alt="Lightbox"
+                  className="max-h-[85vh] max-w-[90vw] object-contain"
+                />
+              </button>
+            </DialogClose>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );

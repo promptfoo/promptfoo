@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -199,6 +199,7 @@ export default function RepeatGroupsDialog({
   evalId: string;
   prompts: CompletedPrompt[];
 }) {
+  const overviewRef = useRef<HTMLDivElement>(null);
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -206,7 +207,18 @@ export default function RepeatGroupsDialog({
           Repeated tests
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl">
+      <DialogContent
+        ref={overviewRef}
+        className="max-w-4xl"
+        onEscapeKeyDown={(event) => {
+          // A portaled image preview handles its own Escape key.
+          const targetDialog =
+            event.target instanceof Element && event.target.closest('[role="dialog"]');
+          if (targetDialog && targetDialog !== overviewRef.current) {
+            event.preventDefault();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Repeated tests</DialogTitle>
           <p className="text-sm text-muted-foreground">

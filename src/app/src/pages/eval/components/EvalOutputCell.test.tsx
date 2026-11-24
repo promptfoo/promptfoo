@@ -2970,16 +2970,16 @@ describe('EvalOutputCell inline image lightbox', () => {
       showStats: false,
     };
 
-    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+    renderWithProviders(<EvalOutputCell {...props} />);
 
     const imgElement = screen.getByRole('img');
     expect(imgElement).toBeInTheDocument();
 
     await user.click(imgElement);
-    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Image preview' })).toBeVisible();
 
-    await user.click(container.querySelector('.lightbox')!);
-    expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Close image preview' }));
+    expect(screen.queryByRole('dialog', { name: 'Image preview' })).not.toBeInTheDocument();
   });
 
   it('toggleLightbox maintains stable behavior across multiple toggles', async () => {
@@ -3030,23 +3030,23 @@ describe('EvalOutputCell inline image lightbox', () => {
       showStats: false,
     };
 
-    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+    renderWithProviders(<EvalOutputCell {...props} />);
 
     const imgElement = screen.getByRole('img');
 
     await user.click(imgElement);
-    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Image preview' })).toBeVisible();
 
-    await user.click(container.querySelector('.lightbox')!);
-    expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
-
-    await user.click(imgElement);
-    expect(container.querySelector('.lightbox')).toBeInTheDocument();
-
-    await user.click(container.querySelector('.lightbox')!);
-    expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Close image preview' }));
+    expect(screen.queryByRole('dialog', { name: 'Image preview' })).not.toBeInTheDocument();
 
     await user.click(imgElement);
-    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Image preview' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Close image preview' }));
+    expect(screen.queryByRole('dialog', { name: 'Image preview' })).not.toBeInTheDocument();
+
+    await user.click(imgElement);
+    expect(screen.getByRole('dialog', { name: 'Image preview' })).toBeVisible();
   });
 });
