@@ -11,7 +11,7 @@ promptfoo allows you to import eval test cases directly from Google Sheets. This
 
 ### Public Sheets (Unauthenticated)
 
-For sheets that are accessible via "anyone with the link", simply specify the share URL in your configuration:
+For sheets that are accessible via "anyone with the link", specify the document URL in your configuration. Both `/d/<spreadsheet-id>` and `/d/<spreadsheet-id>/edit` work; add `#gid=<sheet-id>` to select a tab.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
