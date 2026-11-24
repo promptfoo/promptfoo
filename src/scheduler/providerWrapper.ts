@@ -155,19 +155,29 @@ export function createProviderRateLimitOptions(
       const tokenUsage: Partial<TokenUsage> = {};
       let combinedCost = 0;
       let hasCost = false;
+      let combinedIncurredCost: number | undefined;
+      let needsIncurredCost = false;
       for (const response of [...retryResults, result]) {
         accumulateRetryTokenUsage(tokenUsage, response);
         if (isSafeCost(response.cost)) {
           combinedCost += response.cost;
           hasCost = true;
         }
+        needsIncurredCost ||= response.incurredCost !== undefined || response.cached === true;
+        const incurredCost = response.incurredCost ?? (response.cached ? 0 : response.cost);
+        if (isSafeCost(incurredCost)) {
+          combinedIncurredCost = (combinedIncurredCost ?? 0) + incurredCost;
+        }
       }
       const resultWithoutCost = { ...result };
       delete resultWithoutCost.cost;
+      delete resultWithoutCost.incurredCost;
       return {
         ...resultWithoutCost,
         tokenUsage,
         ...(hasCost && Number.isFinite(combinedCost) && { cost: combinedCost }),
+        ...(needsIncurredCost &&
+          isSafeCost(combinedIncurredCost) && { incurredCost: combinedIncurredCost }),
       };
     },
   };
