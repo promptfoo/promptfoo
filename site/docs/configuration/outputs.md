@@ -92,6 +92,8 @@ Create spreadsheet-compatible data:
 promptfoo eval --output results.csv
 ```
 
+Each test case gets one row, with its prompt and provider results in separate columns. This layout also applies when you export with `--no-write`.
+
 **Columns include:**
 
 - Test variables
