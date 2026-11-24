@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Loom document search citations and scope
+
+prompts:
+  - 'When does the Emberglass release freeze start?'
+
+providers:
+  - id: http
+    config:
+      url: '{{env.LOOM_BASE_URL}}/v1/knowledge.search'
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: 'Bearer {{env.LOOM_VIEWER_TOKEN}}'
+      body:
+        org: '{{env.LOOM_ORG}}'
+        namespace: '{{namespace}}'
+        namespace_scope: this
+        search_mode: lexical
+        query: '{{prompt}}'
+        top_k: 5
+      transformResponse: |
+        ({
+          status: context.response.status,
+          sources: json?.results?.map((hit) => hit.source_uri) ?? [],
+        })
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: output.status === 200 && output.sources.length === 1 && output.sources[0] === context.vars.source
+
+tests:
+  - description: Search the team handbook
+    vars:
+      namespace: team-handbook
+      source: https://example.com/team-handbook/emberglass
+  - description: Search the second handbook
+    vars:
+      namespace: second-handbook
+      source: https://example.com/second-handbook/emberglass
