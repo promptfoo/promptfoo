@@ -833,7 +833,9 @@ export default class Eval {
           batches.set(key, [result]);
         }
       }
-      yield* batches.values();
+      for (const key of [...batches.keys()].sort((a, b) => a - b)) {
+        yield batches.get(key)!;
+      }
       return;
     }
 

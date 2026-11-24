@@ -339,10 +339,11 @@ describe('evaluator', () => {
       ]);
     });
 
-    it('keeps prompt results for the same in-memory test in one batch', async () => {
+    it('keeps each test together and yields in-memory batches by test index', async () => {
       const evaluation = new Eval({});
+      await evaluation.addResult(createEvaluateResult({ testIdx: 12, promptIdx: 0 }));
       await evaluation.addResult(createEvaluateResult({ testIdx: 0, promptIdx: 0 }));
-      await evaluation.addResult(createEvaluateResult({ testIdx: 1, promptIdx: 0 }));
+      await evaluation.addResult(createEvaluateResult({ testIdx: 2, promptIdx: 0 }));
       await evaluation.addResult(createEvaluateResult({ testIdx: 0, promptIdx: 1 }));
 
       const batches: number[][] = [];
@@ -350,7 +351,7 @@ describe('evaluator', () => {
         batches.push(batch.map((result) => result.testIdx));
       }
 
-      expect(batches).toEqual([[0, 0], [1]]);
+      expect(batches).toEqual([[0, 0], [2], [12]]);
     });
 
     it('advances across sparse test indices for persisted evals', async () => {
