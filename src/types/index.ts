@@ -527,7 +527,7 @@ export interface EvaluateSummaryV2 {
   stats: EvaluateStats;
 }
 
-export type { RepeatGroup, RepeatGroupsResponse } from './api/eval';
+export type { RepeatGroup, RepeatGroupsResponse } from './repeatGroups';
 
 export type EvalTableDTO = {
   table: EvaluateTable;
