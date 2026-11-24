@@ -1,11 +1,6 @@
 import { z } from 'zod';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
-import {
-  EvalResultsFilterMode,
-  EvaluateOptionsSchema,
-  RepeatGroupsResponseSchema,
-  TestSuiteConfigSchema,
-} from '../index';
+import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */
@@ -90,6 +85,27 @@ export type CopyEvalResponse = z.infer<typeof CopyEvalResponseSchema>;
 
 // Compatibility export for existing API schema consumers.
 export { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
+
+const repeatGroupSchema = z.object({
+  id: z.string(),
+  description: z.string().nullable(),
+  firstTestIdx: z.number(),
+  prompts: z.array(
+    z.object({
+      promptIdx: z.number(),
+      passed: z.number(),
+      failed: z.number(),
+      errors: z.number(),
+    }),
+  ),
+});
+
+export type RepeatGroup = z.infer<typeof repeatGroupSchema>;
+const RepeatGroupsResponseSchema = z.object({
+  groups: z.array(repeatGroupSchema),
+  hasMore: z.boolean(),
+});
+export type RepeatGroupsResponse = z.infer<typeof RepeatGroupsResponseSchema>;
 
 /** Query parameters for eval table endpoint. */
 export const EvalTableQuerySchema = z
