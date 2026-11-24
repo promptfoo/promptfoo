@@ -1,6 +1,9 @@
+import { mockObjectUrl } from '@app/tests/browserMocks';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { parse } from 'csv-parse/browser/esm/sync';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import History from './History';
 import type { StandaloneEval } from '@promptfoo/types/standaloneEval';
 
@@ -108,13 +111,40 @@ describe('History', () => {
     const promptLink2 = row2Cells.getByRole('link', { name: '[def456]' });
     expect(promptLink2).toHaveAttribute('href', '/prompts?id=def456prompt');
     expect(row2Cells.getByText('Summarize the following text.')).toBeInTheDocument();
-    expect(row2Cells.getByText('77.78%')).toBeInTheDocument();
+    expect(row2Cells.getByText('70.00%')).toBeInTheDocument();
     // Pass count is rendered as a Badge, not gridcell
     expect(row2Cells.getByText('7')).toBeInTheDocument();
     expect(row2Cells.getByText('2')).toBeInTheDocument();
     expect(row2Cells.getByText('1 err')).toBeInTheDocument();
     expect(row2Cells.getByText('0.75')).toBeInTheDocument();
   });
+
+  it.each(['CSV', 'JSON'])(
+    'includes execution errors in the %s export pass rate',
+    async (format) => {
+      const user = userEvent.setup();
+      mockObjectUrl();
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      render(
+        <MemoryRouter>
+          <History data={[mockData[1]]} isLoading={false} error={null} />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Export' }));
+      await user.click(screen.getByRole('menuitem', { name: `Export ${format}` }));
+
+      const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob;
+      const content = await blob.text();
+      if (format === 'CSV') {
+        expect(parse(content, { columns: true })).toMatchObject([
+          { passRate: '70.00', failCount: '3' },
+        ]);
+      } else {
+        expect(JSON.parse(content)).toMatchObject([{ passRate: '70.00', failCount: 3 }]);
+      }
+    },
+  );
 
   it('should display the loading overlay when isLoading is true', () => {
     render(
