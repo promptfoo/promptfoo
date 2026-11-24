@@ -75,6 +75,8 @@ providers:
           when: always
 ```
 
+With `@fal-ai/client` 1.11.0 and later, the SDK uses exponential backoff between queue status checks, capped at 10 seconds. The delay resets when the status changes. For direct connections, the SDK retries against `queue.falrun.com` if it cannot connect to `queue.fal.run`.
+
 ## Configuration
 
 Configure the fal provider in your promptfoo configuration file. Here's an example using [`fal-ai/flux/schnell`](https://fal.ai/models/fal-ai/flux/schnell):
