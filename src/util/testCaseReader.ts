@@ -6,7 +6,7 @@ import { parse as parsePath } from 'path';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import { escape as escapeGlob, globSync, hasMagic } from 'glob';
+import { escape as escapeGlob, globSync, hasMagic } from 'glob/raw';
 import cliState from '../cliState';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';

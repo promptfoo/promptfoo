@@ -39,6 +39,8 @@ import {
   calculateObservableOpenAIToolCost,
   calculateOpenAIUsageCost,
   getBedrockBillingEndpoint,
+  getBedrockGptInferenceProfile,
+  hasUnpricedAzureResponsesToolUsage,
   usesAzureOpenAiBilling,
 } from './billing';
 import {
@@ -67,6 +69,7 @@ import {
   hasSensitiveOpenAiCacheString,
   isAzureOpenAiEndpoint,
   isCustomOpenAiEndpoint,
+  isOpenAiFirstPartyApiUrl,
   normalizeOpenAiBillingModelName,
   normalizeOpenAiServiceTierForWire,
   OPENAI_BILLING_MODELS,
@@ -95,21 +98,23 @@ interface OpenAIErrorResponse {
   };
 }
 
-function hasUnpricedAzureResponsesToolUsage(data: any): boolean {
-  const output = Array.isArray(data?.output) ? data.output : [];
-  if (
-    output.some((item: any) =>
-      ['file_search_call', 'code_interpreter_call', 'image_generation_call'].includes(item?.type),
-    )
-  ) {
+const MULTI_AGENT_BETA = 'responses_multi_agent=v1';
+
+function enableMultiAgentBeta(apiUrl: string, headers: Record<string, string>): boolean {
+  const key =
+    Object.keys(headers).find((name) => name.toLowerCase() === 'openai-beta') ?? 'OpenAI-Beta';
+  const betas = (headers[key] ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (betas.includes(MULTI_AGENT_BETA)) {
     return true;
   }
-  const webSearch = data?.tool_usage?.web_search;
-  const requests = webSearch?.num_requests;
-  if (typeof requests === 'number' && Number.isFinite(requests) && requests >= 0) {
-    return requests > 0;
+  if (!isOpenAiFirstPartyApiUrl(apiUrl)) {
+    return false;
   }
-  return webSearch != null || output.some((item: any) => item?.type === 'web_search_call');
+  headers[key] = [...betas, MULTI_AGENT_BETA].join(',');
+  return true;
 }
 
 interface OpenAIResponsesResponse {
@@ -234,6 +239,11 @@ function getBackgroundCacheIdentity(
   request: BackgroundRequest,
   responseId?: string,
 ): { key: string; cacheable: boolean; coalescable: boolean } {
+  // Request-time credentials do not identify a principal here. Gate creation,
+  // polling and billing together, even when a gateway reuses a job ID.
+  if (request.getAuthHeaders) {
+    return { key: '', cacheable: false, coalescable: false };
+  }
   const headerEntries = Object.entries(request.headers);
   const cacheHeaders = headerEntries
     .filter(
@@ -773,6 +783,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-6-luna',
     'gpt-6.1-sol',
     'gpt-6.1-terra',
+    'gpt-6.2-astra',
+    'gpt-6.2-sol',
     // GPT-5.6 models
     'gpt-5.6-cyber',
     'gpt-5.6',
@@ -880,6 +892,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return undefined;
   }
 
+  protected getObservableToolCost(
+    data: unknown,
+    modelName: string,
+    config: OpenAiBillingConfig,
+  ): number {
+    return calculateObservableOpenAIToolCost(data, modelName, config);
+  }
+
   protected applyBilling(
     result: ProviderResponse,
     data: any,
@@ -903,17 +923,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const bedrockEndpoint = this.getBedrockEndpoint();
     const isBedrock = this.getGenAISystem() === 'bedrock' || bedrockEndpoint !== undefined;
     const runtimeProfile =
-      bedrockEndpoint === 'runtime'
-        ? /^(global|us|us-gov|in)\.openai\.(.+)$/.exec(unprefixedModelName)
-        : null;
+      bedrockEndpoint === 'runtime' ? getBedrockGptInferenceProfile(unprefixedModelName) : null;
     const billingModelName =
-      runtimeProfile?.[2] ??
+      runtimeProfile?.model ??
       (isBedrock && bedrockEndpoint !== 'runtime'
         ? unprefixedModelName.replace(/^openai\./, '')
         : unprefixedModelName);
     const regionalProcessing =
       bedrockEndpoint === 'runtime'
-        ? Boolean(runtimeProfile && runtimeProfile[1] !== 'global')
+        ? Boolean(runtimeProfile && runtimeProfile.scope !== 'global')
         : isBedrock || this.modelName.startsWith('openai.');
     const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
     const responseCost = calculateOpenAIUsageCost(
@@ -923,9 +941,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       {
         apiUrl: this.getApiUrl(),
         cachedResponse: cached,
+        createdAt: data.created_at,
+        completionWindow:
+          data.background === false
+            ? undefined
+            : (data.background_options?.completion_window ?? config.backgroundCompletionWindow),
         provider: isBedrock ? 'bedrock' : this.getGenAISystem(),
         region: this.getBillingRegion(),
-        bedrockProfile: runtimeProfile?.[1],
+        bedrockProfile: runtimeProfile?.scope,
         regionalProcessing,
         serviceTier,
       },
@@ -943,7 +966,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
     const observableToolCost = cached
       ? 0
-      : calculateObservableOpenAIToolCost(data, billingLookupModel, config);
+      : this.getObservableToolCost(data, billingLookupModel, config);
 
     return {
       ...result,
@@ -965,6 +988,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     cached: boolean,
     status: number,
     statusText: string,
+    multiAgent: boolean,
     headers?: Record<string, string>,
   ): ProviderResponse | undefined {
     const policy = getOpenAiPolicyRefusal(data, this.usesGatewayErrorFormat());
@@ -973,7 +997,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
     const response = data.response ?? data;
     const billingData = { ...response, usage: response.usage ?? data.usage };
-    const partialOutput = getResponsesOutputText(response);
+    const partialOutput = getResponsesOutputText(response, multiAgent);
     return this.applyBilling(
       {
         output:
@@ -1264,11 +1288,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     );
 
     omitDeprecatedClaudeSamplingParams(body);
+    const backgroundOptions = body.background_options as { completion_window?: string } | undefined;
 
     return {
       body,
       config: {
         ...config,
+        backgroundCompletionWindow:
+          body.background === true ? backgroundOptions?.completion_window : undefined,
         service_tier: effectiveServiceTier,
         tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation.
         response_format: responseFormat,
@@ -1396,10 +1423,24 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       | undefined;
     let responseHeaders: Record<string, string> | undefined;
     let pollingBackground = false;
+    let multiAgent = false;
     try {
-      const url = appendOpenAiApiPath(this.getApiUrl(), 'responses');
-      const backgroundDeadline = body.background && !body.stream ? Date.now() + timeout : undefined;
+      const apiUrl = this.getApiUrl();
       const customHeaders = this.getOpenAiRequestHeaders(config.headers);
+      const requestedMultiAgent = body.multi_agent?.enabled === true;
+      const azureMultiAgent =
+        requestedMultiAgent && usesAzureOpenAiBilling(config, apiUrl, this.getGenAISystem());
+      const openAiMultiAgentBeta =
+        requestedMultiAgent && !azureMultiAgent && enableMultiAgentBeta(apiUrl, customHeaders);
+      multiAgent = azureMultiAgent || openAiMultiAgentBeta;
+      const url = appendOpenAiApiPath(
+        apiUrl,
+        'responses',
+        openAiMultiAgentBeta && URL.parse(apiUrl)?.searchParams.get('beta') !== 'true'
+          ? 'beta=true'
+          : undefined,
+      );
+      const backgroundDeadline = body.background && !body.stream ? Date.now() + timeout : undefined;
       const hasCustomHeader = (name: string) =>
         Object.keys(customHeaders).some((header) => header.toLowerCase() === name);
       const buildHeaders = (key: string | undefined) => ({
@@ -1510,6 +1551,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                   }
                 },
                 {
+                  multiAgent,
                   preserveFailedOutput: this.usesGatewayErrorFormat(),
                   requireTerminalEvent: this.requiresResponsesStreamTerminalEvent(),
                   classifyError: classifyOpenAiGatewayStreamError,
@@ -1574,6 +1616,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               logger,
               undefined,
               {
+                multiAgent,
                 preserveFailedOutput: this.usesGatewayErrorFormat(),
                 requireTerminalEvent: this.requiresResponsesStreamTerminalEvent(),
                 classifyError: classifyOpenAiGatewayStreamError,
@@ -1633,6 +1676,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         cached,
         status,
         statusText,
+        multiAgent,
         responseHeaders,
       );
       if (policyResponse) {
@@ -1716,6 +1760,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           cached,
           status,
           statusText,
+          multiAgent,
           responseHeaders,
         );
         if (polledPolicy) {
@@ -1815,6 +1860,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Use shared processor for consistent behavior with Azure
     const result = await this.processor.processResponseOutput(data, config, cached, {
       suppressReasoningOutput: Boolean(body.stream),
+      multiAgent,
     });
     const billedResult = this.applyBilling(result, data, config, cached);
 

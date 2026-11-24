@@ -20,6 +20,9 @@ concurrency:
 env:
   VITE_TELEMETRY_DISABLED: 1
   NPM_CONFIG_AUDIT: 'false'
+  # Keep required check names stable. Packed builds exercise each supported
+  # major's minimum while unit tests also cover the latest Node 24 and 26.
+  NODE_FLOORS: '{"22.22":"22.22.2","24.x":"24.15.0","26.x":"26.0.0"}'
 jobs:
   ci-config:
     name: CI Config
@@ -97,9 +100,7 @@ jobs:
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          # Keep the matrix label at 22.22 for stable check names, but install exactly
-          # 22.22.0 so this lane tests the engines floor itself rather than latest 22.22.x.
-          node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
+          node-version: &test-node-version ${{ matrix.node == '22.22' && fromJSON(env.NODE_FLOORS)[matrix.node] || matrix.node }}
           # Windows already caches node_modules below; compressing npm's download cache
           # again can stall post-job cleanup long after the tests finish.
           cache: ${{ runner.os != 'Windows' && 'npm' || '' }}
@@ -111,11 +112,11 @@ jobs:
         with: &python-3-14-8
           python-version: 3.14.8
 
-      # Ruby 4.0.1 is not yet available on Windows via setup-ruby, use 4.0.0 on Windows
-      - name: Use Ruby
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
+      - &use-ruby
+        name: Use Ruby
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
-          ruby-version: ${{ startsWith(matrix.os, 'windows-') && '4.0.0' || '4.0.1' }}
+          ruby-version: '4.0.9'
 
       # Cache node_modules to speed up installs (especially on Windows where npm ci is slow)
       # Key includes OS and Node version since native modules are platform/version specific
@@ -144,7 +145,7 @@ jobs:
         # CI. Real test/assertion failures still fail; see vitest.config.ts.
         env:
           PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts --exclude=test/examples/integrationCrewai.test.ts --exclude=test/examples/integrationInspectOsworldProvider.test.ts --exclude=test/python/python-subprocess-cancellation.test.ts --exclude=test/python/worker.lifecycle.test.ts' || '' }}
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ runner.os == 'Linux' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts --exclude=test/examples/integrationCrewai.test.ts --exclude=test/examples/integrationInspectOsworldProvider.test.ts --exclude=test/python/python-subprocess-cancellation.test.ts --exclude=test/python/worker.lifecycle.test.ts' || '' }}
 
       - name: Test process fixtures without parallel workers
         # Cold npm and Python processes can miss deadlines when competing
@@ -153,14 +154,14 @@ jobs:
         run: npm run test -- test/release-artifact.test.ts test/examples/integrationCrewai.test.ts test/examples/integrationInspectOsworldProvider.test.ts test/python/python-subprocess-cancellation.test.ts test/python/worker.lifecycle.test.ts --maxWorkers=1
 
       - name: Run built agent skill examples
-        if: matrix.os != 'ubuntu-latest' && (!matrix.shard || matrix.shard == '1')
+        if: runner.os != 'Linux' && (!matrix.shard || matrix.shard == '1')
         run: |
           npx tsdown
           npm run postbuild
           npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
 
       - name: Check Backend Coverage Ratchets
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
+        if: runner.os == 'Linux' && matrix.node == '22.22' && !matrix.shard
         env:
           COVERAGE_BASE: ${{ inputs.coverage_base }}
         run: |
@@ -171,7 +172,7 @@ jobs:
           npm run test:coverage:ratchet -- "${args[@]}"
 
       - name: Upload Backend Coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
+        if: runner.os == 'Linux' && matrix.node == '22.22' && !matrix.shard
         # Authentication can fail before fail_ci_if_error applies; uploads are informational.
         continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
@@ -209,9 +210,7 @@ jobs:
         name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          # Keep the matrix label at 22.22 for stable check names, but install exactly
-          # 22.22.0 so this lane tests the engines floor itself rather than latest 22.22.x.
-          node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
+          node-version: ${{ fromJSON(env.NODE_FLOORS)[matrix.node] || matrix.node }}
           cache: 'npm'
 
       - *use-npm-11
@@ -297,7 +296,7 @@ jobs:
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
+          node-version: *test-node-version
 
       - name: Test Isolated Contracts
         # The script uses only Node builtins; no root dependency install or build secrets needed.
@@ -360,10 +359,7 @@ jobs:
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with: *python-3-14-8
 
-      - name: Use Ruby for installed wrapper acceptance
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
-        with: &ruby-4-0-1
-          ruby-version: '4.0.1'
+      - *use-ruby
 
       - name: Use Go for installed wrapper acceptance
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -427,7 +423,7 @@ jobs:
         with: *no-persisted-credentials
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: '22.22.0'
+          node-version: &min-node-version ${{ fromJSON(env.NODE_FLOORS)['22.22'] }}
       - *use-npm-11
       - *download-platform-package
       - name: Prepare isolated artifact tooling
@@ -588,18 +584,23 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.9, 3.14]
+        python-version: ['3.9', '3.14']
     steps:
       - *checkout-repo-read-only
 
+      # setup-python has no CPython 3.9 build for Ubuntu 26.04. uv can install it independently of the runner image.
       - name: Use Python ${{ matrix.python-version }}
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
+          version: '0.13.8'
           python-version: ${{ matrix.python-version }}
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/python-venv
+          enable-cache: false
 
       - name: Install Dependencies
         run: |
-          pip install ruff==0.15.1
+          uv pip install ruff==0.15.1
 
       - name: Check Formatting
         run: |
@@ -865,10 +866,7 @@ jobs:
 
       - *use-python-3-14
 
-      - &use-ruby
-        name: Use Ruby
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
-        with: *ruby-4-0-1
+      - *use-ruby
 
       - name: Install Dependencies
         run: |
@@ -897,7 +895,7 @@ jobs:
       - name: Set up minimum supported Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: '22.22.0'
+          node-version: *min-node-version
 
       - name: Record minimum supported Node executable
         run: echo "PROMPTFOO_MIN_NODE_BIN=$(node -p process.execPath)" >> "$GITHUB_ENV"
@@ -1091,7 +1089,7 @@ jobs:
       - *checkout-repo
 
       - name: Use Ruby ${{ matrix.ruby-version }}
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: ${{ matrix.ruby-version }}
 

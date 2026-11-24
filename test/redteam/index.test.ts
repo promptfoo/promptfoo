@@ -1356,6 +1356,8 @@ describe('synthesize', () => {
 
       expect(result.testCases).toHaveLength(1);
       expect(result.testCases[0].metadata.pluginId).toBe('pass-plugin');
+      expect(result.failedPlugins).toEqual([]);
+      expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/Total tests: .*1/));
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining(
           'Validation failed for plugin fail-plugin: Error: Validation failed!, skipping plugin',
@@ -2001,6 +2003,34 @@ describe('synthesize', () => {
   });
 
   describe('Direct plugin handling', () => {
+    it('expands AIUC controls before estimating and generating, preserving explicit overrides', async () => {
+      const action = vi
+        .fn()
+        .mockImplementation(({ n }) =>
+          Array.from({ length: n }, () => ({ vars: { query: 'example' } })),
+        );
+      vi.spyOn(Plugins, 'find').mockReturnValue({ key: 'mockPlugin', action });
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'hallucination', numTests: 2 },
+          { id: 'aiuc:1:d004', numTests: 1 },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+      expect(action).toHaveBeenCalledTimes(3);
+      expect(result.testCases.map((tc) => tc.metadata.pluginId).sort()).toEqual([
+        'hallucination',
+        'hallucination',
+        'rag-source-attribution',
+        'unverifiable-claims',
+      ]);
+      expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/Total tests: .*4/));
+    });
+
     it('should recognize and not expand direct plugins like bias:gender', async () => {
       const mockPluginAction = vi.fn().mockImplementation(function ({ n }) {
         return Array(n).fill({ vars: { query: 'test' } });
