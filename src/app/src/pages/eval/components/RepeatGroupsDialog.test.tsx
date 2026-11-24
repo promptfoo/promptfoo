@@ -46,7 +46,7 @@ it('fetches group totals on open and loads run outputs only when expanded', asyn
             {
               repeatGroupId: 'test-0-vars-0',
               repeatIndex: 3,
-              text: 'Hello!',
+              text: 'first line\n  indented line',
               pass: true,
             },
           ],
@@ -64,11 +64,13 @@ it('fetches group totals on open and loads run outputs only when expanded', asyn
   expect(group).toHaveAttribute('aria-expanded', 'false');
   expect(callApi).toHaveBeenCalledTimes(1);
   await user.click(group);
-  expect(await screen.findByText('Hello!')).toBeVisible();
+  const output = await screen.findByText('first line indented line');
+  expect(output.textContent).toBe('first line\n  indented line');
+  expect(output.closest('td')).toHaveClass('whitespace-pre-wrap');
   expect(screen.getByRole('rowheader', { name: '4' })).toBeVisible();
   expect(vi.mocked(callApi).mock.calls[1][0]).toContain('repeatGroupId=test-0-vars-0');
   await user.click(group);
-  expect(screen.queryByText('Hello!')).not.toBeInTheDocument();
+  expect(screen.queryByText('first line indented line')).not.toBeInTheDocument();
 });
 
 it('pages recorded runs independently from group summaries', async () => {

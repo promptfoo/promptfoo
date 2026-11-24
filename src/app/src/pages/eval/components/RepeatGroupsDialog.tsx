@@ -117,7 +117,7 @@ function GroupRuns({ evalId, groupId }: { evalId: string; groupId: string }) {
                     );
                   }
                   return (
-                    <td key={index} className="p-2">
+                    <td key={index} className="whitespace-pre-wrap p-2">
                       <EvalRunOutput output={output} />
                     </td>
                   );

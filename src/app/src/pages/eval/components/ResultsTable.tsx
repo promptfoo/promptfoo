@@ -37,6 +37,7 @@ import {
   type EvaluateTableRow,
   type GradingResult,
   type ProviderOptions,
+  type UnifiedConfig,
   type Vars,
 } from '@promptfoo/types';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
@@ -87,6 +88,41 @@ import {
 const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
 );
+
+function testsUseRepeat(tests: UnifiedConfig['tests'], inherited: boolean): boolean {
+  if (!Array.isArray(tests)) {
+    return inherited;
+  }
+  return tests.some((test) => {
+    const repeat =
+      test && typeof test === 'object' && 'options' in test ? test.options?.repeat : undefined;
+    return repeat === undefined ? inherited : repeat > 1;
+  });
+}
+
+function hasConfiguredRepeats(config: Partial<UnifiedConfig>) {
+  const defaultRepeat =
+    typeof config.defaultTest === 'object' ? config.defaultTest?.options?.repeat : undefined;
+  const inherited = (defaultRepeat ?? config.evaluateOptions?.repeat ?? 1) > 1;
+  // Without tests or scenarios the evaluator runs one implicit test case.
+  const tests = Array.isArray(config.tests) && !config.tests.length ? undefined : config.tests;
+  if ((tests || !config.scenarios?.length) && testsUseRepeat(tests, inherited)) {
+    return true;
+  }
+  return (
+    config.scenarios?.some((scenario) => {
+      if (
+        !scenario ||
+        typeof scenario !== 'object' ||
+        (Array.isArray(scenario.config) && !scenario.config.length)
+      ) {
+        return false;
+      }
+      const scenarioRepeats = testsUseRepeat(scenario.config, inherited);
+      return testsUseRepeat(scenario.tests, scenarioRepeats);
+    }) ?? false
+  );
+}
 
 function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
   const audioUrl = isMediaRef(data)
@@ -1636,21 +1672,12 @@ function ResultsTable({
     return config?.redteam !== undefined;
   }, [config?.redteam]);
 
-  const hasRepeatedTests = React.useMemo(() => {
-    if ((config?.evaluateOptions?.repeat ?? 1) > 1) {
-      return true;
-    }
-    if (
-      Array.isArray(config?.tests) &&
-      config.tests.some(
-        (test) =>
-          test && typeof test === 'object' && 'options' in test && (test.options?.repeat ?? 1) > 1,
-      )
-    ) {
-      return true;
-    }
-    return body.some((row) => row.outputs?.some((output) => output?.repeatGroupId));
-  }, [body, config]);
+  const hasRepeatedTests = React.useMemo(
+    () =>
+      (config && hasConfiguredRepeats(config)) ||
+      body.some((row) => row.outputs?.some((output) => output?.repeatGroupId)),
+    [body, config],
+  );
 
   const visiblePromptCount = React.useMemo(
     () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,

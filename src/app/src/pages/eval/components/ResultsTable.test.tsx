@@ -650,13 +650,43 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.queryByText('Avg Tokens:')).not.toBeInTheDocument();
   });
 
-  it('offers repeat groups for a configured repeated test beyond the loaded page only in the unfiltered view', () => {
+  it.each([
+    ['a global repeat', { evaluateOptions: { repeat: 2 } }],
+    [
+      'a referenced scenario test',
+      { scenarios: [{ config: [{ options: { repeat: 2 } }], tests: 'file://tests.yaml' }] },
+    ],
+    ['a test override', { tests: [{ options: { repeat: 20 } }] }],
+    [
+      'an inherited default',
+      { defaultTest: { options: { repeat: 2 } }, tests: [{ options: { repeat: 1 } }, {}] },
+    ],
+    ['a scenario default', { scenarios: [{ config: [{ options: { repeat: 2 } }], tests: [{}] }] }],
+    ['a scenario test', { scenarios: [{ config: [{}], tests: [{ options: { repeat: 2 } }] }] }],
+  ])(
+    'offers repeat groups for %s beyond the loaded page only in the unfiltered view',
+    (_, config) => {
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({ table: mockTable, config }),
+      );
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      expect(screen.getByRole('button', { name: 'Repeated tests' })).toBeInTheDocument();
+      rerender(<ResultsTable {...defaultProps} filterMode="failures" />);
+      expect(screen.queryByRole('button', { name: 'Repeated tests' })).not.toBeInTheDocument();
+    },
+  );
+
+  it('hides repeat groups when every test overrides the repeat default', () => {
+    const once = { options: { repeat: 1 } };
+    const config = {
+      defaultTest: { options: { repeat: 3 } },
+      tests: [once],
+      scenarios: [{ config: [{ options: { repeat: 2 } }], tests: [once] }],
+    };
     vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({ table: mockTable, config: { tests: [{ options: { repeat: 20 } }] } }),
+      createTableStore({ table: mockTable, config }),
     );
-    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
-    expect(screen.getByRole('button', { name: 'Repeated tests' })).toBeInTheDocument();
-    rerender(<ResultsTable {...defaultProps} filterMode="failures" />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.queryByRole('button', { name: 'Repeated tests' })).not.toBeInTheDocument();
   });
 
