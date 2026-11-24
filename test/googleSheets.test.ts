@@ -25,9 +25,14 @@ const expectedGet = { method: 'GET', retry: true, headers: expect.any(Object) };
 const spreadsheetUrl = 'https://sheets.googleapis.com/v4/spreadsheets/1234567890';
 
 describe('Google Sheets Integration', () => {
-  const TEST_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1234567890/edit';
-  const TEST_SHEET_URL_WITH_GID =
-    'https://docs.google.com/spreadsheets/d/1234567890/edit?gid=98765';
+  const DOCUMENT_URL = 'https://docs.google.com/spreadsheets/d/1234567890';
+  const TEST_SHEET_URL = `${DOCUMENT_URL}/edit`;
+  const TEST_SHEET_URL_WITH_GID = `${TEST_SHEET_URL}?gid=98765`;
+  const tabLinks = [
+    `${TEST_SHEET_URL}#gid=98765`,
+    `${DOCUMENT_URL}#gid=98765`,
+    `${DOCUMENT_URL}?gid=98765`,
+  ];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,12 +106,12 @@ describe('Google Sheets Integration', () => {
       expect(fetchWithProxy).toHaveBeenCalledWith(expectedUrl);
     });
 
-    it('should read the gid from the URL fragment', async () => {
+    it.each(tabLinks)('exports the selected tab for %s', async (url) => {
       vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({ text: () => Promise.resolve('header\nvalue') }),
       );
 
-      await fetchCsvFromGoogleSheetUnauthenticated(`${TEST_SHEET_URL}#gid=98765`);
+      await fetchCsvFromGoogleSheetUnauthenticated(url);
       expect(fetchWithProxy).toHaveBeenCalledWith(
         'https://docs.google.com/spreadsheets/d/1234567890/export?format=csv&gid=98765',
       );
@@ -251,10 +256,10 @@ describe('Google Sheets Integration', () => {
       });
     });
 
-    it('should read the gid from the URL fragment', async () => {
+    it.each(tabLinks)('reads the selected tab for %s', async (url) => {
       request.mockResolvedValueOnce({ data: { values: [['header'], ['value']] } });
 
-      await fetchCsvFromGoogleSheetAuthenticated(`${TEST_SHEET_URL}#gid=98765`);
+      await fetchCsvFromGoogleSheetAuthenticated(url);
       expect(request).toHaveBeenCalledWith({
         url: `${spreadsheetUrl}/values/TestSheet`,
         ...expectedGet,

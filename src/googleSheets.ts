@@ -37,7 +37,7 @@ function encodePathSegment(value: string): string {
 }
 
 async function openSpreadsheet(url: string, scope: string) {
-  const match = url.match(/\/d\/([^/]+)/);
+  const match = url.match(/\/d\/([^/?#]+)/);
   if (!match) {
     throw new Error(`Invalid Google Sheets URL: ${url}`);
   }
@@ -119,9 +119,15 @@ export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promi
   const { parse: parseCsv } = await import('csv-parse/sync');
 
   const gid = getSheetGid(url);
-  const csvUrl = `${url.replace(/\/edit.*$/, '/export')}?format=csv${gid ? `&gid=${gid}` : ''}`;
+  const csvUrl = new URL(url);
+  csvUrl.pathname = csvUrl.pathname.replace(/(\/d\/[^/]+)(?:\/edit(?:\/.*)?)?\/?$/, '$1/export');
+  csvUrl.hash = '';
+  csvUrl.search = '?format=csv';
+  if (gid) {
+    csvUrl.searchParams.set('gid', gid);
+  }
 
-  const response = await fetchWithProxy(csvUrl);
+  const response = await fetchWithProxy(csvUrl.toString());
   if (response.status !== 200) {
     throw new Error(`Failed to fetch CSV from Google Sheets URL: ${url}`);
   }
