@@ -7,6 +7,7 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import { parsePathOrGlob } from '../util/index';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
+import { VALID_FILE_EXTENSIONS } from './constants';
 import { processCsvPrompts } from './processors/csv';
 import { processExecutableFile } from './processors/executable';
 import { processJsFile } from './processors/javascript';
@@ -76,16 +77,15 @@ async function processPromptFile(
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
       throw error;
     }
-    // Only extension-like heuristic matches fall back to a literal prompt. Explicit file
-    // references, including file:// URLs, relative/absolute paths, and extensionless
-    // paths, must keep erroring.
+    // Only bare, extension-like heuristic matches fall back to a literal prompt. Any
+    // path syntax or known file extension indicates an explicit file reference, which
+    // must keep erroring when the target is missing.
     const rawPrompt = prompt.raw ?? '';
     const isExplicitPath =
       rawPrompt.startsWith('file://') ||
-      rawPrompt.startsWith('./') ||
-      rawPrompt.startsWith('../') ||
-      path.isAbsolute(rawPrompt) ||
-      path.win32.isAbsolute(rawPrompt);
+      rawPrompt.includes('/') ||
+      rawPrompt.includes('\\') ||
+      VALID_FILE_EXTENSIONS.some((validExtension) => rawPrompt.endsWith(validExtension));
     if (isExplicitPath || !extension) {
       return [];
     }
