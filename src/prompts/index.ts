@@ -2,6 +2,7 @@ import { stat } from 'fs/promises';
 import path from 'path';
 
 import { globSync } from 'glob/raw';
+import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parsePathOrGlob } from '../util/index';
@@ -72,8 +73,15 @@ async function processPromptFile(
       // File is executable
       return await processExecutableFile(filePath, prompt, functionName, labelPath);
     }
-  } catch (_e) {
-    // File doesn't exist or can't be accessed, fall through
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+    if (getEnvBool('PROMPTFOO_STRICT_FILES')) {
+      return [];
+    }
+    logger.debug(`Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`);
+    return processString(prompt);
   }
   return [];
 }

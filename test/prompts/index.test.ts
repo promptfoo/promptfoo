@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 
 import dedent from 'dedent';
 import { globSync } from 'glob/raw';
@@ -23,6 +24,14 @@ vi.mock('glob/raw', async () => {
 });
 
 vi.mock('fs');
+
+vi.mock('fs/promises', async () => {
+  const actual = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+  return {
+    ...actual,
+    stat: vi.fn().mockImplementation(actual.stat),
+  };
+});
 
 vi.mock('python-shell');
 vi.mock('../../src/esm', async () => {
@@ -50,6 +59,7 @@ describe('readPrompts', () => {
     mockProcessEnv({ PROMPTFOO_STRICT_FILES: undefined });
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(fs.statSync).mockReset();
+    vi.mocked(fsPromises.stat).mockClear();
     vi.mocked(globSync).mockReset();
     vi.mocked(maybeFilePath).mockClear();
   });
@@ -514,6 +524,27 @@ describe('readPrompts', () => {
     await expect(readPrompts('non-existent-file.txt*')).resolves.toEqual([
       { raw: 'non-existent-file.txt*', label: 'non-existent-file.txt*' },
     ]);
+  });
+
+  it('should treat a nonexistent version-suffixed prompt as a literal string', async () => {
+    expect(maybeFilePath('Summarize changes in 1.20')).toBe(true);
+    await expect(readPrompts('Summarize changes in 1.20')).resolves.toEqual([
+      { raw: 'Summarize changes in 1.20', label: 'Summarize changes in 1.20' },
+    ]);
+  });
+
+  it('should keep strict-file behavior for nonexistent heuristic file paths', async () => {
+    mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
+    await expect(readPrompts('Summarize changes in 1.20')).rejects.toThrow(
+      'There are no prompts in "Summarize changes in 1.20"',
+    );
+  });
+
+  it('should propagate non-ENOENT stat errors for heuristic file paths', async () => {
+    vi.mocked(fsPromises.stat).mockRejectedValueOnce(
+      Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' }),
+    );
+    await expect(readPrompts('Summarize changes in 1.20')).rejects.toThrow('EACCES');
   });
 
   it('should handle a prompt with a function', async () => {
