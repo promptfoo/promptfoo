@@ -42,6 +42,11 @@ import type {
 
 export const evalRouter = Router();
 
+function getStoredRepeat(value: unknown): number | undefined {
+  const count = typeof value === 'string' ? Number(value) : value;
+  return typeof count === 'number' && Number.isSafeInteger(count) && count > 0 ? count : undefined;
+}
+
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   let parsedPayload: EvalTableDTO;
   try {
@@ -479,7 +484,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     filteredCount: table.filteredCount,
     filteredMetrics,
     config: redactAzureBlobSasTokens(eval_.config),
-    runtimeRepeat: eval_.runtimeOptions?.repeat,
+    runtimeRepeat: getStoredRepeat(eval_.runtimeOptions?.repeat),
     author: eval_.author || null,
     version: eval_.version(),
     id,

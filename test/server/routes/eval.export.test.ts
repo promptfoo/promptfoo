@@ -143,6 +143,18 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     );
   });
 
+  it.each([
+    ['20', 20],
+    [null, undefined],
+    ['invalid', undefined],
+  ])('serves a table with a legacy runtime repeat of %j', async (stored, expected) => {
+    Object.assign(mockEval, { runtimeOptions: { repeat: stored } });
+    const response = await api.get('/api/eval/test-eval-id/table');
+    expect(response.status).toBe(200);
+    expect(response.body.runtimeRepeat).toBe(expected);
+    expect(response.body.table.body).toHaveLength(1);
+  });
+
   it('should handle CSV export for non-redteam evaluations', async () => {
     // Setup eval without redteam config
     mockEval.config = {};
