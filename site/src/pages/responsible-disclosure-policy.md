@@ -76,6 +76,8 @@ We ask that you keep details private until:
 - A fix is released, or
 - We agree on a disclosure date
 
+See also [OpenAI's Coordinated Vulnerability Disclosure Policy](https://openai.com/policies/coordinated-vulnerability-disclosure-policy/).
+
 ## Safe Harbor
 
 If you act in good faith and follow this policy, we will not pursue legal action against you for security research that:

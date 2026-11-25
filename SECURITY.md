@@ -173,6 +173,8 @@ We ask reporters to keep vulnerability details confidential until:
 - A fix or mitigation is available, or
 - We agree on a disclosure date
 
+See also [OpenAI's Coordinated Vulnerability Disclosure Policy](https://openai.com/policies/coordinated-vulnerability-disclosure-policy/).
+
 ## Safe Harbor
 
 We consider security research conducted in good faith to be authorized and will not initiate legal action against researchers who:
