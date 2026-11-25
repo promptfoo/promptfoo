@@ -1,3 +1,5 @@
+import { getTargetForExecution } from '@promptfoo/presentation/redteamConfig';
+
 type LocalOpenAiProviderType = 'llamafile' | 'vllm' | 'text-generation-webui';
 
 export function isOpenAiChatProviderId(providerId?: string): boolean {
@@ -99,7 +101,7 @@ export function normalizeLocalProviders<T>(
       typeof provider.config.type === 'string' ? provider.config.type : undefined,
     );
     if (config === provider.config) {
-      return provider;
+      return forRuntime && config.tls ? getTargetForExecution(provider, id) : provider;
     }
     return {
       ...provider,

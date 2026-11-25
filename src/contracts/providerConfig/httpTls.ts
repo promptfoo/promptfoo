@@ -11,9 +11,15 @@ export const HttpTlsFieldsSchema = z.strictObject({
   certPath: z.string().optional().describe('Path to the client certificate'),
   key: Certificate.optional().describe('Client private key for mutual TLS'),
   keyPath: z.string().optional().describe('Path to the client private key'),
+  jksPath: z.string().optional().describe('Path to a JKS keystore'),
+  jksContent: z.string().optional().describe('Base64-encoded JKS keystore'),
+  keyAlias: z.string().optional().describe('Key alias in the JKS keystore'),
   pfx: z.string().optional().describe('Base64-encoded PFX/PKCS12 bundle; Buffers are runtime-only'),
   pfxPath: z.string().optional().describe('Path to a PFX/PKCS12 bundle'),
-  passphrase: z.string().optional().describe('Passphrase for the PFX certificate'),
+  passphrase: z
+    .string()
+    .optional()
+    .describe('Passphrase for the private key, PFX bundle or JKS keystore'),
   rejectUnauthorized: z
     .boolean()
     .optional()
