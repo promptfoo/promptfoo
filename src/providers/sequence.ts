@@ -60,7 +60,10 @@ export class SequenceProvider implements ApiProvider {
       const response = await context.originalProvider.callApi(renderedInput, context, options);
 
       if (response.error) {
-        return response;
+        // Keep the failure result, but do not lose what the earlier steps
+        // already cost: callers settle spend from tokenUsage even on an error.
+        accumulateResponseTokenUsage(accumulatedTokenUsage, response);
+        return { ...response, tokenUsage: accumulatedTokenUsage };
       }
 
       responses.push(response.output);
