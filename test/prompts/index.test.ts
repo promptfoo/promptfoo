@@ -548,19 +548,23 @@ describe('readPrompts', () => {
     ]);
   });
 
-  it.each(['file://./prompt-generator', './prompt-generator', 'file://./version-like.20'])(
-    'should preserve errors for explicit file references: %s',
-    async (promptPath) => {
-      vi.mocked(fsPromises.stat).mockRejectedValueOnce(
-        Object.assign(new Error(`ENOENT: no such file or directory, stat '${promptPath}'`), {
-          code: 'ENOENT',
-        }),
-      );
-      await expect(readPrompts(promptPath)).rejects.toThrow(
-        `There are no prompts in ${JSON.stringify(promptPath)}`,
-      );
-    },
-  );
+  it.each([
+    'file://./prompt-generator',
+    './prompt-generator',
+    'file://./version-like.20',
+    './bin/prompt-generator.out',
+    '../bin/prompt-generator.out',
+    '/tmp/missing-prompt-generator.out',
+  ])('should preserve errors for explicit file references: %s', async (promptPath) => {
+    vi.mocked(fsPromises.stat).mockRejectedValueOnce(
+      Object.assign(new Error(`ENOENT: no such file or directory, stat '${promptPath}'`), {
+        code: 'ENOENT',
+      }),
+    );
+    await expect(readPrompts(promptPath)).rejects.toThrow(
+      `There are no prompts in ${JSON.stringify(promptPath)}`,
+    );
+  });
 
   it('should keep strict-file behavior for nonexistent heuristic file paths', async () => {
     mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });

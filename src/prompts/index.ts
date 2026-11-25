@@ -77,8 +77,16 @@ async function processPromptFile(
       throw error;
     }
     // Only extension-like heuristic matches fall back to a literal prompt. Explicit file
-    // references, including file:// URLs and extensionless paths, must keep erroring.
-    if (prompt.raw?.startsWith('file://') || !extension) {
+    // references, including file:// URLs, relative/absolute paths, and extensionless
+    // paths, must keep erroring.
+    const rawPrompt = prompt.raw ?? '';
+    const isExplicitPath =
+      rawPrompt.startsWith('file://') ||
+      rawPrompt.startsWith('./') ||
+      rawPrompt.startsWith('../') ||
+      path.isAbsolute(rawPrompt) ||
+      path.win32.isAbsolute(rawPrompt);
+    if (isExplicitPath || !extension) {
       return [];
     }
     logger.debug(`Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`);
