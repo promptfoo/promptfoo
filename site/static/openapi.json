@@ -1733,6 +1733,7 @@
                         "totalCount": { "type": "number" },
                         "filteredCount": { "type": "number" },
                         "filteredMetrics": { "type": ["array", "null"], "items": {} },
+                        "hasRepeatGroups": { "type": "boolean" },
                         "runtimeRepeat": { "type": "number" },
                         "config": { "type": "object", "additionalProperties": {} },
                         "author": { "type": ["string", "null"] },

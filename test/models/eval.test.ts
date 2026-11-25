@@ -108,6 +108,9 @@ describe('evaluator', () => {
         failureReason: ResultFailureReason.ASSERT,
       }),
     );
+    const firstPage = await evaluation.getTablePage({ offset: 0, limit: 1 });
+    expect(firstPage.body[0].outputs[0]?.repeatGroupId).toBeUndefined();
+    expect(firstPage.hasRepeatGroups).toBe(true);
     expect(await evaluation.getRepeatGroups(0, 1)).toEqual({
       hasMore: true,
       groups: [
@@ -133,6 +136,21 @@ describe('evaluator', () => {
     ]);
   });
 
+  it('refreshes repeat availability after adding a group beyond the first page', async () => {
+    const evaluation = await Eval.create({}, []);
+    for (const testIdx of [0, 1]) {
+      await evaluation.addResult(createEvaluateResult({ testIdx }));
+    }
+    const firstPage = () => evaluation.getTablePage({ limit: 1 });
+    expect((await firstPage()).hasRepeatGroups).toBe(false);
+    expect((await firstPage()).hasRepeatGroups).toBe(false);
+
+    await evaluation.addResult(
+      createEvaluateResult({ testIdx: 2, repeatGroupId: 'later', repeatIndex: 0 }),
+    );
+    expect((await firstPage()).hasRepeatGroups).toBe(true);
+  });
+
   it('keeps repeat summaries available when a stored test case contains malformed JSON', async () => {
     const evaluation = await Eval.create({}, []);
     for (const [testIdx, group] of ['legacy', 'valid'].entries()) {
@@ -148,17 +166,28 @@ describe('evaluator', () => {
     }
 
     const db = await getDb();
+    for (const [i, description] of [12, false, { text: 'old' }].entries()) {
+      const id = `non-text-${i}`;
+      await evaluation.addResult(
+        createEvaluateResult({ testIdx: i + 2, repeatGroupId: id, repeatIndex: 0 }),
+      );
+      await db.run(sql`UPDATE ${evalResultsTable} SET test_case = ${JSON.stringify({ description })}
+        WHERE eval_id = ${evaluation.id} AND test_idx = ${i + 2}`);
+    }
     // Older databases can lack the expression index that rejects malformed test_case JSON on write.
     await db.run('CREATE TEMP TABLE eval_results AS SELECT * FROM main.eval_results');
     try {
       await db.run(sql`UPDATE ${evalResultsTable} SET test_case = '{'
         WHERE eval_id = ${evaluation.id} AND test_idx = 0`);
 
-      expect(await evaluation.getRepeatGroups(0, 2)).toMatchObject({
+      expect(await evaluation.getRepeatGroups(0, 5)).toMatchObject({
         hasMore: false,
         groups: [
           { id: 'legacy', description: null, prompts: [{ passed: 1 }] },
           { id: 'valid', description: 'valid', prompts: [{ passed: 1 }] },
+          { id: 'non-text-0', description: null },
+          { id: 'non-text-1', description: null },
+          { id: 'non-text-2', description: null },
         ],
       });
     } finally {

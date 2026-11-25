@@ -484,6 +484,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     filteredCount: table.filteredCount,
     filteredMetrics,
     config: redactAzureBlobSasTokens(eval_.config),
+    hasRepeatGroups: table.hasRepeatGroups,
     runtimeRepeat: getStoredRepeat(eval_.runtimeOptions?.repeat),
     author: eval_.author || null,
     version: eval_.version(),

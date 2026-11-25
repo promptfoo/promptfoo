@@ -691,6 +691,18 @@ describe('ResultsTable Metrics Display', () => {
     },
   );
 
+  it('offers recorded groups from other pages when the config only references a test file', () => {
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({
+        table: mockTable,
+        config: { tests: 'file://cases.yaml' },
+        hasRepeatGroups: true,
+      }),
+    );
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(screen.getByRole('button', { name: 'Repeated tests' })).toBeInTheDocument();
+  });
+
   it('hides repeat groups when every test overrides the repeat default', () => {
     const once = { options: { repeat: 1 } };
     const config = {

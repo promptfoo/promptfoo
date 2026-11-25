@@ -62,6 +62,7 @@ import {
 import {
   getCachedResultsCount,
   getTotalResultRowCount,
+  hasStoredRepeatGroups,
   queryTestIndicesOptimized,
   repeatGroupIdSql,
 } from './evalPerformance';
@@ -1285,7 +1286,8 @@ export default class Eval {
     }>(sql`
     WITH repeats AS MATERIALIZED (
       SELECT ${repeatGroupIdSql} AS group_id, test_idx, prompt_idx, success, failure_reason,
-        CASE WHEN json_valid(test_case) THEN json_extract(test_case, '$.description') END AS description
+        CASE WHEN json_valid(test_case) AND json_type(test_case, '$.description') = 'text'
+          THEN json_extract(test_case, '$.description') END AS description
       FROM ${evalResultsTable}
       WHERE eval_id = ${this.id}
     ), page AS (
@@ -1329,6 +1331,7 @@ export default class Eval {
     body: EvaluateTableRow[];
     totalCount: number;
     filteredCount: number;
+    hasRepeatGroups?: boolean;
     id: string;
   }> {
     // Get total count of tests for this eval
@@ -1436,7 +1439,19 @@ export default class Eval {
     const bodyEnd = Date.now();
     logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
 
-    return { head: { prompts: this.prompts, vars }, body, totalCount, filteredCount, id: this.id };
+    // Search beyond this page only if the rows already loaded cannot answer the question.
+    const hasRepeatGroups =
+      body.some((row) => row.outputs.some((output) => output?.repeatGroupId)) ||
+      (body.length < totalCount && (await hasStoredRepeatGroups(this.id)));
+
+    return {
+      head: { prompts: this.prompts, vars },
+      body,
+      totalCount,
+      filteredCount,
+      hasRepeatGroups,
+      id: this.id,
+    };
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {

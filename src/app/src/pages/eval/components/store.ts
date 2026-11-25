@@ -276,6 +276,7 @@ interface TableState {
   setTable: (table: EvaluateTable | null) => void;
 
   config: Partial<UnifiedConfig> | null;
+  hasRepeatGroups?: boolean;
   runtimeRepeat?: number;
   setConfig: (config: Partial<UnifiedConfig> | null) => void;
 
@@ -714,6 +715,7 @@ export const useTableStore = create<TableState>()(
             highlightedResultsCount: computeHighlightCount(data.table),
             userRatedResultsCount: computeUserRatedCount(data.table),
             config: data.config,
+            hasRepeatGroups: data.hasRepeatGroups,
             runtimeRepeat: data.runtimeRepeat,
             version: data.version,
             author: data.author,

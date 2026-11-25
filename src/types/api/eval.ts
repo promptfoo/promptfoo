@@ -137,6 +137,7 @@ export const EvalTableResponseSchema = z
     totalCount: z.number(),
     filteredCount: z.number(),
     filteredMetrics: z.array(z.unknown()).nullable(),
+    hasRepeatGroups: z.boolean().optional(),
     runtimeRepeat: z.number().optional(),
     config: z.record(z.string(), z.unknown()),
     author: z.string().nullable(),

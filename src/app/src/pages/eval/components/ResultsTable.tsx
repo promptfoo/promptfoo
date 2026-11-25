@@ -1651,6 +1651,7 @@ function ResultsTable({
     table,
     setTable,
     config,
+    hasRepeatGroups,
     runtimeRepeat,
     version,
     filteredResultsCount,
@@ -1675,9 +1676,10 @@ function ResultsTable({
 
   const hasRepeatedTests = React.useMemo(
     () =>
+      hasRepeatGroups ||
       (config && hasConfiguredRepeats(config, runtimeRepeat)) ||
       body.some((row) => row.outputs?.some((output) => output?.repeatGroupId)),
-    [body, config, runtimeRepeat],
+    [body, config, hasRepeatGroups, runtimeRepeat],
   );
 
   const visiblePromptCount = React.useMemo(
