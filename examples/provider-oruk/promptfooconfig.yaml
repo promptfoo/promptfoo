@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Oruk Fourier 2B English speech-to-text evaluation
+
+prompts:
+  # The prompt is the path to an audio file
+  - '{{audio_file}}'
+
+providers:
+  - id: openai:transcription:oruk-fourier-2b
+    label: Oruk Fourier 2B
+    config:
+      apiBaseUrl: https://speech-api.oruk.ai/v1
+      apiKeyEnvar: ORUK_API_KEY
+      language: en
+      headers:
+        OpenAI-Organization: ''
+
+  # Optional side-by-side comparison (requires OPENAI_API_KEY):
+  # - id: openai:transcription:gpt-4o-transcribe
+  #   label: OpenAI GPT-4o Transcribe
+  #   config:
+  #     language: en
+
+tests:
+  - vars:
+      # Replace with your own local English audio file when running standalone
+      audio_file: examples/openai-audio-transcription/sample-audio.mp3
+      reference: That's one small step for man, one giant leap for mankind.
+    assert:
+      - type: icontains
+        value: small step
+        metric: Contains "small step"
+      - type: icontains
+        value: mankind
+        metric: Contains "mankind"
+      - type: javascript
+        metric: wer_pass
+        value: |
+          const normalize = (s) =>
+            String(s || '')
+              .toLowerCase()
+              .replace(/[^a-z0-9'\s]/g, ' ')
+              .trim()
+              .split(/\s+/)
+              .filter(Boolean);
+          const ref = normalize(context.vars.reference);
+          const hyp = normalize(output);
+          const dp = Array.from({ length: ref.length + 1 }, () =>
+            new Array(hyp.length + 1).fill(0),
+          );
+          for (let i = 0; i <= ref.length; i++) dp[i][0] = i;
+          for (let j = 0; j <= hyp.length; j++) dp[0][j] = j;
+          for (let i = 1; i <= ref.length; i++) {
+            for (let j = 1; j <= hyp.length; j++) {
+              const cost = ref[i - 1] === hyp[j - 1] ? 0 : 1;
+              dp[i][j] = Math.min(
+                dp[i - 1][j] + 1,
+                dp[i][j - 1] + 1,
+                dp[i - 1][j - 1] + cost,
+              );
+            }
+          }
+          const wer = ref.length ? dp[ref.length][hyp.length] / ref.length : 0;
+          return {
+            pass: wer <= 0.15,
+            score: Math.max(0, 1 - wer),
+            reason: `WER ${(wer * 100).toFixed(1)}% (${dp[ref.length][hyp.length]}/${ref.length} edits)`,
+          };
