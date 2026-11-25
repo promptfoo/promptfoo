@@ -100,10 +100,10 @@ function testsUseRepeat(tests: UnifiedConfig['tests'], inherited: boolean): bool
   });
 }
 
-function hasConfiguredRepeats(config: Partial<UnifiedConfig>) {
+function hasConfiguredRepeats(config: Partial<UnifiedConfig>, runtimeRepeat?: number) {
   const defaultRepeat =
     typeof config.defaultTest === 'object' ? config.defaultTest?.options?.repeat : undefined;
-  const inherited = (defaultRepeat ?? config.evaluateOptions?.repeat ?? 1) > 1;
+  const inherited = (defaultRepeat ?? runtimeRepeat ?? config.evaluateOptions?.repeat ?? 1) > 1;
   // Without tests or scenarios the evaluator runs one implicit test case.
   const tests = Array.isArray(config.tests) && !config.tests.length ? undefined : config.tests;
   if ((tests || !config.scenarios?.length) && testsUseRepeat(tests, inherited)) {
@@ -1651,6 +1651,7 @@ function ResultsTable({
     table,
     setTable,
     config,
+    runtimeRepeat,
     version,
     filteredResultsCount,
     fetchEvalData,
@@ -1674,9 +1675,9 @@ function ResultsTable({
 
   const hasRepeatedTests = React.useMemo(
     () =>
-      (config && hasConfiguredRepeats(config)) ||
+      (config && hasConfiguredRepeats(config, runtimeRepeat)) ||
       body.some((row) => row.outputs?.some((output) => output?.repeatGroupId)),
-    [body, config],
+    [body, config, runtimeRepeat],
   );
 
   const visiblePromptCount = React.useMemo(

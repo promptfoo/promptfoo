@@ -131,6 +131,18 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     });
   });
 
+  it('returns the persisted repeat and forwards the requested group to the table query', async () => {
+    mockEval.runtimeOptions = { repeat: 20 };
+    const response = await api
+      .get('/api/eval/test-eval-id/table')
+      .query({ repeatGroupId: 'group-a' });
+    expect(response.status).toBe(200);
+    expect(response.body.runtimeRepeat).toBe(20);
+    expect(getTablePage).toHaveBeenCalledWith(
+      expect.objectContaining({ repeatGroupId: 'group-a' }),
+    );
+  });
+
   it('should handle CSV export for non-redteam evaluations', async () => {
     // Setup eval without redteam config
     mockEval.config = {};

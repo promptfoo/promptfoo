@@ -136,6 +136,30 @@ describe('Eval Routes - Zod Validation', () => {
     });
   });
 
+  describe('GET /api/eval/:id/repeat-groups', () => {
+    it('returns the requested page of recorded groups', async () => {
+      const page = {
+        groups: [{ id: 'a', firstTestIdx: 2, description: null, prompts: [] }],
+        hasMore: true,
+      };
+      const getRepeatGroups = vi.fn().mockResolvedValue(page);
+      mockFindById.mockResolvedValue({ getRepeatGroups });
+      const response = await api
+        .get('/api/eval/test-id/repeat-groups')
+        .query({ offset: 2, limit: 1 });
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(page);
+      expect(getRepeatGroups).toHaveBeenCalledWith(2, 1);
+    });
+
+    it('returns 404 for a missing evaluation', async () => {
+      mockFindById.mockResolvedValue(undefined);
+      const response = await api.get('/api/eval/missing/repeat-groups');
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Eval not found');
+    });
+  });
+
   describe('GET /api/eval/:id/table', () => {
     it.each([
       ['format', { format: 'xml' }],

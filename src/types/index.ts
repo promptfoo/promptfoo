@@ -530,6 +530,7 @@ export interface EvaluateSummaryV2 {
 export type { RepeatGroup, RepeatGroupsResponse } from './repeatGroups';
 
 export type EvalTableDTO = {
+  runtimeRepeat?: number;
   table: EvaluateTable;
   totalCount: number;
   filteredCount: number;

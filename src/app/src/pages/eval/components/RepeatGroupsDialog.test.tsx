@@ -46,6 +46,9 @@ it('fetches group totals on open and loads run outputs only when expanded', asyn
             {
               repeatGroupId: 'test-0-vars-0',
               repeatIndex: 3,
+              metadata: {
+                redteamHistory: [{}, { outputAudio: { format: 'wav', data: 'YXVkaW8=' } }],
+              },
               text: 'first line\n  indented line',
               pass: true,
             },
@@ -65,6 +68,9 @@ it('fetches group totals on open and loads run outputs only when expanded', asyn
   expect(callApi).toHaveBeenCalledTimes(1);
   await user.click(group);
   const output = await screen.findByText('first line indented line');
+  const player = screen.getByTestId('response-audio-player');
+  expect(player).toHaveAttribute('controls');
+  expect(player.querySelector('source')).toHaveAttribute('src', 'data:audio/wav;base64,YXVkaW8=');
   expect(output.textContent).toBe('first line\n  indented line');
   expect(output.closest('td')).toHaveClass('whitespace-pre-wrap');
   expect(screen.getByRole('rowheader', { name: '4' })).toBeVisible();

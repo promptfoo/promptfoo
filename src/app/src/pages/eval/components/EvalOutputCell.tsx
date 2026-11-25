@@ -1304,6 +1304,14 @@ function EvalOutputContent({
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
   const outputAudioSource = resolveAudioSource(output.audio);
+  // Extract response audio from the last turn of redteamHistory for display in the cell
+  const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
+  const lastTurn = redteamHistory?.[redteamHistory.length - 1];
+  const responseAudio = lastTurn?.outputAudio as
+    | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
+    | undefined;
+  const responseAudioSource = resolveAudioSource(responseAudio);
+
   const node = renderOutputNode({
     output,
     firstOutput,
@@ -1321,6 +1329,7 @@ function EvalOutputContent({
 
   return (
     <>
+      {renderResponseAudioPlayer(responseAudioSource)}
       <TruncatedText
         text={node || normalizedText}
         maxLength={
@@ -1504,14 +1513,6 @@ function EvalOutputCell({
   const text = stringifyOutputText(output.text);
   const { failReasons, passReasons } = getFailAndPassReasons(output);
 
-  // Extract response audio from the last turn of redteamHistory for display in the cell
-  const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
-  const lastTurn = redteamHistory?.[redteamHistory.length - 1];
-  const responseAudio = lastTurn?.outputAudio as
-    | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
-    | undefined;
-  const responseAudioSource = resolveAudioSource(responseAudio);
-
   const handleRating = (isPass: boolean) => {
     const newRating = activeRating === isPass ? null : isPass;
     setActiveRating(newRating);
@@ -1615,7 +1616,6 @@ function EvalOutputCell({
         passReasons,
       })}
       {renderPromptBlock({ showPrompts, firstOutput, prompt: output.prompt })}
-      {renderResponseAudioPlayer(responseAudioSource)}
       <div
         className={!showPassFail && !showPrompts ? 'content-needs-action-clearance' : undefined}
         style={contentStyle}

@@ -676,6 +676,21 @@ describe('ResultsTable Metrics Display', () => {
     },
   );
 
+  it.each([
+    [20, 1, true],
+    [1, 20, false],
+  ] as const)(
+    'uses the runtime repeat %i ahead of the authored repeat %i',
+    (runtimeRepeat, repeat, visible) => {
+      const config = { evaluateOptions: { repeat }, tests: [{ options: { repeat: 1 } }, {}] };
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({ table: mockTable, config, runtimeRepeat }),
+      );
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      expect(Boolean(screen.queryByRole('button', { name: 'Repeated tests' }))).toBe(visible);
+    },
+  );
+
   it('hides repeat groups when every test overrides the repeat default', () => {
     const once = { options: { repeat: 1 } };
     const config = {
