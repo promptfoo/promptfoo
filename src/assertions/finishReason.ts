@@ -1,3 +1,4 @@
+import { normalizeFinishReason } from '../util/finishReason';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -11,7 +12,10 @@ export function handleFinishReason({
   const value = renderedValue ?? assertion.value;
   invariant(typeof value === 'string', '"finish-reason" assertion type must have a string value');
 
-  if (!providerResponse.finishReason) {
+  const normalizedValue = normalizeFinishReason(value);
+  const normalizedFinishReason = normalizeFinishReason(providerResponse.finishReason);
+
+  if (!normalizedFinishReason) {
     const pass = inverse;
     return {
       pass,
@@ -21,9 +25,6 @@ export function handleFinishReason({
     };
   }
 
-  // Case-insensitive comparison to be more user-friendly
-  const normalizedValue = value.toLowerCase();
-  const normalizedFinishReason = providerResponse.finishReason.toLowerCase();
   const pass = (normalizedValue === normalizedFinishReason) !== inverse;
 
   return {
