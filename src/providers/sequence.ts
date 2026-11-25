@@ -47,6 +47,20 @@ export class SequenceProvider implements ApiProvider {
     const nunjucks = getNunjucksEngine();
     const responses: string[] = [];
     const accumulatedTokenUsage = createEmptyTokenUsage();
+    let cost: number | undefined;
+    let incurredCost: number | undefined;
+
+    // Totals across every step sent so far, so a failure keeps what earlier steps cost.
+    // The step's own cost fields are replaced, never left beside the totals.
+    const withTotals = (response: ProviderResponse): ProviderResponse => {
+      const { cost: _stepCost, incurredCost: _stepIncurredCost, ...rest } = response;
+      return {
+        ...rest,
+        tokenUsage: accumulatedTokenUsage,
+        ...(cost !== undefined && { cost }),
+        ...(incurredCost !== undefined && incurredCost !== cost && { incurredCost }),
+      };
+    };
 
     // Send each input to the original provider
     for (const input of this.sequenceInputs) {
@@ -59,19 +73,21 @@ export class SequenceProvider implements ApiProvider {
 
       const response = await context.originalProvider.callApi(renderedInput, context, options);
 
+      accumulateResponseTokenUsage(accumulatedTokenUsage, response);
+      if (response.cost !== undefined) {
+        cost = (cost ?? 0) + response.cost;
+        incurredCost =
+          (incurredCost ?? 0) + (response.incurredCost ?? (response.cached ? 0 : response.cost));
+      }
+
       if (response.error) {
-        return response;
+        return withTotals(response);
       }
 
       responses.push(response.output);
-
-      accumulateResponseTokenUsage(accumulatedTokenUsage, response);
     }
 
-    return {
-      output: responses.join(this.separator),
-      tokenUsage: accumulatedTokenUsage,
-    };
+    return withTotals({ output: responses.join(this.separator) });
   }
 
   toString() {
