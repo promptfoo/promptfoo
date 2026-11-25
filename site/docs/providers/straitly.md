@@ -17,7 +17,7 @@ Create an API key in the [Straitly console](https://straitly.ai/app) and set `ST
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - "Summarize {{topic}} in two sentences."
+  - 'Summarize {{topic}} in two sentences.'
 
 providers:
   - id: openai:chat:claude-sonnet-5-5
