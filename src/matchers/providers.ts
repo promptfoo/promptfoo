@@ -185,6 +185,39 @@ function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boo
   );
 }
 
+const PROVIDER_TYPE_KEYS: readonly ProviderType[] = [
+  'text',
+  'embedding',
+  'classification',
+  'moderation',
+];
+
+function isProviderTypeMapConfig(provider: GradingConfig['provider']): provider is ProviderTypeMap {
+  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
+    return false;
+  }
+  if (typeof (provider as ApiProvider).id === 'function') {
+    return false;
+  }
+  if ('id' in provider && typeof provider.id === 'string' && provider.id) {
+    return false;
+  }
+  return PROVIDER_TYPE_KEYS.some((key) => key in provider);
+}
+
+function resolveDefaultTestProviderCandidate(
+  type: ProviderType,
+  candidate: GradingConfig['provider'] | undefined,
+): GradingConfig['provider'] | undefined {
+  if (!candidate) {
+    return undefined;
+  }
+  if (isProviderTypeMapConfig(candidate)) {
+    return candidate[type] || undefined;
+  }
+  return candidate;
+}
+
 export async function getGradingProvider(
   type: ProviderType,
   provider: GradingConfig['provider'],
@@ -241,9 +274,8 @@ export async function getGradingProvider(
     const defaultTest = cliState.config?.defaultTest;
     const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
     const fallbackProviders = [
-      defaultTestObj?.provider || undefined,
-      defaultTestObj?.options?.provider?.text || undefined,
-      defaultTestObj?.options?.provider || undefined,
+      resolveDefaultTestProviderCandidate(type, defaultTestObj?.provider),
+      resolveDefaultTestProviderCandidate(type, defaultTestObj?.options?.provider),
     ];
 
     const cfg = fallbackProviders.find((candidateProvider) => {
