@@ -49,16 +49,26 @@ export class SequenceProvider implements ApiProvider {
     const accumulatedTokenUsage = createEmptyTokenUsage();
     let cost: number | undefined;
     let incurredCost: number | undefined;
+    // incurredCost can only differ from cost when a step was cached or reported its own.
+    let reportIncurredCost = false;
+    let everyStepCached = this.sequenceInputs.length > 0;
 
     // Totals across every step sent so far, so a failure keeps what earlier steps cost.
-    // The step's own cost fields are replaced, never left beside the totals.
+    // The step's own cost and cache fields are replaced, never left beside the totals:
+    // the sequence counts as cached only when every step it sent was a cache replay.
     const withTotals = (response: ProviderResponse): ProviderResponse => {
-      const { cost: _stepCost, incurredCost: _stepIncurredCost, ...rest } = response;
+      const {
+        cost: _stepCost,
+        incurredCost: _stepIncurredCost,
+        cached: _stepCached,
+        ...rest
+      } = response;
       return {
         ...rest,
         tokenUsage: accumulatedTokenUsage,
+        ...(everyStepCached && { cached: true }),
         ...(cost !== undefined && { cost }),
-        ...(incurredCost !== undefined && incurredCost !== cost && { incurredCost }),
+        ...(incurredCost !== undefined && reportIncurredCost && { incurredCost }),
       };
     };
 
@@ -74,10 +84,16 @@ export class SequenceProvider implements ApiProvider {
       const response = await context.originalProvider.callApi(renderedInput, context, options);
 
       accumulateResponseTokenUsage(accumulatedTokenUsage, response);
+      everyStepCached &&= response.cached === true;
+      reportIncurredCost ||= response.cached === true || response.incurredCost !== undefined;
       if (response.cost !== undefined) {
         cost = (cost ?? 0) + response.cost;
-        incurredCost =
-          (incurredCost ?? 0) + (response.incurredCost ?? (response.cached ? 0 : response.cost));
+      }
+      const stepIncurredCost =
+        response.incurredCost ??
+        (response.cost === undefined || response.cached ? 0 : response.cost);
+      if (response.incurredCost !== undefined || response.cost !== undefined) {
+        incurredCost = (incurredCost ?? 0) + stepIncurredCost;
       }
 
       if (response.error) {

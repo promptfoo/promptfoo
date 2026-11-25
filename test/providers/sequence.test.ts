@@ -98,6 +98,42 @@ describe('SequenceProvider', () => {
     expect(uncached.incurredCost ?? uncached.cost).toBeCloseTo(0.03);
   });
 
+  it('does not mark a sequence as cached when only the failing step was cached', async () => {
+    const { context } = contextWithSteps(
+      { output: 'one', cost: 0.02, tokenUsage: { prompt: 10, completion: 5, total: 15 } },
+      { error: 'parser rejected the cached reply', cost: 0, cached: true },
+    );
+
+    const result = await sequence(['a', 'b']).callApi('p', context);
+
+    expect(result.error).toBe('parser rejected the cached reply');
+    expect(result.cached).toBeFalsy();
+    expect(result.cost).toBeCloseTo(0.02);
+    expect(result.incurredCost ?? result.cost).toBeCloseTo(0.02);
+  });
+
+  it('marks the sequence as cached when every step was cached', async () => {
+    const { context } = contextWithSteps(
+      { output: 'one', cost: 0.02, cached: true },
+      { output: 'two', cost: 0.01, cached: true },
+    );
+
+    const result = await sequence(['a', 'b']).callApi('p', context);
+
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeCloseTo(0.03);
+    expect(result.incurredCost).toBe(0);
+  });
+
+  it('keeps an incurred cost that a step reports without a cost', async () => {
+    const { context } = contextWithSteps({ error: 'failed', incurredCost: 0.02 });
+
+    const result = await sequence(['a']).callApi('p', context);
+
+    expect(result.cost).toBeUndefined();
+    expect(result.incurredCost).toBeCloseTo(0.02);
+  });
+
   it('leaves cost unset when no step reports one', async () => {
     const { context } = contextWithSteps({ output: 'one' }, { output: 'two' });
 
