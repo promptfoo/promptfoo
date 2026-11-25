@@ -98,6 +98,11 @@ providers:
 
 ## Configuration
 
+To validate a serialized LiteLLM target before running an eval, import
+`LiteLLMProviderOptionsInputSchema` (Zod) or `LiteLLMProviderOptionsInputJsonSchema`
+(Draft 7) from `promptfoo/contracts`. The provider ID selects the chat, completion,
+or embedding configuration. The schema does not check whether the proxy serves the model.
+
 ### Basic configuration
 
 ```yaml

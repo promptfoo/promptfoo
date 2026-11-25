@@ -56,6 +56,20 @@ export {
   HttpAuthInputSchema,
 } from './providerConfig/httpAuth.js';
 export {
+  type LiteLLMChatConfigInput,
+  LiteLLMChatConfigInputJsonSchema,
+  LiteLLMChatConfigInputSchema,
+  type LiteLLMCompletionConfigInput,
+  LiteLLMCompletionConfigInputJsonSchema,
+  LiteLLMCompletionConfigInputSchema,
+  type LiteLLMEmbeddingConfigInput,
+  LiteLLMEmbeddingConfigInputJsonSchema,
+  LiteLLMEmbeddingConfigInputSchema,
+  type LiteLLMProviderOptionsInput,
+  LiteLLMProviderOptionsInputJsonSchema,
+  LiteLLMProviderOptionsInputSchema,
+} from './providerConfig/litellm.js';
+export {
   type McpClientConfigInput,
   McpClientConfigInputJsonSchema,
   McpClientConfigInputSchema,
