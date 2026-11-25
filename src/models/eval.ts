@@ -1285,7 +1285,7 @@ export default class Eval {
     }>(sql`
     WITH repeats AS MATERIALIZED (
       SELECT ${repeatGroupIdSql} AS group_id, test_idx, prompt_idx, success, failure_reason,
-        json_extract(test_case, '$.description') AS description
+        CASE WHEN json_valid(test_case) THEN json_extract(test_case, '$.description') END AS description
       FROM ${evalResultsTable}
       WHERE eval_id = ${this.id}
     ), page AS (

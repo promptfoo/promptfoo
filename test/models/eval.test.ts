@@ -133,6 +133,39 @@ describe('evaluator', () => {
     ]);
   });
 
+  it('keeps repeat summaries available when a stored test case contains malformed JSON', async () => {
+    const evaluation = await Eval.create({}, []);
+    for (const [testIdx, group] of ['legacy', 'valid'].entries()) {
+      await evaluation.addResult(
+        createEvaluateResult({
+          testIdx,
+          testCase: { description: group },
+          repeatGroupId: group,
+          repeatIndex: 0,
+          success: true,
+        }),
+      );
+    }
+
+    const db = await getDb();
+    // Older databases can lack the expression index that rejects malformed test_case JSON on write.
+    await db.run('CREATE TEMP TABLE eval_results AS SELECT * FROM main.eval_results');
+    try {
+      await db.run(sql`UPDATE ${evalResultsTable} SET test_case = '{'
+        WHERE eval_id = ${evaluation.id} AND test_idx = 0`);
+
+      expect(await evaluation.getRepeatGroups(0, 2)).toMatchObject({
+        hasMore: false,
+        groups: [
+          { id: 'legacy', description: null, prompts: [{ passed: 1 }] },
+          { id: 'valid', description: 'valid', prompts: [{ passed: 1 }] },
+        ],
+      });
+    } finally {
+      await db.run('DROP TABLE temp.eval_results');
+    }
+  });
+
   describe('repeat stability export', () => {
     it('includes final comparison verdicts for a row that failed persistence', async () => {
       const evaluation = await Eval.create({}, [], { id: 'repeat-failed-persistence' });
