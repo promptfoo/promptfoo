@@ -558,6 +558,8 @@ describe('readPrompts', () => {
     'bin\\prompt-generator.out',
     '.\\bin\\prompt-generator.out',
     'C:\\bin\\prompt-generator.out',
+    'C:prompt-generator.com',
+    'prompt-generator.out',
     '/tmp/missing-prompt-generator.out',
   ])('should preserve errors for explicit file references: %s', async (promptPath) => {
     vi.mocked(fsPromises.stat).mockRejectedValueOnce(

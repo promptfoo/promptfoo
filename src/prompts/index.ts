@@ -7,7 +7,6 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import { parsePathOrGlob } from '../util/index';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
-import { VALID_FILE_EXTENSIONS } from './constants';
 import { processCsvPrompts } from './processors/csv';
 import { processExecutableFile } from './processors/executable';
 import { processJsFile } from './processors/javascript';
@@ -77,16 +76,16 @@ async function processPromptFile(
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
       throw error;
     }
-    // Only bare, extension-like heuristic matches fall back to a literal prompt. Any
-    // path syntax or known file extension indicates an explicit file reference, which
-    // must keep erroring when the target is missing.
+    // Only a bare numeric version-like suffix falls back to a literal prompt. Any path
+    // syntax or nonnumeric suffix indicates an explicit file reference, which must keep
+    // erroring when the target is missing.
     const rawPrompt = prompt.raw ?? '';
     const isExplicitPath =
       rawPrompt.startsWith('file://') ||
       rawPrompt.includes('/') ||
       rawPrompt.includes('\\') ||
-      VALID_FILE_EXTENSIONS.some((validExtension) => rawPrompt.endsWith(validExtension));
-    if (isExplicitPath || !extension) {
+      /^[A-Za-z]:/.test(rawPrompt);
+    if (isExplicitPath || !/^\.\d+$/.test(extension ?? '')) {
       return [];
     }
     logger.debug(`Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`);
