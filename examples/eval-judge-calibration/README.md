@@ -18,6 +18,8 @@ The claims, evidence and labels come from [FabBench](https://github.com/Denzil10
 
 The recorded replies are the first run of FabBench's Claude Haiku 5.5 results for prompt v1 (2026-11-02) and prompt v5 (2026-11-14). Prompt v5 adds three paragraphs to v1 about what a piece of evidence can and cannot show.
 
+Names, ids and amounts that would identify a product or channel are bracketed placeholders (`[slug-1]`, `[id-3]`), applied to the claims, evidence and replies after the runs; FabBench's README lists every edit.
+
 ## Expected results
 
 A case passes when the judge's last `LABEL:` line equals the human label. promptfoo exits with code 100 because some cases fail; that is the result, not an error.
