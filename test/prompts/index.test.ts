@@ -51,15 +51,19 @@ vi.mock('../../src/prompts/utils', async () => {
   };
 });
 
+const actualFsPromises = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+
 describe('readPrompts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fsPromises.stat).mockReset();
+    vi.mocked(fsPromises.stat).mockImplementation(actualFsPromises.stat);
   });
   afterEach(() => {
     mockProcessEnv({ PROMPTFOO_STRICT_FILES: undefined });
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(fs.statSync).mockReset();
-    vi.mocked(fsPromises.stat).mockClear();
+    vi.mocked(fsPromises.stat).mockReset();
     vi.mocked(globSync).mockReset();
     vi.mocked(maybeFilePath).mockClear();
   });
@@ -107,7 +111,10 @@ describe('readPrompts', () => {
   it('should throw an error for an unsupported file format', async () => {
     vi.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     vi.mocked(maybeFilePath).mockReturnValueOnce(true);
-    mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
+    vi.mocked(fsPromises.stat).mockResolvedValueOnce({
+      isFile: () => true,
+      mode: 0o644,
+    } as fs.Stats);
     await expect(readPrompts(['unsupported.for.mat'])).rejects.toThrow(
       'There are no prompts in "unsupported.for.mat"',
     );
@@ -528,6 +535,14 @@ describe('readPrompts', () => {
 
   it('should treat a nonexistent version-suffixed prompt as a literal string', async () => {
     expect(maybeFilePath('Summarize changes in 1.20')).toBe(true);
+    vi.mocked(fsPromises.stat).mockRejectedValueOnce(
+      Object.assign(
+        new Error("ENOENT: no such file or directory, stat 'Summarize changes in 1.20'"),
+        {
+          code: 'ENOENT',
+        },
+      ),
+    );
     await expect(readPrompts('Summarize changes in 1.20')).resolves.toEqual([
       { raw: 'Summarize changes in 1.20', label: 'Summarize changes in 1.20' },
     ]);
@@ -535,8 +550,14 @@ describe('readPrompts', () => {
 
   it('should keep strict-file behavior for nonexistent heuristic file paths', async () => {
     mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
+    vi.mocked(fs.statSync).mockImplementationOnce(() => {
+      throw Object.assign(
+        new Error("ENOENT: no such file or directory, stat 'Summarize changes in 1.20'"),
+        { code: 'ENOENT' },
+      );
+    });
     await expect(readPrompts('Summarize changes in 1.20')).rejects.toThrow(
-      'There are no prompts in "Summarize changes in 1.20"',
+      "ENOENT: no such file or directory, stat 'Summarize changes in 1.20'",
     );
   });
 
