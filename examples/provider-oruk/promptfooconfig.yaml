@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Oruk Fourier 2B English speech-to-text evaluation
+description: Oruk Fourier 2B English speech-to-text eval
 
 prompts:
   # The prompt is the path to an audio file
@@ -21,10 +21,13 @@ providers:
   #   config:
   #     language: en
 
+defaultTest:
+  options:
+    transformVars: file://audio-path.mjs
+
 tests:
   - vars:
-      # Replace with your own local English audio file when running standalone
-      audio_file: examples/openai-audio-transcription/sample-audio.mp3
+      audio_file: sample-audio.mp3
       reference: That's one small step for man, one giant leap for mankind.
     assert:
       - type: icontains
@@ -45,24 +48,20 @@ tests:
               .filter(Boolean);
           const ref = normalize(context.vars.reference);
           const hyp = normalize(output);
-          const dp = Array.from({ length: ref.length + 1 }, () =>
-            new Array(hyp.length + 1).fill(0),
-          );
-          for (let i = 0; i <= ref.length; i++) dp[i][0] = i;
-          for (let j = 0; j <= hyp.length; j++) dp[0][j] = j;
+          let prev = Array.from({ length: hyp.length + 1 }, (_, j) => j);
+          let curr = new Array(hyp.length + 1).fill(0);
           for (let i = 1; i <= ref.length; i++) {
+            curr[0] = i;
             for (let j = 1; j <= hyp.length; j++) {
               const cost = ref[i - 1] === hyp[j - 1] ? 0 : 1;
-              dp[i][j] = Math.min(
-                dp[i - 1][j] + 1,
-                dp[i][j - 1] + 1,
-                dp[i - 1][j - 1] + cost,
-              );
+              curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
             }
+            [prev, curr] = [curr, prev];
           }
-          const wer = ref.length ? dp[ref.length][hyp.length] / ref.length : 0;
+          const edits = prev[hyp.length];
+          const wer = ref.length ? edits / ref.length : 0;
           return {
             pass: wer <= 0.15,
             score: Math.max(0, 1 - wer),
-            reason: `WER ${(wer * 100).toFixed(1)}% (${dp[ref.length][hyp.length]}/${ref.length} edits)`,
+            reason: `WER ${(wer * 100).toFixed(1)}% (${edits}/${ref.length} edits)`,
           };

@@ -1,12 +1,12 @@
 ---
 title: Oruk
 sidebar_label: Oruk
-description: Configure Oruk Fourier 2B English speech-to-text transcription in promptfoo using the OpenAI-compatible transcription provider.
+description: Configure Oruk Fourier 2B English speech-to-text transcription in Promptfoo using the OpenAI-compatible transcription provider, custom base URL, and WER evals.
 ---
 
 # Oruk
 
-[Oruk](https://oruk.ai) serves the Fourier 2B English speech-to-text model through an OpenAI-compatible `/v1/audio/transcriptions` endpoint. Use promptfoo's [OpenAI transcription provider](/docs/providers/openai/#audio-transcription) pointed at Oruk's endpoint and API key.
+[Oruk](https://oruk.ai) serves the Fourier 2B English speech-to-text model through an OpenAI-compatible `/v1/audio/transcriptions` endpoint. Use Promptfoo's [OpenAI transcription provider](/docs/providers/openai/#audio-transcription) pointed at Oruk's endpoint and API key.
 
 ## Setup
 
@@ -18,7 +18,7 @@ export ORUK_API_KEY=your_api_key_here
 
 Then configure the `openai:transcription:oruk-fourier-2b` provider in your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - '{{audio_file}}'
 
@@ -50,9 +50,9 @@ providers:
 
 ## Example: Comparing Transcription Accuracy (WER)
 
-The example below compares Oruk Fourier 2B against OpenAI's `gpt-4o-transcribe` on the same audio file using a JavaScript Word Error Rate (WER) assertion:
+The example below compares Oruk Fourier 2B against OpenAI's `gpt-4o-transcribe` on the same audio file using a bounded-memory JavaScript Word Error Rate (WER) assertion:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Compare English speech-to-text transcription accuracy
 
@@ -76,7 +76,7 @@ providers:
 
 tests:
   - vars:
-      audio_file: examples/openai-audio-transcription/sample-audio.mp3
+      audio_file: sample-audio.mp3
       reference: That's one small step for man, one giant leap for mankind.
     assert:
       - type: icontains
@@ -95,32 +95,28 @@ tests:
               .filter(Boolean);
           const ref = normalize(context.vars.reference);
           const hyp = normalize(output);
-          const dp = Array.from({ length: ref.length + 1 }, () =>
-            new Array(hyp.length + 1).fill(0),
-          );
-          for (let i = 0; i <= ref.length; i++) dp[i][0] = i;
-          for (let j = 0; j <= hyp.length; j++) dp[0][j] = j;
+          let prev = Array.from({ length: hyp.length + 1 }, (_, j) => j);
+          let curr = new Array(hyp.length + 1).fill(0);
           for (let i = 1; i <= ref.length; i++) {
+            curr[0] = i;
             for (let j = 1; j <= hyp.length; j++) {
               const cost = ref[i - 1] === hyp[j - 1] ? 0 : 1;
-              dp[i][j] = Math.min(
-                dp[i - 1][j] + 1,
-                dp[i][j - 1] + 1,
-                dp[i - 1][j - 1] + cost,
-              );
+              curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
             }
+            [prev, curr] = [curr, prev];
           }
-          const wer = ref.length ? dp[ref.length][hyp.length] / ref.length : 0;
+          const edits = prev[hyp.length];
+          const wer = ref.length ? edits / ref.length : 0;
           return {
             pass: wer <= 0.15,
             score: Math.max(0, 1 - wer),
-            reason: `WER ${(wer * 100).toFixed(1)}% (${dp[ref.length][hyp.length]}/${ref.length} edits)`,
+            reason: `WER ${(wer * 100).toFixed(1)}% (${edits}/${ref.length} edits)`,
           };
 ```
 
 ## Example
 
-The [provider-oruk example](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-oruk) evaluates Oruk Fourier 2B on English audio with phrase and Word Error Rate assertions using only `ORUK_API_KEY`.
+The self-contained [provider-oruk example](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-oruk) ships a sample audio clip and evaluates Oruk Fourier 2B with phrase and Word Error Rate assertions using only `ORUK_API_KEY`.
 
 ## See Also
 
