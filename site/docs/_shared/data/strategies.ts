@@ -280,6 +280,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'fullwidth',
+    displayName: 'Fullwidth',
+    description: 'Fullwidth Unicode forms',
+    longDescription:
+      'Tests detection and handling of ASCII text encoded as fullwidth Unicode forms and ideographic spaces',
+    cost: 'Low',
+    asrIncrease: 'Variable',
+    link: '/docs/red-team/strategies/fullwidth/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'homoglyph',
     displayName: 'Homoglyph',
     description: 'Unicode confusable characters',
