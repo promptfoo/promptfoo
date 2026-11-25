@@ -25,7 +25,7 @@ Once merged, the scanner will automatically run on future pull requests. Authent
 
 The action installs the scanner before requesting its short-lived OIDC token, so slow installs do not expire the token before scanning.
 
-The action runs the scanner with its bundled Node.js 24 runtime. Older action releases and workflow steps that run Promptfoo directly require Node.js `>=22.22.0` on the runner's `PATH`. Configure Node.js 24 LTS for compatibility:
+The action runs the scanner with its bundled Node.js 24 runtime. For direct CLI steps, use Node.js `^24.15.0 || >=26` for full-repository scans. Diff-only scans also support Node.js `^22.22.2`. Set up Node.js before installing Promptfoo.
 
 ```yaml
 - name: Set up Node.js
@@ -67,6 +67,8 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
     sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
     category: promptfoo-code-scan
 ```
+
+Full scans can share eligible committed text files from the compared revision with the hosted scanner. Set `diffsOnly: true` in the file selected by `config-path` to share only the Git diff.
 
 ## Supply Chain Security
 

@@ -1369,6 +1369,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 };
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
+  'AIUC-1': 'Technical tests for AIUC-1 readiness, not certification',
   Custom: 'Choose your own plugins',
   'DoD AI Ethical Principles': 'DoD AI ethical principles framework',
   'EU AI Act': 'Prohibited & high-risk requirements',

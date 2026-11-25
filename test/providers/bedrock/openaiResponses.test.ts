@@ -452,6 +452,26 @@ describe('bedrock openaiResponses helper', () => {
       },
     );
 
+    it('sends Ultrafast for GPT-6.2 Astra and rejects it for GPT-6.2 Sol on Mantle', async () => {
+      const options = {
+        config: { apiKey: 'test', region: 'us-west-2', service_tier: 'ultrafast' as const },
+      };
+      const astra = createBedrockOpenAiResponsesProvider('openai.gpt-6.2-astra', options);
+      expect((await astra.callApi('hello')).output).toBe('hello');
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses');
+      expect(JSON.parse(String(request?.body))).toMatchObject({
+        model: 'openai.gpt-6.2-astra',
+        service_tier: 'ultrafast',
+      });
+
+      const sol = createBedrockOpenAiResponsesProvider('openai.gpt-6.2-sol', options);
+      await expect(sol.callApi('hello')).rejects.toThrow(
+        /does not support the requested service tier/,
+      );
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+    });
+
     it.each(GPT_5_6_MODELS)('uses the shared GA default region for %s', (modelId) => {
       restoreEnv = mockProcessEnv({
         AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',

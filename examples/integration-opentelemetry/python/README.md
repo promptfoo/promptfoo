@@ -2,7 +2,7 @@
 
 This example demonstrates how to use OpenTelemetry with Python to trace the internal operations of your LLM providers during Promptfoo evaluations. It uses the **protobuf format** for trace export, which is the default and most efficient format for the Python OpenTelemetry SDK.
 
-Requires Python 3.10+ and Node.js >=22.22.0.
+Requires Python 3.10+ and a [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support).
 
 ## Quick Start
 

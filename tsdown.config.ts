@@ -11,23 +11,10 @@ const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
 
 // Normalize the package.json engines range into comparator sets that the zero-dependency
 // CLI entrypoint can evaluate before importing any other modules.
-const enginesNode: string = packageJson.engines?.node ?? '>=22.22.0';
-let nodeEngineComparatorSets: Array<
-  Array<{ operator: '' | '=' | '>' | '>=' | '<' | '<='; version: string }>
->;
-try {
-  nodeEngineComparatorSets = new semver.Range(enginesNode).set.map((comparatorSet) =>
-    comparatorSet.map((comparator) => ({
-      operator: comparator.operator,
-      version: comparator.semver.version,
-    })),
-  );
-} catch {
-  console.warn(
-    `[tsdown] Warning: Could not parse engines.node "${enginesNode}". Defaulting to >=22.22.0.`,
-  );
-  nodeEngineComparatorSets = [[{ operator: '>=', version: '22.22.0' }]];
-}
+const enginesNode: string = packageJson.engines.node;
+const nodeEngineComparatorSets = new semver.Range(enginesNode).set.map((set) =>
+  set.map(({ operator, semver: version }) => ({ operator, version: version.version })),
+);
 
 // Build-time constants injected into all builds
 // These replace the __PROMPTFOO_*__ placeholders in source files
@@ -74,10 +61,10 @@ export default defineConfig([
   // Server (ESM only) - stable path for workflows
   // Only public library entry points emit declarations. The server's index declaration
   // otherwise races the library build for dist/src/index.d.ts.
-  esmBuildOptions({ 'server/index': 'src/server/index.ts' }, { dts: false }),
+  esmBuildOptions({ 'server/index': './src/server/index.ts' }, { dts: false }),
   // CLI binary (ESM only)
   {
-    ...esmBuildOptions(['src/entrypoint.ts', 'src/main.ts'], { dts: false }),
+    ...esmBuildOptions(['./src/entrypoint.ts', './src/main.ts'], { dts: false }),
     outputOptions: {
       banner: '#!/usr/bin/env node',
     },
@@ -85,8 +72,8 @@ export default defineConfig([
   // Library ESM build
   esmBuildOptions(
     {
-      contracts: 'src/contracts.ts',
-      index: 'src/index.ts',
+      contracts: './src/contracts.ts',
+      index: './src/index.ts',
     },
     { treeshake: true },
   ), // Ensure library ESM build has shims
@@ -102,8 +89,8 @@ export default defineConfig([
       alwaysBundle: ['chalk'],
     },
     entry: {
-      contracts: 'src/contracts.ts',
-      index: 'src/index.ts',
+      contracts: './src/contracts.ts',
+      index: './src/index.ts',
     },
     format: ['cjs'],
     fixedExtension: true, // Use .cjs extension for CJS output

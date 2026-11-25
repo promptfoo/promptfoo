@@ -1169,6 +1169,25 @@ describe('PluginsTab', () => {
           }
         });
 
+        test('AIUC-1 selects concrete plugins and flags missing configuration', async () => {
+          renderComponent();
+          await userEvent.click(screen.getByTestId('preset-card-aiuc-1'));
+          const ids = useRedTeamConfig
+            .getState()
+            .config.plugins.map((p) => (typeof p === 'string' ? p : p.id));
+          expect(ids).toEqual(
+            expect.arrayContaining(['pii:direct', 'indirect-prompt-injection', 'hallucination']),
+          );
+          expect(ids.length).toBe(new Set(ids).size);
+          expect(ids).not.toContain('policy');
+          expect(
+            screen.getByTestId('selected-plugin-needs-config-prompt-extraction'),
+          ).toBeInTheDocument();
+          expect(
+            screen.getByTestId('selected-plugin-needs-config-indirect-prompt-injection'),
+          ).toBeInTheDocument();
+        });
+
         test('Selecting the "MITRE" preset', async () => {
           const user = userEvent.setup();
           const expectedPlugins = new Set(

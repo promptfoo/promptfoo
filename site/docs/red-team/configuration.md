@@ -117,10 +117,11 @@ For multi-input testing, define `inputs` on the target/provider rather than unde
 
 ### Framework Filtering
 
-Use the optional `redteam.frameworks` array when you only care about a subset of the built-in compliance programs. This filters which frameworks appear in the generated report, `promptfoo redteam run`, and future automation surfaces.
+Use `redteam.frameworks` to filter the frameworks shown in the report and its framework exports. This does not select tests. Use `redteam.plugins` to choose what to run.
 
 Examples of allowed framework IDs:
 
+- `aiuc:1`
 - `mitre:atlas`
 - `nist:ai:measure`
 - `owasp:api`
@@ -425,6 +426,50 @@ plugins:
 ### Standards
 
 Promptfoo supports several preset configurations based on common security frameworks and standards.
+
+#### AIUC-1
+
+Select **AIUC-1** under **Plugins → Presets** in scan setup. In YAML, use `aiuc:1` for the whole preset or select individual controls.
+
+```yaml
+redteam:
+  frameworks: [aiuc:1] # Report filter
+  plugins: [aiuc:1] # Or select controls, e.g. [aiuc:1:a009, aiuc:1:d004]
+  strategies: [basic, jailbreak:meta, crescendo]
+```
+
+A009 through E018 are the five [third-party evaluation controls](https://standard.aiuc-1.com/evidence/third-party-evals). [F001](https://standard.aiuc-1.com/society/prevent-ai-cyber-misuse) and [F002](https://standard.aiuc-1.com/society/prevent-catastrophic-misuse) are Society controls. Their plugins test how the target responds to misuse attempts. They don't verify provider documentation or monitoring. Running the preset doesn't establish AIUC-1 certification.
+
+| Control                  | Plugin alias  | What the preset tests                                                                          |
+| ------------------------ | ------------- | ---------------------------------------------------------------------------------------------- |
+| A009 Data and privacy    | `aiuc:1:a009` | PII, access, cross-session and system prompt leaks, exfiltration, copyright and imitation      |
+| B001 Security            | `aiuc:1:b001` | Hijacking, indirect prompt injection, object and function authorization, coding agent security |
+| C010 Safety              | `aiuc:1:c010` | Harmful content, specialized advice, bias and teen safety                                      |
+| D004 Reliability         | `aiuc:1:d004` | Hallucinations, unverifiable claims and RAG source attribution. Tool execution is untested.    |
+| E018 Accountability      | None          | No built-in AI disclosure test yet. Reported as untested.                                      |
+| F001 Cyber misuse        | `aiuc:1:f001` | Cybercrime and malicious code                                                                  |
+| F002 Catastrophic misuse | `aiuc:1:f002` | Chemical, biological and indiscriminate weapons misuse                                         |
+
+The preset adds no strategies of its own. For a small first run, try `promptfoo redteam generate --plugins aiuc:1:d004 --strategies basic -n 1`. This requests three tests, one per reliability plugin. Some plugins, including RAG source attribution, require remote generation.
+
+All three D004 plugins can pass even if an agent calls a tool with the wrong arguments. The report and both exports mark tool execution as untested.
+
+For A009, set `config.systemPrompt` on [prompt extraction](/docs/red-team/plugins/prompt-extraction/) to the instructions you want to check for leaks. [Data exfiltration](/docs/red-team/plugins/data-exfil/) needs a browsing agent and Cloud tracking.
+
+All 17 B001 plugins require remote generation, and 13 assume a [coding agent working in a repository](/docs/red-team/plugins/coding-agent/). With remote generation disabled, `promptfoo redteam generate --plugins aiuc:1:b001 --strategies basic` warns and can exit 0 with no tests. Add `--strict` in CI to exit 1 in that case.
+
+For [indirect prompt injection](/docs/red-team/plugins/indirect-prompt-injection/), specify the variable that holds untrusted content. Without it, scan setup requests configuration and CLI generation warns and skips that plugin.
+
+```yaml
+redteam:
+  plugins:
+    - aiuc:1:b001
+    - id: indirect-prompt-injection
+      config:
+        indirectInjectionVar: document # Must match your prompt's variable
+```
+
+An explicit plugin overrides the preset entry instead of running twice.
 
 #### NIST AI Risk Management Framework (AI RMF)
 

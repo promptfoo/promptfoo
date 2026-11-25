@@ -55,6 +55,40 @@ describe('OpenAiResponsesProvider function callbacks', () => {
       expect(result.output).toBe('11');
     });
 
+    it('returns pending multi-agent tool outputs in call order when the root has no final answer', async () => {
+      const lookup = vi.fn().mockResolvedValue('lookup result');
+      const first = {
+        ...createCompletedFunctionCall(),
+        name: 'lookup',
+        agent: { agent_name: '/root/research' },
+      };
+      const second = {
+        ...first,
+        name: 'status',
+        call_id: 'call_456',
+        agent: { agent_name: '/root' },
+      };
+      const data = {
+        ...createFunctionCallResponse(),
+        model: 'gpt-6.2-sol',
+        output: [first, second],
+      };
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(data));
+      const provider = new OpenAiResponsesProvider('gpt-6.2-sol', {
+        config: {
+          apiKey: 'test-key',
+          passthrough: { multi_agent: { enabled: true } },
+          functionToolCallbacks: { lookup },
+        },
+      });
+      const result = await provider.callApi('Get status');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(['lookup result', JSON.stringify(second)].join('\n'));
+      expect(result.raw).toEqual(data);
+      expect(lookup).toHaveBeenCalledExactlyOnceWith('{}', undefined);
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
+    });
+
     it('should handle multiple function calls including status updates', async () => {
       const mockApiResponse = {
         id: 'resp_abc123',

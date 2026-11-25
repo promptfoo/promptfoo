@@ -40,7 +40,7 @@ vi.mock('proxy-agent', () => ({
 
 vi.mock('node:module', createRequireModuleFactory());
 
-vi.mock('glob', () => ({
+vi.mock('glob/raw', () => ({
   globSync: vi.fn(),
 }));
 

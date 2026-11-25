@@ -12,12 +12,14 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
 import { loadYaml } from '../util/yamlLoad';
+import { RedteamConfigSchema } from '../validators/redteam';
 import {
-  ALIASED_PLUGIN_MAPPINGS,
+  ALIASED_PLUGINS,
   BIAS_PLUGINS,
   DATASET_EXEMPT_PLUGINS,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
+  FRAMEWORK_COMPLIANCE_IDS,
   getDefaultNFanout,
   HARM_PLUGINS,
   INSURANCE_PLUGINS,
@@ -1018,6 +1020,20 @@ export async function synthesize({
     logger.info(`Max concurrency for test generation is capped at ${MAX_MAX_CONCURRENCY}.`);
   }
 
+  // CLI configs are already expanded. Normalize aliases from direct API callers
+  // before deduplicating strategies, validating plugins or estimating the workload.
+  if (
+    plugins.some(
+      ({ id }) =>
+        ALIASED_PLUGINS.includes(id) ||
+        FRAMEWORK_COMPLIANCE_IDS.some((framework) => id.startsWith(`${framework}:`)),
+    )
+  ) {
+    const normalized = RedteamConfigSchema.parse({ plugins, strategies: [] });
+    plugins = normalized.plugins as typeof plugins;
+    strategies = [...strategies, ...(normalized.strategies as RedteamStrategyObject[])];
+  }
+
   const expandedStrategies: typeof strategies = [];
   strategies.forEach((strategy) => {
     if (isStrategyCollection(strategy.id)) {
@@ -1093,6 +1109,89 @@ export async function synthesize({
     ...providerSelection,
     provider: redteamProvider,
   };
+
+  // Handle multi-input mode: use MULTI_INPUT_VAR to prevent namespace collisions
+  const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
+  if (hasMultipleInputs) {
+    const inputKeys = Object.keys(inputs);
+    logger.info(
+      `Using multi-input mode with ${inputKeys.length} variables: ${inputKeys.join(', ')}`,
+    );
+    // In multi-input mode, use MULTI_INPUT_VAR to prevent namespace collisions
+    // with user-defined input variable names
+    injectVar = MULTI_INPUT_VAR;
+
+    // Some plugins don't support multi-input mode; skip them
+    const multiInputExcluded = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
+    const removedPlugins = plugins.filter((p) => multiInputExcluded.includes(p.id as any));
+    plugins = plugins.filter((p) => !multiInputExcluded.includes(p.id as any));
+    if (removedPlugins.length > 0) {
+      logger.info(
+        `Skipping ${removedPlugins.length} plugin${removedPlugins.length > 1 ? 's' : ''} in multi-input mode: ${removedPlugins.map((p) => p.id).join(', ')}`,
+      );
+    }
+  }
+
+  // Determine injectVar if not explicitly set (only applies to single-input mode)
+  if (typeof injectVar !== 'string') {
+    const parsedVars = extractVariablesFromTemplates(prompts);
+    if (parsedVars.length > 1) {
+      logger.warn(
+        `\nMultiple variables found in prompts: ${parsedVars.join(', ')}. Using the last one "${parsedVars[parsedVars.length - 1]}". Override this selection with --injectVar`,
+      );
+    } else if (parsedVars.length === 0) {
+      logger.warn('No variables found in prompts. Using "query" as the inject variable.');
+    }
+    // Odds are that the last variable is the user input since the user input usually goes at the end of the prompt
+    injectVar = parsedVars[parsedVars.length - 1] || 'query';
+    invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
+  }
+
+  // Expand plugins first
+  for (const [category, categoryPlugins] of Object.entries(categories)) {
+    const plugin = plugins.find((p) => p.id === category);
+    if (plugin) {
+      plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
+    }
+  }
+
+  const validatePlugin: (plugin: (typeof plugins)[0]) => boolean = (plugin) => {
+    if (Object.keys(categories).includes(plugin.id)) {
+      return false;
+    }
+    const registeredPlugin = Plugins.find((p) => p.key === plugin.id);
+
+    if (!registeredPlugin) {
+      if (!plugin.id.startsWith('file://')) {
+        logger.debug(`Plugin ${plugin.id} not registered, skipping validation`);
+      }
+    } else if (registeredPlugin.validate) {
+      try {
+        const resolvedPluginConfig = resolvePluginConfigWithMaxChars(
+          plugin.config,
+          maxCharsPerMessage,
+        );
+        registeredPlugin.validate({
+          language,
+          ...resolvedPluginConfig,
+          modifiers: buildRedteamModifiers({
+            maxCharsPerMessage,
+            pluginConfig: resolvedPluginConfig,
+            testGenerationInstructions,
+          }),
+        });
+      } catch (error) {
+        logger.warn(`Validation failed for plugin ${plugin.id}: ${error}, skipping plugin.`);
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  // Validate all plugins upfront
+  logger.debug('Validating plugins...');
+  plugins = [...new Set(plugins)].filter(validatePlugin);
 
   const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
     calculateTotalTests(plugins, strategies, language);
@@ -1180,128 +1279,6 @@ export async function synthesize({
       `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n` +
       (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
   );
-
-  // Handle multi-input mode: use MULTI_INPUT_VAR to prevent namespace collisions
-  const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
-  if (hasMultipleInputs) {
-    const inputKeys = Object.keys(inputs);
-    logger.info(
-      `Using multi-input mode with ${inputKeys.length} variables: ${inputKeys.join(', ')}`,
-    );
-    // In multi-input mode, use MULTI_INPUT_VAR to prevent namespace collisions
-    // with user-defined input variable names
-    injectVar = MULTI_INPUT_VAR;
-
-    // Some plugins don't support multi-input mode; skip them
-    const multiInputExcluded = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
-    const removedPlugins = plugins.filter((p) => multiInputExcluded.includes(p.id as any));
-    plugins = plugins.filter((p) => !multiInputExcluded.includes(p.id as any));
-    if (removedPlugins.length > 0) {
-      logger.info(
-        `Skipping ${removedPlugins.length} plugin${removedPlugins.length > 1 ? 's' : ''} in multi-input mode: ${removedPlugins.map((p) => p.id).join(', ')}`,
-      );
-    }
-  }
-
-  // Determine injectVar if not explicitly set (only applies to single-input mode)
-  if (typeof injectVar !== 'string') {
-    const parsedVars = extractVariablesFromTemplates(prompts);
-    if (parsedVars.length > 1) {
-      logger.warn(
-        `\nMultiple variables found in prompts: ${parsedVars.join(', ')}. Using the last one "${parsedVars[parsedVars.length - 1]}". Override this selection with --injectVar`,
-      );
-    } else if (parsedVars.length === 0) {
-      logger.warn('No variables found in prompts. Using "query" as the inject variable.');
-    }
-    // Odds are that the last variable is the user input since the user input usually goes at the end of the prompt
-    injectVar = parsedVars[parsedVars.length - 1] || 'query';
-    invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
-  }
-
-  // Expand plugins first
-  for (const [category, categoryPlugins] of Object.entries(categories)) {
-    const plugin = plugins.find((p) => p.id === category);
-    if (plugin) {
-      plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
-    }
-  }
-
-  const expandedPlugins: typeof plugins = [];
-  const expandPlugin = (
-    plugin: (typeof plugins)[0],
-    mapping: { plugins: string[]; strategies: string[] },
-  ) => {
-    mapping.plugins.forEach((p: string) =>
-      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
-    );
-    strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
-  };
-
-  plugins.forEach((plugin) => {
-    // First check if this is a direct plugin that should not be expanded
-    // This is for plugins like bias:gender that have a prefix matching an alias
-    const isDirectPlugin = Plugins.some((p) => p.key === plugin.id);
-
-    if (isDirectPlugin) {
-      expandedPlugins.push(plugin);
-      return;
-    }
-
-    const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
-      (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
-    );
-
-    if (mappingKey) {
-      const mapping =
-        ALIASED_PLUGIN_MAPPINGS[mappingKey][plugin.id] ||
-        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((_m) =>
-          plugin.id.startsWith(`${mappingKey}:`),
-        );
-      if (mapping) {
-        expandPlugin(plugin, mapping);
-      }
-    } else {
-      expandedPlugins.push(plugin);
-    }
-  });
-
-  const validatePlugin: (plugin: (typeof plugins)[0]) => boolean = (plugin) => {
-    if (Object.keys(categories).includes(plugin.id)) {
-      return false;
-    }
-    const registeredPlugin = Plugins.find((p) => p.key === plugin.id);
-
-    if (!registeredPlugin) {
-      if (!plugin.id.startsWith('file://')) {
-        logger.debug(`Plugin ${plugin.id} not registered, skipping validation`);
-      }
-    } else if (registeredPlugin.validate) {
-      try {
-        const resolvedPluginConfig = resolvePluginConfigWithMaxChars(
-          plugin.config,
-          maxCharsPerMessage,
-        );
-        registeredPlugin.validate({
-          language,
-          ...resolvedPluginConfig,
-          modifiers: buildRedteamModifiers({
-            maxCharsPerMessage,
-            pluginConfig: resolvedPluginConfig,
-            testGenerationInstructions,
-          }),
-        });
-      } catch (error) {
-        logger.warn(`Validation failed for plugin ${plugin.id}: ${error}, skipping plugin.`);
-        return false;
-      }
-    }
-
-    return true;
-  };
-
-  // Validate all plugins upfront
-  logger.debug('Validating plugins...');
-  plugins = [...new Set(expandedPlugins)].filter(validatePlugin).sort();
 
   // Check API health before proceeding
   if (shouldGenerateRemote()) {

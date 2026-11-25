@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import Ajv from 'ajv';
-import { globSync } from 'glob';
+import { globSync } from 'glob/raw';
 import * as yaml from 'js-yaml';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
