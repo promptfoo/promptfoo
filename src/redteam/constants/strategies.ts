@@ -82,6 +82,7 @@ export const ADDITIONAL_STRATEGIES = [
   'crescendo',
   'custom',
   'emoji',
+  'fullwidth',
   'gcg',
   'goat',
   'hex',
@@ -150,6 +151,7 @@ export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGUR
 export const ENCODING_STRATEGIES = new Set([
   'arabic-presentation-forms',
   'base64',
+  'fullwidth',
   'hex',
   'rot13',
   'leetspeak',

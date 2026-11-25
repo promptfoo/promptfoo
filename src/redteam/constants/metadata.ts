@@ -48,6 +48,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
   ferpa: 'Tests for compliance with Family Educational Rights and Privacy Act',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
+  fullwidth:
+    'Tests handling of fullwidth Unicode character encoding and normalization in content filters',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   'indirect-web-pwn': 'Embeds attack prompts in web pages for indirect prompt injection via fetch',
@@ -301,6 +303,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'excessive-agency': 'Excessive Agency',
   ferpa: 'FERPA Compliance',
   foundation: 'Foundation Model Plugin Collection',
+  fullwidth: 'Fullwidth',
   gcg: 'Greedy Coordinate Gradient',
   'indirect-web-pwn': 'Indirect Web Prompt Injection',
   layer: 'Strategy Layer',
@@ -1289,6 +1292,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
   custom: 'User-defined multi-turn conversation strategy with custom instructions',
   default: 'Applies standard security testing methodology',
+  fullwidth:
+    'Tests detection and handling of ASCII text encoded using fullwidth Unicode characters',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
   'indirect-web-pwn':
@@ -1340,6 +1345,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   crescendo: 'Multi-turn Crescendo',
   custom: 'Custom',
   default: 'Basic',
+  fullwidth: 'Fullwidth',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
   'indirect-web-pwn': 'Indirect Web Prompt Injection',

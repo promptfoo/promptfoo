@@ -396,6 +396,7 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 export const CANARY_BREAKING_STRATEGY_IDS = [
   'arabic-presentation-forms',
   'base64',
+  'fullwidth',
   'hex',
   'homoglyph',
   'leetspeak',
