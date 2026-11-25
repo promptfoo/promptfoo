@@ -1,7 +1,30 @@
-import { normalizeFinishReason } from '../util/finishReason';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
+
+// Provider-specific aliases map to the standard values documented for this
+// assertion. Kept local so the core layer does not add a cross-layer edge.
+const FINISH_REASON_ALIASES: Record<string, string> = {
+  function_call: 'tool_calls',
+  max_output_tokens: 'length',
+  end_turn: 'stop',
+  stop_sequence: 'stop',
+  max_tokens: 'length',
+  model_context_window_exceeded: 'length',
+  tool_use: 'tool_calls',
+  refusal: 'content_filter',
+  pause_turn: 'pause_turn',
+  'tool-calls': 'tool_calls',
+  'content-filter': 'content_filter',
+};
+
+function normalizeFinishReason(raw?: string | null): string | undefined {
+  if (typeof raw !== 'string') {
+    return undefined;
+  }
+  const key = raw.trim().toLowerCase();
+  return key === '' ? undefined : (FINISH_REASON_ALIASES[key] ?? key);
+}
 
 export function handleFinishReason({
   assertion,
