@@ -30,6 +30,7 @@ describe('validateStrategies', () => {
       { id: 'basic' },
       { id: 'base64' },
       { id: 'arabic-presentation-forms' },
+      { id: 'fullwidth' },
       { id: 'video' },
       { id: 'morse' },
       { id: 'piglatin' },
@@ -107,6 +108,34 @@ describe('loadStrategy', () => {
     expect(logger.debug).toHaveBeenCalledWith(
       'Added 1 Arabic presentation forms encoded test cases',
     );
+  });
+
+  it('runs Fullwidth encoding through the registered strategy', async () => {
+    const strategy = await loadStrategy('fullwidth');
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { prompt: 'Hello World!', preserved: 'value' },
+        assert: [{ type: 'contains', value: 'expected', metric: 'Policy' }],
+        metadata: { pluginId: 'policy' },
+      },
+    ];
+
+    const result = await strategy.action(testCases, 'prompt', {});
+
+    expect(result).toEqual([
+      {
+        vars: { prompt: 'Ｈｅｌｌｏ\u3000Ｗｏｒｌｄ！', preserved: 'value' },
+        assert: [{ type: 'contains', value: 'expected', metric: 'Policy/Fullwidth' }],
+        metadata: {
+          pluginId: 'policy',
+          strategyId: 'fullwidth',
+          originalText: 'Hello World!',
+        },
+      },
+    ]);
+    expect(testCases[0].vars?.prompt).toBe('Hello World!');
+    expect(logger.debug).toHaveBeenCalledWith('Adding Fullwidth encoding to 1 test cases');
+    expect(logger.debug).toHaveBeenCalledWith('Added 1 Fullwidth encoded test cases');
   });
 
   it('should load video strategy', async () => {

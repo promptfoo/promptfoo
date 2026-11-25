@@ -101,6 +101,7 @@ describe('Strategy IDs', () => {
       base64: 'base64.ts',
       citation: 'citation.ts',
       crescendo: 'crescendo.ts',
+      fullwidth: 'fullwidth.ts',
       gcg: 'gcg.ts',
       goat: 'goat.ts',
       hex: 'hex.ts',

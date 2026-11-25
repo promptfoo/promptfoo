@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { addBase64Encoding } from '../../../src/redteam/strategies/base64';
 import { mapEncodingTestCases } from '../../../src/redteam/strategies/encoding';
+import { addFullwidth } from '../../../src/redteam/strategies/fullwidth';
 import { addHexEncoding } from '../../../src/redteam/strategies/hex';
 import { addHomoglyphs } from '../../../src/redteam/strategies/homoglyph';
 import { addLeetspeak } from '../../../src/redteam/strategies/leetspeak';
@@ -127,6 +128,13 @@ type PublicStrategyCase = [string, ApplyEncoding, string, string, Record<string,
 
 const publicStrategies: PublicStrategyCase[] = [
   ['base64', addBase64Encoding, 'SGVsbG8sIHdvcmxkIQ==', 'Base64', { strategyId: 'base64' }],
+  [
+    'fullwidth',
+    addFullwidth,
+    'Ｈｅｌｌｏ，\u3000ｗｏｒｌｄ！',
+    'Fullwidth',
+    { strategyId: 'fullwidth' },
+  ],
   ['hex', addHexEncoding, '48 65 6C 6C 6F 2C 20 77 6F 72 6C 64 21', 'Hex', { strategyId: 'hex' }],
   ['rot13', addRot13, 'Uryyb, jbeyq!', 'Rot13', { strategyId: 'rot13' }],
   ['leetspeak', addLeetspeak, 'H3110, w0r1d!', 'Leetspeak', { strategyId: 'leetspeak' }],
@@ -234,6 +242,7 @@ describe('addBase64Encoding', () => {
 
   it.each([
     [addBase64Encoding, 'base64', 'Base64'],
+    [addFullwidth, 'fullwidth', 'Fullwidth'],
     [addHexEncoding, 'hex', 'Hex'],
     [addHomoglyphs, 'homoglyph', 'Homoglyph'],
     [addLeetspeak, 'leetspeak', 'Leetspeak'],
