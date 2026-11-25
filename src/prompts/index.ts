@@ -76,6 +76,11 @@ async function processPromptFile(
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
       throw error;
     }
+    // Only extension-like heuristic matches fall back to a literal prompt. Explicit file
+    // references, including file:// URLs and extensionless paths, must keep erroring.
+    if (prompt.raw?.startsWith('file://') || !extension) {
+      return [];
+    }
     logger.debug(`Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`);
     return processString(prompt);
   }
