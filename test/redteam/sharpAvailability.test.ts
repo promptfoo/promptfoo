@@ -66,6 +66,28 @@ describe('validateSharpDependency', () => {
       );
     });
 
+    it.each(['image', { id: 'image' }])(
+      'rejects a layer with a Sharp-dependent step %j',
+      async (step) => {
+        const strategies = [{ id: 'layer', config: { steps: [step] } }];
+
+        await expect(validateSharpDependency(strategies, [], sharpUnavailable)).rejects.toThrow(
+          "The sharp library is required for strategy 'layer'",
+        );
+        await expect(
+          validateSharpDependency(strategies, [], sharpAvailable),
+        ).resolves.toBeUndefined();
+      },
+    );
+
+    it('allows a layer without an image step when Sharp is missing', async () => {
+      const strategies = [{ id: 'layer', config: { steps: ['audio'] } }];
+
+      await expect(
+        validateSharpDependency(strategies, [], sharpUnavailable),
+      ).resolves.toBeUndefined();
+    });
+
     it('should throw error when unsafebench plugin is used', async () => {
       const strategies = [{ id: 'base64' }];
       const plugins = [{ id: 'unsafebench', numTests: 5 }];
