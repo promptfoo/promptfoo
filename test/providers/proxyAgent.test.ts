@@ -142,9 +142,16 @@ describe('GPT-Live with a PAC proxy', () => {
   });
 
   it('reports PAC errors without silently connecting directly', async () => {
+    const reachableUrl = `ws://127.0.0.1:${proxyPort}/v1/live/sessions`;
+    const directResponse = await run(reachableUrl);
+    expect(directResponse.error).toBeUndefined();
+    expect(directResponse.output).toBe('PAC fixture ok');
+    expect(upgrades).toEqual(['/v1/live/sessions']);
+    upgrades = [];
+
     pacSource = "function FindProxyForURL() { throw new Error('private PAC detail'); }";
     mockProcessEnv({ HTTP_PROXY: pacUrl });
-    const response = await run();
+    const response = await run(reachableUrl);
     expect(response.error).toContain('WebSocket connection failed');
     expect(response.error).not.toContain('private PAC detail');
     expect(pacReads).toBeGreaterThan(0);
