@@ -282,7 +282,7 @@ REDUCE                               # profile.run("os.system('id')") → exec()
 
 Each gap existed because the blocklist hadn't enumerated that specific entry yet. This is what it means for blocklist-based scanning to be reactive.
 
-Trail of Bits and the picklescan maintainers fixed these quickly. The pickle VM is adversarial territory, and every scanner that operates there will have gaps. We follow coordinated disclosure for all findings and publish POCs as test cases, not weaponized attacks.
+Trail of Bits and the picklescan maintainers fixed these quickly. The pickle VM is adversarial territory, and every scanner that operates there will have gaps.
 
 ModelAudit is the widest-coverage open-source scanner available, with format-specific analysis across 42+ formats, built-in CVE detection rules, and SARIF output for CI/CD integration. In a [head-to-head comparison](/blog/modelaudit-vs-modelscan) against ModelScan, ModelAudit detected 16 issues across 11 test files vs ModelScan's 3. Our team has contributed 7 GHSAs across fickling and picklescan. Teams already using picklescan or ModelScan can run ModelAudit alongside them; SARIF results from multiple scanners aggregate in the same CI pipeline.
 
@@ -368,8 +368,8 @@ modelaudit scan your_model.pkl
 - [Advanced usage](/docs/model-audit/usage)
 - [Contribution guide](https://github.com/promptfoo/modelaudit/blob/main/CONTRIBUTING.md)
 
-If you find a bypass, we follow coordinated disclosure and will credit you.
+If you find a bypass, [report it privately](https://github.com/promptfoo/modelaudit/security/advisories/new).
 
 Promptfoo also offers ModelAudit with a hosted UI and managed integrations in the [platform](https://www.promptfoo.dev/model-security/). The engine is the same open-source code.
 
-[Open issues](https://github.com/promptfoo/modelaudit/issues) on GitHub or reach out directly.
+For non-security issues, [open an issue on GitHub](https://github.com/promptfoo/modelaudit/issues) or reach out directly.
