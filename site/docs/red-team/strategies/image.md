@@ -96,10 +96,10 @@ The `{{image}}` syntax in the examples is a Nunjucks template variable. When pro
 :::
 
 :::tip
-This strategy requires you to install the `sharp` package for image creation.
+For an npm installation, install `sharp` alongside Promptfoo to create images. The Promptfoo Docker image includes it.
 
 ```
-npm i sharp
+npm i sharp@^0.35.5
 ```
 
 :::
