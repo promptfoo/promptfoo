@@ -6,6 +6,7 @@ import cliState from '../cliState';
 import logger from '../logger';
 import { testProviderConnectivity, testProviderSession } from '../node/testProvider';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
+import { validateRedteamRemotePluginConfigSizes } from '../redteam/plugins/remoteConfigValidation';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
 import {
@@ -476,7 +477,7 @@ export async function doValidate(
   const configPaths = opts.config || (defaultConfigPath ? [defaultConfigPath] : undefined);
 
   try {
-    const { config, testSuite } = await resolveConfigs(
+    const { config, testSuite, basePath } = await resolveConfigs(
       { ...opts, config: configPaths },
       defaultConfig,
     );
@@ -493,6 +494,19 @@ ${z.prettifyError(configParse.error)}`,
     const suiteParse = TestSuiteSchema.safeParse(testSuite);
     if (!suiteParse.success) {
       logger.error(dedent`Test suite validation error:\n${z.prettifyError(suiteParse.error)}`);
+      process.exitCode = 1;
+      return;
+    }
+    const remotePluginConfigErrors = validateRedteamRemotePluginConfigSizes(
+      configParse.data,
+      basePath,
+    );
+    if (remotePluginConfigErrors.length > 0) {
+      logger.error(
+        dedent`Configuration validation error:
+Config file path(s): ${Array.isArray(configPaths) ? configPaths.join(', ') : (configPaths ?? 'N/A')}
+${remotePluginConfigErrors.join('\n')}`,
+      );
       process.exitCode = 1;
       return;
     }

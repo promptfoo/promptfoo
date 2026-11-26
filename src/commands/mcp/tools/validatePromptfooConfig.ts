@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+import { validateRedteamRemotePluginConfigSizes } from '../../../redteam/plugins/remoteConfigValidation';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../../../types/index';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { ConfigResolutionError, resolveConfigs } from '../../../util/config/load';
@@ -58,7 +59,7 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         const configPathsArray =
           configPaths || (process.cwd() ? ['promptfooconfig.yaml'] : undefined);
 
-        const { config, testSuite } = await resolveConfigs(
+        const { config, testSuite, basePath } = await resolveConfigs(
           { config: configPathsArray },
           defaultConfig,
         );
@@ -89,8 +90,21 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
           validationResults.isValid = false;
         }
 
+        if (configParse.success && suiteParse.success) {
+          const remotePluginConfigErrors = validateRedteamRemotePluginConfigSizes(
+            configParse.data,
+            basePath,
+          );
+          if (remotePluginConfigErrors.length > 0) {
+            validationResults.errors.push(
+              `Configuration validation error: ${remotePluginConfigErrors.join('\n')}`,
+            );
+            validationResults.isValid = false;
+          }
+        }
+
         // Add helpful warnings and analysis
-        if (configParse.success) {
+        if (configParse.success && validationResults.isValid) {
           const analysis = analyzeConfiguration(config);
           validationResults.warnings.push(...analysis.warnings);
 
