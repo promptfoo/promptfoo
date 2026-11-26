@@ -133,7 +133,7 @@ vi.mock('../../../src/util/file', async (importOriginal) => {
   };
 });
 
-vi.mock('glob', async (importOriginal) => {
+vi.mock('glob/raw', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     globSync: vi.fn().mockReturnValue([]),

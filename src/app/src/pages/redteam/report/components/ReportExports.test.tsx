@@ -6,7 +6,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import FrameworkCsvExporter from './FrameworkCsvExporter';
+import FrameworkExporter from './FrameworkExporter';
 import ReportDownloadButton from './ReportDownloadButton';
 
 type ResultsFile = ComponentProps<typeof ReportDownloadButton>['evalData'];
@@ -123,12 +123,75 @@ describe('report exports', () => {
     },
   );
 
+  it('exports filtered AIUC control results and coverage gaps to CSV and JSON', async () => {
+    const user = userEvent.setup();
+    const pass = { pass: 1, total: 1, failCount: 0 };
+    render(
+      <FrameworkExporter
+        categoryStats={{
+          'pii:direct': { pass: 1, total: 2, failCount: 1 },
+          hallucination: pass,
+          'rag-source-attribution': pass,
+          'unverifiable-claims': pass,
+        }}
+        pluginPassRateThreshold={0.9}
+        frameworksToShow={['aiuc:1']}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Export framework results to CSV' }));
+    const csv: Record<string, string>[] = parse(await readBlob(exportedBlob), { columns: true });
+    expect(csv.every((row) => row.Framework === 'AIUC-1')).toBe(true);
+    expect(csv.find((row) => row.Status === 'Fail')).toMatchObject({
+      Category: 'A009. Data and privacy',
+      'Tests Run': '2',
+    });
+    expect(csv.find((row) => row.Category === 'D004. Reliability (Tool execution)')).toMatchObject({
+      Plugin: '',
+      Status: 'Not Tested',
+      'Attack Success Rate (%)': '',
+    });
+    expect(csv.find((row) => row.Category === 'E018. Accountability')).toMatchObject({
+      Plugin: '',
+      Status: 'Not Tested',
+      'Attack Success Rate (%)': '',
+    });
+    await user.click(screen.getByRole('button', { name: 'Export framework results to JSON' }));
+    const json = JSON.parse(await readBlob(exportedBlob));
+    expect(json).toHaveLength(csv.length);
+    expect(json).toContainEqual(
+      expect.objectContaining({
+        frameworkId: 'aiuc:1',
+        categoryId: 'aiuc:1:a009',
+        pluginId: 'pii:direct',
+        status: 'Fail',
+        testsRun: 2,
+      }),
+    );
+    expect(json).toContainEqual(
+      expect.objectContaining({
+        categoryId: 'aiuc:1:d004',
+        category: 'D004. Reliability (Tool execution)',
+        pluginId: null,
+        status: 'Not Tested',
+        attackSuccessRate: null,
+      }),
+    );
+    expect(json).toContainEqual(
+      expect.objectContaining({
+        categoryId: 'aiuc:1:e018',
+        pluginId: null,
+        status: 'Not Tested',
+        attackSuccessRate: null,
+      }),
+    );
+  });
+
   it.each(['owasp:llm', 'nist:ai:measure'] as const)(
     'exports tested and untested rows for %s',
     async (framework) => {
       const user = userEvent.setup();
       render(
-        <FrameworkCsvExporter
+        <FrameworkExporter
           categoryStats={{ 'pii:direct': { pass: 8, total: 10, failCount: 2 } }}
           pluginPassRateThreshold={0.8}
           frameworksToShow={[framework]}

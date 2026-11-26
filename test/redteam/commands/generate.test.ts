@@ -3523,6 +3523,53 @@ describe('redteam generate command with target option', () => {
     vi.restoreAllMocks();
   });
 
+  it('inherits the report filter, strategy selection and plugin overrides with --plugins aiuc:1:d004', async () => {
+    const plugin = { id: 'hallucination', numTests: 2, config: { language: 'fr' } };
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [{ raw: '{{query}}', label: 'Test' }],
+        tests: [],
+      },
+      config: {
+        redteam: {
+          frameworks: ['aiuc:1'],
+          strategies: [{ id: 'basic' }],
+          numTests: 1,
+          plugins: [plugin, { id: 'aiuc:1:d004', numTests: 3 }],
+        },
+      },
+    });
+    mockReadFileSync({});
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult());
+    await program.parseAsync([
+      'node',
+      'test',
+      'generate',
+      '--plugins',
+      'aiuc:1:d004',
+      '--config',
+      'config.yaml',
+      '--output',
+      'output.yaml',
+      '--force',
+    ]);
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plugins: [
+          plugin,
+          { id: 'rag-source-attribution', numTests: 3 },
+          { id: 'unverifiable-claims', numTests: 3 },
+        ],
+        strategies: [{ id: 'basic' }],
+      }),
+    );
+    expect(vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0].redteam?.frameworks).toEqual([
+      'aiuc:1',
+    ]);
+  });
+
   it('should use target option to fetch cloud config when both config and target are UUIDs', async () => {
     const mockConfig = {
       prompts: ['Test prompt'],

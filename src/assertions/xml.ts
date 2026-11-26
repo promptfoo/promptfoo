@@ -601,7 +601,7 @@ export const handleIsXml = ({
   if (typeof renderedValue === 'string') {
     requiredElements = renderedValue.split(',').map((el) => el.trim());
   } else if (Array.isArray(renderedValue) && renderedValue.length > 0) {
-    requiredElements = renderedValue.map((el) => el.toString());
+    requiredElements = renderedValue.map((element: { toString(): string }) => element.toString());
   } else if (
     renderedValue !== null &&
     typeof renderedValue === 'object' &&

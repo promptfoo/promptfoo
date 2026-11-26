@@ -795,6 +795,8 @@ Available sandbox options:
 | `ripgrep.command`                  | string   | Path to custom ripgrep executable                    |
 | `ripgrep.args`                     | string[] | Additional arguments for ripgrep                     |
 
+Starting with Claude Agent SDK 0.3.325, `autoAllowBashIfSandboxed` defaults to `false`. On macOS, Linux, and WSL, sandboxed Bash commands follow the normal permission flow by default.
+
 When `sandbox.enabled` is `true`, Claude Agent SDK defaults `failIfUnavailable` to `true`; set it to `false` only if you want the SDK to degrade gracefully when sandbox dependencies or platform support are missing.
 
 With Claude Agent SDK 0.3.296 or later, `sandbox` merges with an inline `settings.sandbox` object: explicit `sandbox` values take precedence, while deny and credential lists from both are combined. A `settings` file path cannot be combined with `sandbox`; use inline settings when configuring both.

@@ -416,7 +416,7 @@ const config: Config = {
             },
             {
               label: 'Trust Center',
-              href: 'https://trust.promptfoo.dev',
+              href: 'https://trust.openai.com',
             },
             {
               html: '<a href="#manage-cookies" class="footer__link-item">Cookie Settings</a>',

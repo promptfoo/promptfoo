@@ -142,6 +142,14 @@ export interface ApiKeyResult {
  * - Conflict detection and warnings
  */
 export class GoogleAuthManager {
+  /** A scoped empty path masks ambient ADC. Callers decide whether credentials are required. */
+  static getAdcFilename(env?: EnvOverrides): string | undefined {
+    return (
+      getProviderEnvString(env, 'GOOGLE_APPLICATION_CREDENTIALS') ??
+      getEnvString('GOOGLE_APPLICATION_CREDENTIALS')
+    );
+  }
+
   private static cachedHasDefaultCredentials: boolean | undefined;
   private static pendingHasDefaultCredentials: Promise<boolean> | undefined;
 
@@ -276,10 +284,7 @@ export class GoogleAuthManager {
 
     // Vertex mode requires either API key or project ID
     if (vertexai && !apiKey && !projectId && !hasProjectEnvironment && !credentials) {
-      const hasAdc = Boolean(
-        env?.GOOGLE_APPLICATION_CREDENTIALS ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
-      );
-      if (!hasAdc) {
+      if (!GoogleAuthManager.getAdcFilename(env)) {
         logger.debug(
           '[Google] Vertex AI mode enabled but no projectId, credentials, or ADC detected. ' +
             'Authentication may fail.',
