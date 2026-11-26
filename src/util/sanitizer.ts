@@ -456,6 +456,14 @@ function isSafeTracingCredentialTemplate(value: unknown): value is string {
   return typeof value === 'string' && SAFE_TRACING_CREDENTIAL_TEMPLATE.test(value.trim());
 }
 
+export function getSafeHeaderTemplates(headers: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).filter((entry): entry is [string, string] =>
+      isSafeTracingCredentialTemplate(entry[1]),
+    ),
+  );
+}
+
 export function isCredentialHeader(name: string, value: string): boolean {
   const normalizedName = name.replace(/[-_\s]/g, '').toLowerCase();
   // These key roles identify requests, routing, or public material rather than authenticate.

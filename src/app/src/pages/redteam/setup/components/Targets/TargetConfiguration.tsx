@@ -14,6 +14,7 @@ import { getProviderDocumentationUrl, hasSpecificDocumentation } from './provide
 import type { ProviderOptions } from '../../types';
 
 interface TargetConfigurationProps {
+  guided?: boolean;
   onNext: () => void;
   onBack: () => void;
 }
@@ -26,7 +27,7 @@ const requiresPrompt = (target: ProviderOptions) => {
   );
 };
 
-export default function TargetConfiguration({ onNext, onBack }: TargetConfigurationProps) {
+export default function TargetConfiguration({ onNext, onBack, guided }: TargetConfigurationProps) {
   const { config, updateConfig, providerType } = useRedTeamConfig();
   const { targetConfigError } = useRedTeamTargetConfigValidation();
   const selectedTarget: ProviderOptions = config.target || DEFAULT_HTTP_TARGET;
@@ -105,7 +106,12 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
   return (
     <PageWrapper
       title={`Configure Target: ${selectedTarget.label || 'Unnamed Target'}`}
-      description="Configure the specific settings for your target. The fields below will change based on the target type you selected."
+      description={
+        guided
+          ? 'Add connection details, then review your plan. Testing the connection sends a request to your app and shares the configuration and response with Promptfoo Cloud.'
+          : 'Configure the specific settings for your target. The fields below will change based on the target type you selected.'
+      }
+      nextLabel={guided ? 'Review setup' : 'Next'}
       onNext={handleNext}
       onBack={onBack}
       nextDisabled={!isProviderValid()}

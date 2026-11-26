@@ -57,6 +57,7 @@
         "src/redteam/types.ts",
         "src/types/api/eval.ts",
         "src/types/api/modelAudit.ts",
+        "src/types/api/redteamSetup.ts",
         "src/types/configDraft.ts",
         "src/types/email.ts",
         "src/types/evalConstants.ts",

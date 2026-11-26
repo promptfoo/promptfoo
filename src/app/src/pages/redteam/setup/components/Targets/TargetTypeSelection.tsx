@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -8,16 +9,17 @@ import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetCo
 import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
 import ProviderTypeSelector from './ProviderTypeSelector';
-import { getProviderEditorType } from './providerCatalog';
+import { allProviderOptions, getProviderEditorType } from './providerCatalog';
 
 import type { ProviderOptions } from '../../types';
 
 interface TargetTypeSelectionProps {
+  guided?: boolean;
   onNext: () => void;
   onBack?: () => void;
 }
 
-export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelectionProps) {
+export default function TargetTypeSelection({ onNext, onBack, guided }: TargetTypeSelectionProps) {
   const { config, updateConfig, providerType, setProviderType } = useRedTeamConfig();
   const { clearTargetConfigValidation, targetConfigRevision } = useRedTeamTargetConfigValidation();
 
@@ -44,6 +46,8 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   });
 
   const { recordEvent } = useTelemetry();
+  const [showProviders, setShowProviders] = useState(!guided || !hasCompleteSavedConfig);
+  const changeTypeButton = useRef<HTMLButtonElement>(null);
 
   // A full config load can replace the target while this step remains mounted.
   // Only replacements increment the revision, so incomplete in-progress edits stay local.
@@ -75,6 +79,10 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     setProviderType(providerType);
     updateConfig('target', updatedProvider);
     clearTargetConfigValidation?.(JSON.stringify(updatedProvider));
+    if (guided) {
+      setShowProviders(false);
+      changeTypeButton.current?.focus();
+    }
     recordEvent('feature_used', {
       feature: 'redteam_config_target_type_changed',
       target: provider.id,
@@ -106,10 +114,6 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   // Check if user has entered a target name - must have actual content
   const hasTargetName = Boolean(selectedTarget?.label?.trim());
 
-  const getNextButtonText = () => {
-    return 'Next';
-  };
-
   const isNextButtonDisabled = () => {
     return !hasTargetName || !isValidSelection();
   };
@@ -126,22 +130,28 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
 
   return (
     <PageWrapper
-      title="Target Setup"
-      description="Configure the AI system you want to test"
+      title={guided ? 'Connect your app' : 'Target Setup'}
+      description={
+        guided
+          ? 'Your test plan is ready. Choose how Promptfoo will reach your app when you run the tests.'
+          : 'Configure the AI system you want to test'
+      }
       onNext={handleNext}
       onBack={onBack}
-      nextLabel={getNextButtonText()}
+      nextLabel={guided ? 'Configure target' : 'Next'}
       nextDisabled={isNextButtonDisabled()}
       warningMessage={isNextButtonDisabled() ? getNextButtonTooltip() : undefined}
     >
       <div className="flex flex-col gap-6">
         {/* Quick Start */}
-        <div className="flex flex-col items-start gap-3 rounded-lg border border-border bg-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-          <p className="text-sm text-foreground">
-            New to red teaming? Load an example to explore the setup.
-          </p>
-          <LoadExampleButton />
-        </div>
+        {!guided && (
+          <div className="flex flex-col items-start gap-3 rounded-lg border border-border bg-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <p className="text-sm text-foreground">
+              New to red teaming? Load an example to explore the setup.
+            </p>
+            <LoadExampleButton />
+          </div>
+        )}
 
         {/* Target Name */}
         <div className="space-y-2">
@@ -164,13 +174,34 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
 
         {/* Target Type Selection */}
         <section className="space-y-4">
-          <Label className="text-sm font-semibold">Select Target Type</Label>
-
-          <ProviderTypeSelector
-            provider={selectedTarget}
-            setProvider={handleProviderChange}
-            providerType={providerType}
-          />
+          {guided ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Target type</p>
+                <p className="font-medium">
+                  {allProviderOptions.find((option) => option.value === providerType)?.label ??
+                    'Choose a target type'}
+                </p>
+              </div>
+              <Button
+                ref={changeTypeButton}
+                variant="outline"
+                aria-expanded={showProviders}
+                onClick={() => setShowProviders(!showProviders)}
+              >
+                {showProviders ? 'Hide options' : 'Change target type'}
+              </Button>
+            </div>
+          ) : (
+            <Label className="text-sm font-semibold">Select Target Type</Label>
+          )}
+          {(!guided || showProviders) && (
+            <ProviderTypeSelector
+              provider={selectedTarget}
+              setProvider={handleProviderChange}
+              providerType={providerType}
+            />
+          )}
         </section>
       </div>
     </PageWrapper>

@@ -38,6 +38,19 @@ const OpenApiMediaParamsSchema = z.object({
 });
 
 const OpenApiLooseObjectSchema = z.record(z.string(), z.unknown());
+// zod-to-openapi cannot expand the native HTTP schema's recursive z.json().
+// JSON payloads stay open in the spec. Runtime validation uses the native schema.
+const probe = RedteamSchemas.SetupConnectionTest.Payload.shape;
+const OpenApiConnectionTestPayload = z.strictObject({
+  ...probe,
+  config: z.strictObject({
+    ...probe.config.shape,
+    body: z.union([OpenApiLooseObjectSchema, z.array(z.unknown()), z.string()]).optional(),
+    tools: z.array(OpenApiLooseObjectSchema).optional(),
+    tool_choice: z.unknown().optional(),
+  }),
+});
+
 const OpenApiProvidersSchema = z.union([
   z.string(),
   z.array(z.unknown()),
@@ -1005,6 +1018,49 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse(RedteamSchemas.Cancel.Response),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/redteam/setup-plan',
+    operationId: 'getRedteamSetupAvailability',
+    tags: ['Redteam'],
+    summary: 'Check whether local settings permit remote red team setup',
+    responses: { 200: jsonResponse(z.object({ enabled: z.boolean() })) },
+  });
+
+  register({
+    method: 'post',
+    path: '/api/redteam/setup/connection-test',
+    operationId: 'testRedteamSetupConnection',
+    tags: ['Redteam'],
+    summary: 'Test a supported HTTP target with one request from the local server',
+    description:
+      'Substitutes testPrompt (default Hello) for {{prompt}}. Tests the reply path or reports candidate fields. Requires a local caller. Does not send the reply to Cloud or start a scan.',
+    request: { body: jsonBody(OpenApiConnectionTestPayload) },
+    responses: {
+      200: jsonResponse(RedteamSchemas.SetupConnectionTest.Response),
+      400: jsonResponse(ErrorResponseSchema, 'Invalid connection'),
+      403: jsonResponse(ErrorResponseSchema, 'Requires a local caller'),
+    },
+  });
+
+  register({
+    method: 'post',
+    path: '/api/redteam/setup-plan',
+    operationId: 'draftRedteamSetupPlan',
+    tags: ['Redteam'],
+    summary: 'Continue a red team setup conversation',
+    description:
+      'Send the conversation, native Promptfoo config and optional test feedback to the configured generation service. Validate proposals locally and return validation errors for repair. Never send keys or private records. Drafting cannot contact the target or start a scan.',
+    request: { body: jsonBody(RedteamSchemas.SetupPlan.Request) },
+    responses: {
+      200: jsonResponse(RedteamSchemas.SetupPlan.Response),
+      400: jsonResponse(ErrorResponseSchema, 'Invalid input'),
+      403: jsonResponse(ErrorResponseSchema, 'Remote generation disabled'),
+      429: jsonResponse(ErrorResponseSchema, 'Remote rate limit'),
+      502: jsonResponse(ErrorResponseSchema, 'Agent unavailable or invalid response'),
     },
   });
 

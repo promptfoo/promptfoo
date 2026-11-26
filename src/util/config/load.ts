@@ -34,7 +34,7 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
-import { isApiProvider } from '../../types/providers';
+import { isApiProvider, isProviderOptions } from '../../types/providers';
 import { maybeLoadFromExternalFile, pathExists } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
@@ -43,8 +43,9 @@ import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
+import { isHttpProvider } from '../httpProvider';
 import { promptfooCommand } from '../promptfooCommand';
-import { preserveTracingCredentialReferences } from '../sanitizer';
+import { getSafeHeaderTemplates, preserveTracingCredentialReferences } from '../sanitizer';
 import {
   isRemoteTestsReference,
   readTest,
@@ -351,6 +352,90 @@ type LoadedConfig = UnifiedConfig & {
   strategies?: RedteamStrategyObject[];
 };
 
+// Bind references to each rendered target so combining files and filtering providers
+// can't associate a key with the wrong target. Only the executable provider needs its value.
+const httpHeaderReferences = new WeakMap<
+  ProviderOptions,
+  { headers: Record<string, string>; sourceEnv?: Record<string, unknown> }
+>();
+const headerEnvReference = /env(?:\.(\w+)|\[['"](\w+)['"]\])/;
+
+function rememberHttpHeaderReferences(source: LoadedConfig, rendered: LoadedConfig) {
+  const originals = source.targets ?? source.providers;
+  const providers = rendered.targets ?? rendered.providers;
+  if (!Array.isArray(originals) || !Array.isArray(providers)) {
+    return;
+  }
+  providers.forEach((provider, index) => {
+    const original = originals[index];
+    if (!isProviderOptions(original) || !isProviderOptions(provider) || !isHttpProvider(provider)) {
+      return;
+    }
+    const references = getSafeHeaderTemplates(original.config?.headers ?? {});
+    if (Object.keys(references).length) {
+      httpHeaderReferences.set(provider, { headers: references, sourceEnv: source.env });
+    }
+  });
+}
+
+// A merged config has one suite env. Preserve shadowed bindings on their original
+// target without copying resolved process credentials into the saved config.
+function scopeMergedHeaderReferences(
+  provider: ProviderOptions,
+  fileEnv: Record<string, unknown> | undefined,
+  mergedEnv: Record<string, unknown>,
+) {
+  const references = httpHeaderReferences.get(provider);
+  if (!references) {
+    return;
+  }
+  for (const [header, template] of Object.entries(references.headers)) {
+    const match = template.match(headerEnvReference);
+    if (!match) {
+      continue;
+    }
+    const name = match[1] ?? match[2];
+    if (fileEnv?.[name] === mergedEnv[name]) {
+      continue;
+    }
+    const source = references.sourceEnv?.[name];
+    const alias =
+      typeof source === 'string' &&
+      source.match(/^\{\{\s*env(?:\.(\w+)|\[['"](\w+)['"]\])\s*\}\}$/);
+    if (alias) {
+      const backing = alias[1] ?? alias[2];
+      if (!(backing in mergedEnv) && !(backing in (provider.env ?? {}))) {
+        references.headers[header] = template.replace(headerEnvReference, 'env.' + backing);
+        continue;
+      }
+    } else if (source != null && !String(source).includes('{{') && source === fileEnv?.[name]) {
+      // Keep the independently rendered literal, as before reference restoration.
+      // Export sanitization redacts credential headers. Never inline a resolved env template.
+      delete references.headers[header];
+      continue;
+    }
+    throw new ConfigResolutionError(
+      `Cannot preserve the HTTP header binding for ${name} across merged configs. Use distinct environment variable names for each target.`,
+    );
+  }
+}
+
+function restoreHttpHeaderReferences<T>(provider: T): T {
+  if (!isProviderOptions(provider)) {
+    return provider;
+  }
+  const references = httpHeaderReferences.get(provider);
+  return references
+    ? {
+        ...provider,
+        config: {
+          ...provider.config,
+          headers: { ...provider.config?.headers, ...references.headers },
+        },
+      }
+    : provider;
+}
+
 async function readConfigInScope(
   configPath: string,
   cacheCjsFallback = false,
@@ -391,7 +476,9 @@ function normalizeLoadedConfig(
   // Runtime templates like {{ vars.x }} are preserved for later evaluation.
   // JS configs use the same rendering path as declarative configs.
   // This ensures consistent behavior across config file types.
-  ret = renderConfigEnvTemplates(ret);
+  const source = ret;
+  ret = renderConfigEnvTemplates(source);
+  rememberHttpHeaderReferences(source, ret);
   const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
     ret.commandLineOptions,
     `configuration file ${configPath}`,
@@ -613,6 +700,9 @@ async function prepareCombinedConfig(
       }
     } else if (Array.isArray(config.providers)) {
       config.providers.forEach((provider) => {
+        if (configs.length > 1 && isProviderOptions(provider)) {
+          scopeMergedHeaderReferences(provider, config.env, combinedEnv);
+        }
         const key = providerDedupeKey(provider, functionIds);
         if (!seenProviders.has(key)) {
           providers.push(provider);
@@ -1194,6 +1284,11 @@ async function resolveLoadedConfig(
     env: runtimeEnv,
     basePath,
   });
+  // Persist env references so replay reads the current key without storing the secret.
+  config.providers = config.providers.map(restoreHttpHeaderReferences);
+  const selectedProviderConfigs = Array.isArray(filteredProviderConfigs)
+    ? filteredProviderConfigs.map(restoreHttpHeaderReferences)
+    : filteredProviderConfigs;
   const testConfigs = await readTestSources(
     testSources?.length
       ? testSources
@@ -1328,7 +1423,7 @@ async function resolveLoadedConfig(
     { promptReferenceSources },
   );
 
-  cliState.selectedProviderConfigs = filteredProviderConfigs;
+  cliState.selectedProviderConfigs = selectedProviderConfigs;
 
   // Extract commandLineOptions from either explicit config files or default config
   // Resolve relative envPath(s) against the config file directory
@@ -1351,6 +1446,6 @@ async function resolveLoadedConfig(
     testSuite,
     basePath,
     commandLineOptions,
-    selectedProviderConfigs: filteredProviderConfigs,
+    selectedProviderConfigs,
   };
 }

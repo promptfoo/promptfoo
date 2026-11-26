@@ -21,11 +21,9 @@ The most important components of your red team configuration are:
 
 ## Getting Started
 
-Red teams happen in three steps:
-
-- `promptfoo redteam init` to initialize a basic red team configuration
-- `promptfoo redteam run` to generate adversarial test cases and run them against the target
-- `promptfoo redteam report` to view the results
+1. Run `promptfoo redteam setup` to draft a test plan with the [setup agent](/docs/red-team/quickstart/#initialize-the-project), connect your target, and save `promptfooconfig.yaml`. The agent runs on Promptfoo Cloud and requires no model API key. For manual setup in the terminal, use `promptfoo redteam init --no-gui`.
+2. Run `promptfoo redteam run` to generate adversarial test cases and run them against your target.
+3. Run `promptfoo redteam report` to view the results.
 
 `promptfoo redteam run` is a shortcut that combines `redteam generate` and `redteam eval` steps, ensuring that your generated test cases are always synced with the latest configuration.
 

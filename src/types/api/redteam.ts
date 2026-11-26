@@ -1,15 +1,71 @@
 import { z } from 'zod';
-import { ALL_PLUGINS, ALL_STRATEGIES } from '../../redteam/constants';
+import { ALL_PLUGINS, ALL_STRATEGIES, type Plugin, type Strategy } from '../../redteam/constants';
 import {
   ConversationMessageSchema,
   PluginConfigSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
+import { ProviderOptionsSchema } from '../../validators/providers';
+import {
+  RedteamConfigSchema,
+  RedteamPluginSchema,
+  RedteamStrategySchema,
+} from '../../validators/redteam';
+import {
+  CONFIG_PROVIDER_INPUT_ERROR,
+  CONFIG_PROVIDER_INPUT_KEYS,
+  hasValidConfigProviders,
+} from '../configAliases';
+import { UnifiedConfigSchema } from '../index';
 import { BaseTokenUsageSchema } from '../shared';
 import { MessageResponseSchema } from './common';
 import { JsonProviderOptionsWithIdSchema } from './providers';
+import {
+  HostedSetupReplySchema,
+  localKeysSchema,
+  RedteamSetupReplySchema,
+  SetupConfigSchema,
+  SetupConnectionTest,
+} from './redteamSetup';
 
-import type { Plugin, Strategy } from '../../redteam/constants';
+// Runtime parsers strip unknown keys. Report typos to the agent instead of
+// showing an option in Review that Promptfoo will silently ignore.
+const [pluginId, pluginOptions] = RedteamPluginSchema.options;
+const [strategyId, strategyOptions] = RedteamStrategySchema.options;
+const partialConfig = z.object(UnifiedConfigSchema.in.shape).partial();
+// Generate from the installed CLI. Provider config is open in UnifiedConfig,
+// so include the HTTP contract for connection setup as a separate schema root.
+let configSchema: { config: object; http: object } | undefined;
+function installedSchema() {
+  return (configSchema ??= {
+    config: {
+      ...z.toJSONSchema(partialConfig, {
+        target: 'draft-07',
+        io: 'input',
+        unrepresentable: 'any',
+        reused: 'ref',
+      }),
+      not: { required: [...CONFIG_PROVIDER_INPUT_KEYS] },
+    },
+    http: SetupConnectionTest.configSchema,
+  });
+}
+// A draft needn't be runnable. Use the CLI's field validators and expand
+// plugin/strategy defaults for validation only, leaving the authored file intact.
+const setupDraft = z
+  .strictObject({
+    ...partialConfig.shape,
+    redteam: RedteamConfigSchema.in
+      .strict()
+      .extend({
+        plugins: z.array(z.union([pluginId, pluginOptions.strict()])).optional(),
+        strategies: z.array(z.union([strategyId, strategyOptions.strict()])).optional(),
+      })
+      .optional(),
+  })
+  .refine((data) => hasValidConfigProviders(data, true), {
+    message: CONFIG_PROVIDER_INPUT_ERROR,
+  });
 
 // POST /api/redteam/generate-test
 
@@ -86,7 +142,12 @@ export type TestCaseGenerationResponse = z.infer<typeof TestCaseGenerationRespon
 
 // POST /api/redteam/run
 
+const userTurnsSchema = z.array(z.string().max(16000)).max(256);
+
 export const RedteamRunRequestSchema = z.object({
+  fromAgent: z.boolean().optional(),
+  localKeys: localKeysSchema.optional(),
+  userTurns: userTurnsSchema.optional(),
   config: z.record(z.string(), z.unknown()),
   force: z.boolean().optional(),
   verbose: z.boolean().optional(),
@@ -134,6 +195,58 @@ export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
 
 /** Grouped schemas for server-side validation. */
 export const RedteamSchemas = {
+  SetupConnectionTest: {
+    ...SetupConnectionTest,
+    Payload: SetupConnectionTest.Request.safeExtend({
+      localKeys: localKeysSchema.optional(),
+      testPrompt: HostedSetupReplySchema.shape.testPrompt,
+    }),
+  },
+  SetupPlan: {
+    installedSchema,
+    HostedReply: HostedSetupReplySchema,
+    Draft: setupDraft,
+    Redteam: RedteamConfigSchema,
+    Provider: ProviderOptionsSchema.strict().extend({ id: z.string().min(1) }),
+    ProviderMap: z.record(z.string(), ProviderOptionsSchema.strict()),
+    Request: z.strictObject({
+      // Require a client that discloses hosted processing of connection messages.
+      version: z.literal(3),
+      priorUserTurns: userTurnsSchema
+        .optional()
+        .describe(
+          'Earlier user messages used only for local destination and credential checks. Never forwarded to Cloud.',
+        ),
+      messages: z
+        .array(
+          z.strictObject({
+            role: z.enum(['user', 'assistant']),
+            content: z.string().trim().min(1).max(16000),
+          }),
+        )
+        .min(1)
+        .max(24)
+        .refine((messages) => messages.reduce((n, m) => n + m.content.length, 0) <= 48000),
+      config: SetupConfigSchema.optional(),
+      testContext: z
+        .strictObject({
+          remaining: z.int().min(0).max(3),
+          customPrompt: z.boolean().optional(),
+          targetIndex: z.int().nonnegative().optional(),
+          consentSince: z
+            .int()
+            .min(0)
+            .max(23)
+            .optional()
+            .describe('Earliest message eligible to authorize this probe, after earlier tests.'),
+        })
+        .optional(),
+      verification: SetupConnectionTest.Response.extend({
+        targetIndex: z.int().nonnegative().optional(),
+      }).optional(),
+    }),
+    Response: RedteamSetupReplySchema,
+  },
   GenerateTest: { Request: TestCaseGenerationSchema, Response: TestCaseGenerationResponseSchema },
   Run: { Request: RedteamRunRequestSchema, Response: RedteamRunResponseSchema },
   Cancel: { Response: RedteamCancelResponseSchema },

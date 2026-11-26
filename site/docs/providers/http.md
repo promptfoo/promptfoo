@@ -22,6 +22,8 @@ providers:
       transformResponse: 'json.output' # Extract the "output" field from the response
 ```
 
+The target request follows HTTP redirects by default. If you send a credential in a custom header such as `X-API-Key`, set `redirect: error` under `config` and use the final URL. This stops a redirect from forwarding the key to a different server.
+
 The placeholder variable `{{prompt}}` will be replaced with the final prompt for the test case. You can also reference test variables as you construct the request:
 
 ```yaml

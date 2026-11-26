@@ -10,7 +10,15 @@ This page explains what data leaves your machine during red team testing and how
 
 ## Data Flow Overview
 
-Red team testing involves three distinct operations, each with different data requirements:
+The [setup agent](/docs/red-team/quickstart/#initialize-the-project) sends your recent messages, the **full draft** and your installed version’s config schema to Promptfoo Cloud, even if you have a model API key. The draft can include prompts, URLs, request examples, static header values and environment variable names. Your local server validates the draft and can send rejected edits and validation errors back for correction. Saved manual configs stay out of the conversation.
+
+**Use variable names for production keys and keep private records out of chat.** If you supply a header value directly, for example `the key is "demo-value"`, the browser masks recognized values before sending the message to Cloud. It supplies the value to the local server when you test or run. **Downloaded YAML includes the value** so you can use it outside this session. Free-text masking can miss secrets. To skip the hosted conversation, choose manual setup.
+
+When you ask the agent to test the connection, your local server sends a real request. It substitutes your requested test message or the default “Hello” for `{{prompt}}`. The test message you type in chat is visible to Cloud. A failed test can lead to up to two repaired requests to the same endpoint with the same test message. The **Test connection** button sends one request. Promptfoo resolves header values locally, refuses redirects for the probe and sends Cloud a summary. This includes HTTP status, missing variable names or possible reply fields. It leaves out the response body and resolved credentials.
+
+The manual editor’s provider test can send the target configuration, request headers and response to Cloud. **Run Now** starts the scan and may send target replies for grading.
+
+Running a scan involves three operations.
 
 | Operation             | What Runs       | Data Sent Externally                 |
 | --------------------- | --------------- | ------------------------------------ |
@@ -22,14 +30,13 @@ Your target model is always evaluated locally. Promptfoo receives target respons
 
 ## Default Behavior (No API Key)
 
-Without an `OPENAI_API_KEY` or a usable Codex/ChatGPT login, Promptfoo uses hosted inference for test generation and grading. The following data is sent to `api.promptfoo.app`:
+Without an `OPENAI_API_KEY` or a custom provider, red team plugins can use hosted inference for test generation and grading. By default these requests go to `api.promptfoo.app`.
 
 **For test generation:**
 
 - Application purpose (from your config's `purpose` field)
 - Plugin configuration and settings
 - Complete document contents and the requested goal when using `promptfoo redteam poison` — this command always uses hosted generation, even when your own API key is configured
-- Red team target/provider setup details, including request examples, target URLs, and auth headers entered into setup or test forms
 - Your email (for usage tracking)
 
 **For grading:**
@@ -44,7 +51,7 @@ Without an `OPENAI_API_KEY` or a usable Codex/ChatGPT login, Promptfoo uses host
 - Model weights or training data
 - Files from your filesystem (unless explicitly configured in prompts)
 
-Credentials, authorization headers, provider config fields, and request examples **are** sent if you paste them into red team target/provider setup or test forms, sharing, Cloud sync, or other Cloud-backed features. Don't enter real secrets into those flows. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full hosted-feature list.
+Cloud-backed features such as setup, sharing and Cloud sync can transmit credentials and private request examples you paste into them. Don't enter real secrets into those flows. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full hosted-feature list.
 
 ## With Your Own API Key
 
@@ -65,7 +72,7 @@ With this configuration, Promptfoo servers usually receive only [telemetry](#tel
 
 ## With Your ChatGPT Subscription
 
-If Codex is installed and signed in with ChatGPT, Promptfoo can use `openai:codex-sdk` locally for default text generation and grading when no higher-priority API credentials are configured. Remote-only plugins still use hosted inference, and embedding/moderation assertions still require a provider override with API credentials.
+Some text assertions can use `openai:codex-sdk` when you're signed in to Codex with ChatGPT. Without an API key or explicit grader, red team plugins can still send your target's responses and grading criteria to Promptfoo Cloud. To control where grading runs, [configure a grader](/docs/red-team/troubleshooting/grading-results/). Embedding and moderation assertions still need a provider with API credentials.
 
 ## Remote-Only Plugins
 

@@ -645,6 +645,8 @@ const A2AEndpointConfiguration = ({
             </div>
             <div className="bg-white dark:bg-zinc-950">
               <Editor
+                ignoreTabKey
+                textareaId="a2a-config-json"
                 value={rawConfigJson}
                 onValueChange={handleAdvancedConfigChange}
                 highlight={highlightJSON}

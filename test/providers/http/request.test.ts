@@ -256,6 +256,31 @@ describe('constructor validation', () => {
 });
 
 describe('content type handling', () => {
+  it('sends custom keys only to the target and masks them in debug metadata', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        ...createJsonPostOptions().config,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Secret-Key': 'private',
+          'X-Acme': 'opaque',
+        },
+        redirect: 'error',
+      },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createSuccessJsonResponse());
+    const result = await provider.callApi('test', createDebugContextFixture('test', 'test'));
+    expect(vi.mocked(fetchWithCache).mock.calls.at(-1)?.[1]).toMatchObject({
+      redirect: 'error',
+      headers: { 'x-secret-key': 'private', 'x-acme': 'opaque' },
+    });
+    expect(result.metadata?.http?.requestHeaders).toEqual({
+      'content-type': 'application/json',
+      'x-secret-key': '[REDACTED]',
+      'x-acme': '[REDACTED]',
+    });
+  });
+
   it('should handle JSON content type with object body', async () => {
     const provider = new HttpProvider('http://test.com', createJsonPostOptions());
 
@@ -1994,7 +2019,7 @@ describe('HttpProvider - Abort Signal Handling', () => {
     );
   });
 
-  it('should pass abortSignal to fetchWithCache in raw request mode', async () => {
+  it('should pass abortSignal and the redirect policy to fetchWithCache in raw request mode', async () => {
     const rawRequest = dedent`
       POST /api HTTP/1.1
       Host: example.com
@@ -2006,6 +2031,7 @@ describe('HttpProvider - Abort Signal Handling', () => {
     const provider = new HttpProvider('http://example.com', {
       config: {
         request: rawRequest,
+        redirect: 'error',
       },
     });
 
@@ -2022,7 +2048,7 @@ describe('HttpProvider - Abort Signal Handling', () => {
 
     expect(fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ signal: abortController.signal }),
+      expect.objectContaining({ signal: abortController.signal, redirect: 'error' }),
       expect.any(Number),
       expect.any(String),
       undefined,

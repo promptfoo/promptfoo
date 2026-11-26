@@ -2585,6 +2585,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
+      ...(this.config.redirect && { redirect: this.config.redirect }),
       ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(method !== 'GET' &&
         multipartBody && {
@@ -2653,7 +2654,9 @@ export class HttpProvider implements ApiProvider {
         statusText,
         headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
         ...(context?.debug && {
-          requestHeaders: sanitizeObject(renderedConfig.headers, { context: 'request headers' }),
+          // Reuse the header-aware redaction used in debug logs. A custom API
+          // key header needn't have a recognizable secret name or value.
+          requestHeaders: sanitizedRenderedConfig.headers,
         }),
       },
     };
@@ -2841,6 +2844,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
+      ...(this.config.redirect && { redirect: this.config.redirect }),
       ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(bodyContent && { body: bodyContent }),
     };

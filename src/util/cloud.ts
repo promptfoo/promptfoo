@@ -5,8 +5,10 @@ import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { type UnifiedConfig, UnifiedConfigSchema } from '../types/index';
+import { isProviderOptions, type ProviderOptions } from '../types/providers';
 import { ProviderOptionsSchema } from '../validators/providers';
 import { fetchWithProxy } from './fetch/index';
+import { isHttpProvider } from './httpProvider';
 import invariant from './invariant';
 import { normalizeProviderRef } from './providerRef';
 import { checkServerFeatureSupport } from './server';
@@ -14,7 +16,6 @@ import { isUuid } from './uuid';
 
 import type { Plugin, Severity } from '../redteam/constants';
 import type { PoliciesById } from '../redteam/types';
-import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
 const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
@@ -715,6 +716,22 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
     const { tests, scenarios, defaultTest, evaluateOptions, ...minimalConfig } = config;
     if (minimalConfig.redteam) {
       minimalConfig.redteam = {} as typeof minimalConfig.redteam;
+    }
+
+    if (Array.isArray(minimalConfig.providers)) {
+      minimalConfig.providers = minimalConfig.providers.map((provider) => {
+        if (!isProviderOptions(provider) || !isHttpProvider(provider)) {
+          return provider;
+        }
+        // HTTP connection settings are local. Cloud checks only the provider identity
+        // and any explicit link to an existing target.
+        const linkedTargetId = provider.config?.linkedTargetId;
+        return {
+          id: provider.id,
+          label: provider.label,
+          ...(linkedTargetId && { config: { linkedTargetId } }),
+        };
+      });
     }
 
     const response = await makeRequest('permissions/check', 'POST', {

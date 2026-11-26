@@ -38,10 +38,13 @@ import {
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import isEqual from 'fast-deep-equal';
+import { dump } from 'js-yaml';
 import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
 import { Link } from 'react-router';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
+import { type SetupDraft, targets, userTurns } from '../hooks/useSetupAgent';
+import { displayKeys, exportWithKeys, keysForTargets } from '../utils/chatCredentials';
 import { generateOrderedYaml, getRuntimeRedteamConfig } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
@@ -49,16 +52,39 @@ import EstimationsDisplay from './EstimationsDisplay';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
+import SetupPlan from './SetupPlan';
 import type { PluginConfig, Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
-import type { ProviderOptions } from '../types';
+import type { Config, ProviderOptions } from '../types';
+
+function missingEndpoint({ id, config }: ProviderOptions): boolean {
+  return (
+    (id === 'http' || id === 'https') &&
+    !config?.request &&
+    (typeof config?.url !== 'string' || !config.url.trim())
+  );
+}
+
+// Recheck before running even when an incomplete draft is opened from a numbered deep link.
+function setupRunError({ target }: Config) {
+  return missingEndpoint(target) ? 'Add a target URL before running.' : null;
+}
+
+export interface AgentJob {
+  id: string;
+  config: SetupDraft['config'];
+}
 
 interface ReviewProps {
+  agentJob?: AgentJob;
+  setAgentJob?: (job: AgentJob | undefined) => void;
   onBack?: () => void;
-  navigateToPlugins: () => void;
-  navigateToStrategies: () => void;
-  navigateToPurpose: () => void;
+  native?: SetupDraft;
+  continueConversation?: () => void;
+  navigateToPlugins?: () => void;
+  navigateToStrategies?: () => void;
+  navigateToPurpose?: () => void;
 }
 
 interface PolicyPlugin {
@@ -157,12 +183,29 @@ function removeIntentEntry(
 
 export default function Review({
   onBack,
+  agentJob,
+  setAgentJob,
+  continueConversation,
+  native,
   navigateToPlugins,
   navigateToStrategies,
   navigateToPurpose,
 }: ReviewProps) {
   const { config, updateConfig } = useRedTeamConfig();
-  const { targetConfigError } = useRedTeamTargetConfigValidation();
+  const validation = useRedTeamTargetConfigValidation();
+  const targetConfigError = native ? null : validation.targetConfigError;
+  const reviewError = native
+    ? native.runIssue ||
+      (native.config && native.runnable ? null : 'This draft is only available for inspection.')
+    : targetConfigError || setupRunError(config);
+  const incomplete = native ? Boolean(reviewError) : missingEndpoint(config.target);
+  const entries = targets(native?.config);
+  const approved = native?.runnable ? entries.map((_, i) => i) : (native?.testableTargets ?? []);
+  const localKeys = keysForTargets(
+    approved.map((index) => entries[index]),
+    native?.localKeys,
+  );
+  const saveError = incomplete ? targetConfigError : reviewError;
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
@@ -171,9 +214,15 @@ export default function Review({
   const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
   const pollIntervalRef = useRef<number | null>(null);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
-  const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
+  const yamlContent = useMemo(
+    () =>
+      native ? dump(native.config, { noRefs: true, lineWidth: -1 }) : generateOrderedYaml(config),
+    [config, native],
+  );
+  const mounted = useRef(true);
 
   const [isRunning, setIsRunning] = React.useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const { showToast } = useToast();
@@ -277,91 +326,106 @@ export default function Review({
     setMaxConcurrency(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
   }, [config.maxConcurrency]);
 
-  // Track if recovery has been attempted to prevent duplicate runs
   const hasAttemptedRecovery = useRef(false);
 
-  // Recover job state on mount (e.g., after navigation)
-  // Wait for Zustand to hydrate from localStorage before checking savedJobId
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  // Chat jobs live with the conversation. Only the manual wizard recovers from
+  // browser storage and the server-wide status endpoint.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: recover once per mount, including late job IDs
   useEffect(() => {
-    if (!_hasHydrated || hasAttemptedRecovery.current) {
+    if (hasAttemptedRecovery.current || (native ? !agentJob : !_hasHydrated)) {
       return;
     }
     hasAttemptedRecovery.current = true;
 
     const recoverJob = async () => {
-      // Check what the server thinks is running
-      const { hasRunningJob, jobId: serverJobId } = await checkForRunningJob();
-
-      if (hasRunningJob && serverJobId) {
-        // Server has a running job - reconnect to it
-        try {
-          const jobResponse = await callApi(`/eval/job/${serverJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
-
-            if (job.status === 'in-progress') {
-              setIsRunning(true);
-              setJob(serverJobId);
-              startPolling(serverJobId);
-            } else if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
-              clearJob();
-            } else if (job.status === 'error') {
-              setLogs(job.logs || []);
-              showToast('Previous job failed. Check logs for details.', 'error');
-              clearJob();
-            }
-          } else {
-            // Server reported a running job but we couldn't fetch it
-            showToast('Could not reconnect to running job.', 'error');
-            clearJob();
-          }
-        } catch (error) {
-          console.error('Failed to recover job:', error);
-          showToast('Failed to reconnect to running job.', 'error');
-          clearJob();
+      const server = native ? null : await checkForRunningJob();
+      if (!mounted.current) {
+        return;
+      }
+      const serverJobId =
+        server?.hasRunningJob && server.jobId !== agentJob?.id ? server.jobId : null;
+      const id = native ? agentJob?.id : serverJobId || savedJobId;
+      if (!id) {
+        return;
+      }
+      try {
+        const response = await callApi(`/eval/job/${id}`);
+        const job = response.ok ? ((await response.json()) as Job) : null;
+        if (!mounted.current) {
+          return;
         }
-      } else if (savedJobId) {
-        // We have a saved job ID but server says nothing running
-        // Check if it completed while we were away
-        try {
-          const jobResponse = await callApi(`/eval/job/${savedJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
-
-            if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
+        if (job) {
+          setLogs(job.logs || []);
+          if (job.status === 'in-progress' && (native || serverJobId)) {
+            setIsRunning(true);
+            if (!native) {
+              setJob(id);
+            }
+            startPolling(id);
+            return;
+          }
+          if (job.status === 'complete' && job.evalId) {
+            setEvalId(job.evalId);
+            if (!native && !serverJobId) {
               showToast('Your evaluation completed!', 'success');
-            } else if (job.status === 'error') {
-              showToast('Previous job failed. Check logs for details.', 'error');
             }
+          } else if (job.status === 'error') {
+            showToast('Previous job failed. Check logs for details.', 'error');
           }
-        } catch {
-          // Job doesn't exist anymore (server restarted or cleaned up)
+        } else {
+          if (native || serverJobId) {
+            showToast('Could not reconnect to running job.', 'error');
+          }
+          if (native && response.status === 404) {
+            setAgentJob?.(undefined);
+          }
         }
+      } catch {
+        if (!mounted.current) {
+          return;
+        }
+        if (native || serverJobId) {
+          showToast('Failed to reconnect to running job.', 'error');
+        }
+      }
+      if (!native) {
         clearJob();
       }
     };
 
-    recoverJob();
-  }, [_hasHydrated]); // Run once after hydration completes
+    if (native) {
+      setIsPreparing(true);
+    }
+    recoverJob().finally(() => {
+      if (native && mounted.current) {
+        setIsPreparing(false);
+      }
+    });
+  }, [_hasHydrated, agentJob?.id]);
 
   const handleSaveYaml = () => {
-    if (targetConfigError) {
-      showToast(targetConfigError, 'error');
+    if (saveError) {
+      showToast(saveError, 'error');
       return;
     }
 
-    const blob = new Blob([yamlContent], { type: 'text/yaml' });
+    const yaml =
+      localKeys && native?.config
+        ? dump(exportWithKeys(native.config, localKeys, approved), {
+            noRefs: true,
+            lineWidth: -1,
+          })
+        : yamlContent;
+    const blob = new Blob([yaml], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'promptfooconfig.yaml';
+    link.download = native && incomplete ? 'promptfoo-draft.yaml' : 'promptfooconfig.yaml';
     link.click();
     URL.revokeObjectURL(url);
+    if (native) {
+      return;
+    }
     recordEvent('feature_used', {
       feature: 'redteam_config_download',
       numPlugins: config.plugins.length,
@@ -448,18 +512,19 @@ export default function Review({
   const isRunNowDisabled = useMemo(() => {
     return (
       isRunning ||
-      Boolean(targetConfigError) ||
+      isPreparing ||
+      Boolean(reviewError) ||
       ['blocked', 'disabled', 'unknown'].includes(apiHealthStatus)
     );
-  }, [isRunning, apiHealthStatus, targetConfigError]);
+  }, [isRunning, isPreparing, apiHealthStatus, reviewError]);
 
   const runNowTooltipMessage = useMemo((): string | undefined => {
     if (isRunning) {
       return undefined;
     }
 
-    if (targetConfigError) {
-      return targetConfigError;
+    if (reviewError) {
+      return reviewError;
     }
 
     switch (apiHealthStatus) {
@@ -472,7 +537,7 @@ export default function Review({
       default:
         return undefined;
     }
-  }, [isRunning, apiHealthStatus, targetConfigError]);
+  }, [isRunning, apiHealthStatus, reviewError]);
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
     try {
@@ -496,18 +561,26 @@ export default function Review({
       const interval = window.setInterval(async () => {
         try {
           const statusResponse = await callApi(`/eval/job/${jobId}`);
+          if (!mounted.current) {
+            return;
+          }
           if (!statusResponse.ok) {
             // Job not found - likely server restarted
             window.clearInterval(interval);
             pollIntervalRef.current = null;
             setIsRunning(false);
-            clearJob();
+            if (!native) {
+              clearJob();
+            }
             showToast('Job was interrupted. Please try again.', 'error');
             return;
           }
 
           const status = (await statusResponse.json()) as Job;
 
+          if (!mounted.current) {
+            return;
+          }
           if (status.logs) {
             setLogs(status.logs);
           }
@@ -516,7 +589,9 @@ export default function Review({
             window.clearInterval(interval);
             pollIntervalRef.current = null;
             setIsRunning(false);
-            clearJob();
+            if (!native) {
+              clearJob();
+            }
 
             if (status.status === 'complete' && status.result && status.evalId) {
               setEvalId(status.evalId);
@@ -546,21 +621,38 @@ export default function Review({
 
       pollIntervalRef.current = interval;
     },
-    [clearJob, recordEvent, showToast],
+    [clearJob, native, recordEvent, showToast],
   );
 
   const handleRunWithSettings = async () => {
-    if (targetConfigError) {
-      confirmedRunTargetRef.current = null;
-      showToast(targetConfigError, 'error');
+    if (!mounted.current || isPreparing) {
       return;
     }
-    const confirmedTarget =
-      confirmedRunTargetRef.current ?? structuredClone(useRedTeamConfig.getState().config.target);
+    setIsPreparing(true);
+    try {
+      await startRun();
+    } finally {
+      setIsPreparing(false);
+    }
+  };
+
+  const startRun = async () => {
+    if (reviewError) {
+      confirmedRunTargetRef.current = null;
+      showToast(reviewError, 'error');
+      return;
+    }
+    const confirmedTarget = native
+      ? null
+      : (confirmedRunTargetRef.current ??
+        structuredClone(useRedTeamConfig.getState().config.target));
     confirmedRunTargetRef.current = confirmedTarget;
 
     // Check email verification first
     const emailResult = await checkEmailStatus();
+    if (!mounted.current) {
+      return;
+    }
 
     if (!emailResult.canProceed) {
       if (emailResult.needsEmail) {
@@ -583,15 +675,21 @@ export default function Review({
     }
 
     const { hasRunningJob } = await checkForRunningJob();
+    // Leaving review cancels authorization while email/status checks are pending.
+    if (!mounted.current) {
+      return;
+    }
 
     const { config: latestConfig } = useRedTeamConfig.getState();
     const { targetConfigError: latestTargetConfigError } =
       useRedTeamTargetConfigValidation.getState();
-    const runTargetValidationError = getRunTargetValidationError(
-      latestTargetConfigError,
-      confirmedTarget,
-      latestConfig.target,
-    );
+    const runTargetValidationError =
+      confirmedTarget &&
+      getRunTargetValidationError(
+        latestTargetConfigError || setupRunError(latestConfig),
+        confirmedTarget,
+        latestConfig.target,
+      );
     if (runTargetValidationError) {
       confirmedRunTargetRef.current = null;
       showToast(runTargetValidationError, 'error');
@@ -610,14 +708,17 @@ export default function Review({
       pollIntervalRef.current = null;
     }
 
-    recordEvent('feature_used', {
-      feature: 'redteam_config_run',
-      numPlugins: latestConfig.plugins.length,
-      numStrategies: latestConfig.strategies.length,
-      targetType: latestConfig.target.id,
-    });
+    const metrics = native
+      ? {}
+      : {
+          numPlugins: latestConfig.plugins.length,
+          numStrategies: latestConfig.strategies.length,
+          targetType: latestConfig.target.id,
+        };
+    recordEvent('feature_used', { feature: 'redteam_config_run', ...metrics });
 
     if (
+      !native &&
       latestConfig.target.id === 'http' &&
       latestConfig.target.config?.url?.includes('promptfoo.app')
     ) {
@@ -631,9 +732,7 @@ export default function Review({
       type: 'redteam',
       step: 'webui_evaluation_started',
       source: 'webui',
-      numPlugins: latestConfig.plugins.length,
-      numStrategies: latestConfig.strategies.length,
-      targetType: latestConfig.target.id,
+      ...metrics,
     });
 
     setIsRunning(true);
@@ -646,20 +745,39 @@ export default function Review({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          config: getRuntimeRedteamConfig(latestConfig),
-          force: forceRegeneration,
-          verbose: latestConfig.target.config?.verbose,
-          maxConcurrency,
-          delay: latestConfig.target.config?.delay,
-        }),
+        body: JSON.stringify(
+          native
+            ? {
+                fromAgent: true,
+                config: native.config,
+                localKeys,
+                userTurns: userTurns(native),
+                force: true,
+              }
+            : {
+                config: getRuntimeRedteamConfig(latestConfig),
+                force: forceRegeneration,
+                verbose: latestConfig.target.config?.verbose,
+                maxConcurrency,
+                delay: latestConfig.target.config?.delay,
+              },
+        ),
       });
 
-      const { id } = await response.json();
-
-      // Save job ID to persistent store and start polling
-      setJob(id);
-      startPolling(id);
+      const { id, error } = await response.json();
+      if (response.ok === false || !id) {
+        throw new Error(error || 'Could not start the scan.');
+      }
+      // The scan has already started even if the user returned to chat during POST.
+      if (native) {
+        hasAttemptedRecovery.current = true;
+        setAgentJob?.({ id, config: native.config });
+      } else {
+        setJob(id);
+      }
+      if (mounted.current) {
+        startPolling(id);
+      }
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
@@ -683,7 +801,11 @@ export default function Review({
       }
 
       setIsRunning(false);
-      clearJob();
+      if (native) {
+        setAgentJob?.(undefined);
+      } else {
+        clearJob();
+      }
       showToast('Cancel request submitted', 'success');
     } catch (error) {
       console.error('Error cancelling job:', error);
@@ -705,15 +827,19 @@ export default function Review({
   };
 
   useEffect(() => {
+    mounted.current = true;
     return () => {
+      mounted.current = false;
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
       }
     };
   }, []);
 
-  return (
-    <PageWrapper title="Review & Run" onBack={onBack}>
+  const shortPurpose = (config.purpose?.length ?? 0) < 100;
+
+  function renderDetails() {
+    return (
       <div>
         <div className="mb-8">
           <Label htmlFor="description">Description</Label>
@@ -745,7 +871,8 @@ export default function Review({
                       label === 'Custom Policy' && 'bg-primary text-primary-foreground',
                     )}
                   >
-                    {count > 1 ? `${label} (${count})` : label}
+                    {label}
+                    {count > 1 && ` (${count})`}
                     <button
                       type="button"
                       aria-label={`Remove plugin ${label}`}
@@ -834,15 +961,10 @@ export default function Review({
               {(strategySummary.length === 0 ||
                 (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
                 <>
-                  <Alert variant="warning" className="mt-4">
-                    <AlertContent>
-                      <AlertDescription>
-                        The basic strategy is great for an end-to-end setup test, but don't expect
-                        any findings. Once you've verified that the setup is working, add another
-                        strategy.
-                      </AlertDescription>
-                    </AlertContent>
-                  </Alert>
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    Basic tests send direct prompts. Add a strategy to try other techniques like
+                    disguising the request.
+                  </p>
                   <Button onClick={navigateToStrategies} className="mt-4">
                     Add more strategies
                   </Button>
@@ -973,7 +1095,11 @@ export default function Review({
         {/* Collapsible Sections */}
         <div className="mt-6 rounded-lg border border-border shadow-sm">
           {/* Application Details */}
-          <Collapsible open={isPurposeExpanded} onOpenChange={setIsPurposeExpanded}>
+          <Collapsible
+            className="ph-no-capture"
+            open={isPurposeExpanded}
+            onOpenChange={setIsPurposeExpanded}
+          >
             <CollapsibleTrigger className="flex w-full items-start justify-between gap-3 border-b border-border p-4 hover:bg-muted/50 sm:items-center">
               <div className="flex min-w-0 flex-1 flex-col items-start gap-2 sm:flex-row sm:items-center">
                 <div className="flex min-w-0 items-center gap-2">
@@ -985,12 +1111,12 @@ export default function Review({
                     variant="outline"
                     className={cn(
                       'text-xs',
-                      config.purpose.length < 100
+                      shortPurpose
                         ? 'border-amber-500 text-amber-600'
                         : 'border-green-500 text-green-600',
                     )}
                   >
-                    {config.purpose.length < 100 ? 'Needs more detail' : 'Configured'}
+                    {shortPurpose ? 'Needs more detail' : 'Configured'}
                   </Badge>
                 )}
                 {!config.purpose && (
@@ -1030,7 +1156,7 @@ export default function Review({
                   </div>
                 )}
 
-                {(!config.purpose?.trim() || config.purpose.length < 100) &&
+                {(!config.purpose?.trim() || shortPurpose) &&
                 !isFoundationModelProvider(config.target.id) ? (
                   <div className="mb-4">
                     <Alert variant="warning">
@@ -1214,50 +1340,104 @@ export default function Review({
             </CollapsibleContent>
           </Collapsible>
         </div>
+      </div>
+    );
+  }
 
-        <Separator className="my-8" />
+  const download = (
+    <Button
+      variant={native ? 'outline' : 'default'}
+      onClick={handleSaveYaml}
+      disabled={Boolean(saveError)}
+      className="gap-2"
+    >
+      <Save className="size-4" /> Save YAML
+    </Button>
+  );
 
-        <h2 className="mb-6 text-xl font-semibold">Run Your Scan</h2>
-
-        <EstimationsDisplay config={config} />
-
-        <Card className="p-6">
-          <div className="mb-8">
-            <h3 className="mb-2 text-lg font-semibold">Option 1: Save and Run via CLI</h3>
-            <p className="mb-4 text-muted-foreground">
-              Save your configuration and run it from the command line. Full control over the
-              evaluation process, good for larger scans:
-            </p>
-            <Code>promptfoo redteam run</Code>
-            <div className="mt-4 flex gap-3">
-              <Button
-                onClick={handleSaveYaml}
-                disabled={Boolean(targetConfigError)}
-                className="gap-2"
-              >
-                <Save className="size-4" />
-                Save YAML
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleOpenYamlDialog}
-                disabled={Boolean(targetConfigError)}
-                className="gap-2"
-              >
-                <Eye className="size-4" />
-                View YAML
-              </Button>
-            </div>
+  return (
+    <PageWrapper
+      title={continueConversation && incomplete ? 'Review draft' : 'Review & Run'}
+      onBack={onBack}
+    >
+      <div>
+        {native ? (
+          <div className="space-y-4">
+            <Button variant="outline" size="sm" onClick={continueConversation}>
+              Continue conversation
+            </Button>
+            <SetupPlan draft={native} review />
+            {reviewError && (
+              <Alert variant="warning">
+                <AlertContent>
+                  <AlertDescription>
+                    <strong>For inspection only.</strong> {reviewError} Check the YAML before using
+                    it outside this browser.
+                  </AlertDescription>
+                </AlertContent>
+              </Alert>
+            )}
           </div>
+        ) : (
+          renderDetails()
+        )}
+        <Separator className={continueConversation ? 'my-4' : 'my-8'} />
+        {!continueConversation && <h2 className="mb-6 text-xl font-semibold">Run Your Scan</h2>}
 
-          <Separator className="my-6" />
+        {!native && incomplete && reviewError && (
+          <p
+            role="alert"
+            className={cn(
+              'mb-4 text-sm',
+              incomplete && !targetConfigError ? 'text-muted-foreground' : 'text-destructive',
+            )}
+          >
+            {reviewError}
+          </p>
+        )}
+        {!native && <EstimationsDisplay config={config} />}
 
+        <Card className={native ? 'p-4 sm:p-5' : 'p-6'}>
+          {native ? (
+            <details className="mb-3 rounded-md border border-border">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">View YAML</summary>
+              <pre className="max-h-[50dvh] overflow-auto border-t border-border bg-muted p-3 text-xs">
+                {displayKeys(yamlContent)}
+              </pre>
+            </details>
+          ) : (
+            <>
+              <div className="mb-8">
+                <h3 className="mb-2 text-lg font-semibold">Save for the command line</h3>
+                <p className="mb-4 text-muted-foreground">
+                  {incomplete
+                    ? 'Save a YAML draft. Add a target before running it.'
+                    : 'Save the YAML file, then run this command from the same folder when you’re ready.'}
+                </p>
+                {!incomplete && <Code>promptfoo redteam run</Code>}
+                <div className="mt-4 flex gap-3">
+                  {download}
+                  <Button
+                    variant="outline"
+                    onClick={handleOpenYamlDialog}
+                    disabled={Boolean(targetConfigError)}
+                    className="gap-2"
+                  >
+                    <Eye className="size-4" /> View YAML
+                  </Button>
+                </div>
+              </div>
+              <Separator className="my-6" />
+              <h3 className="mb-2 text-lg font-semibold">Run in the browser</h3>
+            </>
+          )}
           <div>
-            <h3 className="mb-2 text-lg font-semibold">Option 2: Run Directly in Browser</h3>
-            <p className="mb-4 text-muted-foreground">
-              Run the red team evaluation right here. Simpler but less powerful than the CLI, good
-              for tests and small scans:
-            </p>
+            {(!native || !reviewError) && (
+              <p className={cn('mb-4 text-muted-foreground', native && 'text-sm')}>
+                Running sends test requests to your targets and may send their responses to
+                Promptfoo Cloud for grading. Only test systems you have permission to scan.
+              </p>
+            )}
             {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
               <Alert variant="warning" className="mb-4">
                 <AlertContent>
@@ -1271,8 +1451,13 @@ export default function Review({
                 </AlertContent>
               </Alert>
             )}
+            {native && agentJob && !isEqual(agentJob.config, native.config) && (
+              <p role="status" className="mb-2 text-sm text-muted-foreground">
+                This scan used an earlier version of your draft.
+              </p>
+            )}
             <div className="mb-4">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span>
@@ -1284,13 +1469,18 @@ export default function Review({
                         disabled={isRunNowDisabled}
                         className="gap-2"
                       >
-                        {isRunning ? <Spinner className="size-4" /> : <Play className="size-4" />}
+                        {isRunning || isPreparing ? (
+                          <Spinner className="size-4" />
+                        ) : (
+                          <Play className="size-4" />
+                        )}
                         {isRunning ? 'Running...' : 'Run Now'}
                       </Button>
                     </span>
                   </TooltipTrigger>
                   {runNowTooltipMessage && <TooltipContent>{runNowTooltipMessage}</TooltipContent>}
                 </Tooltip>
+                {native && download}
                 {isRunning && (
                   <Button variant="destructive" onClick={handleCancel} className="gap-2">
                     <X className="size-4" />
@@ -1315,13 +1505,32 @@ export default function Review({
                 )}
               </div>
             </div>
+            {native && (
+              <p className="mb-2 text-xs text-muted-foreground">
+                {localKeys
+                  ? 'Downloaded YAML includes the key values you provided.'
+                  : 'Save the YAML to keep this draft after you leave setup.'}
+                {!native.runnable &&
+                  Object.keys(native.localKeys ?? {}).length > 0 &&
+                  ' Keys for unapproved targets are omitted.'}
+              </p>
+            )}
+            {native && !incomplete && (
+              <details className="text-sm text-muted-foreground">
+                <summary className="cursor-pointer">Run from the command line</summary>
+                <p className="my-2">
+                  Save the YAML file and run this command from the same folder.
+                </p>
+                <Code>promptfoo redteam run</Code>
+              </details>
+            )}
             {logs.length > 0 && <LogViewer logs={logs} />}
           </div>
         </Card>
 
         {/* YAML Dialog */}
         <Dialog open={isYamlDialogOpen} onOpenChange={setIsYamlDialogOpen}>
-          <DialogContent className="max-w-6xl w-[90vw] overflow-hidden">
+          <DialogContent className="ph-no-capture max-w-6xl w-[90vw] overflow-hidden">
             <DialogHeader>
               <DialogTitle>YAML Configuration</DialogTitle>
             </DialogHeader>

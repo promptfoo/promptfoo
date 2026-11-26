@@ -1,6 +1,5 @@
 import type winston from 'winston';
 
-import type { MinimalApiProvider } from '../contracts/prompts';
 import type {
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
@@ -9,7 +8,7 @@ import type {
   ProviderSimilarityResponse,
 } from '../contracts/providers';
 import type { EnvOverrides } from './env';
-import type { Prompt } from './prompts';
+import type { MinimalApiProvider, Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
 import type { TransformFunction } from './transform';
 

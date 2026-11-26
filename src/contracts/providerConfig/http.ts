@@ -49,6 +49,12 @@ export const HttpProviderConfigFieldsSchema = z.strictObject({
   headers: StringMapSchema.optional().describe(
     'HTTP headers; names are open and values support templates',
   ),
+  redirect: z
+    .enum(['follow', 'error'])
+    .optional()
+    .describe(
+      'Redirect policy for the target request. Defaults to follow. Use error to keep custom credentials at the configured endpoint.',
+    ),
   maxRetries: z
     .number()
     .min(0)

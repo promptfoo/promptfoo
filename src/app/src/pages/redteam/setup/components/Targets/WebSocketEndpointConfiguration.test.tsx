@@ -10,9 +10,9 @@ import type { ProviderOptions } from '../../types';
 
 // Mock the editor component to avoid prism.js issues and to enable label association via htmlFor
 vi.mock('react-simple-code-editor', () => ({
-  default: ({ id, value, onValueChange, ...rest }: any) => (
+  default: ({ textareaId, value, onValueChange, ...rest }: any) => (
     <textarea
-      id={id}
+      id={textareaId}
       aria-describedby={(rest as any)['aria-describedby']}
       value={value}
       onChange={(e) => onValueChange((e.target as HTMLTextAreaElement).value)}

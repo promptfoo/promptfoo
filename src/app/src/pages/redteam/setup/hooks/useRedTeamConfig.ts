@@ -4,7 +4,7 @@ import {
   looksLikeRequestCredentialParameter,
 } from '@app/stores/evalConfig';
 import { isPlainObject } from '@app/utils/isPlainObject';
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { type Plugin, REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { getProviderType, withLocalProviderType } from '../components/Targets/helpers';
@@ -15,7 +15,6 @@ import {
   registerTargetConfigReconciler,
   useRedTeamTargetConfigValidation,
 } from './useRedTeamTargetConfigValidation';
-import type { Plugin } from '@promptfoo/redteam/constants';
 
 import type { ApplicationDefinition, Config, ProviderOptions } from '../types';
 
@@ -1636,8 +1635,6 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
           providerType: undefined,
         });
         finishTargetConfigValidationClear();
-        // Faizan: This is a hack to reload the page and apply the new config, this needs to be fixed so a reload isn't required.
-        window.location.reload();
       },
       updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) => {
         const finishNonObjectTargetRecovery = prepareNonObjectTargetRecovery(get().config.target);

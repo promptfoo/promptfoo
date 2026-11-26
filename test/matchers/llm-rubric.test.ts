@@ -2553,6 +2553,40 @@ Evaluate the response
     });
   });
 
+  it('grades remotely when Codex credentials cannot power the implicit red team grader', async () => {
+    const { shouldGenerateRemote } = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(shouldGenerateRemote).mockImplementationOnce(
+      (options) => !options?.canUseCodexDefaultProvider,
+    );
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValueOnce(createPassingGrade());
+    (cliState as any).config = { redteam: {} };
+    const provider = createMockProvider();
+    const grading = { provider, __promptfooPreferRemote: true };
+
+    const result = await matchesLlmRubric('rubric', 'output', grading);
+
+    expect(result.pass).toBe(true);
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalled();
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('preserves local grading with Codex credentials and a defaultTest provider', async () => {
+    const { shouldGenerateRemote } = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(shouldGenerateRemote).mockImplementationOnce(
+      (options) => !options?.canUseCodexDefaultProvider,
+    );
+    (cliState as any).config = { redteam: {}, defaultTest: { provider: 'custom' } };
+    const provider = createMockProvider({
+      response: { output: JSON.stringify(createPassingGrade()) },
+    });
+    const grading = { provider, __promptfooPreferRemote: true };
+
+    await matchesLlmRubric('rubric', 'output', grading);
+
+    expect(provider.callApi).toHaveBeenCalled();
+    expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
+  });
+
   it('should tag remote-grading transport failures with metadata.graderError', async () => {
     const rubric = 'Test rubric';
     const llmOutput = 'Test output';

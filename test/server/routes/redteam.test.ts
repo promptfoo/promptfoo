@@ -909,7 +909,7 @@ describe('Redteam Routes', () => {
       expect(mockedFetchWithProxy).not.toHaveBeenCalled();
     });
 
-    it('should log task metadata without stringifying the body', async () => {
+    it('should log task metadata without the body', async () => {
       mockedFetchWithProxy.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ result: 'success' }),
@@ -921,17 +921,10 @@ describe('Redteam Routes', () => {
       });
 
       expect(response.status).toBe(200);
-      expect(debugSpy).toHaveBeenCalledWith(
-        'Received my-task task request',
-        expect.objectContaining({
-          method: 'POST',
-          url: '/my-task',
-          body: expect.objectContaining({
-            data: 'test',
-            secret: '[REDACTED]',
-          }),
-        }),
-      );
+      expect(debugSpy).toHaveBeenCalledWith('Received my-task task request', {
+        method: 'POST',
+        url: '/my-task',
+      });
     });
 
     it('should return 500 when cloud function fails', async () => {

@@ -673,7 +673,9 @@ ${exampleRequest}`;
 
             <div className="mb-2 mt-6 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <p className="font-medium">Request Body</p>
+                <label htmlFor="http-request-body" className="font-medium">
+                  Request Body
+                </label>
                 <div className="flex items-center rounded-md border border-border bg-muted/30 p-0.5">
                   <button
                     type="button"
@@ -737,6 +739,8 @@ ${exampleRequest}`;
               style={{ contain: 'inline-size' }}
             >
               <Editor
+                ignoreTabKey
+                textareaId="http-request-body"
                 value={
                   typeof requestBody === 'object'
                     ? JSON.stringify(requestBody, null, 2)
@@ -761,7 +765,9 @@ ${exampleRequest}`;
         )}
 
         {/* Response Transform Section - Common for both modes */}
-        <p className="mb-2 mt-6 font-medium">Response Parser</p>
+        <label htmlFor="http-response-parser" className="mb-2 mt-6 block font-medium">
+          Response Parser
+        </label>
         <div className="mb-4 text-sm text-muted-foreground">
           <p>
             This tells promptfoo how to extract the AI's response from your API. Most APIs return
@@ -798,6 +804,8 @@ ${exampleRequest}`;
           style={{ contain: 'inline-size' }}
         >
           <Editor
+            ignoreTabKey
+            textareaId="http-response-parser"
             value={selectedTarget.config.transformResponse || ''}
             onValueChange={(code) => updateCustomTarget('transformResponse', code)}
             highlight={highlightJS}
