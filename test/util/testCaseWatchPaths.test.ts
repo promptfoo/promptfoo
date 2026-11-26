@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { readTests, resolveTestsWatchPaths } from '../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../src/types/index';
@@ -32,6 +32,10 @@ describe('resolveTestsWatchPaths', () => {
     ]) {
       fs.writeFileSync(path.join(base, rel), '');
     }
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   afterAll(() => {
@@ -157,6 +161,15 @@ describe('resolveTestsWatchPaths', () => {
     );
     expect(resolve(source as TestSuiteConfig['tests'])).toEqual(
       expect.arrayContaining([path.join(base, 'nested/report.txt'), path.join(base, 'vars.csv')]),
+    );
+  });
+
+  it('rebases nested string-array vars when PROMPTFOO_DISABLE_VAR_EXPANSION is set', () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_VAR_EXPANSION', 'true');
+    const source = 'nested/array-cases.yaml';
+    fs.writeFileSync(path.join(base, source), '- vars:\n    docs:\n      - file://report.txt\n');
+    expect(resolve(source as TestSuiteConfig['tests'])).toContain(
+      path.join(base, 'nested/report.txt'),
     );
   });
 

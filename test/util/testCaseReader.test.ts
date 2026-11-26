@@ -941,6 +941,36 @@ describe('readTest', () => {
     expect(result.vars).toEqual({ sharedVar: 'value1' });
   });
 
+  it('keeps nested file:// strings literal when the vars-file root was itself a file:// load', async () => {
+    vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce('file://shared.json');
+    const mapping = { cfg: { path: 'file:///private/canary.txt' } };
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValueOnce(mapping);
+
+    const result = await readTest({ vars: 'cases/vars.yaml' }, '/project');
+
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledTimes(1);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://shared.json');
+    expect(result.vars).toEqual({ cfg: { path: 'file:///private/canary.txt' } });
+    expect(result.metadata?.__promptfoo?.varsFileKeys).toEqual(['cfg']);
+  });
+
+  it('marks glob-expanded string array vars as loaded and keeps nested file:// literal', async () => {
+    vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce('docs:\n  - file://reports/*.json\n');
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    const loaded = [{ path: 'file:///private/canary.txt' }];
+    vi.mocked(maybeLoadConfigFromExternalFile)
+      .mockImplementationOnce((config) => config)
+      .mockReturnValueOnce(loaded);
+
+    const result = await readTest({ vars: 'cases/vars.yaml' }, '/project');
+
+    expect(result.vars?.docs).toEqual([loaded]);
+    expect(result.metadata?.__promptfoo?.varsFileKeys).toEqual(['docs']);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledTimes(2);
+  });
+
   it('preserves config base path for string array vars and avoids rebasing in nested vars references', async () => {
     vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
     vi.mocked(fs.readFileSync).mockReturnValueOnce('docs:\n  - file://a.txt\n  - file://b.txt');
@@ -1006,6 +1036,24 @@ describe('readTest', () => {
       '/project/cases',
     );
     expect(defaultResult.vars?.docs).toEqual(['file://report.txt']);
+  });
+
+  it('rebases string array vars in a nested tests file when PROMPTFOO_DISABLE_VAR_EXPANSION is set', async () => {
+    vi.mocked(getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_DISABLE_VAR_EXPANSION');
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(dedent`
+      vars:
+        docs:
+          - file://report.txt
+      assert:
+        - type: equals
+          value: '1'
+    `);
+
+    const result = await readTest('cases/case.yaml', '/project');
+
+    expect(result.vars?.docs).toEqual([
+      `file://${path.resolve('/project/cases', 'report.txt')}`,
+    ]);
   });
 
   it('readTest with TestCase that contains a vars glob input', async () => {

@@ -84,12 +84,24 @@ export async function readTestFiles(
     for (const p of paths) {
       let rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
       // A vars file may itself be a single file:// reference to the real mapping.
+      const loadedFromFileRef = typeof rawData === 'string' && rawData.startsWith('file://');
       if (typeof rawData === 'string') {
         rawData = maybeLoadConfigFromExternalFile(rawData);
       }
       // Preserve structured values and glob handling from the existing vars-file loader.
       const seen = new WeakMap<object, unknown>();
       for (const [key, value] of Object.entries(rawData ?? {})) {
+        // Data already read from a file is never re-interpreted as a file:// reference.
+        if (loadedFromFileRef) {
+          loadedKeys?.add(key);
+          Object.defineProperty(ret, key, {
+            value,
+            enumerable: true,
+            writable: true,
+            configurable: true,
+          });
+          continue;
+        }
         // An external structured value is data through test expansion and replay.
         // Directly authored scalar package references still use the normal renderer.
         // Top-level file references have always used the active config directory.
@@ -97,9 +109,15 @@ export async function readTestFiles(
         // String arrays are authored alternatives: leave them for expansion and the
         // normal per-value loader (file:// and package: alike), as before.
         if (isStringArray(value)) {
-          loadedKeys?.delete(key);
+          const mapped = value.map(prepareVarsFileAlternative);
+          // Glob/eager loads are data; keep provenance. Plain string refs stay expandable.
+          if (mapped.some((entry) => typeof entry !== 'string')) {
+            loadedKeys?.add(key);
+          } else {
+            loadedKeys?.delete(key);
+          }
           Object.defineProperty(ret, key, {
-            value: value.map(prepareVarsFileAlternative),
+            value: mapped,
             enumerable: true,
             writable: true,
             configurable: true,
@@ -652,7 +670,8 @@ async function readTestWithEnv(
     testCase.vars,
     typeof test === 'string' ? effectiveBasePath : nestedBasePath,
     Array.isArray(preloaded) ? preloaded : [],
-    testCase.options?.disableVarExpansion !== true,
+    !getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') &&
+      testCase.options?.disableVarExpansion !== true,
   );
 
   const providerId =
@@ -1153,7 +1172,8 @@ function collectNestedFileReferences(
             row.vars,
             path.dirname(testsFile),
             [],
-            row.options?.disableVarExpansion !== true,
+            !getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') &&
+              row.options?.disableVarExpansion !== true,
           ),
         };
       }

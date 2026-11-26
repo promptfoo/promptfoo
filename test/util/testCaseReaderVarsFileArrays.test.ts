@@ -40,6 +40,19 @@ describe('readTestFiles string array vars', () => {
     expect((vars.docs as string[][])[0]).toHaveLength(2);
   });
 
+  it('marks a glob-expanded array key as loaded and leaves nested file:// paths literal', async () => {
+    fs.writeFileSync(
+      path.join(base, 'reports', 'payload.json'),
+      JSON.stringify({ path: 'file:///private/canary.txt' }),
+    );
+    const keys = new Set<string>();
+    fs.writeFileSync(path.join(base, 'vars.yaml'), 'docs:\n  - file://reports/*.json\n');
+    cliState.basePath = base;
+    const vars = await readTestFiles('vars.yaml', base, keys);
+    expect(keys.has('docs')).toBe(true);
+    expect(vars.docs).toEqual([[{ path: 'file:///private/canary.txt' }]]);
+  });
+
   it('renders templated paths and leaves plain entries as references', async () => {
     vi.stubEnv('PF_TEST_REPORTS_DIR', 'reports');
     const vars = await read(
