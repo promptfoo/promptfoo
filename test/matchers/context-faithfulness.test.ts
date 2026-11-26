@@ -425,6 +425,68 @@ describe('matchesContextFaithfulness', () => {
     expect(graderPrompt).not.toContain(rawContext);
   });
 
+  it('should not treat "yes" substrings in a No verdict as supported', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy
+      .mockResolvedValueOnce(createOutputResponse('Statement 1\nStatement 2'))
+      .mockResolvedValueOnce(
+        createOutputResponse(
+          "Final verdict for each statement in order: No, yesterday's context does not cover it. Yes.",
+        ),
+      );
+
+    const result = await matchesContextFaithfulness('Query', 'Output', 'Context', 0.5);
+    expect(result.score).toBeCloseTo(0.5, 2);
+    expect(result.pass).toBe(true);
+  });
+
+  it('should parse numbered and newline-separated final verdicts', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy
+      .mockResolvedValueOnce(createOutputResponse('Statement 1\nStatement 2\nStatement 3'))
+      .mockResolvedValueOnce(
+        createOutputResponse(
+          'Final verdict for each statement in order:\n1. Yes.\n2. No.\n3. Yes.',
+        ),
+      );
+
+    const numberedResult = await matchesContextFaithfulness('Query', 'Output', 'Context', 0.5);
+    expect(numberedResult.score).toBeCloseTo(2 / 3, 2);
+    expect(numberedResult.pass).toBe(true);
+
+    callApiSpy.mockReset();
+    callApiSpy
+      .mockResolvedValueOnce(createOutputResponse('Statement 1\nStatement 2\nStatement 3'))
+      .mockResolvedValueOnce(
+        createOutputResponse('Final verdict for each statement in order:\nYes\nNo\nYes'),
+      );
+
+    const newlineResult = await matchesContextFaithfulness('Query', 'Output', 'Context', 0.5);
+    expect(newlineResult.score).toBeCloseTo(2 / 3, 2);
+    expect(newlineResult.pass).toBe(true);
+  });
+
+  it('should reject numbered final-answer output that contains no yes/no verdicts', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy
+      .mockResolvedValueOnce(createOutputResponse('Statement 1\nStatement 2'))
+      .mockResolvedValueOnce(
+        createOutputResponse('Final verdict for each statement in order: 1. 2.'),
+      );
+
+    await expect(
+      matchesContextFaithfulness('Query', 'Output', 'Context', DEFAULT_RAG_ASSERTION_THRESHOLD),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Could not parse context-faithfulness verdicts',
+      metadata: { graderError: true },
+    });
+  });
+
   describe('Array Context Support', () => {
     it('should handle array of context chunks', async () => {
       const query = 'What is the capital of France?';
