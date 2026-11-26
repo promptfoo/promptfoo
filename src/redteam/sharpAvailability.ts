@@ -3,6 +3,21 @@ import type { RedteamPluginObject, RedteamStrategyObject } from './types';
 const SHARP_REQUIRED_STRATEGIES = ['image'];
 const SHARP_REQUIRED_PLUGINS = ['unsafebench'];
 
+function isImageStep(step: unknown): boolean {
+  if (typeof step === 'string') {
+    return step === 'image';
+  }
+  return typeof step === 'object' && step !== null && 'id' in step && step.id === 'image';
+}
+
+function strategyRequiresSharp(strategy: RedteamStrategyObject): boolean {
+  if (SHARP_REQUIRED_STRATEGIES.includes(strategy.id)) {
+    return true;
+  }
+  const steps = strategy.config?.steps;
+  return strategy.id === 'layer' && Array.isArray(steps) && steps.some(isImageStep);
+}
+
 let sharpAvailableCache: boolean | null = null;
 
 /**
@@ -35,7 +50,7 @@ export async function validateSharpDependency(
   plugins: RedteamPluginObject[],
   checkSharp: () => Promise<boolean> = isSharpAvailable,
 ): Promise<void> {
-  const sharpStrategies = strategies.filter((s) => SHARP_REQUIRED_STRATEGIES.includes(s.id));
+  const sharpStrategies = strategies.filter(strategyRequiresSharp);
   const sharpPlugins = plugins.filter((p) => SHARP_REQUIRED_PLUGINS.includes(p.id));
 
   const requiresSharp = sharpStrategies.length > 0 || sharpPlugins.length > 0;
@@ -48,7 +63,8 @@ export async function validateSharpDependency(
 
     throw new Error(
       `The sharp library is required for ${features.join(', ')} and must be manually installed separately.\n` +
-        `Install it with: npm install sharp`,
+        `For a local Promptfoo install, run npm install sharp in the same project.\n` +
+        `For a global Promptfoo install, use the same npm global prefix: npm install -g sharp`,
     );
   }
 }
