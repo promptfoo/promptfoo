@@ -375,6 +375,25 @@ describe('eval routes', () => {
     });
   });
 
+  describe('viewer table defaults', () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it.each([
+      [undefined, undefined, undefined],
+      ['1', '0', { prettifyJson: true, showPassFail: false }],
+      ['false', undefined, { prettifyJson: false }],
+      [undefined, 'true', { showPassFail: true }],
+    ] as const)('serves settings for %s / %s', async (json, passFail, expected) => {
+      vi.stubEnv('PROMPTFOO_WEB_VIEWER_TABLE_SETTING_PRETTIFY_JSON', json);
+      vi.stubEnv('PROMPTFOO_WEB_VIEWER_TABLE_SETTING_SHOW_PASS_FAIL', passFail);
+
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const response = await api.get(`/api/eval/${eval_.id}/table`).expect(200);
+      expect(response.body.viewerTableDefaults).toEqual(expected);
+    });
+  });
+
   describe('GET /:id/table - large payload handling', () => {
     it('preserves config tests returned from the table endpoint when saved back', async () => {
       const eval_ = await EvalFactory.create();

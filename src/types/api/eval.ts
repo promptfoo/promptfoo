@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
+import { ViewerTableDefaultsSchema } from '../viewerTableDefaults';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */
@@ -122,6 +123,7 @@ const ShallowEvaluateTableSchema = z
 export const EvalTableResponseSchema = z
   .object({
     table: ShallowEvaluateTableSchema,
+    viewerTableDefaults: ViewerTableDefaultsSchema.optional(),
     totalCount: z.number(),
     filteredCount: z.number(),
     filteredMetrics: z.array(z.unknown()).nullable(),

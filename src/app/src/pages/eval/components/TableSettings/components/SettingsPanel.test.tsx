@@ -2,11 +2,12 @@ import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useResultsViewSettingsStore } from '../../store';
+import { useResultsViewSettingsStore, useTableStore } from '../../store';
 import SettingsPanel from './SettingsPanel';
 
 vi.mock('../../store', () => ({
   useResultsViewSettingsStore: vi.fn(),
+  useTableStore: vi.fn(),
 }));
 
 const mockedUseResultsViewSettingsStore = vi.mocked(useResultsViewSettingsStore);
@@ -52,6 +53,30 @@ describe('SettingsPanel', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  it.each([
+    [undefined, false, true],
+    [{ prettifyJson: true, showPassFail: false }, true, false],
+  ] as const)(
+    'displays the table defaults when no personal choice exists',
+    (defaults, json, passFail) => {
+      vi.mocked(useTableStore).mockReturnValueOnce(defaults);
+      mockedUseResultsViewSettingsStore.mockReturnValue({
+        ...mockStore,
+        prettifyJson: undefined,
+        showPassFail: undefined,
+      });
+      renderWithProviders(<SettingsPanel {...defaultProps} />);
+      expect(screen.getByRole('checkbox', { name: 'Prettify JSON' })).toHaveAttribute(
+        'aria-checked',
+        String(json),
+      );
+      expect(screen.getByRole('checkbox', { name: 'Pass/fail indicators' })).toHaveAttribute(
+        'aria-checked',
+        String(passFail),
+      );
+    },
+  );
 
   it.each([
     {

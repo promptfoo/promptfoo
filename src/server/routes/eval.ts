@@ -24,6 +24,7 @@ import {
   sanitizeObject,
 } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
+import { getViewerTableDefaults } from '../config/serverConfig';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
@@ -458,6 +459,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   const responsePayload = {
     table: returnTable,
+    viewerTableDefaults: getViewerTableDefaults(),
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,

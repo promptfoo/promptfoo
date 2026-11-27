@@ -50,6 +50,7 @@ import type {
   ProvidersConfig,
 } from './providers';
 import type { TraceData } from './tracing';
+import type { ViewerTableDefaults } from './viewerTableDefaults';
 
 /**
  * Minimal interface for RateLimitRegistry to avoid circular dependency.
@@ -526,6 +527,7 @@ export interface EvaluateSummaryV2 {
 }
 
 export type EvalTableDTO = {
+  viewerTableDefaults?: ViewerTableDefaults;
   table: EvaluateTable;
   totalCount: number;
   filteredCount: number;
