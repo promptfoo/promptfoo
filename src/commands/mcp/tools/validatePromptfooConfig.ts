@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import { validateRedteamRemotePluginConfigSizes } from '../../../redteam/plugins/remoteConfigValidation';
+import { validateRedteamRemotePluginConfigSizes } from '../../../redteam/remoteConfigValidation';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../../../types/index';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { ConfigResolutionError, resolveConfigs } from '../../../util/config/load';
@@ -92,8 +92,12 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
 
         if (configParse.success && suiteParse.success) {
           const remotePluginConfigErrors = validateRedteamRemotePluginConfigSizes(
-            configParse.data,
+            { redteam: configParse.data.redteam },
             basePath,
+            {
+              rawConfig: config,
+              targetInputs: testSuite.providers[0]?.inputs,
+            },
           );
           if (remotePluginConfigErrors.length > 0) {
             validationResults.errors.push(

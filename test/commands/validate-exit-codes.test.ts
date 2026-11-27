@@ -213,6 +213,41 @@ describe('Validate Command Exit Codes', () => {
       );
       expect(process.exitCode).toBe(1);
     });
+
+    it('should preserve testGenerationInstructions and target inputs when validating remote plugin size', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValueOnce(true);
+      const mockConfig = {
+        prompts: ['test prompt'],
+        providers: ['test-provider'],
+        redteam: {
+          testGenerationInstructions: 'g'.repeat(30_000),
+          plugins: [
+            {
+              id: 'prompt-extraction',
+              config: {
+                systemPrompt: 'short',
+              },
+            },
+          ],
+        },
+      };
+
+      const mockValidTestSuite = {
+        prompts: [{ raw: 'test prompt', label: 'test' }],
+        providers: [{ id: () => 'test-provider', callApi: () => Promise.resolve({}) }],
+      };
+
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: mockConfig as any,
+        testSuite: mockValidTestSuite as any,
+        basePath: '/test',
+      });
+
+      await doValidate({ config: ['redteam-config.yaml'] }, defaultConfig, defaultConfigPath);
+
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('prompt-extraction'));
+      expect(process.exitCode).toBe(1);
+    });
   });
 
   describe('Command registration', () => {

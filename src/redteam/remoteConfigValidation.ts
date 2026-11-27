@@ -1,22 +1,77 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { loadYaml } from '../../util/yamlLoad';
-import { CANARY_BREAKING_STRATEGY_IDS, UNALIGNED_PROVIDER_HARM_PLUGINS } from '../constants';
-import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
+import { loadYaml } from '../util/yamlLoad';
+import { CANARY_BREAKING_STRATEGY_IDS, UNALIGNED_PROVIDER_HARM_PLUGINS } from './constants';
+import { DATASET_EXEMPT_PLUGINS, MULTI_INPUT_EXCLUDED_PLUGINS } from './constants/plugins';
+import { Plugins } from './plugins/index';
+import { TOOL_DISCOVERY_ATTACK_CONSTRAINTS } from './plugins/toolDiscovery';
+import { neverGenerateRemote, shouldGenerateRemote } from './remoteGeneration';
 import {
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
-} from '../shared/promptLength';
-import { Plugins } from './index';
-import { TOOL_DISCOVERY_ATTACK_CONSTRAINTS } from './toolDiscovery';
+} from './shared/promptLength';
 
-import type { PluginConfig, UnifiedConfig } from '../../types/index';
-import type { RedteamFileConfig, RedteamPluginObject } from '../types';
+import type { RedteamFileConfig, RedteamPluginObject } from './types';
 
 export const MAX_REMOTE_PLUGIN_CONFIG_BYTES = 30_000;
 
 const unalignedHarmPluginIds = new Set<string>(Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS));
+const multiInputExcludedPluginIds = new Set<string>([
+  ...DATASET_EXEMPT_PLUGINS,
+  ...MULTI_INPUT_EXCLUDED_PLUGINS,
+]);
+
+export interface RemotePluginValidationConfig {
+  redteam?: RedteamFileConfig;
+  targets?: unknown;
+  providers?: unknown;
+}
+
+export interface RemotePluginValidationOptions {
+  targetInputs?: Record<string, unknown>;
+  rawConfig?: unknown;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function extractFirstTargetInputs(
+  config: RemotePluginValidationConfig,
+  explicitInputs?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (isRecord(explicitInputs)) {
+    return explicitInputs;
+  }
+  const targetList = Array.isArray(config.targets)
+    ? config.targets
+    : Array.isArray(config.providers)
+      ? config.providers
+      : [];
+  const firstTarget = targetList[0];
+  if (isRecord(firstTarget) && isRecord(firstTarget.inputs)) {
+    return firstTarget.inputs;
+  }
+  return undefined;
+}
+
+function resolveRawTestGenerationInstructions(
+  redteam: RedteamFileConfig,
+  rawConfig?: unknown,
+): string | undefined {
+  if (typeof redteam.testGenerationInstructions === 'string') {
+    return redteam.testGenerationInstructions;
+  }
+  if (
+    isRecord(rawConfig) &&
+    isRecord(rawConfig.redteam) &&
+    typeof rawConfig.redteam.testGenerationInstructions === 'string'
+  ) {
+    return rawConfig.redteam.testGenerationInstructions;
+  }
+  return undefined;
+}
 
 function resolvePluginFileValue(fileRef: string, basePath?: string): unknown | undefined {
   const rawPath = fileRef.slice('file://'.length);
@@ -30,7 +85,8 @@ function resolvePluginFileValue(fileRef: string, basePath?: string): unknown | u
 
   try {
     const content = fs.readFileSync(resolvedPath, 'utf8');
-    if (resolvedPath.endsWith('.yaml') || resolvedPath.endsWith('.yml')) {
+    // Match resolvePluginConfig in src/redteam/index.ts: only .yaml is parsed as YAML; .yml is raw text.
+    if (resolvedPath.endsWith('.yaml')) {
       return loadYaml(content);
     }
     if (resolvedPath.endsWith('.json')) {
@@ -43,7 +99,7 @@ function resolvePluginFileValue(fileRef: string, basePath?: string): unknown | u
 }
 
 function resolvePluginConfigNonMutating(
-  config: PluginConfig | undefined,
+  config: RedteamPluginObject['config'],
   basePath?: string,
 ): Record<string, unknown> {
   if (!config) {
@@ -83,16 +139,17 @@ function buildSerializedConfigCandidates(
   plugin: RedteamPluginObject,
   redteam: RedteamFileConfig,
   basePath?: string,
+  targetInputs?: Record<string, unknown>,
+  rawTestGenerationInstructions?: string,
 ): Record<string, unknown>[] {
   const resolved = resolvePluginConfigNonMutating(plugin.config, basePath);
   const maxCharsPerMessage =
     (typeof resolved.maxCharsPerMessage === 'number' ? resolved.maxCharsPerMessage : undefined) ??
     redteam.maxCharsPerMessage;
 
+  const instructions = rawTestGenerationInstructions ?? redteam.testGenerationInstructions;
   const baseModifiers: Record<string, string> = {
-    ...(redteam.testGenerationInstructions
-      ? { testGenerationInstructions: redteam.testGenerationInstructions }
-      : {}),
+    ...(instructions ? { testGenerationInstructions: instructions } : {}),
     ...((resolved.modifiers as Record<string, string> | undefined) ?? {}),
   };
   const maxCharsModifier = getMaxCharsPerMessageModifierValue(maxCharsPerMessage);
@@ -103,9 +160,11 @@ function buildSerializedConfigCandidates(
     baseModifiers.toolDiscoveryAttackConstraints = TOOL_DISCOVERY_ATTACK_CONSTRAINTS;
   }
 
+  const hasMultipleInputs = targetInputs && Object.keys(targetInputs).length > 0;
   const basePayload: Record<string, unknown> = {
     ...resolved,
     ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
+    ...(hasMultipleInputs ? { inputs: targetInputs } : {}),
     ...(Object.keys(baseModifiers).length > 0 ? { modifiers: baseModifiers } : {}),
   };
 
@@ -146,14 +205,21 @@ function measureSerializedConfigBytes(payload: Record<string, unknown>): number 
  * the remote generation API's serialized UTF-8 byte limit.
  */
 export function validateRedteamRemotePluginConfigSizes(
-  config: Partial<UnifiedConfig>,
+  config: RemotePluginValidationConfig,
   basePath?: string,
+  options?: RemotePluginValidationOptions,
 ): string[] {
-  const redteam = config.redteam as RedteamFileConfig | undefined;
+  const redteam = config.redteam;
   if (!redteam?.plugins?.length) {
     return [];
   }
 
+  const resolvedInputs = extractFirstTargetInputs(config, options?.targetInputs);
+  const rawTestGenerationInstructions = resolveRawTestGenerationInstructions(
+    redteam,
+    options?.rawConfig,
+  );
+  const hasMultipleInputs = Boolean(resolvedInputs && Object.keys(resolvedInputs).length > 0);
   const errors: string[] = [];
 
   for (const pluginEntry of redteam.plugins) {
@@ -161,11 +227,21 @@ export function validateRedteamRemotePluginConfigSizes(
       continue;
     }
 
+    if (hasMultipleInputs && multiInputExcludedPluginIds.has(pluginEntry.id)) {
+      continue;
+    }
+
     if (!isRemoteGenerationSelectedForPlugin(pluginEntry.id)) {
       continue;
     }
 
-    const candidates = buildSerializedConfigCandidates(pluginEntry, redteam, basePath);
+    const candidates = buildSerializedConfigCandidates(
+      pluginEntry,
+      redteam,
+      basePath,
+      resolvedInputs,
+      rawTestGenerationInstructions,
+    );
     const maxByteLength = candidates.reduce(
       (maxBytes, candidate) => Math.max(maxBytes, measureSerializedConfigBytes(candidate)),
       0,

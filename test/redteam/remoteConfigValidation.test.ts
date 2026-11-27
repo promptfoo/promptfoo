@@ -6,12 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MAX_REMOTE_PLUGIN_CONFIG_BYTES,
   validateRedteamRemotePluginConfigSizes,
-} from '../../../src/redteam/plugins/remoteConfigValidation';
-import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
-import { RedteamConfigSchema } from '../../../src/validators/redteam';
+} from '../../src/redteam/remoteConfigValidation';
+import { neverGenerateRemote, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
+import { RedteamConfigSchema } from '../../src/validators/redteam';
 
-vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/redteam/remoteGeneration')>()),
+vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/redteam/remoteGeneration')>()),
   neverGenerateRemote: vi.fn(),
   shouldGenerateRemote: vi.fn(),
 }));
@@ -197,5 +197,60 @@ describe('validateRedteamRemotePluginConfigSizes', () => {
     expect(
       (parsedRedteam.plugins?.[0] as { config?: { systemPrompt?: string } }).config?.systemPrompt,
     ).toBe('file://system-prompt.txt');
+  });
+
+  it('reads .yml file:// values as raw UTF-8 text while parsing .yaml as YAML', () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-plugin-yml-'));
+    const ymlComments = `# ${'c'.repeat(MAX_REMOTE_PLUGIN_CONFIG_BYTES)}\nkey: small\n`;
+    fs.writeFileSync(path.join(tempDir, 'large-comments.yml'), ymlComments, 'utf8');
+    fs.writeFileSync(path.join(tempDir, 'large-comments.yaml'), ymlComments, 'utf8');
+
+    const ymlRedteam = RedteamConfigSchema.parse({
+      plugins: [
+        {
+          id: 'prompt-extraction',
+          config: { systemPrompt: 'file://large-comments.yml' },
+        },
+      ],
+    });
+    const yamlRedteam = RedteamConfigSchema.parse({
+      plugins: [
+        {
+          id: 'prompt-extraction',
+          config: { systemPrompt: 'file://large-comments.yaml' },
+        },
+      ],
+    });
+
+    expect(validateRedteamRemotePluginConfigSizes({ redteam: ymlRedteam }, tempDir)).toHaveLength(
+      1,
+    );
+    expect(validateRedteamRemotePluginConfigSizes({ redteam: yamlRedteam }, tempDir)).toEqual([]);
+  });
+
+  it('includes testGenerationInstructions and target inputs in the serialized size estimate', () => {
+    const parsedRedteam = RedteamConfigSchema.parse({
+      plugins: [
+        {
+          id: 'prompt-extraction',
+          config: { systemPrompt: 'short prompt' },
+        },
+      ],
+    });
+
+    const errorsFromInstructions = validateRedteamRemotePluginConfigSizes({
+      redteam: {
+        ...parsedRedteam,
+        testGenerationInstructions: 'i'.repeat(MAX_REMOTE_PLUGIN_CONFIG_BYTES),
+      },
+    });
+    expect(errorsFromInstructions).toHaveLength(1);
+
+    const errorsFromInputs = validateRedteamRemotePluginConfigSizes(
+      { redteam: parsedRedteam },
+      undefined,
+      { targetInputs: { context: 'v'.repeat(MAX_REMOTE_PLUGIN_CONFIG_BYTES) } },
+    );
+    expect(errorsFromInputs).toHaveLength(1);
   });
 });

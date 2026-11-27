@@ -6,7 +6,7 @@ import cliState from '../cliState';
 import logger from '../logger';
 import { testProviderConnectivity, testProviderSession } from '../node/testProvider';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
-import { validateRedteamRemotePluginConfigSizes } from '../redteam/plugins/remoteConfigValidation';
+import { validateRedteamRemotePluginConfigSizes } from '../redteam/remoteConfigValidation';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
 import {
@@ -498,8 +498,12 @@ ${z.prettifyError(configParse.error)}`,
       return;
     }
     const remotePluginConfigErrors = validateRedteamRemotePluginConfigSizes(
-      configParse.data,
+      { redteam: configParse.data.redteam },
       basePath,
+      {
+        rawConfig: config,
+        targetInputs: testSuite.providers[0]?.inputs,
+      },
     );
     if (remotePluginConfigErrors.length > 0) {
       logger.error(
