@@ -10,6 +10,8 @@ export const ProviderEnvOverridesSchema = z.object({
   ANTHROPIC_BASE_URL: z.string().optional(),
   ANTHROPIC_CUSTOM_HEADERS: z.string().optional(),
   ANTHROPIC_TEMPERATURE: z.string().optional(),
+  ARK_API_BASE_URL: z.string().optional(),
+  ARK_API_KEY: z.string().optional(),
   ATLASCLOUD_API_KEY: z.string().optional(),
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_BEARER_TOKEN_BEDROCK: z.string().optional(),

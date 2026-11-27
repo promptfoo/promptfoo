@@ -16,6 +16,10 @@ export function getSafeProviderId(url: string): string {
 /**
  * Sanitizes provider-owned data before including it in logs or error messages.
  */
-export function sanitizeProviderObject(value: unknown, context: string): unknown {
-  return sanitizeObject(value, { context });
+export function sanitizeProviderObject(
+  value: unknown,
+  context: string,
+  sanitizeUrls = false,
+): unknown {
+  return sanitizeObject(value, { context, sanitizeUrls });
 }

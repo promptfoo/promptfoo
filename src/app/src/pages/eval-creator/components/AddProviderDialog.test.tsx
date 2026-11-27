@@ -138,6 +138,7 @@ describe('getProviderTypeFromId', () => {
     ['openrouter:model-id', 'openrouter'],
     ['groq:model-id', 'groq'],
     ['deepseek:model-id', 'deepseek'],
+    ['volcengine:model-id', 'volcengine'],
     ['perplexity:model-id', 'perplexity'],
     ['openinterpreter:model-id', 'openinterpreter'],
   ])('detects prefix-based provider %s as %s', (id, expected) => {
