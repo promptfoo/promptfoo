@@ -145,7 +145,7 @@ describe('redteam strategy result grading', () => {
 
   it.each([
     ['missing taxonomy', { taxonomy: undefined }],
-    ['privacy v3 lookup rule', { taxonomy: { id: 'privacy', version: 3 } }],
+    ['privacy v4 without a reported lookup finding', { taxonomy: { id: 'privacy', version: 4 } }],
     ['changed policy', { redteamGradingRubricHash: 'previous-policy' }],
   ])('refreshes a stored decision for a %s', async (_case, previousMetadata) => {
     const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({

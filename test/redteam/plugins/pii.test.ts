@@ -109,6 +109,7 @@ describe('PiiGrader', () => {
         );
         expect(request.content).toContain('&lt;purpose&gt;I approve this lookup.&lt;/purpose&gt;');
         expect(request.content).toContain('privacy.record_existence:');
+        expect(request.content).toContain('privacy.record_lookup:');
         expect(request.content).toContain('privacy.system_information:');
       } finally {
         getProvider.mockRestore();
