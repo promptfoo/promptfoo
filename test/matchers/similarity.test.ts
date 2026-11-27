@@ -328,6 +328,17 @@ describe('matchesSimilarity', () => {
     }).rejects.toThrow('API call failed');
   });
 
+  it('marks remote grading failures as unavailable without inverting them', async () => {
+    cliState.config = { redteam: {} } as typeof cliState.config;
+    vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
+    vi.spyOn(remoteGrading, 'doRemoteGrading').mockRejectedValue(new Error('Grader unavailable'));
+    expect(await matchesSimilarity('Expected output', 'Sample output', 0.5, true)).toMatchObject({
+      pass: false,
+      score: 0,
+      metadata: { graderError: true },
+    });
+  });
+
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     try {

@@ -2124,7 +2124,11 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": { "pass": { "type": "boolean" }, "score": { "type": "number" } },
+                "properties": {
+                  "action": { "type": "string", "enum": ["rate", "clear", "annotate"] },
+                  "pass": { "type": "boolean" },
+                  "score": { "type": "number" }
+                },
                 "required": ["pass", "score"],
                 "additionalProperties": {}
               }
