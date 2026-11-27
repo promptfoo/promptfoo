@@ -12,6 +12,7 @@ import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { loadYaml } from '../../util/yamlLoad';
+import { MAX_GENERATION_COUNT, parseGenerationCount, validateGenerationOutput } from './options';
 import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {
@@ -29,6 +30,18 @@ interface DatasetGenerateOptions {
 }
 
 export async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
+  const numPersonas = parseGenerationCount(options.numPersonas, '--numPersonas');
+  const numTestCasesPerPersona = parseGenerationCount(
+    options.numTestCasesPerPersona,
+    '--numTestCasesPerPersona',
+  );
+  if (numPersonas * numTestCasesPerPersona > MAX_GENERATION_COUNT) {
+    throw new Error(
+      `Reduce --numPersonas or --numTestCasesPerPersona to generate at most ${MAX_GENERATION_COUNT} test cases.`,
+    );
+  }
+  validateGenerationOutput(options.output, ['.csv', '.yaml']);
+
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled.');
@@ -63,8 +76,8 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
 
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
-    numPersonas: Number.parseInt(options.numPersonas, 10),
-    numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
+    numPersonas,
+    numTestCasesPerPersona,
     provider: options.provider,
   });
   const configAddition = { tests: results.map((result) => ({ vars: result })) };
@@ -73,10 +86,8 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     // Should the output be written as a YAML or CSV?
     if (options.output.endsWith('.csv')) {
       await fs.writeFile(options.output, serializeObjectArrayAsCSV(results));
-    } else if (options.output.endsWith('.yaml')) {
-      await fs.writeFile(options.output, yamlString);
     } else {
-      throw new Error(`Unsupported output file type: ${options.output}`);
+      await fs.writeFile(options.output, yamlString);
     }
     printBorder();
     logger.info(`Wrote ${results.length} new test cases to ${options.output}`);
@@ -144,7 +155,11 @@ export function generateDatasetCommand(
       `Provider to use for generating adversarial tests. Defaults to the default grading provider.`,
     )
     .option('--numPersonas <number>', 'Number of personas to generate', '5')
-    .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
+    .option(
+      '--numTestCasesPerPersona <number>',
+      `Number of test cases per persona (up to ${MAX_GENERATION_COUNT} total)`,
+      '3',
+    )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action((opts) => doGenerateDataset({ ...opts, defaultConfig, defaultConfigPath }));
