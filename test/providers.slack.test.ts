@@ -42,6 +42,7 @@ describe('SlackProvider', () => {
       },
       conversations: {
         history: vi.fn(),
+        replies: vi.fn(),
       },
     };
 
@@ -552,6 +553,48 @@ describe('SlackProvider', () => {
   });
 
   describe('thread support', () => {
+    it.each(['first', 'user', 'timeout'] as const)(
+      'collects only new thread replies with the %s strategy',
+      async (responseStrategy) => {
+        const provider = new SlackProvider({
+          config: {
+            channel: 'C123',
+            threadTs: '100.000001',
+            includeThread: true,
+            responseStrategy,
+            waitForUser: 'U123',
+            timeout: 1000,
+          },
+        });
+        mockWebClient.chat.postMessage.mockResolvedValue({ ok: true, ts: '101.000001' });
+        mockWebClient.conversations.history.mockResolvedValue({
+          messages: [
+            { type: 'message', ts: '102.000001', user: 'U123', text: 'Unrelated channel message' },
+          ],
+        });
+        mockWebClient.conversations.replies.mockResolvedValue({
+          messages: [
+            { type: 'message', ts: '100.000001', user: 'U123', text: 'Thread parent' },
+            { type: 'message', ts: '100.000002', user: 'U123', text: 'Earlier reply' },
+            { type: 'message', ts: '101.000001', bot_id: 'B123', text: 'Our prompt' },
+            { type: 'message', ts: '102.000001', user: 'U123', text: 'New thread reply' },
+          ],
+        });
+        const pending = provider.callApi('Question');
+        await vi.runAllTimersAsync();
+        const result = await pending;
+        expect(result.output).toBe('New thread reply');
+        expect(result.metadata?.threadTs).toBe('100.000001');
+        expect(mockWebClient.conversations.history).not.toHaveBeenCalled();
+        expect(mockWebClient.conversations.replies).toHaveBeenCalledWith({
+          channel: 'C123',
+          ts: '100.000001',
+          oldest: '101.000001',
+          limit: expect.any(Number),
+        });
+      },
+    );
+
     it('should post in thread if threadTs is provided', async () => {
       const provider = new SlackProvider({
         config: {
@@ -565,7 +608,7 @@ describe('SlackProvider', () => {
         ts: '1234567890.123456',
       } as any);
 
-      mockWebClient.conversations.history.mockResolvedValue({
+      mockWebClient.conversations.replies.mockResolvedValue({
         messages: [
           {
             type: 'message',

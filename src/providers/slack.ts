@@ -149,7 +149,7 @@ export class SlackProvider implements ApiProvider {
       }
 
       if (config.includeThread) {
-        responseMetadata.threadTs = messageTs;
+        responseMetadata.threadTs = config.threadTs || messageTs;
       }
 
       // Calculate response time
@@ -191,6 +191,19 @@ export class SlackProvider implements ApiProvider {
     }
   }
 
+  private async getResponses(channel: string, afterTs: string, limit: number) {
+    const threadTs = this.options.config?.threadTs;
+    const result = threadTs
+      ? await this.client.conversations.replies({ channel, ts: threadTs, oldest: afterTs, limit })
+      : await this.client.conversations.history({ channel, oldest: afterTs, limit });
+    return {
+      ...result,
+      // Thread responses can include the parent; only replies after this prompt
+      // are eligible, even when the same thread is reused across eval rows.
+      messages: result.messages?.filter((message) => Number(message.ts) > Number(afterTs)),
+    };
+  }
+
   private async waitForFirstResponse(
     channel: string,
     afterTs: string,
@@ -201,11 +214,7 @@ export class SlackProvider implements ApiProvider {
     while (Date.now() - startTime < timeout) {
       try {
         // Get conversation history
-        const result = await this.client.conversations.history({
-          channel,
-          oldest: afterTs,
-          limit: 10,
-        });
+        const result = await this.getResponses(channel, afterTs, 10);
 
         if (result.messages && result.messages.length > 0) {
           // Find first non-bot message after our message
@@ -239,11 +248,7 @@ export class SlackProvider implements ApiProvider {
 
     while (Date.now() - startTime < timeout) {
       try {
-        const result = await this.client.conversations.history({
-          channel,
-          oldest: afterTs,
-          limit: 20,
-        });
+        const result = await this.getResponses(channel, afterTs, 20);
 
         if (result.messages && result.messages.length > 0) {
           const response = (result.messages as unknown as SlackMessage[])
@@ -276,11 +281,7 @@ export class SlackProvider implements ApiProvider {
 
     while (Date.now() - startTime < timeout) {
       try {
-        const result = await this.client.conversations.history({
-          channel,
-          oldest: afterTs,
-          limit: 50,
-        });
+        const result = await this.getResponses(channel, afterTs, 50);
 
         if (result.messages && result.messages.length > 0) {
           const newResponses = (result.messages as unknown as SlackMessage[])

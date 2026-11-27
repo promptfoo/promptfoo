@@ -242,7 +242,10 @@ tests:
 
 ### Thread-based Conversations
 
-`threadTs` controls where the prompt is posted. Response collection currently reads conversation history, so replies that remain only in the thread are not collected.
+`threadTs` controls where the prompt is posted and which thread is polled for responses.
+All response strategies collect replies newer than the posted prompt, excluding the
+parent and older replies. Without `threadTs`, response collection reads channel history.
+When `includeThread` is enabled, metadata contains the configured thread timestamp.
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
