@@ -14,8 +14,19 @@ Expose promptfoo's eval tools to AI agents via Model Context Protocol (MCP).
 - Node.js installed on your system
 - A promptfoo project with some evaluations (for testing the connection)
 - Cursor IDE, Claude Desktop, or another MCP-compatible AI tool
+- The optional `@modelcontextprotocol/sdk` runtime package when your promptfoo install omits optional dependencies
 
 :::
+
+For slim installs created with omitted optional dependencies, use a local install that includes
+both promptfoo and the MCP SDK:
+
+```bash
+npm install promptfoo @modelcontextprotocol/sdk
+```
+
+When using that local slim-install setup, run the MCP commands below as `npx promptfoo ...`
+instead of `npx promptfoo@latest ...` so both packages resolve from the same project.
 
 ## Quick Start
 
@@ -86,19 +97,19 @@ After restarting your AI tool, you should see promptfoo tools available. Try ask
 ### Core Evaluation Tools
 
 - **`list_evaluations`** - Browse your evaluation runs with optional dataset filtering
-- **`get_evaluation_details`** - Get comprehensive results, metrics, and test cases for a specific evaluation
+- **`get_evaluation_details`** - Get results, metrics, and test cases for an eval
 - **`run_evaluation`** - Execute evaluations with custom parameters, test case filtering, and concurrency control
 - **`share_evaluation`** - Generate publicly shareable URLs for evaluation results
 
 ### Generation Tools
 
-- **`generate_dataset`** - Generate test datasets using AI for comprehensive evaluation coverage
+- **`generate_dataset`** - Generate test datasets using a model
 - **`generate_test_cases`** - Generate test cases with assertions for existing prompts
 - **`compare_providers`** - Compare multiple AI providers side-by-side for performance and quality
 
 ### Redteam Security Tools
 
-- **`redteam_run`** - Execute comprehensive security testing against AI applications with dynamic attack probes
+- **`redteam_run`** - Run red team tests against an AI application
 - **`redteam_generate`** - Generate adversarial test cases for redteam security testing with configurable plugins and strategies
 
 ### Configuration & Testing
@@ -204,6 +215,14 @@ npx promptfoo@latest validate
 npx promptfoo@latest mcp --transport stdio
 ```
 
+If the error says `@modelcontextprotocol/sdk` is required, install that optional runtime package
+alongside the promptfoo installation that runs the server. For example, add both packages to the
+same project before using a local `npx promptfoo ...` command:
+
+```bash
+npm install promptfoo @modelcontextprotocol/sdk
+```
+
 **Port conflicts (HTTP mode):**
 
 ```bash
@@ -279,7 +298,6 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 # Configure promptfoo behavior
 export PROMPTFOO_CONFIG_DIR=/path/to/configs
-export PROMPTFOO_OUTPUT_DIR=/path/to/outputs
 
 # Start server with environment
 npx promptfoo@latest mcp --transport stdio

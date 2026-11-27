@@ -28,6 +28,7 @@ interface HttpAdvancedConfigurationProps {
   updateCustomTarget: (field: string, value: unknown) => void;
   defaultRequestTransform?: string;
   onSessionTested?: (success: boolean) => void;
+  isTargetConfigInvalid?: () => boolean;
 }
 
 const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
@@ -35,6 +36,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
   defaultRequestTransform,
   updateCustomTarget,
   onSessionTested,
+  isTargetConfigInvalid,
 }: HttpAdvancedConfigurationProps) => {
   return (
     <>
@@ -56,6 +58,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                 selectedTarget={selectedTarget}
                 updateCustomTarget={updateCustomTarget}
                 onTestComplete={onSessionTested}
+                isTargetConfigInvalid={isTargetConfigInvalid}
               />
             </TabsContent>
 
@@ -71,6 +74,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                 selectedTarget={selectedTarget}
                 updateCustomTarget={updateCustomTarget}
                 defaultRequestTransform={defaultRequestTransform}
+                isTargetConfigInvalid={isTargetConfigInvalid}
               />
             </TabsContent>
 

@@ -19,6 +19,22 @@ const RESULTS_TABLE_ZOOM_OPTIONS = [
   { value: '1.5', label: '150%' },
   { value: '2', label: '200%' },
 ] as const;
+const DEFAULT_MAX_TEXT_LENGTH = 500;
+// Slider values are finite-only, so this sentinel represents "unlimited"
+// and maps to Number.POSITIVE_INFINITY in settings state.
+const INFINITY_SLIDER_VALUE = 1001;
+
+function sanitizeMaxTextLength(value: number) {
+  if (value === Number.POSITIVE_INFINITY) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  if (Number.isFinite(value) && value >= 25) {
+    return value;
+  }
+
+  return DEFAULT_MAX_TEXT_LENGTH;
+}
 
 const SectionHeader = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -57,14 +73,11 @@ const SettingsPanel = ({ resultsTableZoom, onResultsTableZoomChange }: SettingsP
   } = useResultsViewSettingsStore();
 
   // Local state for text length slider
-  const sanitizedMaxTextLength =
-    maxTextLength === Number.POSITIVE_INFINITY
-      ? Number.POSITIVE_INFINITY
-      : Number.isFinite(maxTextLength) && maxTextLength >= 25
-        ? maxTextLength
-        : 500;
+  const sanitizedMaxTextLength = sanitizeMaxTextLength(maxTextLength);
   const [localMaxTextLength, setLocalMaxTextLength] = useState(
-    sanitizedMaxTextLength === Number.POSITIVE_INFINITY ? 1001 : sanitizedMaxTextLength,
+    sanitizedMaxTextLength === Number.POSITIVE_INFINITY
+      ? INFINITY_SLIDER_VALUE
+      : sanitizedMaxTextLength,
   );
 
   const handleTextLengthChange = useCallback((value: number) => {
@@ -73,7 +86,7 @@ const SettingsPanel = ({ resultsTableZoom, onResultsTableZoomChange }: SettingsP
 
   const handleTextLengthCommitted = useCallback(
     (value: number) => {
-      const newValue = value === 1001 ? Number.POSITIVE_INFINITY : value;
+      const newValue = value === INFINITY_SLIDER_VALUE ? Number.POSITIVE_INFINITY : value;
       setMaxTextLength(newValue);
     },
     [setMaxTextLength],
@@ -195,7 +208,7 @@ const SettingsPanel = ({ resultsTableZoom, onResultsTableZoomChange }: SettingsP
             onChange={handleTextLengthChange}
             onChangeCommitted={handleTextLengthCommitted}
             min={25}
-            max={1001}
+            max={INFINITY_SLIDER_VALUE}
             tooltipText="Characters before truncating"
             unlimited
           />

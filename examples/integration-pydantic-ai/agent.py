@@ -8,6 +8,11 @@ in a consistent format using Pydantic models.
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
+# Use the OpenAI Responses API with the smallest current GPT-5 reasoning model.
+# The `openai-responses:` prefix selects the Responses API explicitly (the bare
+# `openai:` prefix also resolves there in PydanticAI v2.0+).
+DEFAULT_MODEL = "openai-responses:gpt-5.4-nano"
+
 
 class WeatherResponse(BaseModel):
     """Structured weather response"""
@@ -39,7 +44,7 @@ def get_weather(ctx: RunContext, location: str) -> dict:
     return {"location": location, "temperature": "21°C", "description": "Clear"}
 
 
-def get_weather_agent(model: str = "openai:gpt-4.1-mini") -> Agent:
+def get_weather_agent(model: str = DEFAULT_MODEL) -> Agent:
     """Create a weather agent with structured output"""
     agent = Agent(
         model,
@@ -55,9 +60,7 @@ def get_weather_agent(model: str = "openai:gpt-4.1-mini") -> Agent:
     return agent
 
 
-async def run_weather_agent(
-    query: str, model: str = "openai:gpt-4.1-mini"
-) -> WeatherResponse:
+async def run_weather_agent(query: str, model: str = DEFAULT_MODEL) -> WeatherResponse:
     """Run the weather agent with a query"""
     try:
         agent = get_weather_agent(model)

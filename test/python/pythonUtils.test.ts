@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mock for execFileAsync - must be hoisted for vi.mock factory
 const { mockExecFileAsync, mockExecFile } = vi.hoisted(() => {
@@ -19,8 +19,16 @@ vi.mock('child_process', () => ({
 }));
 
 import { PythonShell } from 'python-shell';
+import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
+import logger from '../../src/logger';
 import * as pythonUtils from '../../src/python/pythonUtils';
+import {
+  createSecureTempDirectory,
+  removeSecureTempDirectory,
+  writeSecureTempFile,
+} from '../../src/util/secureTempFiles';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 const fsMock = vi.hoisted(() => ({
   writeFileSync: vi.fn(),
@@ -47,23 +55,49 @@ vi.mock('fs/promises', () => ({
   unlink: fsMock.unlinkSync,
 }));
 
-vi.mock('../../src/envars', () => ({
+vi.mock(import('../../src/envars'), async (importOriginal) => ({
+  ...(await importOriginal()),
   getEnvString: vi.fn(),
   getEnvBool: vi.fn(),
 }));
 
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+
+vi.mock('../../src/util/secureTempFiles', () => ({
+  createSecureTempDirectory: vi.fn(),
+  removeSecureTempDirectory: vi.fn(),
+  writeSecureTempFile: vi.fn(),
+}));
+
 // Must be hoisted for vi.mock factory
-const { mockPythonShellInstance, MockPythonShell } = vi.hoisted(() => {
+const { mockPythonShellInstance, MockPythonShell } = await vi.hoisted(async () => {
+  const { EventEmitter } = await import('node:events');
   const instance = {
-    stdout: { on: vi.fn() },
-    stderr: { on: vi.fn() },
+    stdout: { on: vi.fn(), removeListener: vi.fn() },
+    stderr: { on: vi.fn(), removeListener: vi.fn() },
     end: vi.fn(),
   };
-  // Create a proper class that can be used with 'new'
-  const MockPythonShell = vi.fn(function (this: typeof instance) {
-    Object.assign(this, instance);
-    return this;
-  }) as unknown as typeof import('python-shell').PythonShell;
+  const MockPythonShell = vi.fn(
+    class extends EventEmitter {
+      stdout = instance.stdout;
+      stderr = instance.stderr;
+      childProcess = new EventEmitter();
+
+      end(callback: (error: Error | null) => void) {
+        instance.end((error: Error | null) => {
+          callback(error);
+          this.childProcess.emit('close', error ? 1 : 0, null);
+        });
+      }
+    },
+  ) as unknown as typeof import('python-shell').PythonShell;
   return { mockPythonShellInstance: instance, MockPythonShell };
 });
 
@@ -75,11 +109,18 @@ describe('Python Utils', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecFileAsync.mockReset();
-    pythonUtils.state.cachedPythonPath = null;
-    pythonUtils.state.validationPromise = null;
+
+    mockPythonShellInstance.stdout.on.mockReset();
+    mockPythonShellInstance.stderr.on.mockReset();
+    mockPythonShellInstance.end.mockReset();
     // Set default mock return values
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(createSecureTempDirectory).mockResolvedValue('/tmp/promptfoo-python-test');
+    vi.mocked(removeSecureTempDirectory).mockResolvedValue(undefined);
+    vi.mocked(writeSecureTempFile).mockImplementation(
+      async (directory: string, filename: string) => `${directory}/${filename}`,
+    );
   });
 
   describe('getConfiguredPythonPath', () => {
@@ -141,10 +182,11 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('/usr/bin/python3.8');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('python3', [
-        '-c',
-        'import sys; print(sys.executable)',
-      ]);
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'python3',
+        ['-c', 'import sys; print(sys.executable)'],
+        { env: expect.any(Object) },
+      );
 
       // Restore original platform
       Object.defineProperty(process, 'platform', { value: originalPlatform });
@@ -174,9 +216,15 @@ describe('Python Utils', () => {
 
       // Should skip WindowsApps and use the real Python installation
       expect(result).toBe('C:\\Python39\\python.exe');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        env: expect.any(Object),
+      });
       // Verify that the non-WindowsApps path was validated
-      expect(mockExecFileAsync).toHaveBeenCalledWith('C:\\Python39\\python.exe', ['--version']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('C:\\Python39\\python.exe', ['--version'], {
+        env: expect.any(Object),
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -200,12 +248,15 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('C:\\Python39\\python.exe');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        env: expect.any(Object),
+      });
       // Verify py launcher fallback was used
-      expect(mockExecFileAsync).toHaveBeenCalledWith('py', [
-        '-c',
-        'import sys; print(sys.executable)',
-      ]);
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'py',
+        ['-c', 'import sys; print(sys.executable)'],
+        { env: expect.any(Object) },
+      );
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -229,9 +280,15 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('python');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        env: expect.any(Object),
+      });
       // Verify the final fallback python --version was called
-      expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version'], {
+        env: expect.any(Object),
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -276,12 +333,15 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('C:\\Python39\\python.exe');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        env: expect.any(Object),
+      });
       // Verify py launcher fallback was used when where returned empty
-      expect(mockExecFileAsync).toHaveBeenCalledWith('py', [
-        '-c',
-        'import sys; print(sys.executable)',
-      ]);
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'py',
+        ['-c', 'import sys; print(sys.executable)'],
+        { env: expect.any(Object) },
+      );
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -303,7 +363,11 @@ describe('Python Utils', () => {
         const result = await pythonUtils.tryPath('/usr/bin/python3');
 
         expect(result).toBe('/usr/bin/python3');
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version'], {
+          env: expect.any(Object),
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
     });
 
@@ -314,47 +378,32 @@ describe('Python Utils', () => {
         const result = await pythonUtils.tryPath('/usr/bin/nonexistent');
 
         expect(result).toBeNull();
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/nonexistent', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/nonexistent', ['--version'], {
+          env: expect.any(Object),
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
 
-      it('should return null if the command times out', async () => {
-        vi.useFakeTimers();
+      it('terminates a timed-out validation command before returning null', async () => {
+        mockExecFileAsync.mockRejectedValue(
+          Object.assign(new Error('Command killed'), { killed: true, signal: 'SIGKILL' }),
+        );
 
-        // Mock execFileAsync to return a promise that never resolves (simulating timeout)
-        mockExecFileAsync.mockImplementation(() => new Promise(() => {}));
-
-        const resultPromise = pythonUtils.tryPath('/usr/bin/python3');
-        await vi.advanceTimersByTimeAsync(2501);
-
-        const result = await resultPromise;
-
-        expect(result).toBeNull();
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version']);
-        vi.useRealTimers();
+        expect(await pythonUtils.tryPath('/usr/bin/python3')).toBeNull();
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version'], {
+          env: expect.any(Object),
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
     });
   });
 
   describe('validatePythonPath', () => {
-    describe('caching behavior', () => {
-      it('should validate and cache an existing Python 3 path', async () => {
-        mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
-
-        const result = await pythonUtils.validatePythonPath('python', false);
-
-        expect(result).toBe('python');
-        expect(pythonUtils.state.cachedPythonPath).toBe('python');
-        expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version']);
-      });
-
-      it('should return the cached path on subsequent calls', async () => {
-        pythonUtils.state.cachedPythonPath = '/usr/bin/python3';
-
-        const result = await pythonUtils.validatePythonPath('python', false);
-
-        expect(result).toBe('/usr/bin/python3');
-        expect(mockExecFileAsync).not.toHaveBeenCalled();
-      });
+    it('validates an existing Python 3 path', async () => {
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+      expect(await pythonUtils.validatePythonPath('python', false)).toBe('python');
     });
 
     describe('fallback behavior', () => {
@@ -390,7 +439,11 @@ describe('Python Utils', () => {
         await expect(pythonUtils.validatePythonPath('non_existent_program', true)).rejects.toThrow(
           'Python 3 not found. Tried "non_existent_program"',
         );
-        expect(mockExecFileAsync).toHaveBeenCalledWith('non_existent_program', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('non_existent_program', ['--version'], {
+          env: expect.any(Object),
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
 
       it('should throw an error when no valid Python path is found', async () => {
@@ -412,82 +465,144 @@ describe('Python Utils', () => {
         const result = await pythonUtils.validatePythonPath('/custom/python/path', true);
 
         expect(result).toBe('/custom/python/path');
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/custom/python/path', ['--version']);
-      });
-    });
-
-    describe('concurrent validation', () => {
-      it('should share validation promise between concurrent calls', async () => {
-        mockExecFileAsync.mockImplementation(async () => {
-          // Yield control so concurrent callers can register on the shared
-          // validation promise before resolution.
-          await Promise.resolve();
-          return { stdout: 'Python 3.8.10\n', stderr: '' };
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/custom/python/path', ['--version'], {
+          env: expect.any(Object),
+          timeout: 2500,
+          killSignal: 'SIGKILL',
         });
-
-        // Start two validations concurrently
-        const [result1, result2] = await Promise.all([
-          pythonUtils.validatePythonPath('python', false),
-          pythonUtils.validatePythonPath('python', false),
-        ]);
-
-        expect(result1).toBe('python');
-        expect(result2).toBe('python');
-
-        // Only one exec call should be made
-        expect(mockExecFileAsync).toHaveBeenCalledTimes(1);
-
-        // After resolution, validation promise should be cleared
-        expect(pythonUtils.state.validationPromise).toBeNull();
-      });
-
-      it('should handle race conditions between concurrent validation attempts', async () => {
-        // Clear cached path first to ensure validation runs
-        pythonUtils.state.cachedPythonPath = null;
-
-        mockExecFileAsync.mockImplementation(async () => {
-          // Yield control so concurrent callers can race onto the shared
-          // validation promise before resolution.
-          await Promise.resolve();
-          return { stdout: 'Python 3.8.10\n', stderr: '' };
-        });
-
-        // Start multiple validations without waiting
-        const promises = [
-          pythonUtils.validatePythonPath('python', false),
-          pythonUtils.validatePythonPath('python', false),
-          pythonUtils.validatePythonPath('python', false),
-        ];
-
-        const results = await Promise.all(promises);
-
-        expect(results).toEqual(['python', 'python', 'python']);
-
-        // Only one exec call should be made
-        expect(mockExecFileAsync).toHaveBeenCalledTimes(1);
-
-        // After resolution, validation promise should be cleared
-        expect(pythonUtils.state.validationPromise).toBeNull();
-      });
-    });
-
-    describe('promise cleanup', () => {
-      it('should clear validation promise after failed validation', async () => {
-        mockExecFileAsync.mockRejectedValue(new Error('Command failed'));
-
-        await expect(pythonUtils.validatePythonPath('python', true)).rejects.toThrow(
-          'Python 3 not found. Tried "python"',
-        );
-
-        // Validation promise should be cleared even after failure
-        expect(pythonUtils.state.validationPromise).toBeNull();
       });
     });
   });
 
   describe('runPython', () => {
+    it('passes file defaults to one-shot Python calls without changing process.env', async () => {
+      const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ type: 'final_result', data: 42 }),
+      );
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+      mockPythonShellInstance.end.mockImplementation((callback: (error: Error | null) => void) =>
+        callback(null),
+      );
+      try {
+        await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
+          pythonUtils.runPython('/path/to/script.py', 'call_api', []),
+        );
+        expect(PythonShell).toHaveBeenCalledWith(
+          'wrapper.py',
+          expect.objectContaining({
+            env: expect.objectContaining({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }),
+          }),
+        );
+        expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+      } finally {
+        restore();
+      }
+    });
     beforeEach(() => {
       vi.clearAllMocks();
+    });
+
+    describe('one-shot invocation validation', () => {
+      beforeEach(() => {
+        vi.mocked(fs.readFileSync).mockReturnValue(
+          JSON.stringify({ type: 'final_result', data: 42 }),
+        );
+        mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.12.0', stderr: '' });
+        mockPythonShellInstance.end.mockImplementation((callback: (error: Error | null) => void) =>
+          callback(null),
+        );
+      });
+
+      afterEach(() => {
+        mockExecFileAsync.mockReset();
+        mockPythonShellInstance.end.mockReset();
+        vi.mocked(fs.readFileSync).mockReset();
+      });
+
+      const run = (pythonExecutable?: string) =>
+        pythonUtils.runPython('/fixture/script.py', 'call_api', [], { pythonExecutable });
+
+      it('coalesces concurrent probes and reuses success within one invocation', async () => {
+        const probe = createDeferred<{ stdout: string; stderr: string }>();
+        mockExecFileAsync.mockReturnValue(probe.promise);
+        await cliState.withEnv({}, async () => {
+          const calls = Promise.all(Array.from({ length: 4 }, () => run('fixture-python')));
+          try {
+            expect(mockExecFileAsync).toHaveBeenCalledOnce();
+          } finally {
+            probe.resolve({ stdout: 'Python 3.12.0', stderr: '' });
+            await calls;
+          }
+          expect(await run('fixture-python')).toBe(42);
+          expect(mockExecFileAsync).toHaveBeenCalledOnce();
+          expect(PythonShell).toHaveBeenCalledTimes(5);
+        });
+      });
+
+      it('keeps concurrent file and suite environments in separate validation scopes', async () => {
+        await Promise.all(
+          ['first', 'second'].map((name) =>
+            cliState.withEnvFileOverrides({ PATH: `/fixture/${name}` }, () =>
+              cliState.withEnv({ PROMPTFOO_REVIEW_ENV_PROBE: name }, () =>
+                Promise.all([run('fixture-python'), run('fixture-python')]),
+              ),
+            ),
+          ),
+        );
+        expect(mockExecFileAsync).toHaveBeenCalledTimes(2);
+        expect(mockExecFileAsync.mock.calls.map((call) => call[2].env.PATH).sort()).toEqual([
+          '/fixture/first',
+          '/fixture/second',
+        ]);
+        expect(
+          vi
+            .mocked(PythonShell)
+            .mock.calls.map((call) => call[1]?.env?.PATH)
+            .sort(),
+        ).toEqual(['/fixture/first', '/fixture/first', '/fixture/second', '/fixture/second']);
+      });
+
+      it('distinguishes executable names and explicit versus fallback validation', async () => {
+        await cliState.withEnv({}, async () => {
+          await run('python');
+          await run();
+          await run('other-python');
+          await run('python');
+        });
+        expect(mockExecFileAsync.mock.calls.map((call) => call[0])).toEqual([
+          'python',
+          'python',
+          'other-python',
+        ]);
+      });
+
+      it('evicts failed validation so the same invocation can retry', async () => {
+        mockExecFileAsync.mockRejectedValue(new Error('fixture unavailable'));
+        await cliState.withEnv({}, async () => {
+          const results = await Promise.allSettled([run('fixture-python'), run('fixture-python')]);
+          expect(results.every((result) => result.status === 'rejected')).toBe(true);
+          expect(mockExecFileAsync).toHaveBeenCalledOnce();
+          mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.12.0', stderr: '' });
+          expect(await run('fixture-python')).toBe(42);
+          expect(await run('fixture-python')).toBe(42);
+          expect(mockExecFileAsync).toHaveBeenCalledTimes(2);
+        });
+      });
+
+      it('revalidates unscoped calls and explicit worker validation', async () => {
+        await run('fixture-python');
+        await run('fixture-python');
+        expect(mockExecFileAsync).toHaveBeenCalledTimes(2);
+        await cliState.withEnv({}, async () => {
+          await run('fixture-python');
+          mockExecFileAsync.mockRejectedValue(new Error('fixture removed'));
+          await expect(pythonUtils.validatePythonPath('fixture-python', true)).rejects.toThrow(
+            'Python 3 not found',
+          );
+        });
+        expect(mockExecFileAsync).toHaveBeenCalledTimes(4);
+      });
     });
 
     it('should execute a Python script with proper arguments', async () => {
@@ -506,7 +621,20 @@ describe('Python Utils', () => {
       const result = await pythonUtils.runPython(scriptPath, 'test_method', [1, 2, 3]);
 
       expect(result).toBe(42);
-      expect(fs.writeFileSync).toHaveBeenCalled();
+      expect(createSecureTempDirectory).toHaveBeenCalledWith('promptfoo-python-');
+      expect(writeSecureTempFile).toHaveBeenNthCalledWith(
+        1,
+        '/tmp/promptfoo-python-test',
+        'input.json',
+        '[1,2,3]',
+      );
+      expect(writeSecureTempFile).toHaveBeenNthCalledWith(
+        2,
+        '/tmp/promptfoo-python-test',
+        'output.json',
+        '',
+      );
+      expect(removeSecureTempDirectory).toHaveBeenCalledWith('/tmp/promptfoo-python-test');
       expect(PythonShell).toHaveBeenCalledWith(
         'wrapper.py',
         expect.objectContaining({
@@ -556,6 +684,44 @@ describe('Python Utils', () => {
       );
     });
 
+    it('should not log arguments or returned payloads', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ type: 'final_result', data: 'secret-result' }),
+      );
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+
+      mockPythonShellInstance.end.mockImplementation((callback: any) => {
+        callback(null);
+      });
+
+      await pythonUtils.runPython('/path/to/script.py', 'test_method', ['secret-input']);
+
+      const debugMessages = vi.mocked(logger.debug).mock.calls.flat().map(String).join('\n');
+      expect(debugMessages).not.toContain('secret-input');
+      expect(debugMessages).not.toContain('secret-result');
+    });
+
+    it('classifies routine stderr without reporting Python logging as errors', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ type: 'final_result', data: 'result' }),
+      );
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+      mockPythonShellInstance.stderr.on.mockImplementation((event: string, callback: any) => {
+        if (event === 'data') {
+          callback(Buffer.from('INFO:root:loaded config\nWARNING:root:slow response\n'));
+        }
+      });
+      mockPythonShellInstance.end.mockImplementation((callback: any) => {
+        callback(null);
+      });
+
+      await pythonUtils.runPython('/path/to/script.py', 'test_method', []);
+
+      expect(logger.info).toHaveBeenCalledWith('INFO:root:loaded config');
+      expect(logger.warn).toHaveBeenCalledWith('WARNING:root:slow response');
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
     it('should throw an error if Python script does not return final_result', async () => {
       vi.mocked(fs.writeFileSync).mockImplementation(() => {});
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ type: 'other', data: 42 }));
@@ -587,8 +753,7 @@ describe('Python Utils', () => {
         pythonUtils.runPython('/path/to/script.py', 'test_method', []),
       ).rejects.toThrow();
 
-      // Should attempt to clean up both temp files
-      expect(fs.unlinkSync).toHaveBeenCalledTimes(2);
+      expect(removeSecureTempDirectory).toHaveBeenCalledWith('/tmp/promptfoo-python-test');
     });
   });
 });

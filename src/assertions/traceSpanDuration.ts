@@ -1,12 +1,14 @@
-import { matchesPattern } from './traceUtils';
+import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
+import type { TraceSpanAttributeFilter } from './traceUtils';
 
 interface TraceSpanDurationValue {
   pattern?: string;
   max: number;
   percentile?: number;
+  attributes?: TraceSpanAttributeFilter;
 }
 
 function calculatePercentile(durations: number[], percentile: number): number {
@@ -32,23 +34,30 @@ export const handleTraceSpanDuration = ({
     throw new Error('trace-span-duration assertion must have a value object with max property');
   }
 
-  const { pattern = '*', max, percentile } = value;
+  const { pattern = '*', max, percentile, attributes } = value;
+
+  if (
+    percentile !== undefined &&
+    (!Number.isFinite(percentile) || percentile < 0 || percentile > 100)
+  ) {
+    throw new Error('trace-span-duration assertion percentile must be a number between 0 and 100');
+  }
+
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Filter spans by pattern and calculate durations
-  const matchingSpans = spans.filter((span) => {
-    return (
-      matchesPattern(span.name, pattern) &&
-      span.startTime !== undefined &&
-      span.endTime !== undefined
-    );
-  });
+  const matchingSpans = filterTraceSpans(spans, pattern, attributes).filter(
+    (span) => span.startTime !== undefined && span.endTime !== undefined,
+  );
 
   if (matchingSpans.length === 0) {
     return {
       pass: true,
       score: 1,
-      reason: `No spans found matching pattern "${pattern}" with complete timing data`,
+      reason: withTraceAttributeFilterContext(
+        `No spans found matching pattern "${pattern}" with complete timing data`,
+        attributes,
+      ),
       assertion,
     };
   }
@@ -99,7 +108,7 @@ export const handleTraceSpanDuration = ({
   return {
     pass,
     score: pass ? 1 : 0,
-    reason,
+    reason: withTraceAttributeFilterContext(reason, attributes),
     assertion,
   };
 };

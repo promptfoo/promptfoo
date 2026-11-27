@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Quick demo of the OrcaRouter provider answering geography questions
+
+prompts:
+  - What is the capital of {{country}}?
+
+providers:
+  - orcarouter:openai/gpt-4o-mini
+  - orcarouter:orcarouter/auto
+
+tests:
+  - vars:
+      country: France
+    assert:
+      - type: icontains
+        value: Paris
+  - vars:
+      country: Germany
+    assert:
+      - type: icontains
+        value: Berlin
+  - vars:
+      country: Italy
+    assert:
+      - type: icontains
+        value: Rome

@@ -14,10 +14,10 @@ from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 from langchain_chroma import Chroma
-from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pdf_loader import load_pdf_pages
 from tqdm import tqdm
 
 # Configure logging
@@ -75,8 +75,7 @@ def process_single_pdf(pdf_file: str) -> Tuple[str, List[Document]]:
     """
     doc_url: str = BASE_URL + quote(pdf_file)
     try:
-        loader: PyPDFLoader = PyPDFLoader(doc_url)
-        pages: List[Document] = loader.load()
+        pages: List[Document] = load_pdf_pages(doc_url)
         text_splitter: RecursiveCharacterTextSplitter = RecursiveCharacterTextSplitter(
             chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
         )

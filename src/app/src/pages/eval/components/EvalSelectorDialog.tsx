@@ -13,6 +13,7 @@ type Props = {
   onEvalSelected: (evalId: string) => void;
   focusedEvalId?: string;
   filterByDatasetId?: boolean;
+  focusedDatasetId?: string | null;
   description?: string;
 };
 
@@ -22,6 +23,7 @@ const EvalSelectorDialog = ({
   onEvalSelected,
   focusedEvalId,
   filterByDatasetId,
+  focusedDatasetId,
   description = 'Choose an evaluation to view',
 }: Props) => {
   return (
@@ -36,6 +38,7 @@ const EvalSelectorDialog = ({
             onEvalSelected={onEvalSelected}
             focusedEvalId={focusedEvalId}
             filterByDatasetId={filterByDatasetId}
+            focusedDatasetId={focusedDatasetId}
             showUtilityButtons
           />
         </div>

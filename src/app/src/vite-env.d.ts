@@ -9,7 +9,6 @@ interface ImportMetaEnv {
   readonly VITE_POSTHOG_HOST: string;
   readonly VITE_PROMPTFOO_LAUNCHER?: string;
   readonly VITE_IS_HOSTED?: string;
-  readonly VITE_PROMPTFOO_NO_CHAT?: string;
 }
 
 interface ImportMeta {

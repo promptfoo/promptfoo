@@ -73,7 +73,7 @@ export function StrategyItem({
     return `Generate an example test case using the ${strategy.name} Strategy.`;
   }, [requiresConfig, strategy.id, strategy.name, isTestCaseGenerationDisabled]);
 
-  const settingsTooltipTitle = requiresConfig ? tooltipTitle : 'Configure strategy settings';
+  const settingsTooltipTitle = requiresConfig ? tooltipTitle : `Configure ${strategy.name}`;
 
   const handleToggle = useCallback(() => {
     if (isDisabled) {
@@ -84,10 +84,10 @@ export function StrategyItem({
 
   return (
     <Card
-      onClick={handleToggle}
       className={cn(
         'relative flex select-none flex-col gap-3 p-4 transition-all',
         isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+        !isDisabled && 'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
         !isSelected && !isDisabled && 'hover:border-primary/50 hover:bg-muted/50',
         isSelected &&
           !requiresConfig &&
@@ -103,65 +103,81 @@ export function StrategyItem({
           ),
       )}
     >
-      {/* Header: title + badges on left, checkbox on right */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{strategy.name}</span>
-            {DEFAULT_STRATEGIES_SET.has(strategy.id) && (
-              <Badge variant="secondary">Recommended</Badge>
-            )}
-            {AGENTIC_STRATEGIES_SET.has(strategy.id) && (
-              <Badge className="border border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                Agent
-              </Badge>
-            )}
-            {MULTI_MODAL_STRATEGIES_SET.has(strategy.id) && (
-              <Badge className="border border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                Multi-modal
-              </Badge>
-            )}
-            {isDisabled && isRemoteGenerationDisabled && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[0.7rem] font-medium text-destructive">
-                    Remote generation required
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  This strategy requires remote generation. Unset
-                  PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION
-                  to enable.
-                </TooltipContent>
-              </Tooltip>
-            )}
-            {isDisabled && isAuthGated && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge className="h-5 gap-1 bg-gradient-to-r from-amber-500 to-amber-600 text-[0.6rem] font-bold tracking-wider text-white shadow-sm">
-                    <Lock className="size-2.5" />
-                    ENTERPRISE
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>This strategy is available in Promptfoo Enterprise</TooltipContent>
-              </Tooltip>
-            )}
+      <button
+        type="button"
+        aria-label={strategy.name}
+        aria-pressed={isSelected}
+        aria-disabled={isDisabled}
+        disabled={isDisabled}
+        onClick={handleToggle}
+        className="absolute inset-0 rounded-[inherit] focus-visible:outline-none"
+      />
+
+      <div className="pointer-events-none relative z-10 flex flex-1 flex-col gap-3">
+        {/* Header: title + badges on left, checkbox on right */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">{strategy.name}</span>
+              {DEFAULT_STRATEGIES_SET.has(strategy.id) && (
+                <Badge variant="secondary">Recommended</Badge>
+              )}
+              {AGENTIC_STRATEGIES_SET.has(strategy.id) && (
+                <Badge className="border border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  Agent
+                </Badge>
+              )}
+              {MULTI_MODAL_STRATEGIES_SET.has(strategy.id) && (
+                <Badge className="border border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                  Multi-modal
+                </Badge>
+              )}
+              {isDisabled && isRemoteGenerationDisabled && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="pointer-events-auto rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[0.7rem] font-medium text-destructive">
+                      Remote generation required
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    This strategy requires remote generation. Unset
+                    PROMPTFOO_DISABLE_REMOTE_GENERATION or
+                    PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {isDisabled && isAuthGated && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge className="pointer-events-auto h-5 gap-1 bg-gradient-to-r from-amber-500 to-amber-600 text-[0.6rem] font-bold tracking-wider text-white shadow-sm">
+                      <Lock className="size-2.5" />
+                      ENTERPRISE
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    This strategy is available in Promptfoo Enterprise
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           </div>
+          <Checkbox
+            checked={isSelected}
+            disabled={isDisabled}
+            onCheckedChange={handleToggle}
+            onClick={(e) => e.stopPropagation()}
+            aria-hidden="true"
+            tabIndex={-1}
+            className="mt-0.5"
+          />
         </div>
-        <Checkbox
-          checked={isSelected}
-          disabled={isDisabled}
-          onCheckedChange={handleToggle}
-          onClick={(e) => e.stopPropagation()}
-          className="mt-0.5"
-        />
+
+        {/* Description */}
+        <p className="text-sm text-muted-foreground">{strategy.description}</p>
       </div>
 
-      {/* Description */}
-      <p className="text-sm text-muted-foreground">{strategy.description}</p>
-
       {/* Actions */}
-      <div className="mt-auto flex items-center gap-2">
+      <div className="relative z-10 mt-auto flex items-center gap-2">
         <TestCaseGenerateButton
           onClick={handleTestCaseGeneration}
           disabled={isDisabled || isGenerating || requiresConfig || isTestCaseGenerationDisabled}
@@ -176,7 +192,7 @@ export function StrategyItem({
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Configure strategy settings"
+                aria-label={`Configure ${strategy.name}`}
                 className={cn(
                   'size-8',
                   requiresConfig

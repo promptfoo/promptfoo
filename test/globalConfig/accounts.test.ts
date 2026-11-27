@@ -16,6 +16,7 @@ import {
   promptForEmailUnverified,
   setUserEmail,
 } from '../../src/globalConfig/accounts';
+import { cloudConfig } from '../../src/globalConfig/cloud';
 import {
   readGlobalConfig,
   writeGlobalConfig,
@@ -26,7 +27,7 @@ import telemetry from '../../src/telemetry';
 import { fetchWithTimeout } from '../../src/util/fetch/index';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
-vi.mock('../../src/util/fetch', () => ({
+vi.mock('../../src/util/fetch/index', () => ({
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
@@ -74,7 +75,7 @@ describe('accounts', () => {
       expect(writeGlobalConfig).not.toHaveBeenCalled();
     });
 
-    it('should generate new ID and save to config when no ID exists', () => {
+    const verifyNewUserId = () => {
       vi.mocked(readGlobalConfig).mockReturnValue({
         account: { email: 'test@example.com' },
       });
@@ -90,7 +91,9 @@ describe('accounts', () => {
         account: { email: 'test@example.com' },
         id: result,
       });
-    });
+    };
+
+    it('should generate new ID and save to config when no ID exists', verifyNewUserId);
 
     it('should generate new ID when global config is null', () => {
       vi.mocked(readGlobalConfig).mockReturnValue(null as any);
@@ -122,23 +125,7 @@ describe('accounts', () => {
       });
     });
 
-    it('should generate new ID when config exists but has no id property', () => {
-      vi.mocked(readGlobalConfig).mockReturnValue({
-        account: { email: 'test@example.com' },
-      });
-
-      const result = getUserId();
-
-      // Should return a UUID-like string
-      expect(typeof result).toBe('string');
-      expect(result).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-
-      // Should have saved the config with the new ID
-      expect(writeGlobalConfig).toHaveBeenCalledWith({
-        account: { email: 'test@example.com' },
-        id: result,
-      });
-    });
+    it('should generate new ID when config exists but has no id property', verifyNewUserId);
   });
 
   describe('getUserEmail', () => {
@@ -785,6 +772,65 @@ describe('accounts', () => {
 
         expect(telemetry.saveConsent).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('checkEmailStatus host resolution (on-prem)', () => {
+    const ONPREM_HOST = 'https://onprem.example.com';
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+      vi.mocked(fetchWithTimeout).mockResolvedValue(
+        new Response(JSON.stringify({ status: 'ok' }), { status: 200, statusText: 'OK' }),
+      );
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('sends the email-status request to the configured cloud host when cloud is enabled', async () => {
+      vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(true);
+      vi.spyOn(cloudConfig, 'getApiHost').mockReturnValue(ONPREM_HOST);
+
+      await checkEmailStatus();
+
+      expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+      const calledUrl = vi.mocked(fetchWithTimeout).mock.calls[0][0] as string;
+      expect(calledUrl).toContain(`${ONPREM_HOST}/api/users/status`);
+      expect(calledUrl).not.toContain('api.promptfoo.app');
+    });
+
+    it('does not consult getApiHost and uses PROMPTFOO_CLOUD_API_URL when cloud is not enabled', async () => {
+      vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(false);
+      const getApiHostSpy = vi.spyOn(cloudConfig, 'getApiHost');
+      vi.mocked(getEnvString).mockImplementation((key: string, fallback?: any) =>
+        key === 'PROMPTFOO_CLOUD_API_URL' ? 'https://env-cloud.example.com' : fallback,
+      );
+
+      await checkEmailStatus();
+
+      const calledUrl = vi.mocked(fetchWithTimeout).mock.calls[0][0] as string;
+      expect(calledUrl).toContain('https://env-cloud.example.com/api/users/status');
+      expect(getApiHostSpy).not.toHaveBeenCalled();
+    });
+
+    it('strips a trailing slash from PROMPTFOO_CLOUD_API_URL on the non-cloud path', async () => {
+      vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(false);
+      vi.mocked(getEnvString).mockImplementation((key: string, fallback?: any) =>
+        key === 'PROMPTFOO_CLOUD_API_URL' ? 'https://env-cloud.example.com/' : fallback,
+      );
+
+      await checkEmailStatus();
+
+      const calledUrl = vi.mocked(fetchWithTimeout).mock.calls[0][0] as string;
+      // No `//api/users/status` from the trailing slash.
+      expect(calledUrl).toContain('https://env-cloud.example.com/api/users/status');
+      expect(calledUrl).not.toContain('.com//api');
     });
   });
 

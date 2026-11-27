@@ -56,9 +56,12 @@ Note: Quotes around `'{{env.VAR}}'` are required in YAML to prevent parsing issu
 
 Use current model identifiers (see `site/docs/providers/` for full list):
 
-- OpenAI: `openai:chat:gpt-5.5`, `openai:responses:gpt-5.5`, `openai:responses:gpt-5.5-pro`, `openai:chat:gpt-5.4-mini`
-- Anthropic: `anthropic:messages:claude-sonnet-4-6`, `anthropic:messages:claude-haiku-4-5-20251001`
+- OpenAI: `openai:gpt-6-sol`, `openai:gpt-6-luna`, `openai:gpt-6-astra`
+- Anthropic: `anthropic:messages:claude-opus-5-5`, `anthropic:messages:claude-sonnet-5`, `anthropic:messages:claude-haiku-4-5-20251001`
+  - Claude 4.7+ and the Claude 5 family reject `temperature`/`top_p`/`top_k` and `thinking.budget_tokens`. Use `effort` (`low`–`max`) and `thinking: { type: adaptive }` instead.
 - Google: `google:gemini-3.1-pro-preview`, `google:gemini-2.5-flash`
+
+Prefer short IDs such as `openai:gpt-6-sol` for general-purpose examples; GPT-6 IDs default to Responses. Use explicit `openai:responses:<model>` or `openai:chat:<model>` IDs when selecting a different endpoint or comparing APIs. Match reasoning, tools, structured output, and image inputs to the selected endpoint.
 
 ## Guidelines
 

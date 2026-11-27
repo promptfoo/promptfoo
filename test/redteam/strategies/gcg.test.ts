@@ -4,10 +4,12 @@ import { getUserEmail, isLoggedIntoCloud } from '../../../src/globalConfig/accou
 import logger from '../../../src/logger';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../../../src/redteam/remoteGeneration';
 import { addGcgTestCases, CONCURRENCY } from '../../../src/redteam/strategies/gcg';
+import { createMockFetchResponse } from '../../providers/mockProviderResponses';
 
 import type { TestCase } from '../../../src/types/index';
 
@@ -55,6 +57,10 @@ describe('gcg strategy', () => {
     mockIsLoggedIntoCloud.mockReturnValue(true);
     mockNeverGenerateRemote.mockReturnValue(false);
     mockGetRemoteGenerationUrl.mockReturnValue('http://test-url');
+    vi.mocked(getRemoteGenerationHeaders).mockImplementation((extra) => ({
+      'Content-Type': 'application/json',
+      ...extra,
+    }));
     mockGetRemoteGenerationExplicitlyDisabledError.mockImplementation(
       (strategyName) =>
         `${strategyName} requires remote generation, which has been explicitly disabled.`,
@@ -77,14 +83,11 @@ describe('gcg strategy', () => {
   ];
 
   it('should generate GCG test cases successfully', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({
         responses: ['generated response 1', 'generated response 2'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const result = await addGcgTestCases(testCases, 'prompt', {});
 
@@ -130,12 +133,9 @@ describe('gcg strategy', () => {
   });
 
   it('should handle API errors gracefully', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: { error: 'API Error' },
-      cached: false,
-      status: 500,
-      statusText: 'Error',
-    });
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({ error: 'API Error' }, { status: 500, statusText: 'Error' }),
+    );
 
     const result = await addGcgTestCases(testCases, 'prompt', {});
 
@@ -151,14 +151,11 @@ describe('gcg strategy', () => {
     const metadataSecret = 'SECRET_GCG_METADATA_VALUE';
     const assertionSecret = 'SECRET_GCG_ASSERTION_VALUE';
 
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({
         responses: [generatedResponse],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const result = await addGcgTestCases(
       [
@@ -217,12 +214,9 @@ describe('gcg strategy', () => {
   it('redacts remote error bodies from logs', async () => {
     const remoteError = 'SECRET_GCG_REMOTE_ERROR_WITH_PROMPT';
 
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: { error: remoteError },
-      cached: false,
-      status: 500,
-      statusText: 'Error',
-    });
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({ error: remoteError }, { status: 500, statusText: 'Error' }),
+    );
 
     const result = await addGcgTestCases(testCases, 'prompt', {});
 
@@ -265,14 +259,11 @@ describe('gcg strategy', () => {
   });
 
   it('should respect configuration options', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({
         responses: ['generated response'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const config = { n: 1 };
     await addGcgTestCases(testCases, 'prompt', config);
@@ -307,14 +298,11 @@ describe('gcg strategy', () => {
       },
     ];
 
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({
         responses: ['generated response'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const result = await addGcgTestCases(testCasesWithoutAssert, 'prompt', {});
 
@@ -361,12 +349,7 @@ describe('gcg strategy', () => {
           releaseWave = resolve;
         });
       }
-      return {
-        data: { responses: mockResponses[0] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      return createMockFetchResponse({ responses: mockResponses[0] });
     });
 
     await addGcgTestCases(manyTestCases, 'prompt', {});

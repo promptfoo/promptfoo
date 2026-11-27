@@ -3,6 +3,16 @@
  * Used by both the indirect-web-pwn strategy and provider.
  */
 
+import { z } from 'zod';
+
+import type { TokenUsage } from '../../types/providers';
+
+/** Identifiers already normalized for the Cloud tracking request contract. */
+export const WebPageTrackingIdsSchema = z.object({
+  uuid: z.string().uuid(),
+  evalId: z.string().min(1).max(256),
+});
+
 /**
  * Single exfiltration record with request metadata.
  */
@@ -33,6 +43,7 @@ export interface CreateWebPageResponse {
   embeddingLocation?: string;
   /** LLM-generated fetch prompt asking the AI to visit the URL */
   fetchPrompt?: string;
+  tokenUsage?: TokenUsage;
 }
 
 /**
@@ -46,6 +57,7 @@ export interface UpdateWebPageResponse {
   updateCount?: number;
   /** LLM-generated fetch prompt asking the AI to visit the URL */
   fetchPrompt?: string;
+  tokenUsage?: TokenUsage;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { Badge } from '@app/components/ui/badge';
@@ -30,18 +30,24 @@ import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import {
+  getCombinedTokenUsageTotal,
+  getIncurredTokenAccounting,
+  getPrimaryTokenUsageLabel,
+  getTokenUsageTotal,
+} from '@app/utils/tokenUsage';
+import { convertResultsToTable } from '@promptfoo/presentation/evalResults';
+import {
   type EvaluateResult,
   type EvaluateSummaryV2,
   type GradingResult,
   isProviderOptions,
-  ResultFailureReason,
   type ResultLightweightWithLabel,
   type ResultsFile,
   type SharedResults,
 } from '@promptfoo/types';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import FrameworkCompliance from './FrameworkCompliance';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
 import Overview from './Overview';
@@ -49,10 +55,68 @@ import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
+import { getPluginIdFromResult, getStrategyIdFromTest, type TestWithMetadata } from './shared';
 import { useReportStore } from './store';
 import TestSuites from './TestSuites';
 import ToolsDialog, { Tool } from './ToolsDialog';
+
+function buildStrategyStats(
+  failuresByPlugin: Record<string, TestWithMetadata[]>,
+  passesByPlugin: Record<string, TestWithMetadata[]>,
+): CategoryStats {
+  const stats: CategoryStats = {};
+  for (const [byPlugin, count] of [
+    [failuresByPlugin, 'failCount'],
+    [passesByPlugin, 'pass'],
+  ] as const) {
+    Object.values(byPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const strategyId = getStrategyIdFromTest(test);
+        if (!stats[strategyId]) {
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
+        }
+        stats[strategyId].total += 1;
+        stats[strategyId][count] += 1;
+      });
+    });
+  }
+  return stats;
+}
+
+function forEachReportResult(
+  evalData: ResultsFile,
+  selectedPromptIndex: number,
+  kind: 'failures' | 'passes',
+  onResult: (result: EvaluateResult, pluginId: string) => void,
+) {
+  const prompts =
+    (evalData.version >= 4
+      ? evalData.prompts
+      : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
+  const selectedPrompt = prompts[selectedPromptIndex];
+
+  evalData?.results.results.forEach((result) => {
+    // Filter by selected target/provider if multiple targets exist
+    if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
+      return;
+    }
+
+    const pluginId = getPluginIdFromResult(result);
+    if (!pluginId) {
+      console.warn(`Could not get ${kind} for plugin ${pluginId}`);
+      return;
+    }
+
+    // Exclude results with errors from being counted as results
+    // TODO: Errors which arise while grading may be mis-classified as ResultFailureReason.ASSERT
+    // and leak past this check. Check `result.gradingResult.reason` for errors e.g. "API call error: *".
+    if (result.error && result.failureReason === ResultFailureReason.ERROR) {
+      return;
+    }
+
+    onResult(result, pluginId);
+  });
+}
 
 interface ReportProps {
   /** When provided, uses this evalId instead of reading from URL search params. */
@@ -159,35 +223,11 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       return {};
     }
 
-    const prompts =
-      (evalData.version >= 4
-        ? evalData.prompts
-        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
-    const selectedPrompt = prompts[selectedPromptIndex];
-
     const failures: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
     > = {};
-    evalData?.results.results.forEach((result) => {
-      // Filter by selected target/provider if multiple targets exist
-      if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
-        return;
-      }
-
-      const pluginId = getPluginIdFromResult(result);
-      if (!pluginId) {
-        console.warn(`Could not get failures for plugin ${pluginId}`);
-        return;
-      }
-
-      // Exclude results with errors from being counted as failures
-      // TODO: Errors which arise while grading may be mis-classified as ResultFailureReason.ASSERT
-      // and leak past this check. Check `result.gradingResult.reason` for errors e.g. "API call error: *".
-      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
-        return;
-      }
-
+    forEachReportResult(evalData, selectedPromptIndex, 'failures', (result, pluginId) => {
       if (!result.success || !result.gradingResult?.pass) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
@@ -212,33 +252,11 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       return {};
     }
 
-    const prompts =
-      (evalData.version >= 4
-        ? evalData.prompts
-        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
-    const selectedPrompt = prompts[selectedPromptIndex];
-
     const passes: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
     > = {};
-    evalData?.results.results.forEach((result) => {
-      // Filter by selected target/provider if multiple targets exist
-      if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
-        return;
-      }
-
-      const pluginId = getPluginIdFromResult(result);
-      if (!pluginId) {
-        console.warn(`Could not get passes for plugin ${pluginId}`);
-        return;
-      }
-
-      // Exclude results with errors from being counted
-      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
-        return;
-      }
-
+    forEachReportResult(evalData, selectedPromptIndex, 'passes', (result, pluginId) => {
       if (result.success && result.gradingResult?.pass) {
         if (!passes[pluginId]) {
           passes[pluginId] = [];
@@ -310,41 +328,10 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
     );
   }, [evalData, selectedPromptIndex]);
 
-  const strategyStats = useMemo(() => {
-    if (!failuresByPlugin || !passesByPlugin) {
-      return {};
-    }
-
-    const stats: CategoryStats = {};
-
-    Object.values(failuresByPlugin).forEach((tests) => {
-      tests.forEach((test) => {
-        const strategyId = getStrategyIdFromTest(test);
-
-        if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
-        }
-
-        stats[strategyId].total += 1;
-        stats[strategyId].failCount += 1;
-      });
-    });
-
-    Object.values(passesByPlugin).forEach((tests) => {
-      tests.forEach((test) => {
-        const strategyId = getStrategyIdFromTest(test);
-
-        if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
-        }
-
-        stats[strategyId].total += 1;
-        stats[strategyId].pass += 1;
-      });
-    });
-
-    return stats;
-  }, [failuresByPlugin, passesByPlugin]);
+  const strategyStats = useMemo(
+    () => buildStrategyStats(failuresByPlugin, passesByPlugin),
+    [failuresByPlugin, passesByPlugin],
+  );
 
   const availableCategories = useMemo(() => {
     return Object.keys(categoryStats).sort();
@@ -354,95 +341,61 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
     return Object.keys(strategyStats).sort();
   }, [strategyStats]);
 
-  const filteredFailuresByPlugin = useMemo(() => {
-    if (!failuresByPlugin) {
-      return {} as typeof failuresByPlugin;
-    }
-
-    const filtered: typeof failuresByPlugin = {};
-
-    Object.entries(failuresByPlugin).forEach(([pluginId, tests]) => {
-      if (selectedCategories.length > 0 && !selectedCategories.includes(pluginId)) {
-        return;
+  const filterReportTests = useCallback(
+    (testsByPlugin: typeof failuresByPlugin, excludedStatus: 'pass' | 'fail') => {
+      if (!testsByPlugin) {
+        return {} as typeof failuresByPlugin;
       }
 
-      if (statusFilter === 'pass') {
-        return;
-      }
+      const filtered: typeof failuresByPlugin = {};
 
-      const filteredTests = tests.filter((test) => {
-        if (searchQuery) {
-          const searchLower = searchQuery.toLowerCase();
-          const promptMatches = test.prompt?.toLowerCase().includes(searchLower);
-          const outputMatches = test.output?.toLowerCase().includes(searchLower);
-          if (!promptMatches && !outputMatches) {
-            return false;
-          }
+      Object.entries(testsByPlugin).forEach(([pluginId, tests]) => {
+        if (selectedCategories.length > 0 && !selectedCategories.includes(pluginId)) {
+          return;
         }
 
-        if (selectedStrategies.length > 0) {
-          const strategyId =
-            test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
-          if (!selectedStrategies.includes(strategyId)) {
-            return false;
-          }
+        if (statusFilter === excludedStatus) {
+          return;
         }
 
-        return true;
+        const filteredTests = tests.filter((test) => {
+          if (searchQuery) {
+            const searchLower = searchQuery.toLowerCase();
+            const promptMatches = test.prompt?.toLowerCase().includes(searchLower);
+            const outputMatches = test.output?.toLowerCase().includes(searchLower);
+            if (!promptMatches && !outputMatches) {
+              return false;
+            }
+          }
+
+          if (selectedStrategies.length > 0) {
+            if (!selectedStrategies.includes(getStrategyIdFromTest(test))) {
+              return false;
+            }
+          }
+
+          return true;
+        });
+
+        if (filteredTests.length > 0) {
+          filtered[pluginId] = filteredTests;
+        }
       });
 
-      if (filteredTests.length > 0) {
-        filtered[pluginId] = filteredTests;
-      }
-    });
+      return filtered;
+    },
+    [selectedCategories, selectedStrategies, statusFilter, searchQuery],
+  );
 
-    return filtered;
-  }, [failuresByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
+  const filteredFailuresByPlugin = useMemo(
+    () => filterReportTests(failuresByPlugin, 'pass'),
+    [failuresByPlugin, filterReportTests],
+  );
 
-  const filteredPassesByPlugin = useMemo(() => {
-    if (!passesByPlugin) {
-      return {} as typeof passesByPlugin;
-    }
-
-    const filtered: typeof passesByPlugin = {};
-
-    Object.entries(passesByPlugin).forEach(([pluginId, tests]) => {
-      if (selectedCategories.length > 0 && !selectedCategories.includes(pluginId)) {
-        return;
-      }
-
-      if (statusFilter === 'fail') {
-        return;
-      }
-
-      const filteredTests = tests.filter((test) => {
-        if (searchQuery) {
-          const searchLower = searchQuery.toLowerCase();
-          const promptMatches = test.prompt?.toLowerCase().includes(searchLower);
-          const outputMatches = test.output?.toLowerCase().includes(searchLower);
-          if (!promptMatches && !outputMatches) {
-            return false;
-          }
-        }
-
-        if (selectedStrategies.length > 0) {
-          const strategyId =
-            test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
-          if (!selectedStrategies.includes(strategyId)) {
-            return false;
-          }
-        }
-
-        return true;
-      });
-
-      if (filteredTests.length > 0) {
-        filtered[pluginId] = filteredTests;
-      }
-    });
-
-    return filtered;
-  }, [passesByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
+  const filteredPassesByPlugin = useMemo(
+    () => filterReportTests(passesByPlugin, 'fail'),
+    [passesByPlugin, filterReportTests],
+  );
 
   /**
    * Recalculates category (plugin) stats given the filtered failures and passes.
@@ -468,39 +421,10 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
     return stats;
   }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
 
-  const filteredStrategyStats = useMemo(() => {
-    const stats: CategoryStats = {};
-
-    Object.values(filteredFailuresByPlugin).forEach((tests) => {
-      tests.forEach((test) => {
-        const strategyId =
-          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
-
-        if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
-        }
-
-        stats[strategyId].failCount += 1;
-        stats[strategyId].total += 1;
-      });
-    });
-
-    Object.values(filteredPassesByPlugin).forEach((tests) => {
-      tests.forEach((test) => {
-        const strategyId =
-          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
-
-        if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
-        }
-
-        stats[strategyId].total += 1;
-        stats[strategyId].pass += 1;
-      });
-    });
-
-    return stats;
-  }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
+  const filteredStrategyStats = useMemo(
+    () => buildStrategyStats(filteredFailuresByPlugin, filteredPassesByPlugin),
+    [filteredFailuresByPlugin, filteredPassesByPlugin],
+  );
 
   const hasActiveFilters =
     selectedCategories.length > 0 ||
@@ -672,6 +596,21 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       ? evalData.prompts
       : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
   const selectedPrompt = prompts[selectedPromptIndex];
+  const selectedTokenUsage = selectedPrompt?.metrics?.tokenUsage;
+  const targetTokens = getTokenUsageTotal(selectedTokenUsage);
+  const attackerTokens = getTokenUsageTotal(selectedTokenUsage?.attacker);
+  const gradingTokens = getTokenUsageTotal(selectedTokenUsage?.assertions);
+  const selectedTargetTokens = targetTokens + attackerTokens + gradingTokens;
+  const scanTokenUsage = evalData.results.stats?.tokenUsage;
+  const generationTokens = getTokenUsageTotal(scanTokenUsage?.generation);
+  const generationRequests = scanTokenUsage?.generation?.numRequests ?? 0;
+  const evaluationTokens = scanTokenUsage
+    ? getCombinedTokenUsageTotal(scanTokenUsage) - generationTokens
+    : prompts.reduce((total, prompt) => {
+        return total + getCombinedTokenUsageTotal(prompt.metrics?.tokenUsage);
+      }, 0);
+  const totalTokens = evaluationTokens + generationTokens;
+  const incurredAccounting = getIncurredTokenAccounting(scanTokenUsage ?? selectedTokenUsage);
   const tableData =
     (evalData.version >= 4
       ? convertResultsToTable(evalData).body
@@ -764,24 +703,77 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                       <strong>Target:</strong> {selectedPrompt.provider}
                     </Badge>
                   ) : null}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Badge variant="secondary">
-                          <strong>Depth:</strong>{' '}
-                          {(
-                            selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
-                          ).toLocaleString()}{' '}
-                          probes
-                        </Badge>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {selectedPrompt?.metrics?.tokenUsage?.total
-                        ? `${selectedPrompt.metrics.tokenUsage.total.toLocaleString()} tokens`
-                        : ''}
-                    </TooltipContent>
-                  </Tooltip>
+                  <Badge
+                    variant="secondary"
+                    aria-label={`${(
+                      selectedTokenUsage?.numRequests ?? tableData.length
+                    ).toLocaleString()} target probes`}
+                  >
+                    <strong>Depth:</strong>{' '}
+                    {(selectedTokenUsage?.numRequests ?? tableData.length).toLocaleString()} probes
+                  </Badge>
+                  {selectedTokenUsage ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Badge
+                            variant="secondary"
+                            className="cursor-help"
+                            aria-label={`${totalTokens.toLocaleString()} total tokens`}
+                          >
+                            <strong>Total Tokens:</strong> {totalTokens.toLocaleString()}
+                          </Badge>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div className="flex flex-col gap-1">
+                          <span>
+                            <strong>{getPrimaryTokenUsageLabel(true)} Tokens:</strong>{' '}
+                            {targetTokens.toLocaleString()}
+                          </span>
+                          <span>
+                            <strong>Attacker Tokens:</strong> {attackerTokens.toLocaleString()}
+                          </span>
+                          <span>
+                            <strong>Grading Tokens:</strong> {gradingTokens.toLocaleString()}
+                          </span>
+                          {incurredAccounting ? (
+                            <>
+                              <span>
+                                <strong>Incurred Tokens:</strong>{' '}
+                                {incurredAccounting.incurredTokens.toLocaleString()}
+                              </span>
+                              <span>
+                                <strong>Cached Savings:</strong>{' '}
+                                {incurredAccounting.cachedSavings.toLocaleString()}
+                              </span>
+                              <span>
+                                <strong>Actual Target Requests:</strong>{' '}
+                                {incurredAccounting.actualRequests.toLocaleString()}
+                              </span>
+                            </>
+                          ) : null}
+                          {prompts.length > 1 || generationTokens > 0 || generationRequests > 0 ? (
+                            <>
+                              <span>
+                                <strong>Selected Target Subtotal:</strong>{' '}
+                                {selectedTargetTokens.toLocaleString()}
+                              </span>
+                              <span>
+                                <strong>Generation Tokens (scan-wide):</strong>{' '}
+                                {generationTokens > 0 || generationRequests === 0
+                                  ? generationTokens.toLocaleString()
+                                  : `Unavailable (${generationRequests.toLocaleString()} ${generationRequests === 1 ? 'request' : 'requests'})`}
+                              </span>
+                              <span>
+                                <strong>Scan Total Tokens:</strong> {totalTokens.toLocaleString()}
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
                   {selectedPrompt && selectedPrompt.raw !== '{{prompt}}' && (
                     <Badge variant="secondary">
                       <strong>Prompt:</strong> &quot;

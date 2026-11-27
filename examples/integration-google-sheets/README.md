@@ -5,6 +5,7 @@ You can run this example with:
 ```bash
 npx promptfoo@latest init --example integration-google-sheets
 cd integration-google-sheets
+npm install promptfoo
 ```
 
 ## Usage
@@ -14,10 +15,12 @@ started, set your OPENAI_API_KEY environment variable.
 
 Next, duplicate the Google Sheet in promptfooconfig.yaml and replace the URL.
 
+Public sheet imports work without extra packages. Standard npm installs include the client for private reads and output writes. If you omitted optional dependencies, install the package named in the CLI error in this directory. Promptfoo 0.125.1 uses `npm install @googleapis/sheets`. Builds using Google Auth directly use `npm install google-auth-library`.
+
 Then run:
 
 ```bash
-promptfoo eval
+npx promptfoo eval
 ```
 
-Afterwards, you can view the results by running `promptfoo view`
+Afterwards, you can view the results by running `npx promptfoo view`

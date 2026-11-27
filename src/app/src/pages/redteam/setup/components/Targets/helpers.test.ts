@@ -2,9 +2,87 @@ import { describe, expect, it } from 'vitest';
 import { getProviderType } from './helpers';
 
 describe('getProviderType', () => {
+  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+    'restores an explicitly selected %s editor without inspecting the served name or URL',
+    (type) => {
+      expect(
+        getProviderType('openai:chat:tenant/arbitrary-model', {
+          type,
+          apiBaseUrl: 'https://private.example.test/inference/v1',
+        }),
+      ).toBe(type);
+      expect(getProviderType('anthropic:messages:my-model', { type })).toBe('anthropic');
+      expect(getProviderType('openai:responses:my-model', { type })).toBe('openai');
+    },
+  );
+
+  it.each([
+    'http://localhost:8080/v1',
+    'https://deployment.example.test/api',
+    '{{ env.LOCAL_BASE_URL }}',
+  ])('uses an editable generic target for an untyped compatible endpoint %s', (apiBaseUrl) => {
+    expect(getProviderType('openai:chat:my-served-name', { apiBaseUrl })).toBe('custom');
+    expect(getProviderType('openai:chat:my-served-name', { apiBaseUrl, type: 'unknown' })).toBe(
+      'custom',
+    );
+  });
+
+  it.each([undefined, '', ' ', 'https://api.openai.com/v1', 'https://api.openai.com/v1/'])(
+    'keeps native OpenAI presentation for base URL %s',
+    (apiBaseUrl) => {
+      expect(getProviderType('openai:chat:gpt-5-mini', { apiBaseUrl })).toBe('openai');
+    },
+  );
+
+  it.each([
+    { config: { apiHost: 'private.example.test/tenant' }, expected: 'custom' },
+    { config: { apiHost: 'api.openai.com' }, expected: 'openai' },
+    {
+      config: { apiHost: 'private.example.test', apiBaseUrl: 'https://api.openai.com/v1' },
+      expected: 'custom',
+    },
+    {
+      config: { apiHost: 'api.openai.com', apiBaseUrl: 'https://private.example.test/v1' },
+      expected: 'openai',
+    },
+    { config: { apiHost: 'api.openai.com/tenant' }, expected: 'custom' },
+    { config: { apiHost: 'api.openai.com/v1' }, expected: 'custom' },
+    {
+      config: { apiHost: '', apiBaseUrl: 'https://private.example.test/v1' },
+      expected: 'custom',
+    },
+  ])(
+    'classifies the effective endpoint with apiHost precedence: $config',
+    ({ config, expected }) => {
+      expect(getProviderType('openai:chat:tenant/model.json-v2', config)).toBe(expected);
+    },
+  );
+
+  it.each([
+    ['togetherai:organization/model:revision', 'together'],
+    ['togetherai', 'together'],
+    ['together:organization/model', 'together'],
+    ['llama:organization/model:quantization', 'llama.cpp'],
+    ['llama', 'llama.cpp'],
+    ['llama.cpp', 'llama.cpp'],
+    ['bedrock:agents:deployed-agent-id', 'bedrock-agent'],
+    ['bedrock-agent', 'bedrock-agent'],
+    ['bedrock:converse:amazon.nova-lite-v1:0', 'bedrock'],
+    ['bedrock:amazon.nova-lite-v1:0', 'bedrock'],
+    ['openai:chat:togetherai/my-served-model', 'openai'],
+    ['custom:llama:my-model', 'custom'],
+  ])('maps runtime provider %s to UI type %s without inspecting model names', (id, type) => {
+    expect(getProviderType(id)).toBe(type);
+  });
+
   it.each([
     {
-      providerId: 'openrouter:openai/gpt-5.4',
+      providerId: 'a2a:https://agent.example.com/a2a/v1',
+      expected: 'a2a',
+      description: 'an A2A provider URL',
+    },
+    {
+      providerId: 'openrouter:openai/gpt-6-sol',
       expected: 'openrouter',
       description: 'a standard provider ID with a model',
     },
@@ -13,14 +91,14 @@ describe('getProviderType', () => {
       expected: 'azure',
       description: 'a provider ID with a trailing colon',
     },
-  ])('should return the substring before the first colon for $description ("$providerId")', ({
-    providerId,
-    expected,
-  }) => {
-    const result = getProviderType(providerId);
+  ])(
+    'should return the substring before the first colon for $description ("$providerId")',
+    ({ providerId, expected }) => {
+      const result = getProviderType(providerId);
 
-    expect(result).toBe(expected);
-  });
+      expect(result).toBe(expected);
+    },
+  );
 
   it('should return "exec" for provider IDs like "exec: python script.py"', () => {
     const providerId = 'exec: python script.py';
@@ -28,6 +106,13 @@ describe('getProviderType', () => {
     const result = getProviderType(providerId);
     expect(result).toBe(expected);
   });
+
+  it.each(['openai:codex-security', 'openai:codex-security:gpt-5.6-luna'])(
+    'recognizes %s as Codex Security instead of a foundation OpenAI model',
+    (providerId) => {
+      expect(getProviderType(providerId)).toBe('codex-security');
+    },
+  );
 
   it('should return the substring before the first colon when multiple colons are present', () => {
     const providerId = 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0';
@@ -40,16 +125,35 @@ describe('getProviderType', () => {
 
   it.each([
     { providerId: 'http', expected: 'http', description: 'http provider' },
+    { providerId: 'https', expected: 'http', description: 'https provider alias' },
+    { providerId: 'http://api.example.test', expected: 'http', description: 'http URL provider' },
+    {
+      providerId: 'https://api.example.test',
+      expected: 'http',
+      description: 'https URL provider',
+    },
     { providerId: 'websocket', expected: 'websocket', description: 'websocket provider' },
+    { providerId: 'ws', expected: 'websocket', description: 'ws provider alias' },
+    { providerId: 'wss', expected: 'websocket', description: 'wss provider alias' },
+    {
+      providerId: 'ws://socket.example.test',
+      expected: 'websocket',
+      description: 'ws URL provider',
+    },
+    {
+      providerId: 'wss://socket.example.test',
+      expected: 'websocket',
+      description: 'wss URL provider',
+    },
     { providerId: 'custom', expected: 'custom', description: 'custom provider' },
-  ])('should return the providerId itself for direct provider types like $description ("$providerId")', ({
-    providerId,
-    expected,
-  }) => {
-    const result = getProviderType(providerId);
+  ])(
+    'should return the providerId itself for direct provider types like $description ("$providerId")',
+    ({ providerId, expected }) => {
+      const result = getProviderType(providerId);
 
-    expect(result).toBe(expected);
-  });
+      expect(result).toBe(expected);
+    },
+  );
 
   describe('file:// path handling', () => {
     it.each([

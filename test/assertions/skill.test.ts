@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
+import { createStringAssertion } from '../factories/literalFixtures';
 
 import type { Assertion, AtomicTestCase, ProviderResponse } from '../../src/types/index';
 
@@ -34,13 +35,33 @@ describe('skill-used assertion', () => {
   }
 
   it('passes when an exact skill name is present', async () => {
-    const result = await runSkillAssertion({
-      type: 'skill-used',
-      value: 'token-skill',
-    });
+    const result = await runSkillAssertion(createStringAssertion('skill-used', 'token-skill'));
 
     expect(result.pass).toBe(true);
     expect(result.reason).toContain('Observed required skill(s): token-skill');
+  });
+
+  it('ignores errored skill calls when checking skill-used assertions', async () => {
+    const result = await runAssertion({
+      assertion: createStringAssertion('skill-used', 'missing-skill'),
+      test: testCase,
+      providerResponse: {
+        output: 'Done',
+        metadata: {
+          skillCalls: [
+            {
+              name: 'missing-skill',
+              source: 'tool',
+              is_error: true,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Missing required skill(s): missing-skill');
+    expect(result.reason).toContain('Actual skills: (none)');
   });
 
   it('passes when all expected skills in a list are present', async () => {
@@ -89,10 +110,7 @@ describe('skill-used assertion', () => {
   });
 
   it('fails when a required skill is missing', async () => {
-    const result = await runSkillAssertion({
-      type: 'skill-used',
-      value: 'missing-skill',
-    });
+    const result = await runSkillAssertion(createStringAssertion('skill-used', 'missing-skill'));
 
     expect(result.pass).toBe(false);
     expect(result.reason).toContain('Missing required skill(s): missing-skill');
@@ -194,10 +212,7 @@ describe('skill-used assertion', () => {
 
   it('fails gracefully when skillCalls is an empty array', async () => {
     const result = await runAssertion({
-      assertion: {
-        type: 'skill-used',
-        value: 'token-skill',
-      },
+      assertion: createStringAssertion('skill-used', 'token-skill'),
       test: testCase,
       providerResponse: {
         output: 'Done',

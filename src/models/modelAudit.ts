@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNotNull, like, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, like, or } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { modelAuditsTable } from '../database/tables';
 import logger from '../logger';
@@ -10,8 +10,12 @@ import type { ModelAuditScanResults } from '../types/modelAudit';
 
 type ModelAuditSortField = (typeof MODEL_AUDIT_SORT_FIELDS)[number];
 
-function getModelAuditSortColumn(sortField: ModelAuditSortField) {
-  return modelAuditsTable[sortField];
+function buildSearchCondition(search: string) {
+  return or(
+    like(modelAuditsTable.name, `%${search}%`),
+    like(modelAuditsTable.modelPath, `%${search}%`),
+    like(modelAuditsTable.id, `%${search}%`),
+  );
 }
 
 export function createScanId(createdAt: Date = new Date()) {
@@ -158,8 +162,8 @@ export default class ModelAudit {
       sourceLastModified: params.sourceLastModified || null,
       scannerVersion: params.scannerVersion || null,
     };
-    const db = getDb();
-    db.insert(modelAuditsTable).values(data).run();
+    const db = await getDb();
+    await db.insert(modelAuditsTable).values(data).run();
 
     logger.debug(`Created model audit ${id} for ${params.modelPath}`);
 
@@ -167,7 +171,7 @@ export default class ModelAudit {
   }
 
   static async findById(id: string): Promise<ModelAudit | null> {
-    const db = getDb();
+    const db = await getDb();
     const result = await db
       .select()
       .from(modelAuditsTable)
@@ -179,18 +183,6 @@ export default class ModelAudit {
     }
 
     return new ModelAudit({ ...result, persisted: true });
-  }
-
-  static async findByModelPath(modelPath: string): Promise<ModelAudit[]> {
-    const db = getDb();
-    const results = await db
-      .select()
-      .from(modelAuditsTable)
-      .where(eq(modelAuditsTable.modelPath, modelPath))
-      .orderBy(modelAuditsTable.createdAt)
-      .all();
-
-    return results.map((r) => new ModelAudit({ ...r, persisted: true }));
   }
 
   /**
@@ -211,7 +203,7 @@ export default class ModelAudit {
     revisionSha?: string | null,
     contentHash?: string,
   ): Promise<ModelAudit | null> {
-    const db = getDb();
+    const db = await getDb();
 
     // Build query conditions based on available fields
     const conditions = [];
@@ -219,11 +211,7 @@ export default class ModelAudit {
     // If we have revision_sha, check (modelId, revisionSha)
     if (revisionSha) {
       conditions.push(
-        and(
-          eq(modelAuditsTable.modelId, modelId),
-          eq(modelAuditsTable.revisionSha, revisionSha),
-          isNotNull(modelAuditsTable.revisionSha),
-        ),
+        and(eq(modelAuditsTable.modelId, modelId), eq(modelAuditsTable.revisionSha, revisionSha)),
       );
     }
 
@@ -255,17 +243,6 @@ export default class ModelAudit {
     return new ModelAudit({ ...result, persisted: true });
   }
 
-  static async findLatestByModelId(modelId: string): Promise<ModelAudit | null> {
-    const result = await getDb()
-      .select()
-      .from(modelAuditsTable)
-      .where(eq(modelAuditsTable.modelId, modelId))
-      .orderBy(desc(modelAuditsTable.createdAt))
-      .get();
-
-    return result ? new ModelAudit({ ...result, persisted: true }) : null;
-  }
-
   /**
    * Get multiple model audits with pagination, sorting, and optional search.
    *
@@ -280,7 +257,7 @@ export default class ModelAudit {
     sortOrder: 'asc' | 'desc' = 'desc',
     search?: string,
   ): Promise<ModelAudit[]> {
-    const db = getDb();
+    const db = await getDb();
 
     // Build the base query
     let query = db.select().from(modelAuditsTable);
@@ -288,32 +265,19 @@ export default class ModelAudit {
     // Apply search filter if provided
     // Note: Drizzle ORM's like() uses parameterized queries, making this safe from SQL injection
     if (search) {
-      query = query.where(
-        or(
-          like(modelAuditsTable.name, `%${search}%`),
-          like(modelAuditsTable.modelPath, `%${search}%`),
-          like(modelAuditsTable.id, `%${search}%`),
-        ),
-      ) as typeof query;
+      query = query.where(buildSearchCondition(search)) as typeof query;
     }
 
     // Determine the sort column using explicit allowlist mapping
-    const sortColumn = getModelAuditSortColumn(sortField);
+    const sortColumn = modelAuditsTable[sortField];
 
     // Apply ordering with a unique tie-breaker so offset-based virtualized loads stay stable.
-    if (sortOrder === 'asc') {
-      query = (
-        sortField === 'id'
-          ? query.orderBy(asc(sortColumn))
-          : query.orderBy(asc(sortColumn), asc(modelAuditsTable.id))
-      ) as typeof query;
-    } else {
-      query = (
-        sortField === 'id'
-          ? query.orderBy(desc(sortColumn))
-          : query.orderBy(desc(sortColumn), desc(modelAuditsTable.id))
-      ) as typeof query;
-    }
+    const orderBy = sortOrder === 'asc' ? asc : desc;
+    query = (
+      sortField === 'id'
+        ? query.orderBy(orderBy(sortColumn))
+        : query.orderBy(orderBy(sortColumn), orderBy(modelAuditsTable.id))
+    ) as typeof query;
 
     // Apply pagination
     const results = await query.limit(limit).offset(offset).all();
@@ -322,19 +286,13 @@ export default class ModelAudit {
   }
 
   static async count(search?: string): Promise<number> {
-    const db = getDb();
+    const db = await getDb();
 
     let query = db.select({ value: count() }).from(modelAuditsTable);
 
     // Apply search filter if provided
     if (search) {
-      query = query.where(
-        or(
-          like(modelAuditsTable.name, `%${search}%`),
-          like(modelAuditsTable.modelPath, `%${search}%`),
-          like(modelAuditsTable.id, `%${search}%`),
-        ),
-      ) as typeof query;
+      query = query.where(buildSearchCondition(search)) as typeof query;
     }
 
     const result = await query.get();
@@ -342,7 +300,7 @@ export default class ModelAudit {
   }
 
   static async getLatest(limit: number = 10): Promise<ModelAudit[]> {
-    const db = getDb();
+    const db = await getDb();
     const results = await db
       .select()
       .from(modelAuditsTable)
@@ -362,32 +320,36 @@ export default class ModelAudit {
   }
 
   async save(): Promise<void> {
-    const db = getDb();
+    const db = await getDb();
     const now = Date.now();
+
+    const getValues = () => ({
+      name: this.name,
+      author: this.author,
+      modelPath: this.modelPath,
+      modelType: this.modelType,
+      results: this.results,
+      checks: this.results?.checks || null,
+      issues: this.results?.issues || null,
+      hasErrors: this.hasErrors,
+      totalChecks: this.totalChecks,
+      passedChecks: this.passedChecks,
+      failedChecks: this.failedChecks,
+      metadata: this.metadata,
+      // Revision tracking
+      modelId: this.modelId,
+      revisionSha: this.revisionSha,
+      contentHash: this.contentHash,
+      modelSource: this.modelSource,
+      sourceLastModified: this.sourceLastModified,
+      scannerVersion: this.scannerVersion,
+    });
 
     if (this.persisted) {
       await db
         .update(modelAuditsTable)
         .set({
-          name: this.name,
-          author: this.author,
-          modelPath: this.modelPath,
-          modelType: this.modelType,
-          results: this.results,
-          checks: this.results?.checks || null,
-          issues: this.results?.issues || null,
-          hasErrors: this.hasErrors,
-          totalChecks: this.totalChecks,
-          passedChecks: this.passedChecks,
-          failedChecks: this.failedChecks,
-          metadata: this.metadata,
-          // Revision tracking
-          modelId: this.modelId,
-          revisionSha: this.revisionSha,
-          contentHash: this.contentHash,
-          modelSource: this.modelSource,
-          sourceLastModified: this.sourceLastModified,
-          scannerVersion: this.scannerVersion,
+          ...getValues(),
           updatedAt: now,
         })
         .where(eq(modelAuditsTable.id, this.id))
@@ -397,25 +359,7 @@ export default class ModelAudit {
         .insert(modelAuditsTable)
         .values({
           id: this.id,
-          name: this.name,
-          author: this.author,
-          modelPath: this.modelPath,
-          modelType: this.modelType,
-          results: this.results,
-          checks: this.results?.checks || null,
-          issues: this.results?.issues || null,
-          hasErrors: this.hasErrors,
-          totalChecks: this.totalChecks,
-          passedChecks: this.passedChecks,
-          failedChecks: this.failedChecks,
-          metadata: this.metadata,
-          // Revision tracking
-          modelId: this.modelId,
-          revisionSha: this.revisionSha,
-          contentHash: this.contentHash,
-          modelSource: this.modelSource,
-          sourceLastModified: this.sourceLastModified,
-          scannerVersion: this.scannerVersion,
+          ...getValues(),
           createdAt: this.createdAt || now,
           updatedAt: now,
         })
@@ -429,8 +373,8 @@ export default class ModelAudit {
       return;
     }
 
-    const db = getDb();
-    db.delete(modelAuditsTable).where(eq(modelAuditsTable.id, this.id)).run();
+    const db = await getDb();
+    await db.delete(modelAuditsTable).where(eq(modelAuditsTable.id, this.id)).run();
 
     this.persisted = false;
   }

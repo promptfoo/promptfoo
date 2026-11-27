@@ -1,6 +1,3 @@
-import path from 'path';
-
-import protobuf from 'protobufjs';
 import request from 'supertest';
 import {
   afterEach,
@@ -12,36 +9,10 @@ import {
   type MockedFunction,
   vi,
 } from 'vitest';
-import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
+import { OTLPReceiver, startOTLPReceiver, stopOTLPReceiver } from '../../src/tracing/otlpReceiver';
+import { encodeOTLPRequest } from './otlpRequestFixture';
 
 import type { TraceStore } from '../../src/tracing/store';
-
-// Helper to create protobuf-encoded OTLP data for tests
-let protoRoot: protobuf.Root | null = null;
-
-async function getProtoRoot(): Promise<protobuf.Root> {
-  if (protoRoot) {
-    return protoRoot;
-  }
-  const protoDir = path.join(__dirname, '../../src/tracing/proto');
-  const root = new protobuf.Root();
-  root.resolvePath = (_origin: string, target: string) => {
-    return path.join(protoDir, target);
-  };
-  await root.load('opentelemetry/proto/collector/trace/v1/trace_service.proto');
-  protoRoot = root;
-  return protoRoot;
-}
-
-async function encodeOTLPRequest(data: any): Promise<Buffer> {
-  const root = await getProtoRoot();
-  const ExportTraceServiceRequest = root.lookupType(
-    'opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest',
-  );
-  const message = ExportTraceServiceRequest.create(data);
-  const encoded = ExportTraceServiceRequest.encode(message).finish();
-  return Buffer.from(encoded);
-}
 
 // Mock the database
 vi.mock('../../src/database', () => ({
@@ -75,6 +46,7 @@ describe('OTLPReceiver', () => {
     addSpans: MockedFunction<(traceId: string, spans: any[], options?: any) => Promise<void>>;
     getTracesByEvaluation: MockedFunction<() => Promise<any[]>>;
     getTrace: MockedFunction<() => Promise<any | null>>;
+    getTraceMetadata: MockedFunction<() => Promise<Record<string, any> | undefined>>;
     deleteOldTraces: MockedFunction<() => Promise<void>>;
   };
 
@@ -94,6 +66,9 @@ describe('OTLPReceiver', () => {
         .mockResolvedValue(undefined),
       getTracesByEvaluation: vi.fn<() => Promise<any[]>>().mockResolvedValue([]),
       getTrace: vi.fn<() => Promise<any | null>>().mockResolvedValue(null),
+      getTraceMetadata: vi
+        .fn<() => Promise<Record<string, any> | undefined>>()
+        .mockResolvedValue(undefined),
       deleteOldTraces: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     };
 
@@ -343,7 +318,7 @@ describe('OTLPReceiver', () => {
                         key: 'array.attr',
                         value: {
                           arrayValue: {
-                            values: [{ stringValue: 'a' }, { stringValue: 'b' }],
+                            values: [{ stringValue: 'a' }, { bytesValue: 'AP8=' }, {}],
                           },
                         },
                       },
@@ -371,7 +346,7 @@ describe('OTLPReceiver', () => {
               'int.attr': 123,
               'double.attr': 3.14,
               'bool.attr': true,
-              'array.attr': ['a', 'b'],
+              'array.attr': ['a', 'AP8=', null],
             }),
           }),
         ]),
@@ -393,7 +368,7 @@ describe('OTLPReceiver', () => {
       receiver = new OTLPReceiver({ acceptFormats: ['json'] });
       (receiver as any).traceStore = mockTraceStore;
 
-      const encodedData = await encodeOTLPRequest({
+      const encodedData = encodeOTLPRequest({
         resourceSpans: [
           {
             scopeSpans: [
@@ -461,6 +436,20 @@ describe('OTLPReceiver', () => {
       expect(response.body.error).toMatch(/invalid protobuf/i);
     });
 
+    it('rejects overflowing protobuf lengths without storing spans', async () => {
+      // resourceSpans length encodes 2^32, which previously wrapped to zero.
+      const malformed = Buffer.from([0x0a, 0x80, 0x80, 0x80, 0x80, 0x10]);
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(malformed)
+        .expect(400);
+
+      expect(response.body.error).toMatch(/invalid protobuf/i);
+      expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
+
     it('should accept valid OTLP protobuf traces', async () => {
       // Manually override the traceStore property for this test too
       (receiver as any).traceStore = mockTraceStore;
@@ -507,7 +496,7 @@ describe('OTLPReceiver', () => {
         ],
       };
 
-      const encodedData = await encodeOTLPRequest(protobufRequest);
+      const encodedData = encodeOTLPRequest(protobufRequest);
 
       const response = await request(receiver.getApp())
         .post('/v1/traces')
@@ -580,6 +569,869 @@ describe('OTLPReceiver', () => {
         .expect(500);
 
       expect(response.body).toEqual({ error: 'Internal server error' });
+    });
+  });
+
+  describe('Ingest-time redaction', () => {
+    it('replaces matched attribute values before persisting', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        redactAttributes: ['password', 'authorization', 'tool.arguments'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'a'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      endTimeUnixNano: '2000000000',
+                      attributes: [
+                        { key: 'tool.name', value: { stringValue: 'lookup_user' } },
+                        {
+                          key: 'tool.arguments',
+                          value: { stringValue: '{"ssn":"123-45-6789"}' },
+                        },
+                        { key: 'http.password', value: { stringValue: 'pw123' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer xyz' } },
+                        {
+                          key: 'request.context',
+                          value: {
+                            kvlistValue: {
+                              values: [
+                                { key: 'user.password', value: { stringValue: 'nested-pw' } },
+                                { key: 'safe', value: { stringValue: 'visible' } },
+                              ],
+                            },
+                          },
+                        },
+                        { key: 'tool.result', value: { stringValue: 'ok' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: '[REDACTED]',
+              'http.password': '[REDACTED]',
+              'request.context': {
+                'user.password': '[REDACTED]',
+                safe: 'visible',
+              },
+              'tool.arguments': '[REDACTED]',
+              'tool.result': 'ok',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
+    it('redacts span name and statusMessage that echo a redacted attribute value', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['authorization'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'e'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      // Both name and status message echo the value of the redacted attribute.
+                      name: 'Bearer secret-token',
+                      startTimeUnixNano: '1000000000',
+                      endTimeUnixNano: '2000000000',
+                      status: { code: 2, message: 'Bearer secret-token' },
+                      attributes: [
+                        { key: 'authorization', value: { stringValue: 'Bearer secret-token' } },
+                        { key: 'safe', value: { stringValue: 'visible' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        [
+          expect.objectContaining({
+            name: '[REDACTED]',
+            statusMessage: '[REDACTED]',
+            attributes: expect.objectContaining({
+              authorization: '[REDACTED]',
+              safe: 'visible',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
+    it('replaces a matched key wholesale when its value is a nested object or array', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['secret'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'f'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        {
+                          key: 'secret.config',
+                          value: {
+                            kvlistValue: {
+                              values: [{ key: 'k', value: { stringValue: 'v' } }],
+                            },
+                          },
+                        },
+                        {
+                          key: 'secret.list',
+                          value: {
+                            arrayValue: {
+                              values: [{ stringValue: 'one' }, { stringValue: 'two' }],
+                            },
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'ffffffffffffffffffffffffffffffff',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              'secret.config': '[REDACTED]',
+              'secret.list': '[REDACTED]',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
+    it('uses trace-specific redaction config instead of the receiver default', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['authorization'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+      mockTraceStore.getTraceMetadata.mockResolvedValueOnce({
+        otlpHttpRedactAttributes: ['password'],
+      });
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'b'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      endTimeUnixNano: '2000000000',
+                      attributes: [
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer abc' } },
+                        { key: 'http.password', value: { stringValue: 'pw123' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: 'Bearer abc',
+              'http.password': '[REDACTED]',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
+    it('does not apply receiver-default redaction to a linked trace with no policy', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['authorization'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+      mockTraceStore.getTraceMetadata.mockResolvedValueOnce({});
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'c'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer visible' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'cccccccccccccccccccccccccccccccc',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: 'Bearer visible',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
+    it('persists receiver redaction policy for receiver-created traces', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['authorization'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+      mockTraceStore.getTraceMetadata.mockResolvedValueOnce({
+        otlpHttpRedactAttributes: ['authorization'],
+      });
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'd'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'receiver-created-eval' } },
+                        { key: 'test.case.id', value: { stringValue: 'receiver-created-test' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer hidden' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: 'dddddddddddddddddddddddddddddddd',
+        evaluationId: 'receiver-created-eval',
+        testCaseId: 'receiver-created-test',
+        metadata: { otlpHttpRedactAttributes: ['authorization'] },
+      });
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'dddddddddddddddddddddddddddddddd',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: '[REDACTED]',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
+    it('persists command tool-name policy for receiver-created traces', async () => {
+      const commandAwareReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        commandToolNames: ['bash', 'shell'],
+      });
+      (commandAwareReceiver as any).traceStore = mockTraceStore;
+
+      await request(commandAwareReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'e'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'receiver-created-eval' } },
+                        { key: 'test.case.id', value: { stringValue: 'receiver-created-test' } },
+                        { key: 'tool.name', value: { stringValue: 'bash' } },
+                        { key: 'tool.arguments', value: { stringValue: '{"cmd":"npm test"}' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        evaluationId: 'receiver-created-eval',
+        testCaseId: 'receiver-created-test',
+        metadata: { commandToolNames: ['bash', 'shell'] },
+      });
+    });
+
+    it('uses registered evaluation policy for receiver-created traces on a shared receiver', async () => {
+      const sharedReceiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      (sharedReceiver as any).traceStore = mockTraceStore;
+      sharedReceiver.registerTracePolicy({
+        evaluationId: 'registered-eval',
+        commandToolNames: ['bash'],
+        redactAttributes: ['authorization'],
+      });
+
+      await request(sharedReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'f'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'registered-eval' } },
+                        { key: 'test.case.id', value: { stringValue: 'registered-test' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer hidden' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: 'ffffffffffffffffffffffffffffffff',
+        evaluationId: 'registered-eval',
+        testCaseId: 'registered-test',
+        metadata: {
+          commandToolNames: ['bash'],
+          otlpHttpRedactAttributes: ['authorization'],
+        },
+      });
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'ffffffffffffffffffffffffffffffff',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: '[REDACTED]',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
+    it('drops a registered evaluation policy after deregisterTracePolicy', async () => {
+      // Once an evaluation finishes, its policy is removed so the shared receiver's policy
+      // map can't grow unbounded; a later trace for that eval id falls back to the receiver
+      // default (here: no redaction), proving the policy is gone.
+      const sharedReceiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      (sharedReceiver as any).traceStore = mockTraceStore;
+      sharedReceiver.registerTracePolicy({
+        evaluationId: 'gc-eval',
+        redactAttributes: ['authorization'],
+      });
+      sharedReceiver.deregisterTracePolicy('gc-eval');
+
+      await request(sharedReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: '1'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'gc-eval' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer hidden' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        '11111111111111111111111111111111',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: 'Bearer hidden',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+
+    it('uses an empty registered evaluation policy instead of older startup defaults', async () => {
+      const sharedReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        commandToolNames: ['bash'],
+        redactAttributes: ['authorization'],
+      });
+      (sharedReceiver as any).traceStore = mockTraceStore;
+      sharedReceiver.registerTracePolicy({ evaluationId: 'no-redaction-eval' });
+
+      await request(sharedReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: '1'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'no-redaction-eval' } },
+                        { key: 'test.case.id', value: { stringValue: 'no-redaction-test' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer hidden' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: '11111111111111111111111111111111',
+        evaluationId: 'no-redaction-eval',
+        testCaseId: 'no-redaction-test',
+        metadata: undefined,
+      });
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        '11111111111111111111111111111111',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: 'Bearer hidden',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+  });
+
+  describe('Singleton startup recovery', () => {
+    it('preserves the first startup formats and shares an in-flight listener', async () => {
+      const listeningCallbacks: Array<() => void> = [];
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            listeningCallbacks.push(resolve);
+          }),
+      );
+
+      const firstStart = startOTLPReceiver(4318, '127.0.0.1', ['json']);
+      const sharedReceiver = listenSpy.mock.contexts[0] as OTLPReceiver;
+      const secondStart = startOTLPReceiver(4319, '127.0.0.2', ['protobuf']);
+
+      try {
+        // Resolve every call on the old implementation too, so a failed assertion cannot
+        // leave a pending startup behind and interfere with another test.
+        for (const finishListening of listeningCallbacks) {
+          finishListening();
+        }
+        await Promise.all([firstStart, secondStart]);
+        expect(listenSpy).toHaveBeenCalledExactlyOnceWith(4318, '127.0.0.1');
+        const info = await request(sharedReceiver.getApp()).get('/v1/traces').expect(200);
+        expect(info.body.supported_formats).toEqual(['json']);
+        await request(sharedReceiver.getApp())
+          .post('/v1/traces')
+          .set('Content-Type', 'application/json')
+          .send({ resourceSpans: [] })
+          .expect(200);
+        await request(sharedReceiver.getApp())
+          .post('/v1/traces')
+          .set('Content-Type', 'application/x-protobuf')
+          .send(Buffer.alloc(0))
+          .expect(415);
+      } finally {
+        await stopOTLPReceiver();
+      }
+    });
+
+    it('does not let an idle stop close a receiver started in the same turn', async () => {
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
+      const stopSpy = vi.spyOn(OTLPReceiver.prototype, 'stop').mockResolvedValue(undefined);
+
+      try {
+        const idleStop = stopOTLPReceiver();
+        const start = startOTLPReceiver(4318, '127.0.0.1', ['json']);
+        await Promise.all([idleStop, start]);
+
+        expect(listenSpy).toHaveBeenCalledExactlyOnceWith(4318, '127.0.0.1');
+        expect(stopSpy).not.toHaveBeenCalled();
+      } finally {
+        await stopOTLPReceiver();
+      }
+    });
+
+    it('shares shutdown and waits for it before starting a fresh receiver', async () => {
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
+      let finishStopping: (() => void) | undefined;
+      const stopSpy = vi
+        .spyOn(OTLPReceiver.prototype, 'stop')
+        .mockResolvedValue(undefined)
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              finishStopping = resolve;
+            }),
+        );
+      let firstStop: Promise<void> | undefined;
+      let secondStop: Promise<void> | undefined;
+      let restart: Promise<void> | undefined;
+
+      try {
+        await startOTLPReceiver(4318, '127.0.0.1', ['json']);
+        const firstReceiver = listenSpy.mock.contexts[0];
+        firstStop = stopOTLPReceiver();
+        await vi.waitFor(() => expect(stopSpy).toHaveBeenCalledTimes(1));
+        secondStop = stopOTLPReceiver();
+        restart = startOTLPReceiver(4319, '127.0.0.1', ['protobuf']);
+        let restarted = false;
+        void restart.then(() => {
+          restarted = true;
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(restarted).toBe(false);
+        expect(stopSpy).toHaveBeenCalledTimes(1);
+        expect(listenSpy).toHaveBeenCalledTimes(1);
+
+        finishStopping?.();
+        await Promise.all([firstStop, secondStop, restart]);
+        expect(listenSpy).toHaveBeenCalledTimes(2);
+        expect(listenSpy.mock.contexts[1]).not.toBe(firstReceiver);
+        const freshReceiver = listenSpy.mock.contexts[1] as OTLPReceiver;
+        const info = await request(freshReceiver.getApp()).get('/v1/traces').expect(200);
+        expect(info.body.supported_formats).toEqual(['protobuf']);
+      } finally {
+        finishStopping?.();
+        await Promise.all([firstStop, secondStop, restart]);
+        await stopOTLPReceiver();
+      }
+    });
+
+    it.each([
+      { operations: ['start', 'stop'] },
+      { operations: ['start', 'stop', 'start'] },
+      { operations: ['stop', 'start', 'stop', 'start', 'stop'] },
+    ])('applies queued lifecycle calls in order: $operations', async ({ operations }) => {
+      let activeListeners = 0;
+      vi.spyOn(OTLPReceiver.prototype, 'listen').mockImplementation(async () => {
+        activeListeners += 1;
+      });
+      let finishStopping: (() => void) | undefined;
+      const firstShutdown = new Promise<void>((resolve) => {
+        finishStopping = resolve;
+      });
+      let stopCalls = 0;
+      const stopSpy = vi.spyOn(OTLPReceiver.prototype, 'stop').mockImplementation(async () => {
+        if (stopCalls++ === 0) {
+          await firstShutdown;
+        }
+        activeListeners -= 1;
+      });
+      const pending: Promise<void>[] = [];
+
+      try {
+        await startOTLPReceiver(4318, '127.0.0.1', ['json']);
+        pending.push(stopOTLPReceiver());
+        await vi.waitFor(() => expect(stopSpy).toHaveBeenCalledTimes(1));
+        for (const operation of operations) {
+          pending.push(
+            operation === 'start'
+              ? startOTLPReceiver(4318, '127.0.0.1', ['protobuf'])
+              : stopOTLPReceiver(),
+          );
+        }
+        finishStopping?.();
+        await Promise.all(pending);
+        expect(activeListeners).toBe(operations.at(-1) === 'start' ? 1 : 0);
+      } finally {
+        finishStopping?.();
+        await Promise.all(pending);
+        await stopOTLPReceiver();
+      }
+    });
+
+    it('keeps startup fallback policies while registering each later evaluation policy', async () => {
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
+      try {
+        await startOTLPReceiver(4318, '127.0.0.1', ['json'], {
+          commandToolNames: ['bash'],
+          redactAttributes: ['authorization'],
+          tracePolicy: {
+            evaluationId: 'first-eval',
+            commandToolNames: ['bash'],
+            redactAttributes: ['authorization'],
+          },
+        });
+        const sharedReceiver = listenSpy.mock.contexts[0] as OTLPReceiver;
+        await startOTLPReceiver(4319, '127.0.0.2', ['json'], {
+          commandToolNames: ['shell'],
+          redactAttributes: ['cookie'],
+          tracePolicy: {
+            evaluationId: 'second-eval',
+            commandToolNames: ['shell'],
+            redactAttributes: ['cookie'],
+          },
+        });
+
+        for (const [index, evaluationId] of [
+          'first-eval',
+          'second-eval',
+          'unregistered-eval',
+          undefined,
+        ].entries()) {
+          const traceId = String(index + 1).repeat(32);
+          await request(sharedReceiver.getApp())
+            .post('/v1/traces')
+            .set('Content-Type', 'application/json')
+            .send({
+              resourceSpans: [
+                {
+                  scopeSpans: [
+                    {
+                      spans: [
+                        {
+                          traceId,
+                          spanId: '1234567890abcdef',
+                          name: 'tool.call',
+                          startTimeUnixNano: '1000000000',
+                          attributes: [
+                            ...(evaluationId
+                              ? [
+                                  { key: 'evaluation.id', value: { stringValue: evaluationId } },
+                                  { key: 'test.case.id', value: { stringValue: 'test-case' } },
+                                ]
+                              : []),
+                            { key: 'AUTHORIZATION', value: { stringValue: 'test-auth-value' } },
+                            { key: 'COOKIE', value: { stringValue: 'test-cookie-value' } },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            })
+            .expect(200);
+
+          const isSecond = evaluationId === 'second-eval';
+          expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+            traceId,
+            [
+              expect.objectContaining({
+                attributes: expect.objectContaining({
+                  AUTHORIZATION: isSecond ? 'test-auth-value' : '[REDACTED]',
+                  COOKIE: isSecond ? '[REDACTED]' : 'test-cookie-value',
+                }),
+              }),
+            ],
+            { skipTraceCheck: false, warnIfMissingTrace: false },
+          );
+          if (evaluationId) {
+            expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+              traceId,
+              evaluationId,
+              testCaseId: 'test-case',
+              metadata: {
+                commandToolNames: [isSecond ? 'shell' : 'bash'],
+                otlpHttpRedactAttributes: [isSecond ? 'cookie' : 'authorization'],
+              },
+            });
+          }
+        }
+      } finally {
+        await stopOTLPReceiver();
+      }
+    });
+
+    it('creates a new receiver after a failed listen attempt', async () => {
+      const listenSpy = vi
+        .spyOn(OTLPReceiver.prototype, 'listen')
+        .mockRejectedValueOnce(new Error('EADDRINUSE'))
+        .mockResolvedValueOnce(undefined);
+
+      try {
+        const firstStart = startOTLPReceiver(4318, '127.0.0.1', ['json']);
+        const concurrentStart = startOTLPReceiver(4319, '127.0.0.1', ['protobuf']);
+        await expect(firstStart).rejects.toThrow('EADDRINUSE');
+        await expect(concurrentStart).rejects.toThrow('EADDRINUSE');
+        await startOTLPReceiver(4319, '127.0.0.1', ['protobuf']);
+
+        expect(listenSpy).toHaveBeenCalledTimes(2);
+        expect(listenSpy.mock.instances[1]).not.toBe(listenSpy.mock.instances[0]);
+        const retriedReceiver = listenSpy.mock.contexts[1] as OTLPReceiver;
+        const info = await request(retriedReceiver.getApp()).get('/v1/traces').expect(200);
+        expect(info.body.supported_formats).toEqual(['protobuf']);
+      } finally {
+        await stopOTLPReceiver();
+      }
+    });
+
+    it('rejects (instead of spuriously resolving) when the port is already in use', async () => {
+      // Regression: Express invokes the listen callback even on EADDRINUSE (with
+      // server.listening === false), which previously resolved listen() successfully and
+      // defeated `failOnReceiverStartFailure`. listen() must reject on bind failure.
+      const http = await import('node:http');
+      const blocker = http.createServer();
+      await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', () => resolve()));
+      const port = (blocker.address() as { port: number }).port;
+      try {
+        const busyReceiver = new OTLPReceiver({ acceptFormats: ['json'] });
+        (busyReceiver as any).traceStore = mockTraceStore;
+        await expect(busyReceiver.listen(port, '127.0.0.1')).rejects.toThrow(
+          /EADDRINUSE|already in use/i,
+        );
+      } finally {
+        await new Promise<void>((resolve) => blocker.close(() => resolve()));
+      }
     });
   });
 
@@ -773,6 +1625,37 @@ describe('OTLPReceiver', () => {
       expect((spans as any[])[0].name).toBe('agent.message');
     });
 
+    it('redacts a log body copied into the fallback span name', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        redactAttributes: ['otel.log.body'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          body: { stringValue: 'secret agent message' },
+        },
+      ]);
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect((spans as any[])[0]).toEqual(
+        expect.objectContaining({
+          name: '[REDACTED]',
+          attributes: expect.objectContaining({
+            'otel.log.body': '[REDACTED]',
+          }),
+        }),
+      );
+    });
+
     it('rejects non-JSON content types on /v1/logs', async () => {
       await request(receiver.getApp())
         .post('/v1/logs')
@@ -876,13 +1759,62 @@ describe('OTLPReceiver', () => {
       expect(span.name).toBe('tool_result');
     });
 
-    it('is advertised on the service info endpoint', async () => {
-      // Sanity check that /v1/traces stays stable despite the new /v1/logs route.
-      const response = await request(receiver.getApp()).get('/v1/traces').expect(200);
-      expect(response.body.service).toBe('promptfoo-otlp-receiver');
-    });
+    it.each([
+      ['empty IDs', '', ''],
+      ['all-zero hexadecimal IDs', '0'.repeat(32), '0'.repeat(16)],
+      [
+        'all-zero base64 IDs',
+        Buffer.alloc(16).toString('base64'),
+        Buffer.alloc(8).toString('base64'),
+      ],
+    ])(
+      'falls back to resource trace context for a Codex log with %s',
+      async (_label, inlineTraceId, inlineSpanId) => {
+        const req = {
+          resourceLogs: [
+            {
+              resource: {
+                attributes: [
+                  { key: 'service.name', value: { stringValue: 'codex-cli' } },
+                  { key: 'promptfoo.trace_id', value: { stringValue: hexTraceId } },
+                  { key: 'promptfoo.parent_span_id', value: { stringValue: hexParentSpanId } },
+                ],
+              },
+              scopeLogs: [
+                {
+                  scope: { name: 'codex_otel' },
+                  logRecords: [
+                    {
+                      timeUnixNano: '1700000000000000000',
+                      traceId: inlineTraceId,
+                      spanId: inlineSpanId,
+                      body: { stringValue: 'codex.api_request' },
+                      attributes: [
+                        { key: 'event.name', value: { stringValue: 'codex.api_request' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        };
 
-    it('marks log-derived spans as ERROR when severityNumber >= 17', async () => {
+        await request(receiver.getApp())
+          .post('/v1/logs')
+          .set('Content-Type', 'application/json')
+          .send(req)
+          .expect(200);
+
+        const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
+        expect(persistedTraceId).toBe(hexTraceId);
+        const span = (spans as any[])[0];
+        expect(span.parentSpanId).toBe(hexParentSpanId);
+        expect(span.name).toBe('codex.api_request');
+      },
+    );
+
+    it('preserves OK span status while exposing ERROR log severity', async () => {
       const req = makeLogsRequest([
         {
           timeUnixNano: '1700000000000000000',
@@ -903,9 +1835,8 @@ describe('OTLPReceiver', () => {
 
       const [, spans] = mockTraceStore.addSpans.mock.calls[0];
       const span = (spans as any[])[0];
+      expect(span.statusCode).toBe(1);
       expect(span.statusMessage).toBe('ERROR');
-      // The synthesized span still reports statusCode=1 (OK for the OTEL span itself)
-      // while statusMessage surfaces the severity — verifies the mapping contract.
       expect(span.attributes['otel.log.severity_number']).toBe(17);
     });
 
@@ -1018,13 +1949,11 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      // Either both survived (because parseAttributes was lenient) or the bad
-      // one was skipped while the good one survived — both acceptable. The
-      // failure mode we're guarding against is "bad record → 500 → whole
-      // batch dropped", verified by the 200 status.
-      expect(mockTraceStore.addSpans).toHaveBeenCalled();
-      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
-      expect((spans as any[]).some((s: any) => s.name === 'claude_code.tool.execution')).toBe(true);
+      expect(mockTraceStore.addSpans).toHaveBeenCalledTimes(1);
+      const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect(persistedTraceId).toBe(hexTraceId);
+      expect(spans).toHaveLength(1);
+      expect(spans[0].name).toBe('claude_code.tool.execution');
     });
 
     it('treats a base64-encoded all-zero span_id as no parent linkage', async () => {

@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, type Mocked, vi } from 'vitest';
 import WebSocket from 'ws';
+import logger from '../../src/logger';
 import { createTransformResponse, WebSocketProvider } from '../../src/providers/websocket';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { isProviderResponseRateLimited } from '../../src/scheduler/types';
 
 const websocketMocks = vi.hoisted(() => {
   let factory: (() => Mocked<WebSocket>) | null = null;
@@ -82,7 +85,7 @@ describe('WebSocketProvider', () => {
       onopen: vi.fn(),
     } as unknown as Mocked<WebSocket>;
 
-    websocketMocks.WebSocketMock.mockClear();
+    websocketMocks.WebSocketMock.mockReset();
     websocketMocks.setFactory(() => mockWs);
 
     provider = new WebSocketProvider('ws://test.com', {
@@ -94,11 +97,13 @@ describe('WebSocketProvider', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
   it('should initialize with correct config', () => {
     expect(provider.url).toBe('ws://test.com');
+    expect(provider.id()).toBe('ws://test.com');
     expect(provider.config.messageTemplate).toBe('{{ prompt }}');
   });
 
@@ -124,6 +129,181 @@ describe('WebSocketProvider', () => {
     await provider.callApi('test prompt');
 
     // Now assert that WebSocket was called with the headers
+    expect(WebSocket).toHaveBeenCalledWith('ws://test.com', { headers });
+  });
+
+  it('should render the URL template for each WebSocket connection', async () => {
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://test.com/sessions/{{ sessionId }}',
+        messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
+      },
+    });
+
+    emitWebSocketEvents(
+      { type: 'open' },
+      { type: 'message', data: JSON.stringify({ result: 'first' }) },
+    );
+    await provider.callApi('first prompt', {
+      prompt: { raw: 'first prompt', label: 'first prompt' },
+      vars: { sessionId: 'session-1' },
+    });
+
+    emitWebSocketEvents(
+      { type: 'open' },
+      { type: 'message', data: JSON.stringify({ result: 'second' }) },
+    );
+    await provider.callApi('second prompt', {
+      prompt: { raw: 'second prompt', label: 'second prompt' },
+      vars: { sessionId: 'session-2' },
+    });
+
+    expect(WebSocket).toHaveBeenNthCalledWith(1, 'ws://test.com/sessions/session-1', {});
+    expect(WebSocket).toHaveBeenNthCalledWith(2, 'ws://test.com/sessions/session-2', {});
+  });
+
+  it('should redact literal credentials from templated provider identities', () => {
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://test.com/sessions/{{ sessionId }}?token=runtime-secret',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+
+    expect(provider.id()).toBe('ws://test.com/sessions/{{ sessionId }}?token=%5BREDACTED%5D');
+    expect(provider.toString()).not.toContain('runtime-secret');
+  });
+
+  it('should not log rendered URLs that contain template-like runtime values', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'wss://test.com/ws/{{ sessionId }}?token={{ token }}',
+        messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
+      },
+    });
+
+    emitWebSocketEvents(
+      { type: 'open' },
+      { type: 'message', data: JSON.stringify({ result: 'test' }) },
+    );
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test prompt' },
+      vars: { sessionId: '{{ attacker_controlled }}', token: 'runtime-secret' },
+    });
+
+    expect(WebSocket).toHaveBeenCalledWith(
+      'wss://test.com/ws/{{ attacker_controlled }}?token=runtime-secret',
+      {},
+    );
+    const debugLogs = JSON.stringify(debugSpy.mock.calls);
+    expect(debugLogs).not.toContain('wss://test.com/ws');
+    expect(debugLogs).not.toContain('runtime-secret');
+  });
+
+  it('should not expose rendered URLs in synchronous constructor errors', async () => {
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'wss://{{ host }}/ws?token={{ token }}',
+        messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
+      },
+    });
+
+    const error = await provider
+      .callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: { host: '[invalid-host', token: 'runtime-secret' },
+      })
+      .catch((err: Error) => err);
+
+    expect(error).toEqual(new Error('Failed to create WebSocket connection'));
+    expect((error as Error).message).not.toContain('runtime-secret');
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
+  it('should preserve safe synchronous WebSocket constructor errors', async () => {
+    websocketMocks.setFactory(() => {
+      throw new Error('An invalid or duplicated subprotocol was specified');
+    });
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        messageTemplate: '{{ prompt }}',
+        protocols: ['invalid protocol'],
+        timeoutMs: 1000,
+      },
+    });
+
+    await expect(provider.callApi('test prompt')).rejects.toThrow(
+      'An invalid or duplicated subprotocol was specified',
+    );
+  });
+
+  it('should use configured Nunjucks filters for URL and message templates', async () => {
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://test.com/sessions/{{ sessionId | slugify }}',
+        messageTemplate: '{{ prompt | slugify }}',
+        timeoutMs: 1000,
+      },
+    });
+
+    emitWebSocketEvents(
+      { type: 'open' },
+      { type: 'message', data: JSON.stringify({ result: 'test' }) },
+    );
+    await provider.callApi('Test Prompt', {
+      prompt: { raw: 'Test Prompt', label: 'Test Prompt' },
+      vars: { sessionId: 'Conversation A' },
+      filters: {
+        slugify: (value: string) => value.toLowerCase().replaceAll(' ', '-'),
+      },
+    });
+
+    expect(WebSocket).toHaveBeenCalledWith('ws://test.com/sessions/conversation-a', {});
+    expect(mockWs.send).toHaveBeenCalledWith('test-prompt');
+  });
+
+  it('should pass configured protocols to WebSocket connection', async () => {
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        messageTemplate: '{{ prompt }}',
+        protocols: ['json'],
+      },
+    });
+
+    emitWebSocketEvents(
+      { type: 'open' },
+      { type: 'message', data: JSON.stringify({ result: 'test' }) },
+    );
+
+    await provider.callApi('test prompt');
+
+    expect(WebSocket).toHaveBeenCalledWith('ws://test.com', ['json'], {});
+  });
+
+  it('should preserve Sec-WebSocket-Protocol headers unless protocols are configured', async () => {
+    const headers = {
+      Authorization: 'Bearer test-token',
+      'Sec-WebSocket-Protocol': 'Bearer token-with-space',
+    };
+
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        messageTemplate: '{{ prompt }}',
+        headers,
+      },
+    });
+
+    emitWebSocketEvents(
+      { type: 'open' },
+      { type: 'message', data: JSON.stringify({ result: 'test' }) },
+    );
+
+    await provider.callApi('test prompt');
+
     expect(WebSocket).toHaveBeenCalledWith('ws://test.com', { headers });
   });
 
@@ -169,11 +349,298 @@ describe('WebSocketProvider', () => {
     expect(mockWs.close).toHaveBeenCalled();
   });
 
-  it('should handle WebSocket errors', async () => {
-    emitWebSocketEvents({ type: 'error', error: new Error('connection failed') });
+  it('should not expose URL-derived values from asynchronous WebSocket errors', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://{{ tenant }}.invalid/ws?token={{ token }}',
+        messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
+      },
+    });
+    emitWebSocketEvents({
+      type: 'error',
+      error: new Error('getaddrinfo ENOTFOUND runtime-secret-tenant.invalid'),
+    });
 
-    await expect(provider.callApi('test prompt')).rejects.toThrow('WebSocket error');
+    await expect(
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: { tenant: 'runtime-secret-tenant', token: 'runtime-query-secret' },
+      }),
+    ).rejects.toThrow('WebSocket connection failed');
+    const errorLogs = JSON.stringify(errorSpy.mock.calls);
+    expect(errorLogs).not.toContain('runtime-secret-tenant');
+    expect(errorLogs).not.toContain('runtime-query-secret');
     expect(mockWs.close).toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      description: 'HTTP 429 handshake responses',
+      createError: (url: string) => new Error(`Unexpected server response: 429 ${url}`),
+      expectedMessage: 'WebSocket connection failed (HTTP 429)',
+      expectedRateLimitHits: 3,
+    },
+    {
+      description: 'connection resets',
+      createError: (url: string) =>
+        Object.assign(new Error(`read ECONNRESET ${url}`), { code: 'ECONNRESET' }),
+      expectedMessage: 'WebSocket connection failed (ECONNRESET)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'refused connections',
+      createError: (url: string) =>
+        Object.assign(new Error(`connect ECONNREFUSED ${url}`), { code: 'ECONNREFUSED' }),
+      expectedMessage: 'WebSocket connection failed (ECONNREFUSED)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'broken pipes',
+      createError: (url: string) =>
+        Object.assign(new Error(`write EPIPE ${url}`), { code: 'EPIPE' }),
+      expectedMessage: 'WebSocket connection failed (EPIPE)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'request timeouts',
+      createError: (url: string) => new Error(`request timeout after 1000ms ${url}`),
+      expectedMessage: 'WebSocket connection failed (TIMEOUT)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'coded socket timeouts',
+      createError: (url: string) =>
+        Object.assign(new Error(`connect ETIMEDOUT ${url}`), { code: 'ETIMEDOUT' }),
+      expectedMessage: 'WebSocket connection failed (TIMEOUT)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'socket hang-ups',
+      createError: (url: string) => new Error(`socket hang up ${url}`),
+      expectedMessage: 'WebSocket connection failed (SOCKET HANG UP)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'transient TLS record failures',
+      createError: (url: string) => new Error(`SSL routines: bad record mac ${url}`),
+      expectedMessage: 'WebSocket connection failed (BAD RECORD MAC)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'retryable TLS protocol failures',
+      createError: (url: string) =>
+        Object.assign(new Error(`write EPROTO transient TLS failure ${url}`), { code: 'EPROTO' }),
+      expectedMessage: 'WebSocket connection failed (EPROTO)',
+      expectedRateLimitHits: 0,
+    },
+  ])(
+    'should retry $description without exposing rendered WebSocket URL values',
+    async ({ createError, expectedMessage, expectedRateLimitHits }) => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const renderedUrl =
+        'ws://runtime-secret-tenant.invalid/sessions/private-session-123?token=runtime-query-secret';
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          url: 'ws://{{ tenant }}.invalid/sessions/{{ sessionId }}?token={{ token }}',
+          messageTemplate: '{{ prompt }}',
+          timeoutMs: 1000,
+          maxRetries: 2,
+        },
+      });
+      emitWebSocketEvents({ type: 'error', error: createError(renderedUrl) });
+
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+      const callApi = vi.fn(() =>
+        provider.callApi('test prompt', {
+          prompt: { raw: 'test prompt', label: 'test prompt' },
+          vars: {
+            tenant: 'runtime-secret-tenant',
+            sessionId: 'private-session-123',
+            token: 'runtime-query-secret',
+          },
+        }),
+      );
+
+      try {
+        const error = await registry
+          .execute(provider, callApi, {
+            isRateLimited: isProviderResponseRateLimited,
+            getRetryAfter: () => 0,
+          })
+          .catch((caughtError: Error) => caughtError);
+
+        if (!(error instanceof Error)) {
+          throw new Error('Expected the WebSocket provider call to fail');
+        }
+        expect(callApi).toHaveBeenCalledTimes(3);
+        expect(error.message).toBe(expectedMessage);
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          retriedRequests: 2,
+          rateLimitHits: expectedRateLimitHits,
+          failedRequests: 1,
+        });
+
+        const observableError = JSON.stringify({
+          message: error.message,
+          logs: errorSpy.mock.calls,
+          metrics: registry.getMetrics(),
+        });
+        expect(observableError).not.toContain('runtime-secret-tenant');
+        expect(observableError).not.toContain('private-session-123');
+        expect(observableError).not.toContain('runtime-query-secret');
+      } finally {
+        registry.dispose();
+      }
+    },
+  );
+
+  it('should retry transient TLS failures when the rendered URL contains certificate text', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const renderedUrl =
+      'ws://certificate-service.invalid/sessions/private-session-123?token=runtime-query-secret';
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://{{ tenant }}.invalid/sessions/{{ sessionId }}?token={{ token }}',
+        messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
+        maxRetries: 1,
+      },
+    });
+    emitWebSocketEvents({
+      type: 'error',
+      error: Object.assign(new Error(`write EPROTO transient TLS failure ${renderedUrl}`), {
+        code: 'EPROTO',
+      }),
+    });
+
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+    const callApi = vi.fn(() =>
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {
+          tenant: 'certificate-service',
+          sessionId: 'private-session-123',
+          token: 'runtime-query-secret',
+        },
+      }),
+    );
+
+    try {
+      await expect(
+        registry.execute(provider, callApi, {
+          isRateLimited: isProviderResponseRateLimited,
+          getRetryAfter: () => 0,
+        }),
+      ).rejects.toThrow('WebSocket connection failed (EPROTO)');
+      expect(callApi).toHaveBeenCalledTimes(2);
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        retriedRequests: 1,
+        rateLimitHits: 0,
+        failedRequests: 1,
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('certificate-service');
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('runtime-query-secret');
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it.each([
+    new Error('getaddrinfo ENOTFOUND runtime-secret-tenant.invalid'),
+    Object.assign(new Error('getaddrinfo ENOTFOUND tenant-429.invalid'), { code: 'ENOTFOUND' }),
+    Object.assign(new Error('getaddrinfo ENOTFOUND tenant-503.invalid'), { code: 'ENOTFOUND' }),
+    Object.assign(new Error('getaddrinfo ENOTFOUND tenant-network.invalid'), { code: 'ENOTFOUND' }),
+    Object.assign(new Error('getaddrinfo ENOTFOUND tenant-ECONNRESET.invalid'), {
+      code: 'ENOTFOUND',
+    }),
+    new Error('getaddrinfo ENOTFOUND tenant-ECONNRESET.invalid'),
+    new Error('Unexpected server response: 401'),
+    new Error('Unexpected server response: 401 ws://tenant-429.invalid?token=503'),
+    new Error('Unexpected server response: 401 ws://tenant-ECONNRESET.invalid'),
+    Object.assign(new Error('self signed certificate for runtime-secret-tenant.invalid'), {
+      code: 'DEPTH_ZERO_SELF_SIGNED_CERT',
+    }),
+    Object.assign(new Error('self signed certificate for tenant-network.invalid'), {
+      code: 'DEPTH_ZERO_SELF_SIGNED_CERT',
+    }),
+    Object.assign(new Error('Host: timeout.invalid. is not in the certificate'), {
+      code: 'ERR_TLS_CERT_ALTNAME_INVALID',
+    }),
+    Object.assign(new Error('write EPROTO wrong version number runtime-secret-tenant.invalid'), {
+      code: 'EPROTO',
+    }),
+    Object.assign(new Error('write EPROTO tlsv1 alert protocol version'), { code: 'EPROTO' }),
+    Object.assign(new Error('write EPROTO unsupported protocol'), { code: 'EPROTO' }),
+    Object.assign(new Error('request aborted for runtime-secret-tenant.invalid'), {
+      name: 'AbortError',
+      code: 'ABORT_ERR',
+    }),
+    Object.assign(new Error('request aborted for tenant-network.invalid'), {
+      name: 'AbortError',
+      code: 'ABORT_ERR',
+    }),
+    Object.assign(new Error('The operation was aborted after timeout'), {
+      name: 'AbortError',
+      code: 'ABORT_ERR',
+    }),
+    Object.assign(new Error('The operation was aborted after ECONNRESET'), {
+      name: 'AbortError',
+      code: 'ABORT_ERR',
+    }),
+    Object.assign(new Error('The operation was aborted after timeout'), {
+      name: 'AbortException',
+      code: 'ABORT_ERR',
+    }),
+  ])('should not retry permanent or cancelled WebSocket errors: $message', async (sourceError) => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://{{ tenant }}.invalid/ws?token={{ token }}',
+        messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
+        maxRetries: 2,
+      },
+    });
+    emitWebSocketEvents({ type: 'error', error: sourceError });
+
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+    const callApi = vi.fn(() =>
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: { tenant: 'runtime-secret-tenant', token: 'runtime-query-secret' },
+      }),
+    );
+
+    try {
+      const error = await registry
+        .execute(provider, callApi, {
+          isRateLimited: isProviderResponseRateLimited,
+          getRetryAfter: () => 0,
+        })
+        .catch((caughtError: Error) => caughtError);
+
+      if (!(error instanceof Error)) {
+        throw new Error('Expected the WebSocket provider call to fail');
+      }
+      expect(error.message).toBe('WebSocket connection failed');
+      expect(error.name).toBe(
+        sourceError.name === 'AbortError' || sourceError.name === 'AbortException'
+          ? sourceError.name
+          : 'Error',
+      );
+      expect(callApi).toHaveBeenCalledOnce();
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        retriedRequests: 0,
+        rateLimitHits: 0,
+        failedRequests: 1,
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('runtime-secret-tenant');
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('runtime-query-secret');
+    } finally {
+      registry.dispose();
+    }
   });
 
   it('should handle timeout', async () => {
@@ -399,19 +866,454 @@ describe('WebSocketProvider', () => {
     });
   });
 
-  describe('timeouts', () => {
-    it('should timeout with streamResponse', async () => {
+  describe('request cancellation', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it.each([false, true])(
+      'does not connect with a pre-aborted signal (stream: %s)',
+      async (stream) => {
+        if (stream) {
+          provider = new WebSocketProvider('ws://test.com', {
+            config: {
+              messageTemplate: '{{ prompt }}',
+              streamResponse: (_accumulator: unknown, event: WebSocket.MessageEvent) => [
+                { output: event.data },
+                true,
+              ],
+            },
+          });
+        }
+        const controller = new AbortController();
+        controller.abort(new Error('fixture cancellation'));
+        const response = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+        const outcome = response.catch((error) => error);
+        await vi.runAllTimersAsync();
+
+        await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+        expect(WebSocket).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it.each([false, true])(
+      'cancels and cleans up before/after open (opened: %s)',
+      async (opened) => {
+        const controller = new AbortController();
+        const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+        const response = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+        const outcome = response.catch((error) => error);
+        if (opened) {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }
+        controller.abort('fixture cancellation');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(mockWs.close).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+        expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+        await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+
+        const sent = mockWs.send.mock.calls.length;
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        mockWs.onmessage?.({ data: 'late response' } as WebSocket.MessageEvent);
+        expect(mockWs.send).toHaveBeenCalledTimes(sent);
+        expect(mockWs.close).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it('cancels a prepared streaming request and ignores later events', async () => {
+      const transform = vi.fn(
+        (_accumulator, event) => [{ output: event.data }, true] as [any, boolean],
+      );
+      provider = new WebSocketProvider('ws://test.com', {
+        config: { messageTemplate: '{{ prompt }}', streamResponse: transform },
+      });
+      const controller = new AbortController();
+      const response = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+      const outcome = response.catch((error) => error);
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+      await vi.runAllTimersAsync();
+      await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+      mockWs.onmessage?.({ data: 'complete response' } as WebSocket.MessageEvent);
+      expect(transform).not.toHaveBeenCalled();
+      expect(mockWs.close).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('does not connect if cancellation arrives while the stream transform is being prepared', async () => {
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          streamResponse: (_accumulator: unknown, event: WebSocket.MessageEvent) => [
+            { output: event.data },
+            true,
+          ],
+        },
+      });
+      const controller = new AbortController();
+      const response = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+      const outcome = response.catch((error) => error);
+      controller.abort();
+      await vi.runAllTimersAsync();
+      await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+      expect(WebSocket).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each(['message', 'error', 'close', 'timeout'])(
+      'removes the abort listener after settlement by %s',
+      async (terminal) => {
+        const controller = new AbortController();
+        const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+        const response = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+        const outcome = response.catch((error) => error);
+        if (terminal === 'message') {
+          mockWs.onmessage?.({ data: 'complete response' } as WebSocket.MessageEvent);
+        } else if (terminal === 'error') {
+          mockWs.onerror?.({
+            error: new Error('fixture error'),
+            message: 'fixture error',
+          } as WebSocket.ErrorEvent);
+        } else if (terminal === 'close') {
+          mockWs.onclose?.({
+            type: 'close',
+            target: mockWs,
+            code: 1000,
+            reason: '',
+            wasClean: true,
+          } as WebSocket.CloseEvent);
+        } else {
+          await vi.advanceTimersByTimeAsync(1000);
+        }
+        await outcome;
+        expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+        controller.abort();
+        expect(mockWs.close).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+  });
+
+  describe('stream settlement', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it.each(['complete', 'error', 'timeout'])(
+      'ignores messages after %s without rearming the deadline',
+      async (terminal) => {
+        const transform = vi.fn(
+          (_accumulator, event) =>
+            [{ output: event.data }, event.data === 'done'] as [any, boolean],
+        );
+        provider = new WebSocketProvider('ws://test.com', {
+          config: { messageTemplate: '{{ prompt }}', timeoutMs: 100, streamResponse: transform },
+        });
+        const response = provider.callApi('hello').then(
+          (value) => value,
+          (error) => ({ error: error.message }),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        if (terminal === 'complete') {
+          mockWs.onmessage?.({ data: 'done' } as WebSocket.MessageEvent);
+        } else if (terminal === 'error') {
+          mockWs.onerror?.({
+            error: new Error('fixture connection error'),
+            message: 'fixture connection error',
+          } as WebSocket.ErrorEvent);
+        } else {
+          await vi.advanceTimersByTimeAsync(100);
+        }
+        await response;
+        const calls = transform.mock.calls.length;
+        mockWs.onmessage?.({ data: 'late partial' } as WebSocket.MessageEvent);
+        expect(transform).toHaveBeenCalledTimes(calls);
+        expect(vi.getTimerCount()).toBe(0);
+        expect(mockWs.close).toHaveBeenCalledOnce();
+      },
+    );
+
+    it('does not send or restart a timer when open arrives after timeout', async () => {
       provider = new WebSocketProvider('ws://test.com', {
         config: {
           messageTemplate: '{{ prompt }}',
           timeoutMs: 100,
-          // never signal completion; ensures timeout path is exercised
-          streamResponse: (acc: any, _data: any) => [acc, ''],
+          streamResponse: (accumulator: any) => [accumulator, false],
         },
       });
+      const response = provider.callApi('hello').catch((error) => ({ error: error.message }));
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(response).resolves.toEqual({ error: 'WebSocket request timed out after 100ms' });
+      mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+      expect(mockWs.send).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
 
-      await expect(provider.callApi('timeout test')).rejects.toThrow('WebSocket request timed out');
-      expect(mockWs.close).toHaveBeenCalled();
+    it('settles a closed stream immediately and clears the timer', async () => {
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          timeoutMs: 100,
+          streamResponse: (accumulator: any) => [accumulator, false],
+        },
+      });
+      const rejected = vi.fn();
+      const response = provider.callApi('hello').catch(rejected);
+      await vi.advanceTimersByTimeAsync(0);
+      mockWs.onclose?.({
+        type: 'close',
+        target: mockWs,
+        code: 1000,
+        reason: '',
+        wasClean: true,
+      } as WebSocket.CloseEvent);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(rejected).toHaveBeenCalledWith(
+        new Error('WebSocket connection closed before the response completed'),
+      );
+      expect(vi.getTimerCount()).toBe(0);
+      await response;
+    });
+  });
+
+  describe('timeouts', () => {
+    it('should timeout with streamResponse', async () => {
+      vi.useFakeTimers();
+      try {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            // never signal completion; ensures timeout path is exercised
+            streamResponse: (acc: any, _data: any) => [acc, ''],
+          },
+        });
+
+        const timeoutPromise = expect(provider.callApi('timeout test')).rejects.toThrow(
+          'WebSocket request timed out',
+        );
+
+        await vi.runAllTimersAsync();
+        await timeoutPromise;
+
+        expect(mockWs.close).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should time out when the stream delivers a partial chunk and then stalls', async () => {
+      vi.useFakeTimers();
+      try {
+        // Accumulates every chunk but never signals completion, which is what a server
+        // that streams a partial answer and then stops sending looks like.
+        const streamResponse = vi.fn((accumulator: any, event: any) => [
+          { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+          '',
+        ]);
+
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            streamResponse,
+          },
+        });
+
+        emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'partial chunk' });
+
+        const onResolved = vi.fn();
+        const onRejected = vi.fn();
+        const responsePromise = provider.callApi('timeout test').then(onResolved, onRejected);
+
+        // Deliver the partial chunk while the clock is still short of the timeout.
+        await vi.advanceTimersByTimeAsync(0);
+        expect(streamResponse).toHaveBeenCalledTimes(1);
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).not.toHaveBeenCalled();
+
+        // Nothing else ever arrives, so the request deadline still has to fire.
+        await vi.advanceTimersByTimeAsync(200);
+
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).toHaveBeenCalledTimes(1);
+        const [error] = onRejected.mock.calls[0];
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toContain('WebSocket request timed out after 100ms');
+        expect(mockWs.close).toHaveBeenCalled();
+
+        await responsePromise;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('starts the first-message deadline when the stream connection opens', async () => {
+      vi.useFakeTimers();
+      try {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            streamResponse: (_accumulator: unknown, event: WebSocket.MessageEvent) => [
+              { output: event.data },
+              true,
+            ],
+          },
+        });
+        const response = provider.callApi('slow handshake').then(
+          (value) => value,
+          (error) => ({ error: error.message }),
+        );
+        await vi.advanceTimersByTimeAsync(90);
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        await vi.advanceTimersByTimeAsync(60);
+        expect(mockWs.close).not.toHaveBeenCalled();
+        mockWs.onmessage?.({ data: 'complete' } as WebSocket.MessageEvent);
+        await expect(response).resolves.toEqual({ output: 'complete' });
+        await vi.runAllTimersAsync();
+        expect(mockWs.close).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps an active stream alive past the initial timeout', async () => {
+      vi.useFakeTimers();
+      try {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            streamResponse: (accumulator: any, event: any) =>
+              event.data === 'done'
+                ? [accumulator, true]
+                : [{ output: (accumulator.output ?? '') + event.data }, false],
+          },
+        });
+        emitWebSocketEvents({ type: 'open' });
+
+        const responsePromise = provider.callApi('streaming test').then(
+          (response) => ({ response }),
+          (error: Error) => ({ error: error.message }),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+
+        for (const data of ['first ', 'second ', 'third ']) {
+          await vi.advanceTimersByTimeAsync(75);
+          mockWs.onmessage?.({ data } as WebSocket.MessageEvent);
+        }
+
+        expect(mockWs.close).not.toHaveBeenCalled();
+        mockWs.onmessage?.({ data: 'done' } as WebSocket.MessageEvent);
+
+        await expect(responsePromise).resolves.toEqual({
+          response: { output: 'first second third ' },
+        });
+        expect(mockWs.close).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('restarts the stall deadline after a partial stream message', async () => {
+      vi.useFakeTimers();
+      try {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            streamResponse: (accumulator: any, event: any) => [
+              { output: (accumulator.output ?? '') + event.data },
+              false,
+            ],
+          },
+        });
+        emitWebSocketEvents({ type: 'open' });
+
+        const onResolved = vi.fn();
+        const onRejected = vi.fn();
+        const responsePromise = provider.callApi('late partial chunk').then(onResolved, onRejected);
+        await vi.advanceTimersByTimeAsync(75);
+        mockWs.onmessage?.({ data: 'partial' } as WebSocket.MessageEvent);
+
+        await vi.advanceTimersByTimeAsync(50);
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(50);
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).toHaveBeenCalledOnce();
+        expect(onRejected.mock.calls[0][0].message).toBe('WebSocket request timed out after 100ms');
+        await responsePromise;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('retries a stalled stream and succeeds when the next attempt completes', async () => {
+      vi.useFakeTimers();
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 1_000 });
+      try {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            maxRetries: 1,
+            streamResponse: (_accumulator: any, event: any) => [
+              { output: event.data === 'done' ? 'recovered' : 'partial' },
+              event.data === 'done',
+            ],
+          },
+        });
+
+        let attempts = 0;
+        websocketMocks.setFactory(() => {
+          const attempt = ++attempts;
+          const ws = mockWs;
+          queueMicrotask(() => {
+            ws.onopen?.({ type: 'open', target: ws } as WebSocket.Event);
+            ws.onmessage?.({
+              data: attempt === 1 ? 'partial' : 'done',
+            } as WebSocket.MessageEvent);
+          });
+          return ws;
+        });
+
+        const callApi = vi.fn(() => provider.callApi('recover stalled stream'));
+        const responsePromise = registry
+          .execute(provider, callApi, {
+            isRateLimited: isProviderResponseRateLimited,
+            getRetryAfter: () => 0,
+          })
+          .then(
+            (response) => ({ response }),
+            (error: Error) => ({ error: error.message }),
+          );
+
+        await vi.advanceTimersByTimeAsync(0);
+        expect(callApi).toHaveBeenCalledOnce();
+
+        await vi.runAllTimersAsync();
+
+        await expect(responsePromise).resolves.toEqual({ response: { output: 'recovered' } });
+        expect(callApi).toHaveBeenCalledTimes(2);
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          retriedRequests: 1,
+          completedRequests: 1,
+          failedRequests: 0,
+        });
+      } finally {
+        registry.dispose();
+        vi.useRealTimers();
+      }
     });
   });
 });

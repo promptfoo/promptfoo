@@ -11,7 +11,7 @@ This example shows how to red team an Ollama model using promptfoo. For a detail
 
 ## Prerequisites
 
-1. Install Node.js 20+. [Download Node.js](https://nodejs.org/en/download/)
+1. Install a [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support). [Download Node.js](https://nodejs.org/en/download/)
 2. Install Ollama from [ollama.ai](https://ollama.ai)
 3. Start the Ollama service:
 

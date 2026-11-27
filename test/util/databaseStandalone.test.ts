@@ -1,0 +1,467 @@
+import { eq, sql } from 'drizzle-orm';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getDb } from '../../src/database/index';
+import { updateSignalFile } from '../../src/database/signal';
+import { evalsTable } from '../../src/database/tables';
+import { runDbMigrations } from '../../src/migrate';
+import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
+import { type CompletedPrompt, type Prompt, ResultFailureReason } from '../../src/types/index';
+import {
+  clearStandaloneEvalCache,
+  deleteEval,
+  getDatasetFromHash,
+  getPrompts,
+  getPromptsForTestCasesHash,
+  getStandaloneEvals,
+  getTestCases,
+  hasRecentEvalWithIdPrefix,
+  updateResult,
+} from '../../src/util/database';
+import {
+  getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
+} from '../../src/util/standaloneEvalCache';
+import { clearEvalTables } from '../util/evalDb';
+
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+  };
+});
+
+const completedPrompt: CompletedPrompt = {
+  raw: 'hello',
+  label: 'hello',
+  provider: 'test-provider',
+  metrics: {
+    score: 1,
+    testPassCount: 1,
+    testFailCount: 0,
+    testErrorCount: 0,
+    assertPassCount: 1,
+    assertFailCount: 0,
+    totalLatencyMs: 0,
+    tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0 },
+    namedScores: {},
+    namedScoresCount: {},
+    cost: 0,
+  },
+};
+
+const renderedPrompts: Prompt[] = [{ raw: 'hello', label: 'hello' }];
+
+// Mirrors the CASE expression in drizzle/0024_repair_eval_redteam_flags.sql.
+const isRedteamCase = sql`CASE
+  WHEN json_valid(${evalsTable.config}) AND json_type(${evalsTable.config}, '$.redteam') IS NOT NULL THEN 1
+  ELSE 0
+END`;
+
+async function createEvalWithPrompts(config: Partial<Parameters<typeof Eval.create>[0]>) {
+  return Eval.create(config as Parameters<typeof Eval.create>[0], renderedPrompts, {
+    completedPrompts: [completedPrompt],
+  });
+}
+
+const resetEvalTables = () => clearEvalTables(() => clearStandaloneEvalCache());
+
+async function setIsRedteam(evalId: string, value: boolean) {
+  const db = await getDb();
+  await db.update(evalsTable).set({ isRedteam: value }).where(eq(evalsTable.id, evalId)).run();
+}
+
+function expectStandaloneHistoryCached(options?: Parameters<typeof getStandaloneEvalCacheKey>[0]) {
+  expect(getCachedStandaloneEvals(getStandaloneEvalCacheKey(options))).toBeDefined();
+}
+
+describe('getStandaloneEvals', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(resetEvalTables);
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it.each([false, true])('keeps dataset identities when output stripping is %s', async (strip) => {
+    vi.stubEnv('PROMPTFOO_STRIP_TEST_VARS', String(strip));
+    const tests = [{ vars: { doc: 'https://cdn.example/doc?X-Amz-Signature=short-secret' } }];
+    const created = await createEvalWithPrompts({ tests });
+    const persisted = await Eval.findById(created.id);
+    const datasetId = persisted!.datasetId!;
+
+    expect(datasetId).toBeTruthy();
+    const datasets = await getTestCases();
+    expect(datasets).toHaveLength(1);
+    expect(datasets[0].id).toBe(datasetId);
+    expect(JSON.stringify(datasets[0].testCases)).not.toContain('short-secret');
+    expect((await getDatasetFromHash(datasetId))?.id).toBe(datasetId);
+    const prompts = await getPrompts();
+    expect(prompts[0].evals[0].datasetId).toBe(datasetId);
+    expect(await getPromptsForTestCasesHash(datasetId)).toEqual(prompts);
+    expect(await getPromptsForTestCasesHash('')).toEqual([]);
+    expect(persisted!.config.tests).toEqual(tests);
+  });
+
+  it('keeps prompt membership order and the latest date across timestamp formats', async () => {
+    const older = await createEvalWithPrompts({});
+    const newer = await createEvalWithPrompts({});
+    const db = await getDb();
+    await db.run(sql`UPDATE evals SET created_at = '2000-01-01 00:00:00' WHERE id = ${older.id}`);
+
+    const [group] = await getPrompts();
+    expect(group.evals.map(({ id }) => id)).toEqual([older.id, newer.id]);
+    expect(group.count).toBe(2);
+    expect(group.recentEvalId).toBe(older.id);
+    expect(group.recentEvalDate).toEqual(new Date(newer.createdAt));
+  });
+
+  it('returns isRedteam from the materialized column, not raw JSON inspection', async () => {
+    const redteamEval = await createEvalWithPrompts({ redteam: {} as any });
+    const regularEval = await createEvalWithPrompts({});
+
+    // Flip the column away from what the JSON config would imply; the query must trust the column.
+    await setIsRedteam(redteamEval.id, false);
+    await setIsRedteam(regularEval.id, true);
+
+    const rows = await getStandaloneEvals();
+    const byId = new Map(rows.map((row) => [row.evalId, row.isRedteam] as const));
+
+    expect(byId.get(redteamEval.id)).toBe(false);
+    expect(byId.get(regularEval.id)).toBe(true);
+  });
+
+  it('reflects flag transitions after updateResult rewrites config without stale cached history', async () => {
+    const eval_ = await createEvalWithPrompts({});
+    expect((await getStandaloneEvals()).find((row) => row.evalId === eval_.id)?.isRedteam).toBe(
+      false,
+    );
+
+    await updateResult(eval_.id, { redteam: {} as any });
+
+    expect((await getStandaloneEvals()).find((row) => row.evalId === eval_.id)?.isRedteam).toBe(
+      true,
+    );
+  });
+
+  it('drops deleted evals from cached history immediately', async () => {
+    const keep = await createEvalWithPrompts({});
+    const drop = await createEvalWithPrompts({});
+
+    const beforeIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(beforeIds).toEqual(expect.arrayContaining([keep.id, drop.id]));
+
+    await deleteEval(drop.id);
+
+    const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(afterIds).toContain(keep.id);
+    expect(afterIds).not.toContain(drop.id);
+  });
+
+  it('includes newly created evals after history has been cached', async () => {
+    const first = await createEvalWithPrompts({});
+    const beforeIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    const limitedBeforeIds = (await getStandaloneEvals({ limit: 5 })).map((row) => row.evalId);
+    expect(beforeIds).toContain(first.id);
+    expect(limitedBeforeIds).toContain(first.id);
+    expectStandaloneHistoryCached();
+    expectStandaloneHistoryCached({ limit: 5 });
+
+    const second = await createEvalWithPrompts({});
+
+    const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    const limitedAfterIds = (await getStandaloneEvals({ limit: 5 })).map((row) => row.evalId);
+    expect(afterIds).toContain(first.id);
+    expect(afterIds).toContain(second.id);
+    expect(limitedAfterIds).toContain(first.id);
+    expect(limitedAfterIds).toContain(second.id);
+  });
+
+  it('includes copied evals after history has been cached', async () => {
+    const source = await createEvalWithPrompts({});
+    const beforeIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(beforeIds).toContain(source.id);
+    expectStandaloneHistoryCached();
+
+    const persistedSource = await Eval.findById(source.id);
+    expect(persistedSource).toBeDefined();
+    const copy = await persistedSource!.copy('copy of source');
+
+    const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
+    expect(afterIds).toContain(source.id);
+    expect(afterIds).toContain(copy.id);
+    expect(updateSignalFile).toHaveBeenCalledWith(copy.id);
+  });
+
+  it('includes direct eval saves after history has been cached', async () => {
+    const eval_ = await createEvalWithPrompts({});
+    const beforeRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(beforeRow?.description).toBeNull();
+    expectStandaloneHistoryCached();
+
+    const persistedEval = await Eval.findById(eval_.id);
+    expect(persistedEval).toBeDefined();
+    persistedEval!.config.description = 'updated description';
+    await persistedEval!.save();
+
+    const afterRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(afterRow?.description).toBe('updated description');
+    expect(updateSignalFile).toHaveBeenCalledWith(eval_.id);
+  });
+
+  it('includes prompt changes after history has been cached', async () => {
+    const eval_ = await createEvalWithPrompts({});
+    const beforeRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(beforeRow?.raw).toBe('hello');
+    expectStandaloneHistoryCached();
+
+    await eval_.addPrompts([
+      {
+        ...completedPrompt,
+        raw: 'goodbye',
+        label: 'goodbye',
+      },
+    ]);
+
+    const afterRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(afterRow?.raw).toBe('goodbye');
+  });
+
+  it('includes result changes after history has been cached', async () => {
+    const eval_ = await createEvalWithPrompts({});
+    const beforeRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(beforeRow?.pluginFailCount['plugin-a']).toBeUndefined();
+    expectStandaloneHistoryCached();
+
+    await eval_.setResults([
+      new EvalResult({
+        id: 'set-results-history-row',
+        evalId: eval_.id,
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {}, metadata: { pluginId: 'plugin-a' } },
+        prompt: renderedPrompts[0],
+        provider: { id: 'test-provider' },
+        response: { output: 'bad' },
+        gradingResult: null,
+        namedScores: {},
+        metadata: {},
+        success: false,
+        score: 0,
+        latencyMs: 1,
+        cost: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      }),
+    ]);
+
+    const afterRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(afterRow?.pluginFailCount['plugin-a']).toBe(1);
+  });
+
+  it('includes incrementally added results after history has been cached', async () => {
+    const eval_ = await createEvalWithPrompts({});
+    const beforeRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(beforeRow?.pluginFailCount['plugin-add']).toBeUndefined();
+    expectStandaloneHistoryCached();
+
+    await eval_.addResult({
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: {}, metadata: { pluginId: 'plugin-add' } },
+      promptId: 'prompt-add',
+      provider: { id: 'test-provider' },
+      prompt: renderedPrompts[0],
+      vars: {},
+      response: { output: 'bad' },
+      error: null,
+      failureReason: ResultFailureReason.ASSERT,
+      success: false,
+      score: 0,
+      latencyMs: 1,
+      gradingResult: null,
+      namedScores: {},
+      cost: 0,
+      metadata: {},
+    });
+
+    const afterRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(afterRow?.pluginFailCount['plugin-add']).toBe(1);
+  });
+
+  it('classifies redteam: null as redteam, matching the runtime predicate', async () => {
+    const eval_ = await createEvalWithPrompts({ redteam: null as any });
+
+    const db = await getDb();
+    const stored = await db
+      .select({ isRedteam: evalsTable.isRedteam })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, eval_.id))
+      .get();
+    expect(stored?.isRedteam).toBe(true);
+
+    const row = (await getStandaloneEvals()).find((r) => r.evalId === eval_.id);
+    expect(row?.isRedteam).toBe(true);
+  });
+});
+
+describe('hasRecentEvalWithIdPrefix', () => {
+  beforeAll(() => runDbMigrations());
+  beforeEach(resetEvalTables);
+
+  it('matches literal, case-sensitive prefixes within the 100 most recent IDs', async () => {
+    const db = await getDb();
+    await db.insert(evalsTable).values(
+      Array.from({ length: 101 }, (_, index) => ({
+        id: `Eval-${index}-fixture`,
+        createdAt: index,
+        config: {},
+        results: {},
+      })),
+    );
+
+    expect(await hasRecentEvalWithIdPrefix('Eval-0-fixture')).toBe(false);
+    expect(await hasRecentEvalWithIdPrefix('Eval-1-fix')).toBe(true);
+    expect(await hasRecentEvalWithIdPrefix('Eval-100-fixture')).toBe(true);
+    expect(await hasRecentEvalWithIdPrefix('eval-1-fix')).toBe(false);
+    expect(await hasRecentEvalWithIdPrefix('Eval-%')).toBe(false);
+  });
+
+  it('checks IDs without decoding unrelated payloads or timestamps', async () => {
+    const db = await getDb();
+    await db.insert(evalsTable).values({ id: 'target', results: {}, config: {} });
+    await db.run(sql`INSERT INTO evals (id, created_at, results, config) VALUES
+      ('broken-json', 1, '{', '{'), ('invalid-date', 9000000000000000, '{}', '{}')`);
+
+    expect(await hasRecentEvalWithIdPrefix('target')).toBe(true);
+  });
+});
+
+describe('getTestCases', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(resetEvalTables);
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it('groups sanitized datasets with their first-seen prompts without loading results', async () => {
+    const tests = [
+      {
+        description: 'says hello',
+        vars: { name: 'Ada' },
+        metadata: { topic: 'greeting' },
+      },
+    ];
+    const created = await createEvalWithPrompts({
+      tests,
+      env: { PROMPTFOO_STRIP_METADATA: 'true' },
+    });
+    const olderPrompt = { ...completedPrompt, raw: 'different prompt' };
+    const older = await Eval.create({ tests }, renderedPrompts, {
+      createdAt: new Date(1),
+      completedPrompts: [completedPrompt, olderPrompt, { ...olderPrompt, label: 'duplicate' }],
+    });
+    const persisted = await Eval.findById(created.id);
+    expect(persisted?.config.tests).toEqual(tests);
+
+    const toResultsFile = vi.spyOn(Eval.prototype, 'toResultsFile');
+    const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+    try {
+      const datasets = await getTestCases();
+
+      expect(datasets).toHaveLength(1);
+      expect(datasets[0]).toMatchObject({
+        count: 2,
+        recentEvalId: created.id,
+        recentEvalDate: new Date(created.createdAt),
+      });
+      expect(datasets[0].prompts).toMatchObject([
+        { evalId: created.id, prompt: completedPrompt },
+        { evalId: older.id, prompt: olderPrompt },
+      ]);
+      expect(datasets[0].testCases).toEqual([
+        {
+          description: 'says hello',
+          vars: { name: 'Ada' },
+        },
+      ]);
+      expect(toResultsFile).not.toHaveBeenCalled();
+      expect(findResults).not.toHaveBeenCalled();
+    } finally {
+      toResultsFile.mockRestore();
+      findResults.mockRestore();
+    }
+  });
+});
+
+describe('migration 0024 repair semantics', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(resetEvalTables);
+
+  it('classifies {redteam: null} as redteam via json_type (not json_extract)', async () => {
+    const db = await getDb();
+    const evalNullRedteam = await Eval.create({ redteam: null as any }, []);
+    const evalNoRedteam = await Eval.create({}, []);
+    const evalWithRedteam = await Eval.create({ redteam: {} as any }, []);
+
+    const classify = (id: string) =>
+      db
+        .select({
+          fromMigration: sql<number>`${isRedteamCase}`,
+          fromLegacyExtract: sql<number>`CASE
+            WHEN json_valid(${evalsTable.config}) AND json_extract(${evalsTable.config}, '$.redteam') IS NOT NULL THEN 1
+            ELSE 0
+          END`,
+        })
+        .from(evalsTable)
+        .where(eq(evalsTable.id, id))
+        .get();
+
+    const nullRow = await classify(evalNullRedteam.id);
+    const missingRow = await classify(evalNoRedteam.id);
+    const presentRow = await classify(evalWithRedteam.id);
+
+    expect(nullRow?.fromMigration).toBe(1);
+    expect(missingRow?.fromMigration).toBe(0);
+    expect(presentRow?.fromMigration).toBe(1);
+
+    // Legacy json_extract collapses {redteam: null} to non-redteam — the divergence this migration repairs.
+    expect(nullRow?.fromLegacyExtract).toBe(0);
+    expect(missingRow?.fromLegacyExtract).toBe(0);
+    expect(presentRow?.fromLegacyExtract).toBe(1);
+  });
+
+  it('idempotently repairs only stale rows', async () => {
+    const db = await getDb();
+    const evalWithRedteam = await Eval.create({ redteam: {} as any }, []);
+    const evalRegular = await Eval.create({}, []);
+
+    await setIsRedteam(evalWithRedteam.id, false);
+    await setIsRedteam(evalRegular.id, true);
+
+    const repairSql = sql`UPDATE evals SET is_redteam = ${isRedteamCase} WHERE is_redteam != ${isRedteamCase}`;
+
+    expect((await db.run(repairSql)).rowsAffected).toBe(2);
+    expect((await db.run(repairSql)).rowsAffected).toBe(0);
+
+    const rows = await db
+      .select({ id: evalsTable.id, isRedteam: evalsTable.isRedteam })
+      .from(evalsTable)
+      .all();
+    const byId = new Map(rows.map((row) => [row.id, row.isRedteam] as const));
+    expect(byId.get(evalWithRedteam.id)).toBe(true);
+    expect(byId.get(evalRegular.id)).toBe(false);
+  });
+});
