@@ -695,8 +695,11 @@ export class MistralChatCompletionProvider implements ApiProvider {
       output = normalizedContent;
     }
 
+    const finishReason = data.choices[0].finish_reason;
+
     const result: ProviderResponse = {
       output,
+      ...(finishReason && { finishReason }),
       tokenUsage: getTokenUsage(data, cached),
       cached,
       cost: calculateMistralCost(

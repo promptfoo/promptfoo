@@ -845,6 +845,26 @@ describe('Mistral', () => {
       expect(result.output).toEqual(content);
     });
 
+    it.each([
+      ['stop', 'stop'],
+      ['length', 'length'],
+      ['tool_calls', 'tool_calls'],
+    ])('should report finish_reason %s as finishReason', async (raw, expected) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'Test output' }, finish_reason: raw }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.finishReason).toBe(expected);
+    });
+
     it('should preserve all choices in metadata when n returns multiple completions', async () => {
       const choices = [
         { index: 0, message: { content: 'First response' } },
