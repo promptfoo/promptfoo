@@ -27,6 +27,7 @@ import {
 } from '../constants';
 import { SetupSection } from '../SetupSection';
 import BedrockAuthentication from './BedrockAuthentication';
+import ModelTokenLimitField from './ModelTokenLimitField';
 
 import type { ProviderOptions } from '../../types';
 
@@ -34,6 +35,9 @@ interface FoundationModelConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
   providerType: string;
+  beforeModel?: React.ReactNode;
+  /** Return true when the owning editor handles the ID change itself. */
+  onModelIdChange?: (id: string) => boolean;
 }
 
 const BEDROCK_API_OPTIONS: { value: BedrockApiMode; label: string }[] = [
@@ -191,6 +195,8 @@ const FoundationModelConfiguration = ({
   selectedTarget,
   updateCustomTarget,
   providerType,
+  beforeModel,
+  onModelIdChange,
 }: FoundationModelConfigurationProps) => {
   const isBedrock = providerType === 'bedrock';
   const bedrockRoute = isBedrock ? getBedrockTextRoute(selectedTarget.id || 'bedrock:') : undefined;
@@ -263,6 +269,9 @@ const FoundationModelConfiguration = ({
 
   const handleModelIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newId = e.target.value;
+    if (onModelIdChange?.(newId)) {
+      return;
+    }
     const providerId =
       isBedrock && bedrockApiMode ? buildBedrockProviderId(bedrockApiMode, newId) : newId;
     setModelDraft({ modelId: newId, providerId });
@@ -474,6 +483,7 @@ const FoundationModelConfiguration = ({
 
       <div className="rounded-lg border border-border p-4">
         <div className="space-y-2">
+          {beforeModel}
           {isBedrock && (
             <div className="mb-4 space-y-2">
               <Label htmlFor="bedrock-api-mode">
@@ -769,26 +779,18 @@ const FoundationModelConfiguration = ({
               <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="max-tokens">
-                {tokenLimitKey === 'max_output_tokens' ? 'Max Output Tokens' : 'Max Tokens'}
-              </Label>
-              <Input
-                id="max-tokens"
-                type="number"
-                min={isBedrock ? 0 : 1}
-                value={tokenLimit ?? ''}
-                onChange={(e) => {
-                  const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
-                  if (hasAlternateTokenLimit) {
-                    updateTokenLimit(tokenLimitKey, value);
-                  } else {
-                    updateCustomTarget(tokenLimitKey, value);
-                  }
-                }}
-              />
-              <p className="text-sm text-muted-foreground">Maximum number of tokens to generate</p>
-            </div>
+            <ModelTokenLimitField
+              label={tokenLimitKey === 'max_output_tokens' ? 'Max Output Tokens' : 'Max Tokens'}
+              min={isBedrock ? 0 : 1}
+              value={tokenLimit}
+              onChange={(value) => {
+                if (hasAlternateTokenLimit) {
+                  updateTokenLimit(tokenLimitKey, value);
+                } else {
+                  updateCustomTarget(tokenLimitKey, value);
+                }
+              }}
+            />
 
             <div className="space-y-2">
               <Label htmlFor="top-p">Top P</Label>

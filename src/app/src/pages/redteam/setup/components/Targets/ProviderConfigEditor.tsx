@@ -5,6 +5,7 @@ import deepEqual from 'fast-deep-equal';
 import { AlertTriangle } from 'lucide-react';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
+import { VERTEX_RESPONSES_PREFIX } from '../constants';
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
@@ -18,12 +19,14 @@ import CustomTargetConfiguration from './CustomTargetConfiguration';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import {
+  getVertexResponsesModelIdError,
   isBedrockAgentProviderId,
   isLocalOpenAiProviderType,
   isOpenAiChatProviderId,
   withLocalProviderType,
 } from './helpers';
 import { getProviderEditorKind } from './providerCatalog';
+import VertexConfiguration from './VertexConfiguration';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -433,10 +436,13 @@ function ProviderConfigEditor({
       if (provider.config.max_cost_usd !== undefined && provider.config.max_cost_usd <= 0) {
         errors.push('Maximum scan cost must be greater than 0');
       }
-    } else if (editorKind === 'foundation') {
+    } else if (editorKind === 'foundation' || editorKind === 'vertex') {
       // Foundation model providers validation
-      if (!provider.id || provider.id.trim() === '') {
-        errors.push('Model ID is required');
+      const modelError = provider.id?.trim()
+        ? getVertexResponsesModelIdError(provider.id)
+        : 'Model ID is required';
+      if (modelError) {
+        errors.push(modelError);
       }
       // Validate that temperature is within reasonable bounds if provided
       if (
@@ -448,6 +454,13 @@ function ProviderConfigEditor({
       // Validate that max_tokens is positive if provided
       if (provider.config?.max_tokens !== undefined && provider.config.max_tokens <= 0) {
         errors.push('Max tokens must be greater than 0');
+      }
+      if (
+        provider.id?.startsWith(VERTEX_RESPONSES_PREFIX) &&
+        provider.config?.max_output_tokens !== undefined &&
+        provider.config.max_output_tokens <= 0
+      ) {
+        errors.push('Max output tokens must be greater than 0');
       }
       // Validate that top_p is between 0 and 1 if provided
       if (
@@ -672,6 +685,13 @@ function ProviderConfigEditor({
       {editorKind === 'codex-security' && (
         <CodexSecurityConfiguration
           selectedTarget={provider}
+          updateCustomTarget={updateCustomTarget}
+        />
+      )}
+
+      {editorKind === 'vertex' && (
+        <VertexConfiguration
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
         />
       )}

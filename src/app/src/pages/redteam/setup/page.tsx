@@ -47,6 +47,7 @@ import Purpose from './components/Purpose';
 import Review from './components/Review';
 import Setup from './components/Setup';
 import Strategies from './components/Strategies';
+import { getVertexResponsesModelIdError } from './components/Targets/helpers';
 import { isModelProviderId } from './components/Targets/providerCatalog';
 import TargetConfiguration from './components/Targets/TargetConfiguration';
 import TargetTypeSelection from './components/Targets/TargetTypeSelection';
@@ -136,7 +137,9 @@ export default function RedTeamSetupPage() {
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
   const { config, setFullConfig, resetConfig } = useRedTeamConfig();
-  const { targetConfigError, targetConfigRevision } = useRedTeamTargetConfigValidation();
+  const { targetConfigError: targetDraftError, targetConfigRevision } =
+    useRedTeamTargetConfigValidation();
+  const targetConfigError = targetDraftError ?? getVertexResponsesModelIdError(config.target?.id);
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);

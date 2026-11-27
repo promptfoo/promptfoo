@@ -13,6 +13,7 @@ import type { ProviderOptions } from '../../types';
 type ProviderEditorKind =
   | 'custom'
   | 'foundation'
+  | 'vertex'
   | 'agent'
   | 'http'
   | 'websocket'
@@ -369,11 +370,11 @@ const providerCatalog: ProviderTypeOption[] = [
   {
     value: 'vertex',
     label: 'Google Vertex AI',
-    description: 'Gemini on Google Cloud',
+    description: 'Gemini and other supported models on Google Cloud',
     tag: 'providers',
     defaultId: DEFAULT_VERTEX_TARGET_ID,
     createConfig: () => ({ region: 'global' }),
-    editor: 'foundation',
+    editor: 'vertex',
   },
   {
     value: 'bedrock',

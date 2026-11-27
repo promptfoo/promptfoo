@@ -49,6 +49,7 @@ import EstimationsDisplay from './EstimationsDisplay';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
+import { getVertexResponsesModelIdError } from './Targets/helpers';
 import type { PluginConfig, Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
@@ -162,7 +163,8 @@ export default function Review({
   navigateToPurpose,
 }: ReviewProps) {
   const { config, updateConfig } = useRedTeamConfig();
-  const { targetConfigError } = useRedTeamTargetConfigValidation();
+  const { targetConfigError: targetDraftError } = useRedTeamTargetConfigValidation();
+  const targetConfigError = targetDraftError ?? getVertexResponsesModelIdError(config.target?.id);
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
@@ -588,7 +590,7 @@ export default function Review({
     const { targetConfigError: latestTargetConfigError } =
       useRedTeamTargetConfigValidation.getState();
     const runTargetValidationError = getRunTargetValidationError(
-      latestTargetConfigError,
+      latestTargetConfigError ?? getVertexResponsesModelIdError(latestConfig.target?.id),
       confirmedTarget,
       latestConfig.target,
     );
