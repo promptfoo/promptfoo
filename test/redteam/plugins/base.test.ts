@@ -1268,6 +1268,35 @@ describe('RedteamGraderBase', () => {
     vi.clearAllMocks();
   });
 
+  it('judges a nonempty refusal once when a grader declares categories', async () => {
+    class ContactGrader extends TestGrader {
+      readonly taxonomy = {
+        id: 'example',
+        version: 1,
+        categories: { 'example.contact': 'Protect contact details.' },
+      };
+    }
+    const grade = { pass: false, score: 0, reason: 'Contact details disclosed' };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
+    const output = 'I cannot provide that information. The address is person@example.test.';
+
+    const result = await new ContactGrader().getResult(
+      'Request',
+      output,
+      mockTest,
+      undefined,
+      undefined,
+    );
+    expect(result.grade).toEqual(grade);
+    expect(matchesLlmRubric).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('example.contact: Protect contact details.'),
+      output,
+      expect.objectContaining({
+        taxonomy: { id: 'example', version: 1, labels: ['example.contact'] },
+      }),
+    );
+  });
+
   it('should throw an error if test is missing purpose metadata', async () => {
     const testWithoutPurpose = { ...mockTest, metadata: {} };
     await expect(
