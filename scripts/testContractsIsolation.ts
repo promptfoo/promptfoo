@@ -135,6 +135,9 @@ assert.equal(contracts.OpenAiProviderOptionsInputSchema.safeParse({ id: 'openai:
 assert.equal(contracts.OpenAiProviderOptionsInputSchema.safeParse({ id: 'openai:chat:test', config: { temperature: 'warm' } }).success, false);
 assert.equal(contracts.AzureProviderOptionsInputSchema.safeParse({ id: 'azureopenai:chat:deployment', config: { temperature: 0 } }).success, true);
 assert.equal(contracts.AnthropicProviderOptionsInputSchema.safeParse({ id: 'anthropic:messages:test', config: { thinking: { type: 'enabled' } } }).success, false);
+assert.equal(contracts.VertexResponsesProviderOptionsInputSchema.safeParse({ id: 'vertex:responses:test', config: { projectId: 'project', region: 'global' } }).success, true);
+assert.equal(contracts.VertexResponsesProviderOptionsInputSchema.safeParse({ id: 'vertex:responses:test', config: { apiKey: 'not-oauth' } }).success, false);
+assert.equal(contracts.VertexResponsesProviderOptionsInputJsonSchema.$schema, 'http://json-schema.org/draft-07/schema#');
 assert.deepEqual(contracts.McpClientConfigInputSchema.parse({server: {command: 'fixture'}}), {server: {command: 'fixture'}});
 assert.equal(contracts.McpClientConfigInputSchema.safeParse({defaultArgs: {session: 'ignored'}}).success, false);
 assert.equal(contracts.McpConfigInputSchema.safeParse({defaultArgs: {session: 'supported'}}).success, true);
@@ -161,6 +164,9 @@ const azure: contracts.AzureProviderOptionsInput = { id: 'azure:responses:deploy
 const anthropic: contracts.AnthropicProviderOptionsInput = { id: 'anthropic:messages:test', config: { thinking: { type: 'adaptive' } } };
 // @ts-expect-error Thinking configuration must retain its required numeric budget.
 const invalidAnthropic: contracts.AnthropicProviderOptionsInput = { id: 'anthropic:messages:test', config: { thinking: { type: 'enabled' } } };
+const vertexResponses: contracts.VertexResponsesProviderOptionsInput = { id: 'vertex:responses:test', config: { projectId: 'project', max_output_tokens: 32 } };
+// @ts-expect-error Google Cloud Responses does not take an API key.
+const invalidVertexResponses: contracts.VertexResponsesProviderOptionsInput = { id: 'vertex:responses:test', config: { apiKey: 'not-oauth' } };
 contracts.PromptSchema.parse(prompt);
 contracts.GetUserResponseSchema.parse(user);
 // @ts-expect-error Public declarations must retain the required string prompt body.
@@ -173,7 +179,7 @@ const mcpProvider: contracts.McpConfigInput = { ...mcpClient, defaultArgs: { nes
 const invalidClient: contracts.McpClientConfigInput = { defaultArgs: {session: 'ignored'} };
 // @ts-expect-error Portable tool arguments must be JSON values.
 const invalidDefaults: contracts.McpConfigInput = { defaultArgs: { callback() {} } };
-void [response, invalid, invalidBlob, openai, invalidOpenai, azure, anthropic, invalidAnthropic, mcpClient, mcpProvider, invalidClient, invalidDefaults];
+void [response, invalid, invalidBlob, openai, invalidOpenai, azure, anthropic, invalidAnthropic, vertexResponses, invalidVertexResponses, mcpClient, mcpProvider, invalidClient, invalidDefaults];
 `;
   fs.writeFileSync(
     path.join(consumer, 'types.mts'),

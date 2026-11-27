@@ -41,6 +41,8 @@ Explicit credentials in `credentials`, `keyFilename`, or `googleAuthOptions` tak
 
 Use [Responses API options](./openai.md#responses-api) such as `max_output_tokens`, `reasoning`, `tools`, and `response_format`; availability of individual features depends on your preview endpoint. Responses are not cached locally because a Google Cloud project can contain multiple principals. Token usage is reported, but cost estimates require explicit `inputCost` / `outputCost` or `cost` values in dollars per token, since Google Cloud pricing and discounts can differ from OpenAI pricing. Estimates cover token costs only and exclude hosted-tool fees.
 
+To validate a serializable provider configuration, use `VertexResponsesProviderOptionsInputSchema` or `VertexResponsesProviderOptionsInputJsonSchema` from `promptfoo/contracts`. These contracts check configuration shape, not Google credentials, model enablement, or endpoint reachability.
+
 See the [Google Cloud OpenAI example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-cloud-openai).
 
 ### Gemini Models

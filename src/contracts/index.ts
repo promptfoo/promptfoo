@@ -90,6 +90,14 @@ export {
   OpenAiSharedConfigInputJsonSchema,
   OpenAiSharedConfigInputSchema,
 } from './providerConfig/openai.js';
+export {
+  type VertexResponsesConfigInput,
+  VertexResponsesConfigInputJsonSchema,
+  VertexResponsesConfigInputSchema,
+  type VertexResponsesProviderOptionsInput,
+  VertexResponsesProviderOptionsInputJsonSchema,
+  VertexResponsesProviderOptionsInputSchema,
+} from './providerConfig/vertexResponses.js';
 export * from './providers.js';
 export * from './shared.js';
 export * from './transform.js';
