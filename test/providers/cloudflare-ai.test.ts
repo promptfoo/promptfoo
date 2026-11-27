@@ -372,6 +372,38 @@ describe('CloudflareAi Provider', () => {
       expect(request.headers).toMatchObject({ 'X-Tenant': 'acme' });
     });
 
+    it('Should send the tools and response format the chat provider resolved', async () => {
+      const provider = new CloudflareAiChatCompletionProvider(testModelName, {
+        config: {
+          accountId: 'test-account',
+          apiKey: 'test-key',
+          tools: [{ type: 'function', function: { name: '{{ toolName }}' } }],
+          functions: [{ name: '{{ toolName }}' }],
+          response_format: { type: 'json_schema', json_schema: { name: '{{ schemaName }}' } },
+        } as CloudflareAiConfig,
+      });
+
+      mockFetch.mockResolvedValue({
+        ...defaultMockResponse,
+        text: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ choices: [{ message: { content: 'x' } }] })),
+        ok: true,
+      });
+      await provider.callApi('Test resolved options', {
+        prompt: { raw: 'Test resolved options', label: 'test' },
+        vars: { toolName: 'get_weather', schemaName: 'weather' },
+      });
+
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.tools).toEqual([{ type: 'function', function: { name: 'get_weather' } }]);
+      expect(requestBody.functions).toEqual([{ name: 'get_weather' }]);
+      expect(requestBody.response_format).toEqual({
+        type: 'json_schema',
+        json_schema: { name: 'weather' },
+      });
+    });
+
     it('Should return proper provider identification methods', () => {
       const provider = new CloudflareAiChatCompletionProvider(testModelName, {
         config: cloudflareMinimumConfig,
@@ -584,6 +616,8 @@ describe('CloudflareAi Provider', () => {
         temperature: 0.5,
         max_tokens: 500,
         custom_completion_param: 'test_value',
+        // The completion provider does not resolve this itself, so it must stay in passthrough.
+        response_format: { type: 'json_object' },
       } as CloudflareAiConfig;
 
       const provider = new CloudflareAiCompletionProvider(testModelName, {
@@ -607,6 +641,7 @@ describe('CloudflareAi Provider', () => {
       expect(requestBody.temperature).toBe(0.5);
       expect(requestBody.max_tokens).toBe(500);
       expect(requestBody.custom_completion_param).toBe('test_value');
+      expect(requestBody.response_format).toEqual({ type: 'json_object' });
       // Verify provider-specific config is excluded
       expect(requestBody.accountId).toBeUndefined();
       expect(requestBody.apiKey).toBeUndefined();
