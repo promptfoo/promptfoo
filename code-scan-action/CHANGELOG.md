@@ -4,14 +4,13 @@ All notable changes to this package will be documented in this file.
 
 ## [0.3.0](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.3...code-scan-action-0.3.0) (2026-11-27)
 
-
 ### ⚠ BREAKING CHANGES
 
-* **deps:** Promptfoo requires Node.js ^22.22.2, ^24.15.0 or >=26.
+- **deps:** Promptfoo requires Node.js ^22.22.2, ^24.15.0 or >=26.
 
 ### Bug Fixes
 
-* **deps:** update Inquirer and supported Node.js releases ([#12531](https://github.com/promptfoo/promptfoo/issues/12531)) ([d3d91a8](https://github.com/promptfoo/promptfoo/commit/d3d91a8e877e0f0dbcc946b6d0fceaeea44fc7de))
+- **deps:** update Inquirer and supported Node.js releases ([#12531](https://github.com/promptfoo/promptfoo/issues/12531)) ([d3d91a8](https://github.com/promptfoo/promptfoo/commit/d3d91a8e877e0f0dbcc946b6d0fceaeea44fc7de))
 
 ## [0.2.3](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.2...code-scan-action-0.2.3) (2026-11-18)
 
