@@ -2,6 +2,7 @@ const { createLoggerModule } = await vi.hoisted(async () => import('../factories
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { LiteLLMProviderOptionsInputSchema } from '../../src/contracts/providerConfig/litellm';
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
 import { createApiKeyOptions } from '../factories/literalFixtures';
 import { mockProcessEnv } from '../util/utils';
@@ -278,6 +279,28 @@ describe('LiteLLM Provider', () => {
         });
         expect(provider.config.apiBaseUrl).toBe('https://config-wins.com');
       });
+    });
+  });
+
+  it('sends a target parsed by the portable schema to the configured proxy', async () => {
+    mockFetchWithCache.mockResolvedValue(createMockChatResponse());
+    const target = LiteLLMProviderOptionsInputSchema.parse({
+      id: 'litellm:proxy/model:v2',
+      config: {
+        apiBaseUrl: 'http://proxy.example/v1',
+        passthrough: { metadata: { tags: ['contract-test'] } },
+      },
+    });
+    const provider = createLiteLLMProvider(target.id, { providerOptions: target });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.error).toBeUndefined();
+    const [url, request] = mockFetchWithCache.mock.calls[0]!;
+    expect(url).toBe('http://proxy.example/v1/chat/completions');
+    expect(JSON.parse(request!.body as string)).toMatchObject({
+      model: 'proxy/model:v2',
+      metadata: { tags: ['contract-test'] },
     });
   });
 
