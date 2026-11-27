@@ -1822,7 +1822,9 @@ describe('file utilities', () => {
     });
 
     it('should handle glob patterns in file path', async () => {
-      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockImplementation(() => {
+        throw new Error('File does not exist');
+      });
       expect(parsePathOrGlob('/base', '*.js')).toEqual({
         extension: undefined,
         functionName: undefined,

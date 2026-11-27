@@ -245,7 +245,12 @@ describe('readPrompts', () => {
       vi.mocked(fs.readFileSync).mockReturnValueOnce(
         `${first}\n${'{}\n'.repeat(middleRows)}${last}`,
       );
-      vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.mocked(fs.statSync).mockImplementation((filePath) => {
+        if (String(filePath).includes('*')) {
+          throw new Error('File does not exist');
+        }
+        return { isDirectory: () => false } as fs.Stats;
+      });
       vi.mocked(globSync).mockReturnValue(['prompts.jsonl']);
 
       const prompts = await readPrompts([source]);
