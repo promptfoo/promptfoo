@@ -48,7 +48,7 @@ If you're building or deploying generative AI in production, you can trust that:
 
 These milestones are part of our broader mission: to make LLMs safer and more reliable for enterprises. We’ll continue to invest in our security practices, from encryption and access controls to red teaming and compliance, as we support the growing ecosystem of developers and organizations building with generative AI.
 
-To learn more about our security practices or request our audit reports, visit our [Trust Center](https://trust.promptfoo.dev/) or contact us at security@promptfoo.com.
+To learn more about our security practices or request our audit reports, visit our [Trust Center](https://trust.openai.com/) or contact us at security@promptfoo.com.
 
 ## Join Us and Get Involved
 

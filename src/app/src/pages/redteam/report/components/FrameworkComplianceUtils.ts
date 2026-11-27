@@ -1,4 +1,11 @@
-import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import {
+  ALIASED_PLUGIN_MAPPINGS,
+  categoryAliases,
+  DOD_AI_ETHICS_PRINCIPLE_NAMES,
+  displayNameOverrides,
+  OWASP_API_TOP_10_NAMES,
+  OWASP_LLM_TOP_10_NAMES,
+} from '@promptfoo/redteam/constants';
 
 export type TestResultStats = {
   // The count of successful defenses (tests that passed)
@@ -40,6 +47,14 @@ export const expandPluginCollections = (
   });
   return expandedPlugins;
 };
+
+export function getFrameworkPlugins(framework: string, stats: CategoryStats) {
+  const controls = Object.values(ALIASED_PLUGIN_MAPPINGS[framework] ?? {});
+  return expandPluginCollections(
+    controls.flatMap(({ plugins }) => plugins),
+    stats,
+  );
+}
 
 /**
  * Categorizes plugins into compliant, non-compliant, and untested based on pass rates
@@ -88,7 +103,47 @@ export const getPluginDisplayName = (plugin: string): string => {
   );
 };
 
+const numberedCategories: Partial<Record<string, string[]>> = {
+  'owasp:llm': OWASP_LLM_TOP_10_NAMES,
+  'owasp:api': OWASP_API_TOP_10_NAMES,
+  'dod:ai:ethics': DOD_AI_ETHICS_PRINCIPLE_NAMES,
+};
+
+export function hasNamedCategories(framework: string) {
+  return framework in numberedCategories || framework === 'aiuc:1';
+}
+
+export function getCategoryLabel(framework: string, categoryId: string) {
+  const name = ALIASED_PLUGIN_MAPPINGS[framework]?.[categoryId]?.name;
+  if (name) {
+    return name;
+  }
+  const number = categoryId.split(':').pop() ?? categoryId;
+  const label = numberedCategories[framework]?.[Number(number) - 1] ?? `Category ${number}`;
+  return `${number}. ${label}`;
+}
+
+// A missing control (including one without a built-in plugin) is not a pass.
+export function getAiucCoverageGap(
+  stats: CategoryStats,
+): 'Not tested' | 'Partial coverage' | undefined {
+  const controls = Object.values(ALIASED_PLUGIN_MAPPINGS['aiuc:1']);
+  const tested = (id: string) => stats[id]?.total > 0;
+  if (!controls.some(({ plugins }) => plugins.some(tested))) {
+    return 'Not tested';
+  }
+  if (
+    controls.some(
+      ({ plugins, untestedBehavior }) =>
+        untestedBehavior || !plugins.length || !plugins.every(tested),
+    )
+  ) {
+    return 'Partial coverage';
+  }
+}
+
 export const FRAMEWORK_DESCRIPTIONS: Record<string, string> = {
+  'aiuc:1': 'Technical tests for AIUC-1 readiness, not a certification assessment.',
   'dod:ai:ethics': 'DoD AI ethical principles framework',
   'mitre:atlas': 'MITRE ATLAS framework for adversarial threat landscape for AI systems',
   'nist:ai:measure': 'NIST AI Risk Management Framework for responsible AI development',

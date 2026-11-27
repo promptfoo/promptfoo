@@ -170,19 +170,6 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
   return llmOutput;
 }
 
-function shouldAddImageGradingGuidance(
-  rubric: string | object,
-  output: string,
-  images: ProviderResponse['images'],
-): boolean {
-  const rubricText = typeof rubric === 'string' ? rubric : '';
-  return (
-    Boolean(images?.length) ||
-    IMAGE_RELATED_TEXT_RE.test(rubricText) ||
-    IMAGE_RELATED_TEXT_RE.test(output)
-  );
-}
-
 function addImageGradingGuidance(
   rubric: string | object,
   output: string,
@@ -190,8 +177,8 @@ function addImageGradingGuidance(
 ): string | object {
   if (
     typeof rubric !== 'string' ||
-    !shouldAddImageGradingGuidance(rubric, output, images) ||
-    rubric.includes(IMAGE_GRADING_GUIDANCE)
+    rubric.includes(IMAGE_GRADING_GUIDANCE) ||
+    (!images?.length && !IMAGE_RELATED_TEXT_RE.test(rubric) && !IMAGE_RELATED_TEXT_RE.test(output))
   ) {
     return rubric;
   }

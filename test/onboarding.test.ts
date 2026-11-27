@@ -50,7 +50,7 @@ vi.mock('fs/promises', () => ({
   rm: vi.fn(),
 }));
 
-vi.mock('glob', () => ({
+vi.mock('glob/raw', () => ({
   globSync: vi.fn(),
 }));
 
@@ -224,11 +224,9 @@ describe('createDummyFiles', () => {
         mockSelect.mockResolvedValueOnce('javascript');
       }
       mockSelect.mockImplementationOnce(({ choices }) => {
-        const choice = choices.find(({ name }: { name: string }) => name.startsWith('[OpenAI]'));
-        expect(choice.name).toBe(
-          action === 'agent' ? '[OpenAI] GPT-6 Sol' : '[OpenAI] GPT-6 Luna and Sol',
-        );
-        return choice.value;
+        const expectedName =
+          action === 'agent' ? '[OpenAI] GPT-6 Sol' : '[OpenAI] GPT-6 Luna and Sol';
+        return choices.find(({ name }: { name: string }) => name === expectedName).value;
       });
 
       await createDummyFiles(tempDir, true);
@@ -249,6 +247,41 @@ describe('createDummyFiles', () => {
         ]);
       } else {
         expect(config.providers).toEqual(['openai:gpt-6-luna', 'openai:gpt-6-sol']);
+      }
+    },
+  );
+
+  it.each(['compare', 'rag', 'agent'])(
+    'writes GPT-6.2 Responses providers for an interactive %s setup',
+    async (action) => {
+      mockSelect.mockResolvedValueOnce(action);
+      if (action !== 'compare') {
+        mockSelect.mockResolvedValueOnce('javascript');
+      }
+      mockSelect.mockImplementationOnce(({ choices }) => {
+        const choice = choices.find(
+          ({ name }: { name: string }) => name === '[OpenAI] GPT-6.2 Sol and Astra',
+        );
+        return choice.value;
+      });
+
+      await createDummyFiles(tempDir, true);
+
+      const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
+        call[0].toString().endsWith('promptfooconfig.yaml'),
+      );
+      const config = TestSuiteConfigSchema.parse(yaml.load(configCall?.[1] as string));
+      if (action === 'agent') {
+        expect(config.providers).toEqual(
+          ['openai:gpt-6.2-sol', 'openai:gpt-6.2-astra'].map((id) => ({
+            id,
+            config: {
+              tools: [expect.objectContaining({ type: 'function', name: 'get_current_weather' })],
+            },
+          })),
+        );
+      } else {
+        expect(config.providers).toEqual(['openai:gpt-6.2-sol', 'openai:gpt-6.2-astra']);
       }
     },
   );

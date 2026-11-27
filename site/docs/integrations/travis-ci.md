@@ -11,7 +11,7 @@ This guide demonstrates how to set up promptfoo with Travis CI to run evaluation
 
 - A GitHub repository with a promptfoo project
 - A Travis CI account connected to your repository
-- Node.js `>=22.22.0` (Node.js 24 LTS recommended)
+- A [supported Node.js version](/docs/installation#nodejs-runtime-support)
 - API keys for your LLM providers stored as [Travis CI environment variables](https://docs.travis-ci.com/user/environment-variables/)
 
 ## Setting up Travis CI
@@ -83,7 +83,7 @@ Test your evaluations across different Node.js versions:
 ```yaml
 language: node_js
 node_js:
-  - '22.22.0'
+  - '22.22.2'
   - '24'
 
 script:

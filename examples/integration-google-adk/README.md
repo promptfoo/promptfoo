@@ -13,7 +13,7 @@ It demonstrates:
 ## Prerequisites
 
 - Python 3.10+
-- Node.js >=22.22.0
+- A [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support)
 - A Google API key for the default Gemini model
 
 ## Quick Start

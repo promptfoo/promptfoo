@@ -1441,7 +1441,7 @@ function ResultsTableBodyRow({
   return (
     <tr id={`row-${row.index % pageSize}`}>
       {row.getVisibleCells().map((cell) => {
-        const shouldDrawColBorder = !isMetadataColumn(String(cell.column.id)) && !colBorderDrawn;
+        const shouldDrawColBorder = !isMetadataColumn(cell.column.id) && !colBorderDrawn;
         if (shouldDrawColBorder) {
           colBorderDrawn = true;
         }
@@ -1644,7 +1644,9 @@ function ResultsTable({
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
-    pageSize: filteredResultsCount > 10 ? 50 : 10,
+    // Eval's initial table request always uses a limit of 50, even when the
+    // previous eval's count is still visible while switching evaluations.
+    pageSize: 50,
   });
 
   // Persist column sizing state to prevent header resize flicker during pagination.
@@ -1652,13 +1654,12 @@ function ResultsTable({
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const tableRef = useRef<HTMLDivElement>(null);
 
-  /**
-   * Reset the pagination state when the filtered results count changes.
-   */
+  // Ratings can change the number of matching rows. Keep the current page and
+  // page size unless that page no longer exists.
   React.useEffect(() => {
-    setPagination({
-      pageIndex: 0,
-      pageSize: filteredResultsCount > 10 ? 50 : 10,
+    setPagination((prev) => {
+      const lastPageIndex = Math.max(0, Math.ceil(filteredResultsCount / prev.pageSize) - 1);
+      return prev.pageIndex > lastPageIndex ? { ...prev, pageIndex: lastPageIndex } : prev;
     });
   }, [filteredResultsCount]);
 
@@ -2463,10 +2464,12 @@ function ResultsTable({
           <div className="flex items-center gap-2">
             <span className="whitespace-nowrap">Results per page:</span>
             <Select
-              value={String(pagination.pageSize)}
+              value={String(filteredResultsCount <= 10 ? 10 : pagination.pageSize)}
               onValueChange={(value) => {
+                clearRowDeepLink();
                 setPagination((prev) => ({
                   ...prev,
+                  pageIndex: 0,
                   pageSize: Number(value),
                 }));
                 window.scrollTo(0, 0);

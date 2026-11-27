@@ -10,6 +10,8 @@ import Link from '@docusaurus/Link';
 
 Use Promptfoo to compare OpenAI models, test prompts, and check your application's outputs. Start with the Responses API for new text and image-input evals, following [OpenAI's recommendation](https://developers.openai.com/api/docs/guides/migrate-to-responses). Use Chat Completions when that is the API your application calls.
 
+For OpenAI models hosted on Google Cloud, use [`vertex:responses:<model>`](./vertex.md#openai-models-private-preview) with Google Application Default Credentials (ADC). The Vertex guide covers project setup and preview access.
+
 ## Quickstart
 
 1. Set `OPENAI_API_KEY` in your shell or secret manager. You can create a key in the [OpenAI dashboard](https://platform.openai.com/api-keys).
@@ -138,7 +140,9 @@ Choose a model you can access, then test it with representative inputs. [OpenAI'
 | `gpt-6-sol`     | Complex tasks with balanced cost                    |
 | `gpt-6.1-terra` | Visual reasoning, computer use, and writing         |
 | `gpt-6.1-sol`   | Complex coding, computer use, and professional work |
-| `gpt-6-astra`   | The most demanding reasoning and coding tasks       |
+| `gpt-6-astra`   | Complex reasoning and coding                        |
+| `gpt-6.2-sol`   | Everyday coding and agent workflows                 |
+| `gpt-6.2-astra` | The most demanding reasoning and coding tasks       |
 
 Check [OpenAI pricing](https://developers.openai.com/api/docs/pricing) before a large run. Model access and API billing belong to your OpenAI account.
 
@@ -203,6 +207,18 @@ providers:
 GPT-6.1 Sol accepts `low`, `medium` (the API default), `high`, `xhigh`, and `max`; it does not accept `none` or `minimal`. Promptfoo removes unsupported sampling and log-probability parameters. Fast and Ultrafast modes support US and EU data residency. See the [GPT-6.1 Sol model guide](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
 
 GPT-6.1 Terra supports `none`, `low`, `medium` (the default), `high`, `xhigh`, and `max`. Use `openai:gpt-6.1-terra` for tool calls and `openai:chat:gpt-6.1-terra` for Chat Completions without tools. See the [GPT-6.1 Terra model card](https://developers.openai.com/api/docs/models/gpt-6.1-terra).
+
+### GPT-6.2 Astra and Sol
+
+Use `openai:gpt-6.2-astra` or `openai:gpt-6.2-sol` for the Responses API, including tool calls. For Chat Completions without tools, use `openai:chat:gpt-6.2-astra` or `openai:chat:gpt-6.2-sol`. Both models accept `low`, `medium`, `high`, `xhigh`, and `max` reasoning effort. Promptfoo omits sampling and log-probability parameters on both endpoints. See the [GPT-6.2 migration guide](https://developers.openai.com/api/docs/guides/latest-model#migration-quickstart).
+
+To run a multi-agent Responses eval, set `config.passthrough.multi_agent` to `{ enabled: true, max_concurrent_subagents: 3 }`. Promptfoo enables the beta on OpenAI endpoints and grades the root agent's final answer. For a proxy that forwards to OpenAI, add `OpenAI-Beta: responses_multi_agent=v1` to `config.headers`. When a turn ends with function calls, Promptfoo returns the callback results or serialized calls. Inspect `raw.output` for commentary, subagent messages, and tool calls. [OpenAI multi-agent guide](https://developers.openai.com/api/docs/guides/responses-multi-agent)
+
+For an Azure OpenAI deployment, set `config.apiBaseUrl` to `https://YOUR-RESOURCE.openai.azure.com/openai/v1?api-version=preview` and enable `multi_agent` as above. Promptfoo grades the root agent's final answer using Azure's preview API. [Azure multi-agent guide](https://learn.microsoft.com/azure/foundry/openai/how-to/responses-multi-agent)
+
+For hosted deployments, configure the deployment or model ID from [Azure Foundry](./azure.md#azure-responses-api) or [Amazon Bedrock](./aws-bedrock.md). For a gateway, use the model ID and credentials described in the [OpenRouter](./openrouter.md), [Vercel AI Gateway](./vercel.md), or [LiteLLM](./litellm.md) guide.
+
+Both models can also power an [Agents SDK evaluation](./openai-agents.md), a [hosted Agents API session](./openai-agents-api.md), a [Codex SDK thread](./openai-codex-sdk.md), or a [Codex App Server turn](./openai-codex-app-server.md).
 
 ### Fine-tuned models {#fine-tuned-and-legacy-completion-models}
 
@@ -304,9 +320,9 @@ providers:
       max_output_tokens: 2048
 ```
 
-GPT-6.1 Sol Ultrafast supports US and EU data residency and global processing. GPT-6 Astra Ultrafast supports US data residency and global processing. Access and rate limits depend on the project. See the [Ultrafast guide](https://developers.openai.com/api/docs/guides/ultrafast-mode).
+GPT-6.2 Astra and Sol support US data residency on Ultrafast. GPT-6.1 Sol Ultrafast supports US and EU data residency and global processing. GPT-6 Astra Ultrafast supports US data residency and global processing. Access and rate limits depend on the project. See the [Ultrafast guide](https://developers.openai.com/api/docs/guides/ultrafast-mode).
 
-GPT-6 Astra and GPT-6.1 Sol Ultrafast cost six times their Standard token rates. Promptfoo uses the returned service tier to estimate cost when available. For models without published Ultrafast rates, estimates require explicit `inputCost` and `outputCost`. See [Ultrafast pricing](https://developers.openai.com/api/docs/pricing?latest-pricing=ultrafast).
+GPT-6.2 Astra and Sol Ultrafast cost three times their Standard token rates through February 28, 2027, and six times starting March 1, 2027 (Pacific time). GPT-6 Astra and GPT-6.1 Sol Ultrafast cost six times their Standard token rates. Promptfoo uses the returned service tier to estimate cost when available. For models without published Ultrafast rates, estimates require explicit `inputCost` and `outputCost`. See [Ultrafast pricing](https://developers.openai.com/api/docs/pricing?latest-pricing=ultrafast).
 
 ### Connection settings
 
@@ -374,8 +390,12 @@ Current standard rates in USD per million tokens, for requests with up to 272,00
 | GPT-6.1 Terra | $1    | $0.05        | $1.25        | $5     |
 | GPT-6.1 Sol   | $2    | $0.10        | $2.50        | $10    |
 | GPT-6 Astra   | $10   | $1           | $12.50       | $50    |
+| GPT-6.2 Sol   | $2    | $0.10        | $2.50        | $10    |
+| GPT-6.2 Astra | $8    | $0.40        | $10          | $40    |
 
-Above 272,000 input tokens, input, cached-input, and cache-write rates double; output rates increase by 50%. Batch and Flex cost half the standard rates. Fast mode (`fast` or `priority`) costs twice the standard rates. Regional processing adds 10%. Fast mode supports EU data residency on GPT-6.1 Sol, GPT-6.1 Terra, and GPT-6 Luna. Cache-write prices in this table assume 30-minute retention. For 12-hour retention the write price doubles. Rates verified October 28, 2026; see [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
+Above 272,000 input tokens, input, cached-input, and cache-write rates double and output rates increase by 50%. Batch costs half the standard rates, as does Flex for models with published Flex pricing. Fast mode (`fast` or `priority`) costs twice the standard rates. Regional processing adds 10%. Fast mode supports EU data residency on GPT-6.2 Astra, GPT-6.2 Sol, GPT-6.1 Sol, GPT-6.1 Terra, and GPT-6 Luna. Cache-write prices in this table assume 30-minute retention. For 12-hour retention the write price doubles. See [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
+
+For GPT-6.2 Astra, GPT-6.2 Sol, GPT-6.1 Terra, and GPT-6 Luna, an eligible Standard background response costs 30% less for a two-hour window or 40% less for an eight-hour window. Set `background: true` and pass `background_options.completion_window` as `2h` or `8h` under `passthrough`. The discount applies to model tokens. [Background completion windows](https://developers.openai.com/api/docs/guides/background#use-discounted-completion-windows)
 
 For Chat Completions and Responses, set `inputCost` and `outputCost` to override rates in **dollars per token**, not per million tokens. For audio, use `audioInputCost` and `audioOutputCost`. The older `cost` and `audioCost` options are shared input/output fallbacks. These settings affect Promptfoo's estimates, not API billing.
 
