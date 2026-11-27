@@ -36,6 +36,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import Plugins from './Plugins';
 import PluginsTab from './PluginsTab';
 import { DOMAIN_SPECIFIC_PLUGINS } from './verticalSuites';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
@@ -324,13 +325,17 @@ function PluginsTabHarness() {
   );
 }
 
-const renderComponent = ({ initialEntries = ['/'] }: { initialEntries?: string[] } = {}) => {
+const renderComponent = ({
+  initialEntries = ['/'],
+  children = <PluginsTabHarness />,
+}: {
+  initialEntries?: string[];
+  children?: React.ReactNode;
+} = {}) => {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <TooltipProvider>
-        <ToastProvider>
-          <PluginsTabHarness />
-        </ToastProvider>
+        <ToastProvider>{children}</ToastProvider>
       </TooltipProvider>
     </MemoryRouter>,
   );
@@ -1326,6 +1331,43 @@ describe('PluginsTab', () => {
       });
 
       describe('Selection updates the Zustand store with the correct plugins when the store is not empty', () => {
+        test.each([
+          ['mitre', 'policy'],
+          ['eu-ai-act', 'intent'],
+        ])('reselecting the %s preset preserves each custom entry once', async (preset, id) => {
+          const user = userEvent.setup();
+          renderComponent({ children: <Plugins onNext={vi.fn()} onBack={vi.fn()} /> });
+          const card = screen.getByTestId(`preset-card-${preset}`);
+          await user.click(card);
+          expect(useRedTeamConfig.getState().config.plugins).toContain(id);
+
+          const policies = [
+            { id: 'policy', config: { policy: 'Use plain English' }, numTests: 2, severity: 'low' },
+            {
+              id: 'policy',
+              config: { policy: 'State your sources' },
+              numTests: 3,
+              severity: 'high',
+            },
+          ];
+          const intents = ['Say hello', 'Read a poem'].map((intent) => ({
+            id: 'intent',
+            config: { intent: [intent] },
+          }));
+          act(() => useRedTeamConfig.getState().updatePlugins([...policies, ...intents]));
+
+          await user.click(card);
+          await user.click(card);
+          const plugins = useRedTeamConfig.getState().config.plugins;
+          expect(plugins.filter((p) => typeof p === 'object' && p.id === 'policy')).toEqual(
+            policies,
+          );
+          expect(plugins.filter((p) => typeof p === 'object' && p.id === 'intent')).toEqual(
+            intents,
+          );
+          expect(plugins).not.toContain(id);
+        });
+
         test('Replaces existing plugins with preset plugins', async () => {
           const user = userEvent.setup();
 

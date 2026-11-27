@@ -197,14 +197,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const setSelectedPlugins = useCallback(
     (newSelectedPlugins: Set<Plugin>) => {
-      // Preserve policy and intent plugins
-      const policyPlugins = config.plugins.filter(
-        (p) => typeof p === 'object' && p.id === 'policy',
-      );
-      const intentPlugins = config.plugins.filter(
-        (p) => typeof p === 'object' && p.id === 'intent',
-      );
-
       // Keep count, severity, and config overrides when changing the selection.
       const newPluginsArray: Config['plugins'] = Array.from(newSelectedPlugins).flatMap(
         (plugin) => {
@@ -215,9 +207,14 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         },
       );
 
-      // Combine all plugins and update store
-      const allPlugins = [...newPluginsArray, ...policyPlugins, ...intentPlugins];
-      updatePlugins(allPlugins);
+      // Keep custom entries managed in their own tabs when the preset omits them.
+      const otherCustomPlugins = config.plugins.filter(
+        (p) =>
+          typeof p === 'object' &&
+          (p.id === 'policy' || p.id === 'intent') &&
+          !newSelectedPlugins.has(p.id),
+      );
+      updatePlugins([...newPluginsArray, ...otherCustomPlugins]);
     },
     [config.plugins, updatePlugins],
   );
