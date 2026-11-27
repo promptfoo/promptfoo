@@ -6,6 +6,8 @@ import {
   GEVAL_PROMPT_STEPS,
   OPENAI_CLOSED_QA_PROMPT,
   PROMPTFOO_FACTUALITY_PROMPT,
+  TAXONOMY_GRADING_INSTRUCTIONS,
+  TAXONOMY_GRADING_PROMPT,
   TRAJECTORY_GOAL_SUCCESS_PROMPT,
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
@@ -34,6 +36,7 @@ import type {
   CallApiContextParams,
   GradingConfig,
   GradingResult,
+  GradingTaxonomy,
   ProviderResponse,
   VarValue,
 } from '../types/index';
@@ -181,7 +184,7 @@ function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['au
 export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
-  grading?: GradingConfig,
+  grading?: GradingConfig & { taxonomy?: GradingTaxonomy },
   vars?: Record<string, VarValue>,
   assertion?: Assertion,
   options?: {
@@ -209,6 +212,8 @@ export async function matchesLlmRubric(
     getGradingOutputForAudio(llmOutput, audio),
     imageOutputs,
   );
+  // Evidence offsets refer to the original target text, never a media placeholder.
+  const taxonomy = gradingOutput === llmOutput ? grading.taxonomy : undefined;
   if (
     !grading.rubricPrompt &&
     shouldPreferRemote &&
@@ -221,6 +226,7 @@ export async function matchesLlmRubric(
         ...(await doRemoteGrading({
           task: 'llm-rubric',
           rubric,
+          ...(taxonomy && { config: { taxonomy } }),
           output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
@@ -240,7 +246,9 @@ export async function matchesLlmRubric(
     return await runJsonGradingPrompt({
       assertion,
       checkName: 'llm-rubric check',
-      defaultPrompt: DEFAULT_GRADING_PROMPT,
+      defaultPrompt: taxonomy ? TAXONOMY_GRADING_PROMPT : DEFAULT_GRADING_PROMPT,
+      taxonomy,
+      evidenceOutput: llmOutput,
       grading,
       label: 'llm-rubric',
       providerCallContext,
@@ -249,8 +257,11 @@ export async function matchesLlmRubric(
       audio,
       vars: {
         ...(vars || {}),
-        output: tryParse(gradingOutput),
-        rubric,
+        output: taxonomy ? gradingOutput : tryParse(gradingOutput),
+        rubric:
+          taxonomy && grading.rubricPrompt
+            ? `${typeof rubric === 'string' ? rubric : JSON.stringify(rubric)}\n\n${TAXONOMY_GRADING_INSTRUCTIONS}`
+            : rubric,
       },
     });
   } catch (error) {

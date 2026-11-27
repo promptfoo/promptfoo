@@ -57,6 +57,43 @@ describe('doRemoteGrading', () => {
     vi.resetAllMocks();
   });
 
+  it.each(['current', 'legacy', 'wrong version'])('reads %s hosted grades', async (kind) => {
+    const taxonomy = { id: 'example', version: 1, labels: ['example.contact'] };
+    const findings = [
+      {
+        label: 'example.contact',
+        observed: true,
+        pass: true,
+        reason: 'Allowed',
+        evidence: [{ start: 0, end: 3 }],
+      },
+    ];
+    const verdict = { pass: true, score: 1, reason: 'Allowed' };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
+        result: {
+          ...verdict,
+          ...(kind !== 'legacy' && {
+            findings,
+            metadata: { taxonomy: { id: 'example', version: kind === 'current' ? 1 : 2 } },
+          }),
+        },
+      }) as any,
+    );
+    const result = await doRemoteGrading({
+      task: 'llm-rubric',
+      rubric: 'Allow',
+      output: 'Amy',
+      vars: {},
+      config: { taxonomy },
+    });
+    expect(result).toMatchObject(verdict);
+    expect(result.findings).toEqual(kind === 'current' ? findings : undefined);
+    expect(result.metadata?.taxonomy).toEqual(
+      kind === 'current' ? { id: 'example', version: 1 } : undefined,
+    );
+  });
+
   it('preserves grader error metadata from remote grading results', async () => {
     vi.mocked(getUserEmail).mockReturnValue('user@example.com');
     vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');

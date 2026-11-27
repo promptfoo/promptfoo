@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { hasMatchingTaxonomy } from '../matchers/taxonomy';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import {
@@ -233,8 +234,11 @@ export const handleRedteam = async (
     hasStrategyGrade && storedResult.tokensUsed && claimStoredGradingUsage()
       ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
       : undefined;
+  const grader = getGraderById(assertion.type);
+  const taxonomy = grader?.gradingTaxonomy;
   if (
     hasStrategyGrade &&
+    (!taxonomy || hasMatchingTaxonomy(storedResult, taxonomy, outputString)) &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
     storedResult.metadata?.redteamGradingInputHash ===
@@ -267,7 +271,6 @@ export const handleRedteam = async (
     };
   }
 
-  const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
 
   // Build grading context from provider response metadata, test metadata, and locally

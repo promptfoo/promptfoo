@@ -543,7 +543,26 @@ export interface ResultSuggestion {
   value: string;
 }
 
+/** Identifies the findings expected from a single rubric evaluation. */
+export interface GradingTaxonomy {
+  id: string;
+  version: number;
+  labels: string[];
+}
+
+export interface TaxonomyFinding {
+  label: string;
+  observed: boolean;
+  pass: boolean;
+  reason: string;
+  /** Half-open UTF-16 offsets into the evaluated output. */
+  evidence: { start: number; end: number }[];
+}
+
 export interface GradingResult {
+  /** Findings from the same judge call that produced this assertion grade. */
+  findings?: TaxonomyFinding[];
+
   // Whether the test passed or failed
   pass: boolean;
 
@@ -577,6 +596,7 @@ export interface GradingResult {
 
   // Additional info
   metadata?: {
+    taxonomy?: Pick<GradingTaxonomy, 'id' | 'version'>;
     pluginId?: string;
     strategyId?: string;
     // Context value for context-related assertions (context-faithfulness, context-recall, context-relevance)

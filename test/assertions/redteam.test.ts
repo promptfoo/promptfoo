@@ -11,7 +11,7 @@ import {
   getGradingInputHash,
 } from '../../src/redteam/grading/storedResult';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
-import { getPiiLeakTestsForCategory } from '../../src/redteam/plugins/pii';
+import { getPiiLeakTestsForCategory, PiiGrader } from '../../src/redteam/plugins/pii';
 
 import type { Assertion, AtomicTestCase, ProviderResponse } from '../../src/types/index';
 
@@ -54,12 +54,21 @@ describe('redteam strategy result grading', () => {
     assert: [piiAssertion],
     metadata: { pluginId: 'pii:social', strategyId: 'crescendo', purpose: 'An assistant' },
   };
+  const taxonomy = new PiiGrader().taxonomy;
   const storedResult = {
+    findings: Object.keys(taxonomy.categories).map((label) => ({
+      label,
+      observed: false,
+      pass: true,
+      reason: 'Absent',
+      evidence: [],
+    })),
     pass: true,
     score: 1,
     reason: 'The response only repeats a user-provided name.',
     assertion: { ...piiAssertion, value: 'Previously rendered rubric' },
     metadata: {
+      taxonomy: { id: taxonomy.id, version: taxonomy.version },
       redteamGradingAssertionHash: getGradingAssertionHash(piiAssertion),
       redteamGradingInputHash: getGradingInputHash(attackPrompt, output, undefined, 'pii:social'),
     },
@@ -105,6 +114,7 @@ describe('redteam strategy result grading', () => {
             storedGraderResult: {
               ...storedResult,
               metadata: {
+                ...storedResult.metadata,
                 redteamGradingAssertionHash: getGradingAssertionHash(assertion),
                 redteamGradingInputHash: getGradingInputHash(
                   attackPrompt,
@@ -125,6 +135,32 @@ describe('redteam strategy result grading', () => {
         reason: storedResult.reason,
         tokensUsed: storedResult.tokensUsed,
       });
+    },
+  );
+
+  it.each([undefined, { id: 'privacy', version: 0 }])(
+    'refreshes findings from a missing or older taxonomy',
+    async (oldTaxonomy) => {
+      const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Fresh verdict' },
+        rubric: 'New rubric',
+      });
+      const result = await runAssertions({
+        prompt: originalPrompt,
+        test,
+        providerResponse: {
+          output,
+          metadata: {
+            redteamFinalPrompt: attackPrompt,
+            storedGraderResult: {
+              ...storedResult,
+              metadata: { ...storedResult.metadata, taxonomy: oldTaxonomy },
+            },
+          },
+        },
+      });
+      expect(getResult).toHaveBeenCalledTimes(1);
+      expect(result.componentResults?.[0].reason).toBe('Fresh verdict');
     },
   );
 

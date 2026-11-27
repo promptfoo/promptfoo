@@ -149,6 +149,78 @@ describe('matchesLlmRubric', () => {
     );
   });
 
+  it('collects grounded findings in rubric order from one judge call', async () => {
+    const allowed = {
+      label: 'example.contact',
+      observed: true,
+      pass: true,
+      reason: 'User supplied it',
+      evidence: ['Avery'],
+    };
+    const absent = {
+      label: 'example.location',
+      observed: false,
+      pass: true,
+      reason: 'Absent',
+      evidence: [],
+    };
+    const taxonomy = { id: 'example', version: 2, labels: [allowed.label, absent.label] };
+    const provider = createMockProvider({
+      response: {
+        output: { pass: true, score: 1, reason: 'Allowed', findings: [absent, allowed] },
+      },
+    });
+    const result = await matchesLlmRubric('Apply the listed categories', '👋 Avery', {
+      provider,
+      taxonomy,
+    });
+
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+    expect(provider.callApi.mock.calls[0][0]).toContain('findings');
+    expect(result.findings).toEqual([{ ...allowed, evidence: [{ start: 3, end: 8 }] }, absent]);
+    expect(result.metadata?.taxonomy).toEqual({ id: 'example', version: 2 });
+  });
+
+  it.each(['missing', 'duplicate', 'unmatched excerpt', 'unknown label'])(
+    'keeps the verdict for %s findings',
+    async (problem) => {
+      const row = {
+        label: 'example.a',
+        observed: true,
+        pass: false,
+        reason: 'Disclosed',
+        evidence: ['value'],
+      };
+      const badRow = {
+        ...row,
+        label:
+          problem === 'duplicate'
+            ? row.label
+            : problem === 'unknown label'
+              ? 'example.c'
+              : 'example.b',
+        evidence: problem === 'unmatched excerpt' ? ['only in the prompt'] : ['value'],
+      };
+      const provider = createMockProvider({
+        response: {
+          output: {
+            pass: false,
+            score: 0,
+            reason: 'Disclosure',
+            findings: problem === 'missing' ? [row] : [row, badRow],
+          },
+        },
+      });
+      const result = await matchesLlmRubric('example.a and example.b', 'value', {
+        provider,
+        taxonomy: { id: 'example', version: 1, labels: ['example.a', 'example.b'] },
+      });
+      expect(result).toMatchObject({ pass: false, score: 0, reason: 'Disclosure' });
+      expect(result.findings).toBeUndefined();
+      expect(result.metadata?.taxonomy).toBeUndefined();
+    },
+  );
+
   it('preserves component-only grading usage through matcher normalization and assertion aggregation', async () => {
     vi.spyOn(Grader, 'callApi').mockResolvedValue({
       output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
@@ -2376,6 +2448,25 @@ Evaluate the response
     });
     expect(grading.provider.callApi).not.toHaveBeenCalled();
     expect(result.reason).toBe('Remote grading passed');
+  });
+
+  it('sends category labels under config and accepts a legacy hosted verdict', async () => {
+    const taxonomy = { id: 'example', version: 1, labels: ['example.contact'] };
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    (cliState as any).config = { redteam: {} };
+    const result = await matchesLlmRubric('example.contact: protect contacts', 'Answer', {
+      taxonomy,
+    });
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledExactlyOnceWith({
+      task: 'llm-rubric',
+      rubric: 'example.contact: protect contacts',
+      output: 'Answer',
+      vars: {},
+      config: { taxonomy },
+    });
+    expect(result).toMatchObject(createPassingGrade());
+    expect(result.findings).toBeUndefined();
   });
 
   it('should include Cloud target context in remote grading requests', async () => {

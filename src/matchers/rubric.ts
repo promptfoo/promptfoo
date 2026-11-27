@@ -15,6 +15,7 @@ import { getNunjucksEngine } from '../util/templates';
 import { loadYaml } from '../util/yamlLoad';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { graderFail, normalizeMatcherTokenUsage } from './shared';
+import { parseTaxonomyFindings } from './taxonomy';
 
 import type {
   ApiProvider,
@@ -22,6 +23,7 @@ import type {
   CallApiContextParams,
   GradingConfig,
   GradingResult,
+  GradingTaxonomy,
   ImageOutput,
   ProviderResponse,
   VarValue,
@@ -882,6 +884,8 @@ export async function runJsonGradingPrompt({
   providerCallContext,
   providerPromptConfig,
   throwOnError,
+  taxonomy,
+  evidenceOutput,
   vars,
   images,
   audio,
@@ -895,6 +899,8 @@ export async function runJsonGradingPrompt({
   /** Prompt config for the grader call, which providers merge over their own config. */
   providerPromptConfig?: Record<string, unknown>;
   throwOnError?: boolean;
+  taxonomy?: GradingTaxonomy;
+  evidenceOutput?: string;
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
   audio?: ProviderResponse['audio'];
@@ -946,6 +952,15 @@ export async function runJsonGradingPrompt({
     );
   }
   const { pass, score } = verdict;
+  const findings =
+    taxonomy && evidenceOutput !== undefined
+      ? parseTaxonomyFindings(parsed.findings, taxonomy, evidenceOutput)
+      : undefined;
+  if (taxonomy && !findings) {
+    logger.warn(
+      `Omitting invalid or incomplete findings for taxonomy ${taxonomy.id} v${taxonomy.version}`,
+    );
+  }
 
   const reason =
     parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
@@ -957,19 +972,25 @@ export async function runJsonGradingPrompt({
       ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
       : {};
   }
-  const { cachedResponse: _untrustedCachedResponse, ...trustedResponseMetadata } = responseMetadata;
+  const {
+    cachedResponse: _untrustedCachedResponse,
+    taxonomy: _untrustedTaxonomy,
+    ...trustedResponseMetadata
+  } = responseMetadata;
 
   return {
     assertion,
     pass,
     score,
     reason,
+    ...(findings && { findings }),
     tokensUsed: normalizeMatcherTokenUsage({
       ...resp.tokenUsage,
       completionDetails: resp.tokenUsage?.completionDetails || parsed.tokensUsed?.completionDetails,
     }),
     metadata: {
       ...trustedResponseMetadata,
+      ...(taxonomy && findings && { taxonomy: { id: taxonomy.id, version: taxonomy.version } }),
       renderedGradingPrompt: renderedPrompt,
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
       ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),

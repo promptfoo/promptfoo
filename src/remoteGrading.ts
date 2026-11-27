@@ -1,14 +1,16 @@
 import { fetchWithCache } from './cache';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
+import { hasMatchingTaxonomy } from './matchers/taxonomy';
 import { getRequestTimeoutMs } from './providers/shared';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from './redteam/remoteGeneration';
 import { getActiveTraceparent } from './tracing/spanRoles';
 
-import type { GradingResult } from './types/index';
+import type { GradingResult, GradingTaxonomy } from './types/index';
 
 type RemoteGradingPayload = {
   task: string;
+  config?: { taxonomy?: GradingTaxonomy };
   [key: string]: unknown;
 };
 
@@ -79,10 +81,19 @@ export async function doRemoteGrading(
       throw new Error(`Remote grading failed. Response data is invalid: ${JSON.stringify(data)}`);
     }
 
+    const metadata = { ...result.metadata };
+    const verifiedFindings =
+      payload.config?.taxonomy &&
+      typeof payload.output === 'string' &&
+      hasMatchingTaxonomy(result, payload.config.taxonomy, payload.output);
+    if (!verifiedFindings) {
+      delete metadata.taxonomy;
+    }
     return {
       pass: result.pass,
       score: result.score,
       reason: result.reason,
+      ...(verifiedFindings && { findings: result.findings }),
       tokensUsed: cached
         ? {
             total: 0,
@@ -98,7 +109,7 @@ export async function doRemoteGrading(
               numRequests: 1,
             }
           : undefined,
-      metadata: cached ? { ...(result.metadata ?? {}), cachedResponse: true } : result.metadata,
+      metadata: cached ? { ...metadata, cachedResponse: true } : result.metadata && metadata,
     };
   } catch (error) {
     throw new Error(`Could not perform remote grading: ${error}`);
