@@ -527,6 +527,51 @@ describe('synthesize', () => {
       );
     });
 
+    const misinformationId = 'harmful:misinformation-disinformation';
+    it.each([
+      {
+        mode: 'single-input',
+        inputs: undefined,
+        expectedFailures: [
+          { pluginId: misinformationId, requested: 50, generated: 20 },
+          { pluginId: `(fr) ${misinformationId}`, requested: 50, generated: 20 },
+        ],
+      },
+      {
+        mode: 'multi-input',
+        inputs: { query: 'User request', context: 'Retrieved text' },
+        expectedFailures: [],
+      },
+    ])(
+      'reports only incomplete chunked generation in $mode mode',
+      async ({ inputs, expectedFailures }) => {
+        const returnedTests = Array.from({ length: 20 }, (_, i) => ({
+          vars: { query: `test ${i}` },
+        }));
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          key: misinformationId,
+          action: async () => returnedTests,
+        });
+
+        const result = await synthesize({
+          inputs,
+          numTests: 50,
+          plugins: [
+            { id: misinformationId, numTests: 50, config: { language: ['en', 'fr'] } },
+            { id: 'system-prompt-override', numTests: 50 },
+          ],
+          prompts: ['{{query}}'],
+          provider: mockProvider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.testCases).toHaveLength(60);
+        expect(result.failedPlugins).toEqual(expectedFailures);
+      },
+    );
+
     it('should report failed custom file plugin language batches', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
       const pluginPath = 'test/redteam/fixtures/custom-plugin-language-failure.yaml';

@@ -460,18 +460,21 @@ export type RedteamGenerateOptions = Partial<RedteamCliGenerateOptions>;
 export interface FailedPluginInfo {
   pluginId: string;
   requested: number;
+  /** Actual count for a chunked request that did not finish. */
+  generated?: number;
 }
 
 /**
  * Custom error class for partial test generation failures.
- * Thrown when some plugins completely fail to generate any test cases,
- * which would significantly impact scan quality and completeness.
+ * Thrown in strict mode when a plugin fails or a chunked request falls short.
  */
 export class PartialGenerationError extends Error {
   public readonly failedPlugins: FailedPluginInfo[];
 
   constructor(failedPlugins: FailedPluginInfo[]) {
-    const pluginList = failedPlugins.map((p) => `  - ${p.pluginId} (0/${p.requested} tests)`);
+    const pluginList = failedPlugins.map(
+      (p) => `  - ${p.pluginId} (${p.generated ?? 0}/${p.requested} tests)`,
+    );
     const message =
       `Test case generation failed for ${failedPlugins.length} plugin(s):\n` +
       `${pluginList.join('\n')}\n\n` +

@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache';
+import { fetchWithCache, withCacheNamespace } from '../../cache';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
@@ -17,7 +17,10 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
-import { recordGenerationTokenUsage } from '../generationTokenUsage';
+import {
+  recordFailedGenerationTokenUsage,
+  recordGenerationTokenUsage,
+} from '../generationTokenUsage';
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -106,6 +109,21 @@ type PluginClass<T extends PluginConfig> = new (
 ) => RedteamPluginBase;
 
 const MAX_CHARS_RETRY_MODIFIER_KEY = '__maxCharsPerMessageRetry';
+const REMOTE_MISINFORMATION_BATCH_SIZE = 20;
+
+export function shouldChunkRemoteMisinformationRequests(
+  key: string,
+  n: number,
+  config?: PluginConfig,
+) {
+  // Named inputs can require position-dependent materialization on the server.
+  return (
+    key === 'harmful:misinformation-disinformation' &&
+    n > REMOTE_MISINFORMATION_BATCH_SIZE &&
+    Object.keys(config?.inputs ?? {}).length === 0 &&
+    !neverGenerateRemote()
+  );
+}
 
 /**
  * Computes modifiers from config (same logic as appendModifiers in base.ts).
@@ -291,19 +309,46 @@ function dedupeTestCases(testCases: TestCase[]): TestCase[] {
   return deduped;
 }
 
-function buildMaxCharsRetryInstructions(rejectedPromptLengths: number[], limit?: number): string {
-  const longestRejectedPromptText =
-    rejectedPromptLengths.length > 0
-      ? `${Math.max(...rejectedPromptLengths)} characters`
-      : 'unknown length';
-
+function buildMaxCharsRetryInstructions(rejectedPromptLengths: number[], limit: number): string {
   return dedent`
     Your previous response included ${rejectedPromptLengths.length} generated prompt${
       rejectedPromptLengths.length === 1 ? '' : 's'
-    } that exceeded the ${limit ?? 'configured'}-character limit.
-    The longest rejected prompt was ${longestRejectedPromptText}.
+    } that exceeded the ${limit}-character limit.
+    The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.
     Generate replacement prompts only, and keep every user message within the character limit.
   `.trim();
+}
+
+function filterByPromptLength(
+  generatedTestCases: TestCase[],
+  injectVar: string,
+  maxCharsPerMessage?: number,
+) {
+  if (!maxCharsPerMessage) {
+    return { validTestCases: generatedTestCases, retryInstructions: undefined };
+  }
+  const validTestCases: TestCase[] = [];
+  const rejectedPromptLengths: number[] = [];
+
+  for (const testCase of generatedTestCases) {
+    const violation = getGeneratedPromptOverLimit(
+      String(testCase.vars?.[injectVar] ?? ''),
+      maxCharsPerMessage,
+    );
+    if (violation) {
+      rejectedPromptLengths.push(violation.length);
+      continue;
+    }
+
+    validTestCases.push(stripRetryModifier(testCase));
+  }
+
+  const retryInstructions =
+    rejectedPromptLengths.length > 0
+      ? buildMaxCharsRetryInstructions(rejectedPromptLengths, maxCharsPerMessage)
+      : undefined;
+
+  return { validTestCases, retryInstructions };
 }
 
 function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
@@ -311,7 +356,11 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
     ...pluginFactory,
     action: async (params: PluginActionParams) => {
       const maxCharsPerMessage = getMaxCharsPerMessageFromConfig(params.config);
-      if (!maxCharsPerMessage) {
+      // Chunked generation applies the length limit within its own bounded retry budget.
+      if (
+        !maxCharsPerMessage ||
+        shouldChunkRemoteMisinformationRequests(pluginFactory.key, params.n, params.config)
+      ) {
         return pluginFactory.action(params);
       }
 
@@ -324,30 +373,13 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
           config: retryConfig,
         });
 
-        const validTestCases: TestCase[] = [];
-        const rejectedPromptLengths: number[] = [];
-        let rejectedPromptLimit: number | undefined;
-
-        for (const testCase of generatedTestCases) {
-          const violation = getGeneratedPromptOverLimit(
-            String(testCase.vars?.[params.injectVar] ?? ''),
-            maxCharsPerMessage,
-          );
-          if (violation) {
-            rejectedPromptLengths.push(violation.length);
-            rejectedPromptLimit = violation.limit;
-            continue;
-          }
-
-          validTestCases.push(stripRetryModifier(testCase));
-        }
-
-        retryInstructions =
-          rejectedPromptLengths.length > 0
-            ? buildMaxCharsRetryInstructions(rejectedPromptLengths, rejectedPromptLimit)
-            : undefined;
-
-        return validTestCases;
+        const filtered = filterByPromptLength(
+          generatedTestCases,
+          params.injectVar,
+          maxCharsPerMessage,
+        );
+        retryInstructions = filtered.retryInstructions;
+        return filtered.validTestCases;
       };
 
       const testCases = await retryWithDeduplication(
@@ -360,6 +392,58 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
       return testCases.map(stripRetryModifier);
     },
   };
+}
+
+/** Keep each synchronous request small enough to finish within the proxy timeout. */
+async function generateRemoteMisinformationTests(
+  key: string,
+  n: number,
+  injectVar: string,
+  maxChars: number | undefined,
+  fetchBatch: (
+    size: number,
+    bypassCache: boolean,
+    retryInstructions?: string,
+  ) => Promise<TestCase[]>,
+): Promise<TestCase[]> {
+  const cases = new Map<string, TestCase>();
+  const maxRequests = Math.ceil(n / REMOTE_MISINFORMATION_BATCH_SIZE) + 2;
+  let bypassCache = false;
+  let retryInstructions: string | undefined;
+  let reason = 'the generator returned too few distinct valid prompts';
+  for (let index = 0; index < maxRequests && cases.size < n; index++) {
+    const previousCount = cases.size;
+    const size = Math.min(REMOTE_MISINFORMATION_BATCH_SIZE, n - previousCount);
+    try {
+      // Equal-sized POSTs share their body. Scope both their cache and in-flight keys
+      // while retaining the caller's namespace for repeats.
+      const batch = await withCacheNamespace(`misinformation-batch:${index}`, () =>
+        fetchBatch(size, bypassCache, retryInstructions),
+      );
+      const filtered = filterByPromptLength(batch, injectVar, maxChars);
+      retryInstructions = filtered.retryInstructions;
+      for (const test of filtered.validTestCases) {
+        const value = test?.vars?.[injectVar];
+        const prompt = typeof value === 'string' ? value.trim() : '';
+        if (prompt && !cases.has(prompt)) {
+          cases.set(prompt, test);
+        }
+        if (cases.size === n) {
+          break;
+        }
+      }
+    } catch (error) {
+      reason = String(error);
+      break;
+    }
+    // Once a response underfills a batch, request fresh generations for the
+    // remaining slots so a cached shortage cannot prevent the next run from recovering.
+    bypassCache ||= cases.size - previousCount < size;
+  }
+  if (cases.size < n) {
+    logger.error(`Generated ${cases.size} of ${n} test cases for ${key}: ${reason}`);
+  }
+  return Array.from(cases.values());
 }
 
 async function fetchRemoteTestCases(
@@ -376,13 +460,18 @@ async function fetchRemoteTestCases(
     'fetchRemoteTestCases should never be called when remote generation is disabled',
   );
 
+  const chunked = shouldChunkRemoteMisinformationRequests(key, n, config);
   // Health check remote before generating test cases
   const remoteHealth = await checkRemoteHealth(
     getRemoteHealthUrl() as string, // Only returns null if remote gen is disabled
   );
 
   if (remoteHealth.status !== 'OK') {
-    logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
+    logger.error(
+      chunked
+        ? `Generated 0 of ${n} test cases for ${key}: ${remoteHealth.message}`
+        : `Error generating test cases for ${key}: ${remoteHealth.message}`,
+    );
     return [];
   }
 
@@ -396,53 +485,76 @@ async function fetchRemoteTestCases(
       [MAX_CHARS_PER_MESSAGE_MODIFIER_KEY]: maxCharsModifier,
     };
   }
-  const body = JSON.stringify({
-    config: configForRemote,
-    injectVar,
-    // Send inputs at top level for server compatibility (server expects it there)
-    inputs: config?.inputs,
-    n,
-    purpose,
-    task: key,
-    ...remoteGenerationContextPayload(redteamGenerationContext),
-    version: VERSION,
-    email: getUserEmail(),
-  });
+  const context = remoteGenerationContextPayload(redteamGenerationContext);
+  const email = getUserEmail();
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
     tokenUsage?: TokenUsage;
   }
 
-  let responseRecorded = false;
-  try {
-    const { cached, data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body,
-      },
-      getRequestTimeoutMs(),
-    );
-    if (provider) {
+  async function fetchBatch(
+    size: number,
+    bypassCache = false,
+    retryInstructions?: string,
+  ): Promise<TestCase[]> {
+    const body = JSON.stringify({
+      config: retryInstructions
+        ? buildRetryConfig(configForRemote, retryInstructions)
+        : configForRemote,
+      injectVar,
+      // The server expects named inputs at the top level as well.
+      inputs: config?.inputs,
+      n: size,
+      purpose,
+      task: key,
+      ...context,
+      version: VERSION,
+      email,
+    });
+    const { cached, coalesced, data, status, statusText } =
+      await fetchWithCache<PluginGenerationResponse>(
+        getRemoteGenerationUrl(),
+        { method: 'POST', headers: getRemoteGenerationHeaders(), body },
+        getRequestTimeoutMs(),
+        'json',
+        bypassCache,
+        // A timed-out POST may still complete at the origin. Do not replay a batch.
+        chunked ? 0 : undefined,
+      ).catch((error: unknown) => {
+        if (provider && chunked) {
+          recordFailedGenerationTokenUsage(provider, error);
+        } else if (provider) {
+          recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(error) });
+        }
+        throw error;
+      });
+    if (provider && (!chunked || !coalesced)) {
       recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage, cached });
-      responseRecorded = true;
     }
-    if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
-      logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
-      return [];
+    if (status !== 200 || !Array.isArray(data?.result)) {
+      throw new Error(`HTTP ${status} ${statusText}: ${JSON.stringify(data)}`);
     }
     if (requiresRemoteMaterialization(config?.inputs)) {
       assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
-    const ret = data.result;
-    logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
-    return ret;
+    logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(data.result)}`);
+    return data.result;
+  }
+
+  if (chunked) {
+    return generateRemoteMisinformationTests(
+      key,
+      n,
+      injectVar,
+      getMaxCharsPerMessageFromConfig(config),
+      fetchBatch,
+    );
+  }
+
+  try {
+    return await fetchBatch(n);
   } catch (err) {
-    if (provider && !responseRecorded) {
-      recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(err) });
-    }
     logger.error(`Error generating test cases for ${key}: ${err}`);
     return [];
   }

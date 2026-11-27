@@ -1276,6 +1276,37 @@ describe('doGenerateRedteam', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('--strict'));
   });
 
+  it('writes retained tests by default and reports the same partial count in strict mode', async () => {
+    const pluginId = 'harmful:misinformation-disinformation';
+    const result = createSynthesisResult([], pluginId);
+    result.failedPlugins = [{ pluginId, requested: 50, generated: 1 }];
+    vi.mocked(synthesize).mockResolvedValue(result);
+    const options = {
+      config: 'config.yaml',
+      output: 'output.yaml',
+      cache: false,
+      defaultConfig: {},
+    };
+    let output: Partial<UnifiedConfig> | undefined;
+    vi.mocked(fs.existsSync).mockImplementation(
+      (path) => path === options.config || (path === options.output && output !== undefined),
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((path) =>
+      path === options.output ? yaml.dump(output) : '{}',
+    );
+
+    await doGenerateRedteam(options);
+    output = vi.mocked(writePromptfooConfig).mock.calls[0][0];
+    expect(output.tests).toEqual(result.testCases);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining(`${pluginId} (1/50 tests)`));
+
+    await expect(doGenerateRedteam({ ...options, strict: true })).rejects.toThrow(
+      `${pluginId} (1/50 tests)`,
+    );
+    expect(synthesize).toHaveBeenCalledTimes(2);
+    expect(writePromptfooConfig).toHaveBeenCalledTimes(1);
+  });
+
   it('should throw PartialGenerationError when plugins fail with --strict flag', async () => {
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [
