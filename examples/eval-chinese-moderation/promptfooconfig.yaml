@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Offline Chinese moderation confusion matrix
+
+prompts:
+  - '{{text}}'
+
+providers:
+  - echo
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        const predicted = output.trim();
+        const expected = context.vars.expected;
+        if (!['block', 'allow'].includes(predicted)) {
+          return { pass: false, score: 0, reason: `Invalid moderation label: ${predicted}` };
+        }
+        const correct = predicted === expected;
+        return {
+          pass: correct,
+          score: Number(correct),
+          reason: correct ? 'Correct moderation decision' : `Expected ${expected}, got ${predicted}`,
+          namedScores: {
+            TP: Number(predicted === 'block' && expected === 'block'),
+            FP: Number(predicted === 'block' && expected === 'allow'),
+            FN: Number(predicted === 'allow' && expected === 'block'),
+            TN: Number(predicted === 'allow' && expected === 'allow'),
+          },
+        };
+
+tests: file://cases.yaml
+
+derivedMetrics:
+  - name: precision
+    value: 'TP + FP > 0 ? TP / (TP + FP) : 0'
+  - name: recall
+    value: 'TP + FN > 0 ? TP / (TP + FN) : 0'
+  - name: f1
+    value: '2 * TP + FP + FN > 0 ? 2 * TP / (2 * TP + FP + FN) : 0'
