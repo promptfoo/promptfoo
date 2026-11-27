@@ -6,15 +6,19 @@ import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { isCallerAbortError } from '../../util/fetch/requestSignal';
 import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
+import { callTargetProvider } from './shared';
 
 import type {
   ApiProvider,
@@ -30,6 +34,7 @@ interface BestOfNResponse {
 
 interface BestOfNConfig {
   injectVar: string;
+  targetId?: string;
   maxConcurrency: number;
   nSteps?: number;
   maxCandidatesPerStep?: number;
@@ -48,6 +53,7 @@ export default class BestOfNProvider implements ApiProvider {
       maxConcurrency?: number;
       nSteps?: number;
       maxCandidatesPerStep?: number;
+      targetId?: string;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -60,6 +66,7 @@ export default class BestOfNProvider implements ApiProvider {
       maxConcurrency: options.maxConcurrency || 3,
       nSteps: options.nSteps,
       maxCandidatesPerStep: options.maxCandidatesPerStep,
+      targetId: options.targetId,
     };
   }
 
@@ -74,6 +81,8 @@ export default class BestOfNProvider implements ApiProvider {
 
     const targetProvider: ApiProvider = context.originalProvider;
     const targetTokenUsage = createEmptyTokenUsage();
+    let targetCost: number | undefined;
+    let incurredTargetCost: number | undefined;
     const sessionIds: string[] = [];
     try {
       // Get candidate prompts from the server
@@ -81,11 +90,10 @@ export default class BestOfNProvider implements ApiProvider {
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: getRemoteGenerationHeaders(),
           body: JSON.stringify({
             task: 'jailbreak:best-of-n',
+            ...remoteGenerationContextPayload(this.config.targetId),
             prompt: context.vars[this.config.injectVar],
             nSteps: this.config.nSteps,
             maxCandidatesPerStep: this.config.maxCandidatesPerStep,
@@ -109,13 +117,21 @@ export default class BestOfNProvider implements ApiProvider {
       // Try candidates concurrently until one succeeds
       let successfulResponse: ProviderResponse | null = null;
       let lastResponse: ProviderResponse | null = null;
+      let completedErrorResponse: ProviderResponse | null = null;
+      const completion: {
+        response: ProviderResponse | null;
+        cancellation?: { error: unknown };
+      } = { response: null };
       let currentStep = 0;
 
       await async.eachLimit(
         data.modifiedPrompts,
         this.config.maxConcurrency,
         async (candidatePrompt) => {
-          if (successfulResponse) {
+          if (options?.abortSignal?.aborted) {
+            completion.cancellation ??= { error: options.abortSignal.reason };
+          }
+          if (successfulResponse || completedErrorResponse || completion.cancellation) {
             return;
           }
 
@@ -159,17 +175,39 @@ export default class BestOfNProvider implements ApiProvider {
             [this.config.injectVar], // Skip special loading and template rendering for the injection variable
           );
 
+          if (options?.abortSignal?.aborted) {
+            completion.cancellation ??= { error: options.abortSignal.reason };
+          }
+          if (completedErrorResponse || completion.cancellation) {
+            return;
+          }
+
           try {
             // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
             // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
             throwIfTargetPromptExceedsMaxChars(renderedPrompt);
-            const response = await targetProvider.callApi(renderedPrompt, context, options);
+            const response = await callTargetProvider(
+              targetProvider,
+              renderedPrompt,
+              context,
+              options,
+            );
             const sessionId = getSessionId(response, context);
             if (sessionId) {
               sessionIds.push(sessionId);
             }
+            completion.response = response;
             lastResponse = response;
+            if (response.error && options?.abortSignal?.aborted) {
+              completedErrorResponse ??= response;
+            }
             accumulateResponseTokenUsage(targetTokenUsage, response);
+            if (response.cost !== undefined) {
+              targetCost = (targetCost ?? 0) + response.cost;
+              incurredTargetCost =
+                (incurredTargetCost ?? 0) +
+                (response.incurredCost ?? (response.cached ? 0 : response.cost));
+            }
             currentStep++;
             if (!response.error) {
               successfulResponse = response;
@@ -182,6 +220,10 @@ export default class BestOfNProvider implements ApiProvider {
               return false; // Stop processing more candidates
             }
           } catch (err) {
+            if (isCallerAbortError(err, options?.abortSignal)) {
+              completion.cancellation ??= { error: err };
+              return;
+            }
             logger.debug(`[Best-of-N] Candidate failed: ${err}`);
             lastResponse = { error: String(err) };
             currentStep++;
@@ -189,28 +231,52 @@ export default class BestOfNProvider implements ApiProvider {
         },
       );
 
-      if (successfulResponse) {
-        (successfulResponse as ProviderResponse).tokenUsage = targetTokenUsage;
-        return successfulResponse;
+      // eachLimit has drained already-started candidates, retaining their cost.
+      // A catch-generated error envelope is not a completed target response.
+      if (completion.cancellation && !completion.response) {
+        throw completion.cancellation.error;
       }
-      if (lastResponse) {
-        (lastResponse as ProviderResponse).tokenUsage = targetTokenUsage;
-        (lastResponse as ProviderResponse).metadata = {
-          ...((lastResponse as ProviderResponse).metadata ?? {}),
-          sessionIds,
-        };
-      }
-      return (
-        lastResponse || {
-          error: 'All candidates failed',
-          metadata: {
-            sessionIds,
-          },
+      const aggregatedResponse = (successfulResponse ??
+        completedErrorResponse ??
+        (completion.cancellation ? completion.response : lastResponse)) as ProviderResponse | null;
+      if (aggregatedResponse) {
+        aggregatedResponse.tokenUsage = targetTokenUsage;
+        if (
+          aggregatedResponse.cached &&
+          (targetTokenUsage.incurredTokenUsage?.numRequests ?? 0) > 0
+        ) {
+          aggregatedResponse.cached = false;
         }
-      );
+
+        if (targetCost !== undefined) {
+          aggregatedResponse.cost = targetCost;
+          if (incurredTargetCost !== targetCost || aggregatedResponse.incurredCost !== undefined) {
+            aggregatedResponse.incurredCost = incurredTargetCost;
+          }
+        }
+
+        if (!successfulResponse) {
+          aggregatedResponse.metadata = {
+            ...(aggregatedResponse.metadata ?? {}),
+            sessionIds,
+          };
+        }
+
+        return aggregatedResponse;
+      }
+
+      return {
+        error: 'All candidates failed',
+        metadata: {
+          sessionIds,
+        },
+      };
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (
+        isCallerAbortError(err, options?.abortSignal) ||
+        (err instanceof Error && err.name === 'AbortError')
+      ) {
         throw err;
       }
       logger.error(`[Best-of-N] Error: ${err}`);

@@ -3,18 +3,19 @@ import dedent from 'dedent';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
+import { createAssertion } from './base';
 import {
   ImageDatasetGraderBase,
   ImageDatasetPluginBase,
   type ImageDatasetPluginConfig,
 } from './imageDatasetPluginBase';
-import { fetchImageAsBase64, fisherYatesShuffle, ImageDatasetManager } from './imageDatasetUtils';
+import { fetchImageAsBase64, fisherYatesShuffle } from './imageDatasetUtils';
 
 import type { ApiProvider, Assertion, AtomicTestCase, TestCase } from '../../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:vlsu';
 
-// Fetch CSV directly from GitHub
+// Fetch CSV directly from GitHub (~8K rows)
 const VLSU_CSV_URL = 'https://raw.githubusercontent.com/apple/ml-vlsu/main/data/VLSU.csv';
 
 // Default concurrency for image fetching
@@ -238,19 +239,13 @@ function normalizeGrade(grade: string): VLSUGrade {
  * DatasetManager to handle VLSU dataset caching and filtering
  * Fetches CSV from GitHub and images from web URLs
  */
-export class VLSUDatasetManager extends ImageDatasetManager<VLSUInput> {
+export class VLSUDatasetManager {
   private static instance: VLSUDatasetManager | null = null;
-
-  protected pluginId = 'vlsu';
-  protected datasetPath = VLSU_CSV_URL;
-  protected fetchLimit = 10000; // CSV is ~8K rows
 
   // CSV data cache
   private csvCache: VLSURawRecord[] | null = null;
 
-  private constructor() {
-    super();
-  }
+  private constructor() {}
 
   /**
    * Get singleton instance
@@ -268,15 +263,7 @@ export class VLSUDatasetManager extends ImageDatasetManager<VLSUInput> {
   static clearCache(): void {
     if (VLSUDatasetManager.instance) {
       VLSUDatasetManager.instance.csvCache = null;
-      VLSUDatasetManager.instance.datasetCache = null;
     }
-  }
-
-  /**
-   * Required by base class but not used since we override ensureDatasetLoaded
-   */
-  protected async processRecords(_records: unknown[]): Promise<VLSUInput[]> {
-    throw new Error('processRecords should not be called directly - use getFilteredRecords');
   }
 
   /**
@@ -511,6 +498,11 @@ export class VLSUPlugin extends ImageDatasetPluginBase<VLSUInput, VLSUPluginConf
    * Validate plugin configuration
    */
   protected validateConfig(config?: VLSUPluginConfig): void {
+    const concurrency = config?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
+    if (!Number.isInteger(concurrency) || concurrency <= 0) {
+      throw new Error('[vlsu] maxConcurrency must be a positive integer');
+    }
+
     // Validate categories
     if (config?.categories) {
       const invalidCategories = config.categories.filter((c) => {
@@ -651,12 +643,7 @@ export class VLSUPlugin extends ImageDatasetPluginBase<VLSUInput, VLSUPluginConf
    * Get assertions for test case
    */
   protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID as Assertion['type'],
-        metric: this.getMetricName(),
-      },
-    ];
+    return [createAssertion(PLUGIN_ID as Assertion['type'], this.getMetricName())];
   }
 
   /**

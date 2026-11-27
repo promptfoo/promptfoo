@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
 import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/sharedFrontend';
+import { RedteamConfigSchema } from '../../src/validators/redteam';
 
 import type { Plugin } from '../../src/redteam/constants';
 import type { SavedRedteamConfig } from '../../src/redteam/types';
@@ -143,6 +144,30 @@ describe('getUnifiedConfig', () => {
     expect(result.redteam.purpose).toBe('testing');
   });
 
+  it.each([0, -2, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    'omits an invalid plugin count %s so generation uses the global count',
+    (numTests) => {
+      const result = getUnifiedConfig({
+        ...baseConfig,
+        numTests: 7,
+        plugins: [{ id: 'bola', numTests, severity: Severity.High }],
+      });
+      expect(result.redteam.plugins).toEqual([{ id: 'bola', severity: Severity.High }]);
+      expect(result.redteam.numTests).toBe(7);
+    },
+  );
+
+  it.each(['urgent', 'HIGH', '', null, 42, {}])(
+    'omits an invalid imported severity %j before generation',
+    (severity) => {
+      const plugin = Object.freeze({ id: 'toxicity', numTests: 2, severity: severity as Severity });
+      const result = getUnifiedConfig({ ...baseConfig, numTests: 7, plugins: [plugin] });
+      expect(result.redteam.plugins).toEqual([{ id: 'toxicity', numTests: 2 }]);
+      expect(RedteamConfigSchema.parse(result.redteam).plugins).toHaveLength(6);
+      expect(plugin.severity).toBe(severity);
+    },
+  );
+
   it('should handle defaultTest transformation', () => {
     const configWithDefaultTest: SavedRedteamConfig = {
       ...baseConfig,
@@ -177,6 +202,53 @@ describe('getUnifiedConfig', () => {
       { id: 'simple-plugin' },
       { id: 'complex-plugin', config: { setting: true } },
     ]);
+  });
+
+  it.each([undefined, {}, { targetSystems: ['documents'] }])(
+    'preserves per-plugin counts and severity with config %j',
+    (pluginConfig) => {
+      const plugin = Object.freeze({
+        id: 'bola',
+        numTests: 17,
+        severity: Severity.Critical,
+        config: pluginConfig,
+      });
+      const result = getUnifiedConfig({ ...baseConfig, numTests: 5, plugins: [plugin] });
+
+      expect(result.redteam.plugins).toEqual([
+        {
+          id: 'bola',
+          numTests: 17,
+          severity: Severity.Critical,
+          ...(pluginConfig && Object.keys(pluginConfig).length > 0 && { config: pluginConfig }),
+        },
+      ]);
+      expect(result.redteam.plugins![0]).not.toBe(plugin);
+      expect(plugin.config).toBe(pluginConfig);
+      expect(result.redteam.numTests).toBe(5);
+    },
+  );
+
+  it('preserves alias overrides through export and generation config normalization', () => {
+    const exported = getUnifiedConfig({
+      ...baseConfig,
+      numTests: 5,
+      plugins: [
+        { id: 'toxicity', numTests: 2, severity: Severity.Critical, config: { language: 'fr' } },
+      ],
+      strategies: ['basic'],
+    });
+    const normalized = RedteamConfigSchema.parse(exported.redteam);
+    expect(normalized.plugins).toHaveLength(6);
+    expect(
+      normalized.plugins?.every(
+        (plugin) =>
+          plugin.numTests === 2 &&
+          plugin.severity === Severity.Critical &&
+          plugin.config?.language === 'fr',
+      ),
+    ).toBe(true);
+    expect(normalized.plugins?.every((plugin) => plugin.id.startsWith('harmful:'))).toBe(true);
   });
 
   it('should transform strategies with stateful config', () => {
@@ -285,6 +357,22 @@ describe('getUnifiedConfig', () => {
     const result = getUnifiedConfig(configWithNonStateful);
 
     expect(result.redteam.strategies).toEqual([{ id: 'goat' }]);
+  });
+
+  it('should handle multi-turn strategies when an imported target has a null config', () => {
+    const configWithNullTarget: SavedRedteamConfig = {
+      ...baseConfig,
+      strategies: ['goat', { id: 'jailbreak:hydra' }],
+      target: {
+        ...baseConfig.target,
+        config: null as unknown as SavedRedteamConfig['target']['config'],
+      },
+    };
+
+    const result = getUnifiedConfig(configWithNullTarget);
+
+    expect(result.targets).toEqual([expect.objectContaining({ config: {} })]);
+    expect(result.redteam.strategies).toEqual([{ id: 'goat' }, { id: 'jailbreak:hydra' }]);
   });
 
   it('should include frameworks when provided', () => {

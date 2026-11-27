@@ -1,6 +1,6 @@
 # Security Policy
 
-Promptfoo takes security seriously. We appreciate responsible disclosure and will work with you to address valid issues.
+Please [report security vulnerabilities privately](#reporting-a-vulnerability).
 
 ## Security Model
 
@@ -8,9 +8,9 @@ Promptfoo is a developer tool that runs in your environment with your user permi
 
 Some features intentionally execute user-provided code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in fields that execute code). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
 
-**The guiding principle:** Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. If you explicitly run a config, or select/configure a provider, model, fixture, dataset, prompt pack, remote resource, model-output feedback loop, template, or field that Promptfoo evaluates as code, the result is your responsibility. Running evals against adversarial providers, models, fixtures, remote content, or model-output feedback loops carries inherent risk — use isolation and scoped credentials (see Hardening Recommendations). A vulnerability exists when behavior bypasses a supported isolation boundary or hardening control, affects Cloud/on-prem tenant isolation, or sends data or secrets to a destination the user did not configure for the selected eval, account, reporting, sharing, hosted-feature, or Cloud path.
+When you configure a feature to execute code from a source, you trust that source to supply code. When you select a data source or model as input, you authorize the feature to process its content for the documented purpose. The feature's documented security restrictions take precedence over the general trust placed in eval inputs and apply whenever Promptfoo processes or reuses those inputs.
 
-**Important:** Treat Promptfoo configuration files and everything they reference or evaluate against as **trusted code and data**. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, remote content, and model-output feedback loops. Run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests only when the run is isolated and secrets are scoped for that run.
+Promptfoo OSS provides no general sandbox for adversarial eval content. Run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests only when the run is isolated and secrets are scoped for that run. A vulnerability exists when behavior bypasses a supported isolation boundary or hardening control, affects Cloud/on-prem tenant isolation, or sends data or secrets to a destination the user did not configure for the selected eval, account, reporting, sharing, hosted-feature, or Cloud path.
 
 ### Local Developer Interfaces
 
@@ -82,11 +82,11 @@ Documented opt-out and disable controls are operational controls for the feature
 
 **Local artifacts and logs:**
 
-Promptfoo stores local artifacts such as logs, cache entries, databases, trace data, media blobs, config snapshots, reports, and exported files under the user's local account. These local artifacts are not external destinations by themselves. For OSS, secret persistence or display that remains confined to the same local user account is generally treated as a hardening or privacy issue rather than a security-boundary bypass. It becomes in scope only when Promptfoo bypasses a documented redaction, exclusion, authentication, authorization, or tenant-isolation control, or uploads, shares, exports, or otherwise exposes that data beyond the same local account, including to other users or tenants.
+Promptfoo stores local artifacts such as logs, cache entries, databases, trace data, media blobs, config snapshots, reports, and exported files under the user's local account. Sensitive data confined to that account is generally a privacy or hardening issue. Report it if Promptfoo bypasses an applicable security control, including a redaction or exclusion rule. Also report disclosures to a user, tenant, or destination the operator did not authorize to receive that data.
 
 Local caches, OAuth/token stores, provider response caches, temporary files, debug logs, report databases, and media/blob stores are scoped to the user's local Promptfoo environment. They are not isolation boundaries between different credentials, providers, endpoints, regions, tenants, accounts, evals, projects, or users running under the same local account unless Promptfoo documents such partitioning for a specific feature. Cache keys, token-store keys, and local artifact paths are not guaranteed to include provider identity, endpoint, region, tenant, account, credential, or project identity unless documented. Cache or token reuse, collision, overwrite, or lookup ambiguity within the same local user environment is generally treated as hardening or privacy behavior rather than a security-boundary bypass. Use separate operating-system users, containers, `PROMPTFOO_CONFIG_DIR` values, cache directories, token stores, and credentials when you need isolation between projects, tenants, or accounts.
 
-Shared or Cloud-backed reports may include the snapshot needed to view, reproduce, or inspect the result, including prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, and derived artifacts. Do not put secrets in prompts, datasets, provider config fields, metadata, or other shareable inputs unless that field is documented as redacted. If a field is documented as redacted or excluded, bypassing that redaction or exclusion is in scope.
+Shared or Cloud-backed reports may include the snapshot needed to view, reproduce, or inspect the result, including prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, and derived artifacts. Keep secrets out of shareable inputs. If a feature documents a redaction or exclusion rule, or you configure one using a supported setting, that rule must protect the data it covers wherever the feature says it applies. Automatic detection beyond those rules is best effort.
 
 Report files, Markdown, HTML, CSV, JSON, screenshots, and other exports are generated artifacts from the user's run. They may contain active markup, formulas, links, media, `data:` URLs, or provider-controlled text. Treat exported artifacts as untrusted when opening them in browsers, spreadsheets, terminals, or other tools.
 
@@ -116,13 +116,7 @@ If you run Promptfoo in higher-risk contexts (CI, shared machines, third-party c
 
 ## Supported Versions
 
-| Version                               | Supported        |
-| ------------------------------------- | ---------------- |
-| Latest published release (npm/Docker) | ✅               |
-| `main` branch (unreleased fixes)      | ✅ (best effort) |
-| Previously published releases         | ❌               |
-
-We do not backport security fixes. Unsupported releases are previously published versions older than the latest published release. If you report an issue against an older release, we may ask you to reproduce it on the latest supported version.
+This policy covers the latest published release (npm/Docker) and the `main` branch. Older releases are unsupported.
 
 ## Reporting a Vulnerability
 
@@ -130,18 +124,16 @@ We do not backport security fixes. Unsupported releases are previously published
 
 Report privately via:
 
-- **GitHub Security Advisories:** [Report a vulnerability](https://github.com/promptfoo/promptfoo/security/advisories/new) (preferred — this is a secure channel)
+- **GitHub Security Advisories:** [Report a vulnerability](https://github.com/promptfoo/promptfoo/security/advisories/new) (preferred)
 - **Email:** security@promptfoo.dev (fallback: support@promptfoo.dev)
 
-Email is not encrypted by default. For sensitive details (exploit code, PoC artifacts), use GitHub Security Advisories or wait until we establish a secure channel.
+Use GitHub Security Advisories for sensitive details such as exploit code or proof-of-concept files. Email is not encrypted by default.
 
-We will acknowledge your report within **1 business day**.
-
-For safe harbor provisions and full process details, see our [Responsible Disclosure Policy](https://www.promptfoo.dev/responsible-disclosure-policy/).
+For disclosure guidelines and safe harbor provisions, see our [Responsible Disclosure Policy](https://www.promptfoo.dev/responsible-disclosure-policy/).
 
 ### What to Include in Your Report
 
-A good report helps us triage and fix issues faster. Please include:
+Please include the following in your report.
 
 - **Description** of the vulnerability and its security impact
 - **Reproduction steps** — minimal config snippet or sequence of actions (redact any real secrets or API keys)
@@ -154,32 +146,16 @@ A good report helps us triage and fix issues faster. Please include:
 - **For browser-origin claims:** a real browser-based PoC. Spoofed `Origin` or `Sec-Fetch-Site` headers from `curl` are not sufficient
 - **Why the issue exceeds the documented trust model** in this policy
 
-### Common Triage Outcomes
-
-We may close reports as one of the following:
+### Report Classifications
 
 - **Invalid** — the reported behavior does not reproduce, depends on stale/nonexistent code, or relies on an unrealistic setup
-- **Out of scope** — the behavior matches the documented trust model or requires explicitly configured trusted code or eval content
+- **Out of scope** — the behavior falls within the documented trust model for the configured feature
 - **Duplicate** — the report is materially the same as an earlier advisory
 - **Already fixed** — the issue is valid but no longer affects the latest supported release
 
-## Response Timeline
+## Severity
 
-These are response targets, not service-level guarantees.
-
-- Acknowledgment and initial assessment are measured from report receipt.
-- Remediation targets start once we confirm severity.
-
-| Stage                    | Target           |
-| ------------------------ | ---------------- |
-| Acknowledgment           | 1 business day   |
-| Initial assessment       | 5 business days  |
-| Fix (Critical, 9.0–10.0) | 14 calendar days |
-| Fix (High, 7.0–8.9)      | 30 calendar days |
-| Fix (Medium, 4.0–6.9)    | 60 calendar days |
-| Fix (Low, 0.1–3.9)       | Best effort      |
-
-Severity is assessed using [CVSS v4.0](https://www.first.org/cvss/v4.0/specification-document), supplemented by Promptfoo's trust model and deployment context. Targets assume we have enough information to reproduce or validate the issue and are not blocked on reporter follow-up or upstream fixes. We may ship mitigations or workarounds before a full fix is available. We may adjust timelines if a fix requires significant architectural changes and **will communicate any material delays**.
+Consider [CVSS v4.0](https://www.first.org/cvss/v4.0/specification-document), Promptfoo's trust model, and the affected deployment when describing the impact of a vulnerability.
 
 **Promptfoo-specific severity considerations (illustrative, not automatic):**
 
@@ -188,7 +164,7 @@ Severity is assessed using [CVSS v4.0](https://www.first.org/cvss/v4.0/specifica
 - Bypasses of documented tenant-isolation, authentication, authorization, redaction, or exclusion controls that send data externally: typically **Medium–High**, depending on the data sent
 - Algorithmic DoS in CI pipelines causing significant resource exhaustion: typically **Medium–High**
 - Sensitive data written only to local logs, cache, token stores, traces, reports, exports, or databases: typically **Low–Medium**, and higher only if the artifact is uploaded, shared, or exposed to another user or tenant outside the documented sharing or Cloud-backed behavior
-- Web UI or report XSS requiring deliberate user interaction, local report access, or same-user artifact opening: typically **Low** or no CVE (see Scope)
+- Web UI or report XSS requiring deliberate user interaction, local report access, or same-user artifact opening: typically **Low** when [in scope](#scope)
 
 ## Embargo and Non-Disclosure
 
@@ -197,42 +173,7 @@ We ask reporters to keep vulnerability details confidential until:
 - A fix or mitigation is available, or
 - We agree on a disclosure date
 
-If remediation is delayed, we will keep the reporter informed and coordinate a revised disclosure timeline in good faith.
-
-## CVE Policy
-
-We request CVEs through GitHub Security Advisories when appropriate. Final advisory and CVE decisions depend on exploitability, impact, affected deployment model, and CNA policies and availability.
-
-**We usually request a CVE for:**
-
-- Code execution that bypasses a supported hardening control or isolation boundary outside the documented local eval pipeline
-- Bypasses of Cloud/on-prem isolation boundaries
-- Secret or credential leakage to destinations not configured to participate in the selected eval, account, reporting, sharing, hosted-feature, or Cloud path
-- Bypasses of documented tenant-isolation, authentication, authorization, redaction, or exclusion controls that send secrets, credentials, or sensitive eval data to an external destination
-- Supply chain compromise affecting Promptfoo-published packages, dependencies, or build artifacts
-
-**CVE-eligible (case-by-case):**
-
-- Algorithmic DoS in CI pipelines with significant resource impact
-- Sensitive data exposure through local artifacts when those artifacts are uploaded, shared, or exposed across users or tenants outside the documented sharing or Cloud-backed behavior
-- Web UI XSS with demonstrable impact beyond self-XSS
-
-**We generally do not request a CVE for:**
-
-- Issues in explicitly configured custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins)
-- Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output interpolated into grading prompts, `_conversation` history rendered or passed through built-in assertions/graders, values saved with `storeOutputAs` reused as later eval inputs, variable or file-reference values dereferenced by configured eval steps, or data passed to configured providers)
-- Local API, local web UI, local MCP, CORS, CSRF, browser-origin, bind-address, or same-user local access issues within the documented trust model
-- Promptfoo-hosted feature requests, account/license/consent checks, telemetry controls, sharing, Cloud sync, hosted report viewing, hosted scan upload, or media/blob uploads that remain within the documented payload and controls for that feature
-- Sensitive data present only in local logs, cache, databases, traces, reports, screenshots, OAuth/token stores, temporary files, or exported files generated by the user's own run and confined to the same local user account, unless another supported boundary is crossed or the artifact is uploaded, shared, or exposed across users or tenants outside the documented sharing or Cloud-backed behavior
-- Local cache, provider response cache, OAuth/token-store, temporary-file, or artifact namespace reuse, collision, overwrite, or lookup ambiguity between credentials, providers, endpoints, regions, accounts, tenants, projects, or evals within the same local user environment, unless Promptfoo documents the namespace as an isolation boundary for that feature
-- TLS verification, certificate-validation, custom-CA, proxy, HTTP agent, or local network interception behavior for configured destinations, unless Promptfoo bypasses a documented transport-security control
-- Active content, formulas, links, media, or markup in local reports or exports generated from the user's eval data
-- File reads or writes outside the current project directory requested through trusted MCP tool arguments, local API requests, config values, or CLI options, unless a specific feature documents a hard workspace isolation boundary
-- Repository CI, examples, maintainer scripts, code-scan configuration, package-manager configuration, or local agent/editor automation unless the issue affects Promptfoo-published packages, released product behavior, Cloud/on-prem tenant isolation, or a documented product security boundary
-- Self-XSS requiring the user to paste payloads into their own console or UI
-- Quality, UX, or non-security functional bugs
-
-We may still fix issues in the categories above without requesting a CVE; this classification only affects whether we publish a formal advisory.
+See also [OpenAI's Coordinated Vulnerability Disclosure Policy](https://openai.com/policies/coordinated-vulnerability-disclosure-policy/).
 
 ## Safe Harbor
 
@@ -247,29 +188,24 @@ We consider security research conducted in good faith to be authorized and will 
 
 This safe harbor applies to activities conducted under this policy. For the full legal terms, see our [Responsible Disclosure Policy](https://www.promptfoo.dev/responsible-disclosure-policy/). In case of conflict, the Responsible Disclosure Policy governs.
 
-## Coordinated Disclosure
-
-When a fix is released, we will:
-
-1. Publish a [GitHub Security Advisory](https://github.com/promptfoo/promptfoo/security/advisories) with full details
-2. Credit the reporter by name (unless anonymity is requested)
-3. Document the fix in release notes or the CHANGELOG, as appropriate
-
 ## Scope
 
 **In scope:**
 
-- Code execution, file access, network access, or secret exposure that bypasses a supported isolation boundary or hardening control outside the documented local eval pipeline
+- Code execution, file access, network access, or secret exposure that bypasses a supported isolation boundary or hardening control
 - Bypasses of documented restrictions or isolation boundaries
+- Supply chain compromise affecting Promptfoo-published packages, dependencies, or build artifacts
 - Data, secret, or credential leakage to destinations not configured to participate in the selected eval, account, reporting, sharing, hosted-feature, or Cloud path, or outside the documented payload for that path
 - Path traversal or arbitrary file read/write that escapes a documented sandbox, authentication/authorization boundary, Cloud/on-prem tenant boundary, or explicit path restriction that Promptfoo identifies as a security boundary
 - Vulnerabilities in CLI, config parsing, or web UI affecting confidentiality, integrity, or availability beyond the intended trust model described above
 - Exposure of privileged local developer interfaces only when it bypasses an explicit authentication or authorization control documented for a remote or multi-user deployment
 - Bypasses of documented tenant-isolation, authentication, authorization, redaction, or exclusion controls
 - Sensitive local artifacts that are uploaded, shared, served to other users, or exposed across Cloud/on-prem tenant boundaries outside the documented sharing or Cloud-backed behavior
-- Algorithmic complexity DoS (crafted input causing hang/crash with modest input size)
+- Algorithmic denial of service when Promptfoo’s built-in processing consumes disproportionate resources while handling modest attacker-controlled input, stalling or crashing a supported workflow
 
 **Out of scope:**
+
+The protections described above also apply when a configured feature processes untrusted input.
 
 - Code execution from **explicitly configured** custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins, `file://`-backed scripts)
 - Adversarial eval content flowing through the configured template engine, variable loading or reference dereferencing, built-in assertions, graders, providers, transforms, reports, or model-output feedback loops. This includes model outputs, `_conversation` history, grader outputs, fixture values, values saved with `storeOutputAs`, and other stored runtime values later rendered, dereferenced, or passed through configured eval pipeline steps
@@ -286,7 +222,8 @@ When a fix is released, we will:
 - Sensitive data present only in local logs, cache entries, OAuth/token stores, provider response caches, databases, trace files, temporary files, media blobs, screenshots, reports, or exports created by the user's own run and confined to the same local user account, unless a separate supported boundary is crossed, Promptfoo bypasses a documented redaction or exclusion control, or Promptfoo uploads, shares, or exposes that artifact beyond the documented local, sharing, or Cloud-backed behavior
 - Local cache, provider response cache, OAuth/token-store, temporary-file, or artifact namespace reuse, collision, overwrite, or lookup ambiguity between credentials, providers, endpoints, regions, accounts, tenants, projects, or evals within the same local user environment, unless Promptfoo documents the namespace as an isolation boundary for that feature
 - Active content, formulas, links, media, `data:` URLs, or markup in local reports, shared reports, screenshots, CSV/JSON exports, Markdown/HTML renderers, citations, or viewer downloads generated from the user's eval data
-- Shared or Cloud-backed report snapshots containing prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, or derived artifacts, unless Promptfoo bypasses a documented redaction or exclusion for that field
+- Shared or Cloud-backed report snapshots containing prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, or derived artifacts, when shared with the intended recipients and within the feature’s documented payload, unless a redaction or exclusion rule applies to the data on that path
+- Requests to extend best-effort detection of sensitive data to names or formats outside the documented or user-configured rules
 - Repository workflows, example CI snippets, code-scan action configuration, package-manager behavior, local agent/editor automation, maintainer scripts, and other developer automation surfaces unless the issue affects Promptfoo-published packages, released product behavior, Cloud/on-prem tenant isolation, or a documented product security boundary
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Third-party dependency issues that don't materially affect Promptfoo's security posture (report upstream)

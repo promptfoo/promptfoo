@@ -20,12 +20,26 @@ const TokenUsageCoreSchema = z.object({
   completionDetails: CompletionTokenDetailsSchema.optional(),
 });
 
-/** Token usage statistics. The optional `assertions` mirrors the top-level fields for model-graded assertion accounting. */
-export const BaseTokenUsageSchema = TokenUsageCoreSchema.extend({
+/** Target usage with independent generation, attacker, and assertion breakdowns. */
+const TokenUsageBreakdownSchema = TokenUsageCoreSchema.extend({
+  attacker: TokenUsageCoreSchema.optional(),
   assertions: TokenUsageCoreSchema.optional(),
+  generation: TokenUsageCoreSchema.optional(),
+});
+
+/**
+ * The root describes the full evaluation footprint, including replayed responses.
+ * The optional incurred view contains only requests executed during this run.
+ */
+export const BaseTokenUsageSchema = TokenUsageBreakdownSchema.extend({
+  incurredTokenUsage: TokenUsageBreakdownSchema.optional(),
 });
 
 export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
+export type NormalizedTokenUsage = Required<
+  Omit<TokenUsage, 'attacker' | 'generation' | 'incurredTokenUsage'>
+> &
+  Pick<TokenUsage, 'attacker' | 'generation' | 'incurredTokenUsage'>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 
@@ -60,7 +74,7 @@ export type XlsxInjectionPlacement = z.infer<typeof XlsxInjectionPlacementSchema
 export const DocumentMediaInjectionPlacementValues = ['body', 'header', 'footer'] as const;
 export const DocumentMediaInjectionPlacementSchema = z.enum(DocumentMediaInjectionPlacementValues);
 
-const XlsxCellReferenceSchema = z.string().regex(/^[A-Z]{1,3}[1-9][0-9]{0,6}$/i, {
+const XlsxCellReferenceSchema = z.string().regex(/^[A-Za-z]{1,3}[1-9][0-9]{0,6}$/, {
   error: 'XLSX cell references must be single A1-style cells such as B4',
 });
 
@@ -72,10 +86,10 @@ const XlsxSheetNameSchema = z
   .max(31, {
     error: 'XLSX sheet names must be 31 characters or fewer',
   })
-  .refine((value) => !/[:\\/?*[\]]/.test(value), {
+  .regex(/^[^:\\/?*[\]]*$/, {
     error: 'XLSX sheet names cannot contain : \\ / ? * [ or ]',
   })
-  .refine((value) => value.trim() === value && !value.startsWith("'") && !value.endsWith("'"), {
+  .regex(/^[^\s'](?:[\s\S]*[^\s'])?$(?![\s\S])/, {
     error: 'XLSX sheet names cannot start or end with spaces or apostrophes',
   });
 
@@ -95,7 +109,16 @@ export const XlsxInputConfigSchema = z.object({
 });
 export type XlsxInputConfig = z.infer<typeof XlsxInputConfigSchema>;
 
-export const InputConfigSchema = z.object({
+// Exhaustive mapping keeps runtime validation and portable structural variants in sync.
+const InputPlacementSchemas = {
+  text: z.string().min(1),
+  pdf: DocumentMediaInjectionPlacementSchema,
+  docx: DocxInjectionPlacementSchema,
+  xlsx: XlsxInjectionPlacementSchema,
+  image: DocumentMediaInjectionPlacementSchema,
+} satisfies Record<InputType, z.ZodType<string>>;
+
+const BaseInputConfigSchema = z.object({
   benign: z.boolean().optional(),
   inputPurpose: z
     .string()
@@ -107,58 +130,51 @@ export const InputConfigSchema = z.object({
     .array(z.string().min(1, { error: 'Injection placement must be a non-empty string' }))
     .min(1, { error: 'Injection placements must contain at least one placement' })
     .optional(),
+});
+
+export const InputConfigSchema = BaseInputConfigSchema.extend({
   xlsx: XlsxInputConfigSchema.optional(),
 });
 export type InputConfig = z.infer<typeof InputConfigSchema>;
 
-export const InputDefinitionObjectSchema = z
-  .object({
-    config: InputConfigSchema.optional(),
-    description: z.string().min(1, {
-      error: 'Input descriptions must be non-empty strings',
-    }),
-    type: InputTypeSchema.optional(),
-  })
-  .superRefine((input, ctx) => {
-    const inputType = input.type ?? 'text';
-    const injectionPlacements = input.config?.injectionPlacements ?? [];
+const InputDefinitionFieldsSchema = z.object({
+  config: InputConfigSchema.optional(),
+  description: z.string().min(1, {
+    error: 'Input descriptions must be non-empty strings',
+  }),
+  type: InputTypeSchema.optional(),
+});
 
-    if (inputType !== 'xlsx' && input.config?.xlsx) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['config', 'xlsx'],
-        message: 'XLSX config is only supported for XLSX inputs',
-      });
-    }
+export const InputDefinitionObjectSchema = InputDefinitionFieldsSchema.superRefine((input, ctx) => {
+  const inputType = input.type ?? 'text';
+  const injectionPlacements = input.config?.injectionPlacements ?? [];
 
-    if (inputType === 'text' || injectionPlacements.length === 0) {
-      return;
-    }
+  if (inputType !== 'xlsx' && input.config?.xlsx) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['config', 'xlsx'],
+      message: 'XLSX config is only supported for XLSX inputs',
+    });
+  }
 
-    const placementSchema =
-      inputType === 'docx'
-        ? DocxInjectionPlacementSchema
-        : inputType === 'xlsx'
-          ? XlsxInjectionPlacementSchema
-          : DocumentMediaInjectionPlacementSchema;
-    const placementValues =
-      inputType === 'docx'
-        ? DocxInjectionPlacementValues
-        : inputType === 'xlsx'
-          ? XlsxInjectionPlacementValues
-          : DocumentMediaInjectionPlacementValues;
-    const invalidPlacements = injectionPlacements.filter(
-      (placement) => !placementSchema.safeParse(placement).success,
-    );
+  if (inputType === 'text' || injectionPlacements.length === 0) {
+    return;
+  }
 
-    if (invalidPlacements.length > 0) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['config', 'injectionPlacements'],
-        message: `Invalid ${inputType.toUpperCase()} injection placements: ${invalidPlacements.join(', ')}. Expected one of: ${placementValues.join(', ')}`,
-      });
-    }
-  });
+  const placementSchema = InputPlacementSchemas[inputType];
+  const placementValues = placementSchema.options;
+  const invalidPlacements = injectionPlacements.filter(
+    (placement) => !placementSchema.safeParse(placement).success,
+  );
+
+  if (invalidPlacements.length > 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['config', 'injectionPlacements'],
+      message: `Invalid ${inputType.toUpperCase()} injection placements: ${invalidPlacements.join(', ')}. Expected one of: ${placementValues.join(', ')}`,
+    });
+  }
+});
 
 export const InputDefinitionSchema = z.union([
   z.string().min(1, {
@@ -233,6 +249,36 @@ export function buildInputPromptDescription(input: InputDefinition): string {
 const InputVariableNameSchema = z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, {
   error: 'Input variable names must be valid identifiers (start with letter or underscore)',
 });
+
+function documentInputSchema<T extends Exclude<InputType, 'text'>>(type: T) {
+  return InputDefinitionFieldsSchema.strict().extend({
+    type: z.literal(type),
+    config: (type === 'xlsx' ? InputConfigSchema : BaseInputConfigSchema)
+      .strict()
+      .extend({
+        injectionPlacements: z.array(InputPlacementSchemas[type]).min(1).optional(),
+      })
+      .optional(),
+  });
+}
+
+// The exhaustive keys also preserve each type's placement literals in inferred types.
+const StructuralInputDefinitions = {
+  text: InputDefinitionFieldsSchema.strict().extend({
+    type: z.literal('text').optional(),
+    config: BaseInputConfigSchema.strict().optional(),
+  }),
+  pdf: documentInputSchema('pdf'),
+  docx: documentInputSchema('docx'),
+  xlsx: documentInputSchema('xlsx'),
+  image: documentInputSchema('image'),
+} satisfies Record<InputType, z.ZodType>;
+
+/** Strict serializable input definitions; runtime schemas retain stripping and diagnostics. */
+export const InputsInputSchema = z.record(
+  InputVariableNameSchema,
+  z.union([InputDefinitionSchema.options[0], ...Object.values(StructuralInputDefinitions)]),
+);
 
 // Inputs schema for multi-variable test case generation.
 // Keys are variable names, values are descriptions or typed definitions for what the variable should contain.

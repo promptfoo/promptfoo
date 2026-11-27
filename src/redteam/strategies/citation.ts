@@ -1,23 +1,24 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache';
-import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
-  getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { postRemoteGenerationTask } from '../remoteGenerationTask';
+import { appendMetricSuffix } from './assertions';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyRuntimeContext } from './types';
 
 async function generateCitations(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -44,11 +45,11 @@ async function generateCitations(
 
       const payload = {
         task: 'citation',
-        testCases: [testCase],
-        injectVar,
         topic: testCase.vars[injectVar],
-        config,
-        email: getUserEmail(),
+        ...(typeof config.useAcademic === 'boolean' && { useAcademic: config.useAcademic }),
+        ...(typeof config.useJournals === 'boolean' && { useJournals: config.useJournals }),
+        ...(typeof config.useBooks === 'boolean' && { useBooks: config.useBooks }),
+        ...remoteGenerationContextPayload(config.targetId),
       };
 
       interface CitationGenerationResponse {
@@ -61,16 +62,9 @@ async function generateCitations(
         };
       }
 
-      const { data } = await fetchWithCache<CitationGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
+      const { data } = await postRemoteGenerationTask<CitationGenerationResponse>(
+        payload,
+        runtimeContext,
       );
 
       logger.debug(
@@ -110,10 +104,7 @@ async function generateCitations(
           1. ${data.result.citation.content}
         `,
         },
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: `${assertion.metric}/Citation`,
-        })),
+        assert: appendMetricSuffix(testCase, 'Citation'),
         metadata: {
           ...testCase.metadata,
           citation: data.result.citation,
@@ -149,12 +140,13 @@ export async function addCitationTestCases(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, unknown>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
     throw new Error(getRemoteGenerationExplicitlyDisabledError('Citation strategy'));
   }
 
-  const citationTestCases = await generateCitations(testCases, injectVar, config);
+  const citationTestCases = await generateCitations(testCases, injectVar, config, runtimeContext);
   if (citationTestCases.length === 0) {
     logger.warn('No citation test cases were generated');
   }

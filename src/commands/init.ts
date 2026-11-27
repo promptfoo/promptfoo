@@ -15,7 +15,9 @@ import { EXAMPLE_ALIASES, EXAMPLE_REPLACEMENTS, REMOVED_EXAMPLES } from './examp
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
+const GITHUB_EXAMPLES_PATH = '/repos/promptfoo/promptfoo/contents/examples/';
 const DEFAULT_EXAMPLE_REFS = [VERSION, 'main'];
+
 const EXAMPLE_CONFIG_FILENAMES = new Set([
   'promptfooconfig.yaml',
   'promptfooconfig.yml',
@@ -34,6 +36,27 @@ interface GitHubContentItem {
   name: string;
   type: 'file' | 'dir' | string;
   download_url: string | null;
+}
+
+function getExampleDirectoryUrl(dirPath: string, ref: string): URL {
+  return new URL(`${GITHUB_API_BASE}${GITHUB_EXAMPLES_PATH}${dirPath}?ref=${ref}`);
+}
+
+function getUnsupportedExampleReason(exampleName: string): string | undefined {
+  // Match the effective request path, including URL dot segments and backslashes.
+  let { pathname } = getExampleDirectoryUrl(exampleName, VERSION);
+  try {
+    pathname = decodeURIComponent(pathname);
+  } catch {
+    // Preserve the original request behavior for malformed percent escapes.
+  }
+  const root = pathname.startsWith(GITHUB_EXAMPLES_PATH)
+    ? pathname.slice(GITHUB_EXAMPLES_PATH.length).split('/')[0]
+    : undefined;
+  if (root === 'github-models' || root === 'provider-github-models') {
+    return 'GitHub Models has been retired, so this example is no longer supported.';
+  }
+  return undefined;
 }
 
 function getGitHubHeaders() {
@@ -73,7 +96,7 @@ function extractRunnableExamples(tree: GitHubTreeItem[]): string[] {
     }
 
     const exampleDir = path.posix.dirname(item.path).replace(/^examples\//, '');
-    if (exampleDir && exampleDir !== '.') {
+    if (exampleDir && exampleDir !== '.' && !getUnsupportedExampleReason(exampleDir)) {
       examples.add(exampleDir);
     }
   }
@@ -111,7 +134,7 @@ async function fetchExampleDirectoryContents(
   const failedRefs: string[] = [];
 
   for (const ref of refs) {
-    const url = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=${ref}`;
+    const url = getExampleDirectoryUrl(dirPath, ref).toString();
     const response = await fetchWithProxy(url, {
       headers: getGitHubHeaders(),
     });
@@ -140,6 +163,10 @@ export async function downloadDirectory(
   targetDir: string,
   refs: string[] = DEFAULT_EXAMPLE_REFS,
 ): Promise<void> {
+  const unsupportedReason = getUnsupportedExampleReason(dirPath);
+  if (unsupportedReason) {
+    throw new Error(`Example '${dirPath}' is unavailable. ${unsupportedReason}`);
+  }
   const contents = await fetchExampleDirectoryContents(dirPath, refs);
 
   for (const item of contents) {
@@ -199,7 +226,7 @@ export async function getExamplesList(): Promise<string[]> {
 }
 
 interface ExampleDownloadSelection {
-  exampleName: string | undefined;
+  exampleName: string;
   downloadRefs: string[];
 }
 
@@ -233,14 +260,10 @@ function resolveExampleSelection(example: string): ExampleDownloadSelection {
         chalk.yellow(`Note: '${example}' has been renamed to '${resolved}'. Using new name.`),
       );
     }
-    return {
-      exampleName: resolved,
-      downloadRefs: DEFAULT_EXAMPLE_REFS,
-    };
   }
 
   return {
-    exampleName: example,
+    exampleName: resolved || example,
     downloadRefs: DEFAULT_EXAMPLE_REFS,
   };
 }
@@ -259,19 +282,9 @@ async function logExampleInstructions(
 
   if (exampleName.includes('redteam') || !isRunnableFromRoot) {
     if (readmeExists) {
-      logger.info(
-        dedent`
-
-        View the README file at ${chalk.bold(readmePath)} to get started!
-        `,
-      );
+      logger.info(`View the README file at ${chalk.bold(readmePath)} to get started!`);
     } else {
-      logger.info(
-        dedent`
-
-        View the example at ${chalk.bold(docsUrl)} to get started!
-        `,
-      );
+      logger.info(`View the example at ${chalk.bold(docsUrl)} to get started!`);
     }
     return;
   }
@@ -279,18 +292,18 @@ async function logExampleInstructions(
   const runCommand = promptfooCommand('eval');
   if (readmeExists) {
     logger.info(
-      dedent`
+      dedent(`
 
       View the README at ${chalk.bold(readmePath)} or run:
 
       \`${chalk.bold(`${cdCommand} && ${runCommand}`)}\`
 
       to get started!
-      `,
+      `),
     );
   } else {
     logger.info(
-      dedent`
+      dedent(`
 
       Run:
 
@@ -298,42 +311,31 @@ async function logExampleInstructions(
 
       to get started.
       Example docs: ${chalk.bold(docsUrl)}
-      `,
+      `),
     );
   }
 }
 
-async function selectExample(): Promise<string> {
+async function selectExample(): Promise<ExampleDownloadSelection> {
   const examples = await getExamplesList();
-  const choices = [
-    { name: 'None (initialize with dummy files)', value: '' },
-    ...examples.map((ex) => ({ name: ex, value: ex })),
-  ];
-
-  const selectedExample = await select({
+  const exampleName = await select({
     message: 'Choose an example to download:',
-    choices,
+    choices: [{ name: 'None (initialize with dummy files)', value: '' }, ...examples],
   });
-  return selectedExample;
+  return { exampleName, downloadRefs: DEFAULT_EXAMPLE_REFS };
 }
 
 export async function handleExampleDownload(
   directory: string | null,
   example: string | boolean | undefined,
 ): Promise<string | undefined> {
-  let exampleName: string | undefined;
-  let downloadRefs = DEFAULT_EXAMPLE_REFS;
-
-  if (example === true) {
-    exampleName = await selectExample();
-  } else if (typeof example === 'string') {
-    const selection = resolveExampleSelection(example);
-    exampleName = selection.exampleName;
-    downloadRefs = selection.downloadRefs;
+  if (example !== true && typeof example !== 'string') {
+    return;
   }
 
-  let attemptDownload = true;
-  while (attemptDownload && exampleName) {
+  let selection = example === true ? await selectExample() : resolveExampleSelection(example);
+  while (selection.exampleName) {
+    const { exampleName, downloadRefs } = selection;
     const targetDir = path.join(directory || '.', exampleName);
     try {
       await downloadExample(exampleName, targetDir, downloadRefs);
@@ -343,18 +345,17 @@ export async function handleExampleDownload(
           chalk.yellow(`Downloaded legacy example '${exampleName}' from ref '${downloadRefs[0]}'.`),
         );
       }
-      attemptDownload = false;
     } catch (error) {
       logger.error(`Failed to download example: ${error instanceof Error ? error.message : error}`);
-      attemptDownload = await confirm({
+      if (getUnsupportedExampleReason(exampleName)) {
+        process.exitCode = 1;
+        return exampleName;
+      }
+      const retry = await confirm({
         message: 'Would you like to try downloading a different example?',
         default: true,
       });
-      if (attemptDownload) {
-        exampleName = await selectExample();
-        downloadRefs = DEFAULT_EXAMPLE_REFS;
-      } else {
-        // User declined to try downloading a different example
+      if (!retry) {
         logger.info(
           dedent`
 
@@ -367,16 +368,13 @@ export async function handleExampleDownload(
         );
         return exampleName;
       }
+      selection = await selectExample();
+      continue;
     }
+
+    await logExampleInstructions(exampleName, directory, downloadRefs);
+    return exampleName;
   }
-
-  if (!exampleName) {
-    return;
-  }
-
-  await logExampleInstructions(exampleName, directory, downloadRefs);
-
-  return exampleName;
 }
 
 interface InitCommandOptions {

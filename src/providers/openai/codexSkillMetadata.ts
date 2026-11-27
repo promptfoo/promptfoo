@@ -31,9 +31,13 @@ export function getCodexSkillRootPrefixes(options: CodexSkillRootPrefixOptions):
       return;
     }
 
-    const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/g, '');
-    if (normalized) {
-      prefixes.add(normalized);
+    const normalized = candidate.replace(/\\/g, '/');
+    let end = normalized.length;
+    while (end > 0 && normalized[end - 1] === '/') {
+      end--;
+    }
+    if (end > 0) {
+      prefixes.add(normalized.slice(0, end));
     }
   };
 
@@ -103,7 +107,11 @@ export function buildCodexSkillMetadata(
     return undefined;
   }
 
-  const attemptedSkillCalls = extractCodexSkillCallsFromItems(items, skillRootPrefixes, itemAdapter);
+  const attemptedSkillCalls = extractCodexSkillCallsFromItems(
+    items,
+    skillRootPrefixes,
+    itemAdapter,
+  );
   const skillCalls = extractCodexSkillCallsFromItems(items, skillRootPrefixes, itemAdapter, {
     requireSuccessfulCommand: true,
   });

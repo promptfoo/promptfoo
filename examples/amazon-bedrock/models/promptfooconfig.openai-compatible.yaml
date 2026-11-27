@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock OpenAI-compatible model families (GLM, MiniMax, Kimi, Nemotron, Gemma, Palmyra)'
+
+# These newer Bedrock families all speak the OpenAI Chat Completions schema over InvokeModel,
+# so they share the same provider config. Confirm each model is enabled in your region with
+# `aws bedrock list-foundation-models --region us-east-1`.
+
+prompts:
+  - 'Answer in one short sentence: {{question}}'
+
+providers:
+  # Z.AI GLM
+  - id: bedrock:zai.glm-5
+    label: GLM 5
+    config:
+      region: us-east-1
+      max_tokens: 1024
+
+  # MiniMax (reasoning model — give it a larger token budget so the answer is not truncated)
+  - id: bedrock:minimax.minimax-m2
+    label: MiniMax M2
+    config:
+      region: us-east-1
+      max_tokens: 2048
+      showThinking: false # strip the <reasoning> block, keep only the final answer
+
+  # Moonshot Kimi
+  - id: bedrock:moonshotai.kimi-k2.5
+    label: Kimi K2.5
+    config:
+      region: us-east-1
+      max_tokens: 1024
+
+  # NVIDIA Nemotron — reasons in-line without tags, so it needs a larger token budget.
+  # To get a direct answer, prepend a `/no_think` system message (NVIDIA's reasoning toggle);
+  # `showThinking` has no tagged block to strip here.
+  - id: bedrock:nvidia.nemotron-nano-9b-v2
+    label: Nemotron Nano 9B
+    config:
+      region: us-east-1
+      max_tokens: 2048
+
+  # Google Gemma 3
+  - id: bedrock:google.gemma-3-12b-it
+    label: Gemma 3 12B
+    config:
+      region: us-east-1
+      max_tokens: 1024
+
+  # Writer Palmyra — on-demand throughput is served through the `us.` inference profile
+  - id: bedrock:us.writer.palmyra-x5-v1:0
+    label: Palmyra X5
+    config:
+      region: us-east-1
+      max_tokens: 1024
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: icontains
+        value: Paris
+
+  - vars:
+      question: What is 2 + 2?
+    assert:
+      - type: contains
+        value: '4'
+
+  - vars:
+      question: Name the largest planet in our solar system.
+    assert:
+      - type: icontains
+        value: Jupiter

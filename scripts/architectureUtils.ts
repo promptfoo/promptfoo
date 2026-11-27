@@ -2,14 +2,21 @@ import fs from 'node:fs';
 import { builtinModules } from 'node:module';
 import path from 'node:path';
 
-import { globSync } from 'glob';
-import ts from 'typescript';
+import { globSync } from 'glob/raw';
+import { type Node, parseSync, Visitor } from 'oxc-parser';
 
 export interface LayerDefinition {
   name: string;
   roots: string[];
   allowedDependencies: string[];
   allowedImportPaths?: string[];
+  /**
+   * Layers this layer must NOT depend on, even transitionally. Used to lock a
+   * cross-layer pair once its cycle has been fully broken so it cannot regress.
+   * Entries must be known layer names and must not also appear in
+   * `allowedDependencies`.
+   */
+  forbiddenDependencies?: string[];
   /**
    * Bare module specifiers (npm packages or Node builtins) a LEAF layer is allowed to import.
    * Only consulted for layers listed in {@link LayerConfig.leafLayers}: a leaf layer may import
@@ -25,14 +32,28 @@ export interface LayerConfig {
   aliases?: Record<string, string>;
   ignoredRoots?: string[];
   layers: LayerDefinition[];
+  /**
+   * Target topological order, listed most-depended-upon first (the intended
+   * DAG bottom-to-top). A cross-layer edge from an earlier entry to a later one
+   * is a cycle-causing "back edge". When defined, every configured layer must
+   * appear exactly once so the back-edge report cannot silently omit a layer.
+   */
+  tierOrder?: string[];
+  /**
+   * Ratchet for the largest strongly-connected component (dependency cycle) in
+   * the layer graph. The checker fails if the real graph exceeds this size, so
+   * the value can only be lowered over time (8 today, 1 == a DAG).
+   */
+  maxStronglyConnectedComponentSize?: number;
 }
 
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
+const DECLARATION_EXTENSIONS = ['.d.ts', '.d.mts', '.d.cts'];
 const DIRECTORY_INDEXES = TYPESCRIPT_EXTENSIONS.map((extension) => `index${extension}`);
 const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
-  '.js': ['.ts', '.tsx'],
-  '.mjs': ['.mts'],
-  '.cjs': ['.cts'],
+  '.js': ['.ts', '.tsx', '.d.ts'],
+  '.mjs': ['.mts', '.d.mts'],
+  '.cjs': ['.cts', '.d.cts'],
 };
 const BUILTIN_MODULES = new Set(
   builtinModules.flatMap((moduleName) => [moduleName, moduleName.replace(/^node:/, '')]),
@@ -80,7 +101,7 @@ function validateLayerDefinition(
     );
   }
 
-  return layer.roots.map((root) => {
+  return layer.roots.map((root: unknown) => {
     if (typeof root !== 'string' || !fs.existsSync(path.join(repoRoot, root))) {
       throw new Error(`Architecture layer "${layer.name}" root "${String(root)}" does not exist.`);
     }
@@ -93,7 +114,7 @@ function validateDependencies(config: LayerConfig, layerNames: Set<string>): voi
     for (const allowedDependency of layer.allowedDependencies) {
       if (typeof allowedDependency !== 'string' || !layerNames.has(allowedDependency)) {
         throw new Error(
-          `Architecture layer "${layer.name}" allows unknown dependency "${String(allowedDependency)}".`,
+          `Architecture layer "${layer.name}" allows unknown dependency "${allowedDependency}".`,
         );
       }
     }
@@ -123,6 +144,65 @@ function validateRootsDoNotOverlap(
   }
 }
 
+function validateTierOrder(tierOrder: LayerConfig['tierOrder'], layerNames: Set<string>): void {
+  if (tierOrder === undefined) {
+    return;
+  }
+  if (!Array.isArray(tierOrder)) {
+    throw new Error('Architecture tierOrder must be an array of layer names.');
+  }
+  const seen = new Set<string>();
+  for (const layerName of tierOrder) {
+    if (typeof layerName !== 'string' || !layerNames.has(layerName)) {
+      throw new Error(`Architecture tierOrder contains unknown layer "${String(layerName)}".`);
+    }
+    if (seen.has(layerName)) {
+      throw new Error(`Architecture tierOrder lists layer "${layerName}" more than once.`);
+    }
+    seen.add(layerName);
+  }
+  if (seen.size !== layerNames.size) {
+    const missingLayers = [...layerNames].filter((layerName) => !seen.has(layerName)).sort();
+    throw new Error(
+      `Architecture tierOrder must list every layer. Missing: ${missingLayers.join(', ')}.`,
+    );
+  }
+}
+
+function validateMaxStronglyConnectedComponentSize(max: number | undefined): void {
+  if (max !== undefined && (typeof max !== 'number' || !Number.isInteger(max) || max < 1)) {
+    throw new Error('Architecture maxStronglyConnectedComponentSize must be a positive integer.');
+  }
+}
+
+function validateForbiddenDependencies(layers: LayerDefinition[], layerNames: Set<string>): void {
+  for (const layer of layers) {
+    if (layer.forbiddenDependencies !== undefined && !Array.isArray(layer.forbiddenDependencies)) {
+      throw new Error(
+        `Architecture layer "${layer.name}" forbiddenDependencies must be an array of layer names.`,
+      );
+    }
+    for (const forbidden of layer.forbiddenDependencies ?? []) {
+      if (typeof forbidden !== 'string' || !layerNames.has(forbidden)) {
+        throw new Error(
+          `Architecture layer "${layer.name}" forbids unknown dependency "${String(forbidden)}".`,
+        );
+      }
+      if (layer.allowedDependencies.includes(forbidden)) {
+        throw new Error(
+          `Architecture layer "${layer.name}" both allows and forbids dependency "${forbidden}".`,
+        );
+      }
+    }
+  }
+}
+
+function validateDagPolicy(config: LayerConfig, layerNames: Set<string>): void {
+  validateTierOrder(config.tierOrder, layerNames);
+  validateMaxStronglyConnectedComponentSize(config.maxStronglyConnectedComponentSize);
+  validateForbiddenDependencies(config.layers, layerNames);
+}
+
 export function readLayerConfig(repoRoot: string): LayerConfig {
   const configPath = path.join(repoRoot, 'architecture/layers.json');
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as LayerConfig;
@@ -130,11 +210,14 @@ export function readLayerConfig(repoRoot: string): LayerConfig {
   if (!config || typeof config !== 'object' || !Array.isArray(config.layers)) {
     throw new Error(`${configPath} must define a layers array.`);
   }
+  const publicFacadePath =
+    typeof config.publicFacade === 'string' ? path.join(repoRoot, config.publicFacade) : '';
   if (
-    typeof config.publicFacade !== 'string' ||
-    !fs.existsSync(path.join(repoRoot, config.publicFacade))
+    !publicFacadePath ||
+    !fs.existsSync(publicFacadePath) ||
+    !fs.statSync(publicFacadePath).isFile()
   ) {
-    throw new Error(`${configPath} must define an existing publicFacade path.`);
+    throw new Error(`${configPath} must define an existing publicFacade file path.`);
   }
 
   const layerNames = new Set<string>();
@@ -148,9 +231,27 @@ export function readLayerConfig(repoRoot: string): LayerConfig {
     configuredRoots.push(...validateLayerDefinition(repoRoot, configPath, layer));
   }
 
+  if (config.leafLayers !== undefined) {
+    if (!Array.isArray(config.leafLayers)) {
+      throw new Error(`${configPath} leafLayers must be an array of unique layer names.`);
+    }
+    const leafLayers = new Set<string>();
+    for (const layerName of config.leafLayers) {
+      if (
+        typeof layerName !== 'string' ||
+        leafLayers.has(layerName) ||
+        !layerNames.has(layerName)
+      ) {
+        throw new Error(`${configPath} leafLayers must be unique, known layer names.`);
+      }
+      leafLayers.add(layerName);
+    }
+  }
+
   validateDependencies(config, layerNames);
   validateAliases(repoRoot, config.aliases);
   validateRootsDoNotOverlap(configuredRoots);
+  validateDagPolicy(config, layerNames);
 
   return config;
 }
@@ -163,7 +264,7 @@ export function getSourceFiles(
   return globSync('src/**/*.{ts,tsx,mts,cts}', {
     cwd: repoRoot,
     ignore: [
-      'src/**/*.d.ts',
+      'src/**/*.d.{ts,mts,cts}',
       'src/**/node_modules/**',
       ...(includeApp ? [] : ['src/app/**']),
       ...ignoredRoots.map((root) => `${normalizePath(root)}/**`),
@@ -188,68 +289,138 @@ export function getLayerForFile(relativePath: string, config: LayerConfig): stri
   return 'unclassified';
 }
 
+function getStaticModuleSpecifier(node: Node): string | undefined {
+  if (node.type === 'Literal' && typeof node.value === 'string') {
+    return node.value;
+  }
+
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0) {
+    return node.quasis[0]?.value.cooked ?? undefined;
+  }
+
+  return undefined;
+}
+
+export type ModuleReferenceKind = 'type' | 'value' | 'deferred' | 'resolution';
+
+export interface ModuleReference {
+  /** Undefined for computed loaders whose target cannot be determined statically. */
+  specifier?: string;
+  kind: ModuleReferenceKind;
+  syntax:
+    | 'import'
+    | 'export'
+    | 'dynamic-import'
+    | 'import-equals'
+    | 'import-type'
+    | 'require'
+    | 'require-resolve';
+  /** One-based source line for diagnostics. */
+  line: number;
+}
+
+/** Classifies syntax, not emitted JavaScript: ordinary imports may still be erased by tsc. */
+export function extractModuleReferences(sourceText: string, filePath: string): ModuleReference[] {
+  const result = parseSync(filePath, sourceText);
+  if (result.errors.length > 0) {
+    throw new Error(`Could not parse ${filePath}: ${result.errors[0].message}`);
+  }
+  // Oxc's JavaScript AST offsets use UTF-16 code units, like string/RegExp indices.
+  const lineStarts = [0];
+  for (const match of sourceText.matchAll(/\r\n|[\n\r\u2028\u2029]/gu)) {
+    lineStarts.push(match.index + match[0].length);
+  }
+  const lineAtOffset = (offset: number): number => {
+    let low = 0;
+    let high = lineStarts.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (lineStarts[middle] <= offset) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
+  };
+  const references: ModuleReference[] = [];
+  const add = (
+    node: Node,
+    specifier: string | undefined,
+    kind: ModuleReferenceKind,
+    syntax: ModuleReference['syntax'],
+  ) => {
+    references.push({
+      specifier,
+      kind,
+      syntax,
+      line: lineAtOffset(node.start),
+    });
+  };
+  new Visitor({
+    ImportDeclaration(node) {
+      const typeOnly =
+        node.importKind === 'type' ||
+        (node.specifiers.length > 0 &&
+          node.specifiers.every(
+            (specifier) => specifier.type === 'ImportSpecifier' && specifier.importKind === 'type',
+          ));
+      add(node, node.source.value, typeOnly ? 'type' : 'value', 'import');
+    },
+    ExportAllDeclaration(node) {
+      add(node, node.source.value, node.exportKind === 'type' ? 'type' : 'value', 'export');
+    },
+    ExportNamedDeclaration(node) {
+      if (node.source) {
+        const typeOnly =
+          node.exportKind === 'type' ||
+          (node.specifiers.length > 0 &&
+            node.specifiers.every((specifier) => specifier.exportKind === 'type'));
+        add(node, node.source.value, typeOnly ? 'type' : 'value', 'export');
+      }
+    },
+    ImportExpression(node) {
+      add(node, getStaticModuleSpecifier(node.source), 'deferred', 'dynamic-import');
+    },
+    TSImportEqualsDeclaration(node) {
+      if (node.moduleReference.type === 'TSExternalModuleReference') {
+        add(
+          node,
+          node.moduleReference.expression.value,
+          node.importKind === 'type' ? 'type' : 'value',
+          'import-equals',
+        );
+      }
+    },
+    TSImportType(node) {
+      add(node, node.source.value, 'type', 'import-type');
+    },
+    CallExpression(node) {
+      if (node.arguments.length !== 1) {
+        return;
+      }
+      if (node.callee.type === 'Identifier' && node.callee.name === 'require') {
+        add(node, getStaticModuleSpecifier(node.arguments[0]), 'value', 'require');
+      } else if (
+        node.callee.type === 'MemberExpression' &&
+        !node.callee.computed &&
+        node.callee.object.type === 'Identifier' &&
+        node.callee.object.name === 'require' &&
+        node.callee.property.type === 'Identifier' &&
+        node.callee.property.name === 'resolve'
+      ) {
+        add(node, getStaticModuleSpecifier(node.arguments[0]), 'resolution', 'require-resolve');
+      }
+    },
+  }).visit(result.program);
+  return references;
+}
+
+/** Compatibility view used by the conservative ratchet and dependency ownership report. */
 export function extractModuleSpecifiers(sourceText: string, filePath: string): string[] {
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  return extractModuleReferences(sourceText, filePath).flatMap((reference) =>
+    reference.specifier === undefined ? [] : [reference.specifier],
   );
-  const specifiers: string[] = [];
-
-  function addStaticCallSpecifier(node: ts.CallExpression): void {
-    if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
-      return;
-    }
-
-    if (
-      node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-      (ts.isIdentifier(node.expression) && node.expression.text === 'require') ||
-      (ts.isPropertyAccessExpression(node.expression) &&
-        ts.isIdentifier(node.expression.expression) &&
-        node.expression.expression.text === 'require' &&
-        node.expression.name.text === 'resolve')
-    ) {
-      specifiers.push(node.arguments[0].text);
-    }
-  }
-
-  function visit(node: ts.Node): void {
-    if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteralLike(node.moduleSpecifier)
-    ) {
-      specifiers.push(node.moduleSpecifier.text);
-    }
-
-    if (
-      ts.isImportEqualsDeclaration(node) &&
-      ts.isExternalModuleReference(node.moduleReference) &&
-      node.moduleReference.expression &&
-      ts.isStringLiteralLike(node.moduleReference.expression)
-    ) {
-      specifiers.push(node.moduleReference.expression.text);
-    }
-
-    if (
-      ts.isImportTypeNode(node) &&
-      ts.isLiteralTypeNode(node.argument) &&
-      ts.isStringLiteralLike(node.argument.literal)
-    ) {
-      specifiers.push(node.argument.literal.text);
-    }
-
-    if (ts.isCallExpression(node)) {
-      addStaticCallSpecifier(node);
-    }
-
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
-  return specifiers;
 }
 
 export function resolveInternalModule(
@@ -294,7 +465,9 @@ export function resolveInternalModule(
     unresolvedPath,
     ...runtimeSourceCandidates,
     ...TYPESCRIPT_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
+    ...DECLARATION_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
     ...DIRECTORY_INDEXES.map((indexFile) => path.join(unresolvedPath, indexFile)),
+    ...DECLARATION_EXTENSIONS.map((extension) => path.join(unresolvedPath, `index${extension}`)),
   ];
 
   for (const candidate of candidates) {
@@ -351,10 +524,75 @@ export interface BoundaryViolation {
   importedLayer: string;
 }
 
-export function findUnclassifiedFiles(repoRoot: string, config: LayerConfig): string[] {
-  return getSourceFiles(repoRoot, true, config.ignoredRoots).filter(
-    (sourceFile) => getLayerForFile(sourceFile, config) === 'unclassified',
-  );
+export interface ArchitectureModuleReference extends ModuleReference {
+  importer: string;
+  importerLayer: string;
+  specifier: string;
+  resolvedImport?: string;
+  importedLayer?: string;
+}
+
+export interface ArchitectureSourceScan {
+  sourceFiles: string[];
+  includesFacade: boolean;
+  references: ArchitectureModuleReference[];
+  computedReferences: Array<ModuleReference & { importer: string; importerLayer: string }>;
+}
+
+/**
+ * Reads and parses the checked source tree once so callers that need multiple
+ * architecture views can reuse the same module-reference scan.
+ */
+export function scanArchitectureSources(
+  repoRoot: string,
+  config: LayerConfig,
+  options: { includeFacade?: boolean } = {},
+): ArchitectureSourceScan {
+  const publicFacade = normalizePath(config.publicFacade);
+  const sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots);
+  const references: ArchitectureModuleReference[] = [];
+  const computedReferences: ArchitectureSourceScan['computedReferences'] = [];
+
+  for (const importer of sourceFiles) {
+    if (!options.includeFacade && normalizePath(importer) === publicFacade) {
+      continue;
+    }
+
+    const importerLayer = getLayerForFile(importer, config);
+    const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
+    for (const reference of extractModuleReferences(sourceText, importer)) {
+      const { specifier } = reference;
+      if (specifier === undefined) {
+        computedReferences.push({ ...reference, importer, importerLayer });
+        continue;
+      }
+      const resolvedImport = resolveInternalModule(repoRoot, importer, specifier, config.aliases);
+      references.push({
+        ...reference,
+        importer,
+        importerLayer,
+        specifier,
+        ...(resolvedImport
+          ? { resolvedImport, importedLayer: getLayerForFile(resolvedImport, config) }
+          : {}),
+      });
+    }
+  }
+
+  return {
+    sourceFiles,
+    references,
+    computedReferences,
+    includesFacade: options.includeFacade ?? false,
+  };
+}
+
+export function findUnclassifiedFiles(
+  repoRoot: string,
+  config: LayerConfig,
+  sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots),
+): string[] {
+  return sourceFiles.filter((sourceFile) => getLayerForFile(sourceFile, config) === 'unclassified');
 }
 
 /**
@@ -363,115 +601,551 @@ export function findUnclassifiedFiles(repoRoot: string, config: LayerConfig): st
  * reads required to scan source files; no `process.exit`. Exposed so the
  * pipeline can be unit-tested against fixture trees.
  */
-export function findViolations(repoRoot: string, config: LayerConfig): BoundaryViolation[] {
+export function findViolations(
+  repoRoot: string,
+  config: LayerConfig,
+  sourceScan = scanArchitectureSources(repoRoot, config),
+): BoundaryViolation[] {
   const publicFacade = normalizePath(config.publicFacade);
   const leafLayers = new Set(config.leafLayers ?? []);
   const layersByName = new Map(config.layers.map((layer) => [layer.name, layer]));
+  const allowedExternalByLayer = new Map(
+    config.layers
+      .filter((layer) => leafLayers.has(layer.name))
+      .map((layer) => [
+        layer.name,
+        new Set((layer.allowedExternal ?? []).map((entry) => entry.replace(/^node:/, ''))),
+      ]),
+  );
   const violations: BoundaryViolation[] = [];
 
-  for (const importer of getSourceFiles(repoRoot, true, config.ignoredRoots)) {
+  for (const {
+    importer,
+    importerLayer,
+    specifier,
+    resolvedImport,
+    importedLayer,
+  } of sourceScan.references) {
     if (normalizePath(importer) === publicFacade) {
       continue;
     }
 
-    const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
-    const importerLayer = getLayerForFile(importer, config);
     const importerIsLeaf = leafLayers.has(importerLayer);
-    const allowedExternal = importerIsLeaf
-      ? new Set(
-          (layersByName.get(importerLayer)?.allowedExternal ?? []).map((entry) =>
-            entry.replace(/^node:/, ''),
-          ),
-        )
-      : null;
+    const allowedExternal = allowedExternalByLayer.get(importerLayer);
 
-    for (const specifier of extractModuleSpecifiers(sourceText, importer)) {
-      const resolvedImport = resolveInternalModule(repoRoot, importer, specifier, config.aliases);
-      if (!resolvedImport) {
-        // Not an internal module (internal relative / src-rooted / aliased imports resolve above).
-        // A leaf layer may import only its allowlisted external packages and Node builtins; flag
-        // any other bare specifier.
-        if (importerIsLeaf) {
-          const externalName = getExternalModuleName(specifier);
-          if (externalName && !allowedExternal!.has(externalName)) {
-            violations.push({
-              kind: 'leaf-external',
-              importer,
-              importerLayer,
-              specifier,
-              imported: specifier,
-              importedLayer: 'external',
-            });
-          }
-        }
-        continue;
-      }
-
-      const importedLayer = getLayerForFile(resolvedImport, config);
-
-      if (resolvedImport === publicFacade) {
-        violations.push({
-          kind: 'facade',
-          importer,
-          importerLayer,
-          specifier,
-          imported: resolvedImport,
-          importedLayer,
-        });
-      }
-
-      if (leafLayers.has(importerLayer)) {
-        if (importedLayer !== importerLayer) {
+    if (!resolvedImport || !importedLayer) {
+      // Not an internal module (internal relative / src-rooted / aliased imports resolve above).
+      // A leaf layer may import only its allowlisted external packages and Node builtins; flag
+      // any other bare specifier.
+      if (allowedExternal) {
+        const externalName = getExternalModuleName(specifier);
+        if (externalName && !allowedExternal.has(externalName)) {
           violations.push({
-            kind: 'leaf',
+            kind: 'leaf-external',
             importer,
             importerLayer,
             specifier,
-            imported: resolvedImport,
-            importedLayer,
+            imported: specifier,
+            importedLayer: 'external',
           });
         }
       }
+      continue;
+    }
 
-      const importerConfig = layersByName.get(importerLayer);
-      const allowedLayerDependency =
-        importedLayer === importerLayer ||
-        (importerConfig?.allowedDependencies.includes(importedLayer) ?? false);
+    if (resolvedImport === publicFacade) {
+      violations.push({
+        kind: 'facade',
+        importer,
+        importerLayer,
+        specifier,
+        imported: resolvedImport,
+        importedLayer,
+      });
+    }
 
-      if (
-        importedLayer !== importerLayer &&
-        resolvedImport !== publicFacade &&
-        !leafLayers.has(importerLayer) &&
-        importerConfig &&
-        !allowedLayerDependency
-      ) {
-        violations.push({
-          kind: 'layer',
-          importer,
-          importerLayer,
-          specifier,
-          imported: resolvedImport,
-          importedLayer,
-        });
-      }
+    if (importerIsLeaf && importedLayer !== importerLayer) {
+      violations.push({
+        kind: 'leaf',
+        importer,
+        importerLayer,
+        specifier,
+        imported: resolvedImport,
+        importedLayer,
+      });
+    }
 
-      if (
-        importedLayer !== importerLayer &&
-        allowedLayerDependency &&
-        importerConfig?.allowedImportPaths &&
-        !importerConfig.allowedImportPaths.includes(resolvedImport)
-      ) {
-        violations.push({
-          kind: 'path',
-          importer,
-          importerLayer,
-          specifier,
-          imported: resolvedImport,
-          importedLayer,
-        });
-      }
+    const importerConfig = layersByName.get(importerLayer);
+    const allowedLayerDependency =
+      importedLayer === importerLayer ||
+      (importerConfig?.allowedDependencies.includes(importedLayer) ?? false);
+
+    if (
+      importedLayer !== importerLayer &&
+      resolvedImport !== publicFacade &&
+      !importerIsLeaf &&
+      importerConfig &&
+      !allowedLayerDependency
+    ) {
+      violations.push({
+        kind: 'layer',
+        importer,
+        importerLayer,
+        specifier,
+        imported: resolvedImport,
+        importedLayer,
+      });
+    }
+
+    if (
+      importedLayer !== importerLayer &&
+      allowedLayerDependency &&
+      importerConfig?.allowedImportPaths &&
+      !importerConfig.allowedImportPaths.includes(resolvedImport)
+    ) {
+      violations.push({
+        kind: 'path',
+        importer,
+        importerLayer,
+        specifier,
+        imported: resolvedImport,
+        importedLayer,
+      });
     }
   }
 
   return violations;
+}
+
+export interface CrossLayerEdge {
+  from: string;
+  to: string;
+  /** Number of module references crossing from `from` to `to`. */
+  count: number;
+  /** Distinct importer files behind the edge, sorted. */
+  files: string[];
+}
+
+/**
+ * Tallies the directed cross-layer module-reference edges across the source
+ * tree. Each edge is an (importerLayer -> importedLayer) pair with the number
+ * of module references and the distinct importer files behind it. The public
+ * facade file is skipped as an importer (it intentionally re-exports every
+ * layer); same-layer and unresolved/external references are ignored. Pure
+ * function aside from the source reads, so it can be unit-tested against
+ * fixture trees.
+ */
+export function computeCrossLayerEdges(
+  repoRoot: string,
+  config: LayerConfig,
+  sourceScan = scanArchitectureSources(repoRoot, config),
+): CrossLayerEdge[] {
+  const tallies = new Map<string, { count: number; files: Set<string> }>();
+
+  for (const { importer, importerLayer, resolvedImport, importedLayer } of sourceScan.references) {
+    if (
+      normalizePath(importer) === normalizePath(config.publicFacade) ||
+      !resolvedImport ||
+      !importedLayer ||
+      importedLayer === importerLayer
+    ) {
+      continue;
+    }
+
+    const key = edgeKey(importerLayer, importedLayer);
+    const tally = tallies.get(key) ?? { count: 0, files: new Set<string>() };
+    tally.count += 1;
+    tally.files.add(importer);
+    tallies.set(key, tally);
+  }
+
+  return [...tallies.entries()]
+    .map(([key, tally]) => {
+      const [from, to] = key.split(EDGE_SEPARATOR);
+      return { from, to, count: tally.count, files: [...tally.files].sort() };
+    })
+    .sort((left, right) => left.from.localeCompare(right.from) || left.to.localeCompare(right.to));
+}
+
+/**
+ * Computes the strongly-connected components of the layer dependency graph
+ * (Tarjan's algorithm). Every configured layer is a node, so singletons are
+ * included; a component with more than one layer is a dependency cycle.
+ * Components are returned with their layers sorted, ordered by descending size.
+ */
+export function computeStronglyConnectedComponents(
+  config: LayerConfig,
+  edges: CrossLayerEdge[],
+): string[][] {
+  return stronglyConnectedComponents(
+    config.layers.map((layer) => layer.name),
+    edges,
+  );
+}
+
+function stronglyConnectedComponents(
+  nodes: string[],
+  edges: Array<{ from: string; to: string }>,
+): string[][] {
+  const adjacency = new Map<string, string[]>(nodes.map((node) => [node, []]));
+  for (const edge of edges) {
+    if (adjacency.has(edge.from) && adjacency.has(edge.to)) {
+      adjacency.get(edge.from)!.push(edge.to);
+    }
+  }
+
+  let nextIndex = 0;
+  const indices = new Map<string, number>();
+  const lowLinks = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const components: string[][] = [];
+
+  const strongConnect = (node: string): void => {
+    indices.set(node, nextIndex);
+    lowLinks.set(node, nextIndex);
+    nextIndex += 1;
+    stack.push(node);
+    onStack.add(node);
+
+    for (const next of adjacency.get(node) ?? []) {
+      if (!indices.has(next)) {
+        strongConnect(next);
+        lowLinks.set(node, Math.min(lowLinks.get(node)!, lowLinks.get(next)!));
+      } else if (onStack.has(next)) {
+        lowLinks.set(node, Math.min(lowLinks.get(node)!, indices.get(next)!));
+      }
+    }
+
+    if (lowLinks.get(node) === indices.get(node)) {
+      const component: string[] = [];
+      let member: string;
+      do {
+        member = stack.pop()!;
+        onStack.delete(member);
+        component.push(member);
+      } while (member !== node);
+      components.push(component.sort());
+    }
+  };
+
+  for (const node of nodes) {
+    if (!indices.has(node)) {
+      strongConnect(node);
+    }
+  }
+
+  return components.sort(
+    (left, right) => right.length - left.length || left[0].localeCompare(right[0]),
+  );
+}
+
+/**
+ * Given a target topological order (`tierOrder`, most-depended-upon first),
+ * returns the cross-layer edges that violate it — a lower-tier layer importing
+ * a higher-tier layer. These are order violations, not a minimum cut or an estimate of the work
+ * required to reach a DAG. Edges touching a layer absent from `tierOrder` are ignored.
+ */
+export function findBackEdges(edges: CrossLayerEdge[], tierOrder: string[]): CrossLayerEdge[] {
+  const rank = new Map(tierOrder.map((layer, index) => [layer, index]));
+  return edges.filter((edge) => {
+    const fromRank = rank.get(edge.from);
+    const toRank = rank.get(edge.to);
+    return fromRank !== undefined && toRank !== undefined && fromRank < toRank;
+  });
+}
+
+export interface ForbiddenDependencyViolation {
+  from: string;
+  to: string;
+  path: CrossLayerEdge[];
+}
+
+function findDependencyPath(
+  edgesByFrom: Map<string, CrossLayerEdge[]>,
+  from: string,
+  to: string,
+): CrossLayerEdge[] | undefined {
+  const queue: Array<{ layer: string; path: CrossLayerEdge[] }> = [{ layer: from, path: [] }];
+  const visited = new Set([from]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const edge of edgesByFrom.get(current.layer) ?? []) {
+      const path = [...current.path, edge];
+      if (edge.to === to) {
+        return path;
+      }
+      if (!visited.has(edge.to)) {
+        visited.add(edge.to);
+        queue.push({ layer: edge.to, path });
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Returns direct or transitive dependency paths that violate an explicit
+ * `forbiddenDependencies` lock.
+ */
+export function findForbiddenDependencyViolations(
+  config: LayerConfig,
+  edges: CrossLayerEdge[],
+): ForbiddenDependencyViolation[] {
+  const edgesByFrom = new Map<string, CrossLayerEdge[]>();
+  for (const edge of edges) {
+    const outgoing = edgesByFrom.get(edge.from) ?? [];
+    outgoing.push(edge);
+    edgesByFrom.set(edge.from, outgoing);
+  }
+  for (const outgoing of edgesByFrom.values()) {
+    outgoing.sort((left, right) => left.to.localeCompare(right.to));
+  }
+
+  const violations: ForbiddenDependencyViolation[] = [];
+  for (const layer of config.layers) {
+    for (const forbidden of layer.forbiddenDependencies ?? []) {
+      const path = findDependencyPath(edgesByFrom, layer.name, forbidden);
+      if (path !== undefined) {
+        violations.push({ from: layer.name, to: forbidden, path });
+      }
+    }
+  }
+  return violations;
+}
+
+export type EdgeBaseline = Record<string, number>;
+
+const EDGE_SEPARATOR = ' -> ';
+
+export function edgeKey(from: string, to: string): string {
+  return `${from}${EDGE_SEPARATOR}${to}`;
+}
+
+/** Builds a baseline mapping each cross-layer edge to its current module-reference count. */
+export function buildEdgeBaseline(edges: CrossLayerEdge[], config: LayerConfig): EdgeBaseline {
+  const layerNames = new Set(config.layers.map((layer) => layer.name));
+  const baseline: EdgeBaseline = {};
+  for (const edge of edges
+    .slice()
+    .sort((left, right) =>
+      edgeKey(left.from, left.to).localeCompare(edgeKey(right.from, right.to)),
+    )) {
+    const key = edgeKey(edge.from, edge.to);
+    if (!layerNames.has(edge.from) || !layerNames.has(edge.to)) {
+      throw new Error(`Cannot build edge baseline: edge "${key}" references an unknown layer.`);
+    }
+    baseline[key] = edge.count;
+  }
+  return baseline;
+}
+
+export interface EdgeBaselineComparison {
+  /** Edges whose import count exceeds the baseline (or are entirely new). */
+  regressions: Array<{ from: string; to: string; count: number; allowed: number }>;
+  /** Edges whose count dropped below the baseline (baseline can be lowered). */
+  improvements: Array<{ from: string; to: string; count: number; allowed: number }>;
+}
+
+/**
+ * Compares the live cross-layer edges against a committed baseline. Any edge
+ * whose count exceeds its baseline (including a brand-new edge, baseline 0) is
+ * a regression; any edge that shrank — or disappeared — is an improvement that
+ * the baseline can be lowered to capture.
+ */
+export function compareEdgesToBaseline(
+  edges: CrossLayerEdge[],
+  baseline: EdgeBaseline,
+): EdgeBaselineComparison {
+  const regressions: EdgeBaselineComparison['regressions'] = [];
+  const improvements: EdgeBaselineComparison['improvements'] = [];
+  const seen = new Set<string>();
+
+  for (const edge of edges) {
+    const key = edgeKey(edge.from, edge.to);
+    seen.add(key);
+    const allowed = baseline[key] ?? 0;
+    if (edge.count > allowed) {
+      regressions.push({ from: edge.from, to: edge.to, count: edge.count, allowed });
+    } else if (edge.count < allowed) {
+      improvements.push({ from: edge.from, to: edge.to, count: edge.count, allowed });
+    }
+  }
+
+  for (const key of Object.keys(baseline)) {
+    if (!seen.has(key) && baseline[key] > 0) {
+      const [from, to] = key.split(EDGE_SEPARATOR);
+      improvements.push({ from, to, count: 0, allowed: baseline[key] });
+    }
+  }
+
+  return { regressions, improvements };
+}
+
+/** Reads and validates the committed cross-layer edge baseline, or an empty baseline if absent. */
+export function readEdgeBaseline(repoRoot: string, config: LayerConfig): EdgeBaseline {
+  const baselinePath = path.join(repoRoot, 'architecture/edge-baseline.json');
+  if (!fs.existsSync(baselinePath)) {
+    return {};
+  }
+  const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8')) as unknown;
+  if (!baseline || typeof baseline !== 'object' || Array.isArray(baseline)) {
+    throw new Error(`${baselinePath} must contain an object mapping layer edges to import counts.`);
+  }
+
+  const layerNames = new Set(config.layers.map((layer) => layer.name));
+  for (const [key, count] of Object.entries(baseline)) {
+    const parts = key.split(EDGE_SEPARATOR);
+    if (
+      parts.length !== 2 ||
+      parts.some((layerName) => layerName.length === 0 || !layerNames.has(layerName))
+    ) {
+      throw new Error(`${baselinePath} contains invalid edge "${key}".`);
+    }
+    if (typeof count !== 'number' || !Number.isInteger(count) || count < 1) {
+      throw new Error(`${baselinePath} contains invalid import count for edge "${key}".`);
+    }
+  }
+
+  return baseline as EdgeBaseline;
+}
+
+/** Source graph diagnostics only; this does not model bundler substitutions or tree shaking. */
+export function buildArchitectureReport(
+  repoRoot: string,
+  config: LayerConfig,
+  sourceScan: ArchitectureSourceScan,
+  entrypoints: string[] = [config.publicFacade],
+) {
+  if (!sourceScan.includesFacade) {
+    throw new Error('Architecture reports require a scan with includeFacade: true.');
+  }
+  const normalizedEntrypoints = [
+    ...new Set(
+      entrypoints.map((entrypoint) =>
+        normalizePath(
+          path.relative(repoRoot, path.resolve(repoRoot, entrypoint.replace(/\\/g, '/'))),
+        ),
+      ),
+    ),
+  ];
+  const scannedFiles = new Set(sourceScan.sourceFiles);
+  const unscannedInternal = sourceScan.references.filter(
+    (reference) => reference.resolvedImport && !scannedFiles.has(reference.resolvedImport),
+  );
+  const views = Object.fromEntries(
+    (['combined', 'type', 'value', 'deferred', 'resolution'] as const).map((kind) => {
+      const references = sourceScan.references.filter(
+        (reference) => kind === 'combined' || reference.kind === kind,
+      );
+      const edges = computeCrossLayerEdges(repoRoot, config, { ...sourceScan, references });
+      const fileEdges = references.flatMap((reference) =>
+        reference.resolvedImport
+          ? [{ from: reference.importer, to: reference.resolvedImport }]
+          : [],
+      );
+      const selfImports = new Set(
+        fileEdges.filter((edge) => edge.from === edge.to).map((edge) => edge.from),
+      );
+      const fileCycles = stronglyConnectedComponents(sourceScan.sourceFiles, fileEdges).filter(
+        (component) => component.length > 1 || selfImports.has(component[0]),
+      );
+      return [
+        kind,
+        {
+          references: references.length,
+          crossLayerReferences: edges.reduce((sum, edge) => sum + edge.count, 0),
+          edges,
+          layerCycles: computeStronglyConnectedComponents(config, edges).filter(
+            (component) => component.length > 1,
+          ),
+          fileCycles,
+        },
+      ];
+    }),
+  );
+  const sourceRoots = ['src', 'packages', ...config.layers.flatMap((layer) => layer.roots)];
+  const unresolvedInternal = sourceScan.references.filter(
+    (reference) =>
+      !reference.resolvedImport &&
+      (reference.specifier.startsWith('.') ||
+        reference.specifier.startsWith('/') ||
+        reference.specifier.startsWith('#') ||
+        sourceRoots.some((root) => isWithinRoot(reference.specifier, root)) ||
+        Object.keys(config.aliases ?? {}).some(
+          (alias) => reference.specifier === alias || reference.specifier.startsWith(`${alias}/`),
+        )),
+  );
+  const unresolvedSet = new Set(unresolvedInternal);
+  const byImporter = new Map<string, ArchitectureModuleReference[]>();
+  for (const reference of sourceScan.references) {
+    const outgoing = byImporter.get(reference.importer) ?? [];
+    outgoing.push(reference);
+    byImporter.set(reference.importer, outgoing);
+  }
+  const reach = (entrypoint: string, mode: 'combined' | 'value' | 'value-and-deferred') => {
+    const files = new Set([entrypoint]);
+    const externalSpecifiers = new Set<string>();
+    const unresolvedReferences: ArchitectureModuleReference[] = [];
+    const includesKind = (reference: ModuleReference) =>
+      mode === 'combined' ||
+      reference.kind === 'value' ||
+      (mode === 'value-and-deferred' && reference.kind === 'deferred');
+    for (const file of files) {
+      for (const reference of byImporter.get(file) ?? []) {
+        if (!includesKind(reference)) {
+          continue;
+        }
+        if (reference.resolvedImport) {
+          files.add(reference.resolvedImport);
+        } else if (unresolvedSet.has(reference)) {
+          unresolvedReferences.push(reference);
+        } else {
+          externalSpecifiers.add(reference.specifier);
+        }
+      }
+    }
+    return {
+      files: [...files].sort(),
+      externalSpecifiers: [...externalSpecifiers].sort(),
+      unresolvedReferences,
+      unscannedInternal: unscannedInternal.filter(
+        (reference) => files.has(reference.importer) && includesKind(reference),
+      ),
+      computedReferences: sourceScan.computedReferences.filter(
+        (reference) => files.has(reference.importer) && includesKind(reference),
+      ),
+    };
+  };
+  for (const entrypoint of normalizedEntrypoints) {
+    if (!scannedFiles.has(entrypoint)) {
+      throw new Error(
+        `Architecture report entrypoint "${entrypoint}" is not in the checked source tree.`,
+      );
+    }
+  }
+  return {
+    schemaVersion: 1,
+    scope: {
+      sourceFiles: sourceScan.sourceFiles.length,
+      facadeIncluded: true,
+      ratchetExcludesFacade: true,
+    },
+    views,
+    unresolvedInternal,
+    unscannedInternal,
+    computedReferences: sourceScan.computedReferences,
+    entrypoints: Object.fromEntries(
+      normalizedEntrypoints.map((entrypoint) => [
+        entrypoint,
+        {
+          combined: reach(entrypoint, 'combined'),
+          value: reach(entrypoint, 'value'),
+          valueAndDeferred: reach(entrypoint, 'value-and-deferred'),
+        },
+      ]),
+    ),
+  };
 }

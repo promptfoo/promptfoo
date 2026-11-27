@@ -1,11 +1,26 @@
 {
   "publicFacade": "src/index.ts",
-  "leafLayers": ["contracts"],
+  "leafLayers": ["contracts", "validation"],
   "aliases": {
     "@app": "src/app/src",
     "@promptfoo": "src"
   },
   "ignoredRoots": ["src/__mocks__"],
+  "tierOrder": [
+    "contracts",
+    "validation",
+    "legacy-contracts",
+    "legacy-runtime",
+    "node",
+    "providers",
+    "redteam",
+    "core",
+    "view-server",
+    "cli",
+    "app",
+    "facade"
+  ],
+  "maxStronglyConnectedComponentSize": 6,
   "layers": [
     {
       "name": "facade",
@@ -15,41 +30,54 @@
     {
       "name": "app",
       "roots": ["src/app"],
-      "allowedDependencies": ["legacy-contracts", "legacy-runtime", "node", "providers", "redteam"],
+      "allowedDependencies": [
+        "contracts",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam"
+      ],
       "allowedImportPaths": [
+        "src/contracts.ts",
         "src/csv.ts",
+        "src/presentation/evalResults.ts",
+        "src/presentation/redteamConfig.ts",
+        "src/presentation/redteamMetrics.ts",
         "src/logger.ts",
+        "src/providers/bedrock/routing.ts",
         "src/providers/constants.ts",
         "src/providers/http.ts",
         "src/redteam/commands/discover.ts",
         "src/redteam/constants.ts",
         "src/redteam/constants/metadata.ts",
         "src/redteam/constants/strategies.ts",
-        "src/redteam/metrics.ts",
         "src/redteam/plugins/policy/utils.ts",
         "src/redteam/riskScoring.ts",
-        "src/redteam/sharedFrontend.ts",
         "src/redteam/types.ts",
-        "src/tracing/store.ts",
         "src/types/api/eval.ts",
         "src/types/api/modelAudit.ts",
-        "src/types/api/user.ts",
+        "src/types/configDraft.ts",
         "src/types/email.ts",
+        "src/types/evalConstants.ts",
         "src/types/index.ts",
         "src/types/modelAudit.ts",
-        "src/util/convertEvalResultsToTable.ts",
-        "src/util/database.ts",
+        "src/types/results.ts",
+        "src/types/standaloneEval.ts",
+        "src/types/tracing.ts",
         "src/util/fileExtensions.ts",
         "src/util/invariant.ts",
         "src/util/objectUtils.ts",
+        "src/util/providerResponse.ts",
         "src/util/sanitizer.ts",
         "src/util/text.ts",
+        "src/util/yamlLoad.ts",
         "src/validators/providers.ts"
       ]
     },
     {
       "name": "cli",
-      "roots": ["src/entrypoint.ts", "src/main.ts", "src/commands"],
+      "roots": ["src/entrypoint.ts", "src/localEntrypoint.ts", "src/main.ts", "src/commands"],
       "allowedDependencies": [
         "core",
         "legacy-contracts",
@@ -76,24 +104,24 @@
     {
       "name": "redteam",
       "roots": ["src/redteam"],
-      "allowedDependencies": [
-        "cli",
-        "core",
-        "legacy-contracts",
-        "legacy-runtime",
-        "node",
-        "providers",
-        "view-server"
-      ]
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "providers"]
     },
     {
       "name": "providers",
       "roots": ["src/providers"],
-      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "core",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "redteam"
+      ]
     },
     {
       "name": "node",
       "roots": [
+        "src/cache",
         "src/cache.ts",
         "src/database",
         "src/evaluate.ts",
@@ -106,24 +134,32 @@
         "src/util"
       ],
       "allowedDependencies": [
-        "cli",
+        "contracts",
         "core",
         "legacy-contracts",
         "legacy-runtime",
         "providers",
         "redteam",
-        "view-server"
+        "validation"
       ]
     },
     {
       "name": "core",
       "roots": ["src/assertions", "src/matchers", "src/prompts", "src/scheduler", "src/testCase"],
-      "allowedDependencies": ["legacy-contracts", "legacy-runtime", "node", "providers", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam",
+        "validation"
+      ]
     },
     {
       "name": "legacy-contracts",
       "roots": ["src/types", "src/validators"],
-      "allowedDependencies": ["contracts", "legacy-runtime", "node", "providers", "redteam"]
+      "allowedDependencies": ["contracts", "legacy-runtime", "providers", "redteam", "validation"]
     },
     {
       "name": "contracts",
@@ -144,7 +180,7 @@
         "src/envOverrides.ts",
         "src/envars.ts",
         "src/esm.ts",
-        "src/evaluator.ts",
+        "src/evaluator",
         "src/evaluatorHelpers.ts",
         "src/external",
         "src/feedback.ts",
@@ -159,6 +195,7 @@
         "src/onboarding.ts",
         "src/openapi",
         "src/optimizer",
+        "src/presentation",
         "src/progress",
         "src/python",
         "src/remoteGrading.ts",
@@ -173,7 +210,21 @@
         "src/updates",
         "src/version.ts"
       ],
-      "allowedDependencies": ["core", "legacy-contracts", "node", "providers", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "core",
+        "legacy-contracts",
+        "node",
+        "providers",
+        "redteam",
+        "validation"
+      ]
+    },
+    {
+      "name": "validation",
+      "roots": ["src/validation"],
+      "allowedDependencies": [],
+      "allowedExternal": []
     }
   ]
 }

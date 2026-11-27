@@ -6,7 +6,11 @@ import {
   type MultiTurnStrategy,
   type Plugin,
 } from '../../redteam/constants';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../../redteam/remoteGeneration';
 import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
@@ -40,27 +44,13 @@ export function getPluginConfigurationError(plugin: PluginWithConfig): string | 
         return 'Prompt Extraction plugin requires systemPrompt configuration';
       }
       break;
-    case 'bfla': {
-      const targetIdentifiers = config.targetIdentifiers as unknown;
-      if (
-        targetIdentifiers &&
-        (!Array.isArray(targetIdentifiers) || targetIdentifiers.length === 0)
-      ) {
-        return 'BFLA plugin targetIdentifiers must be a non-empty array when provided';
-      }
-      break;
-    }
-    case 'bola': {
-      const targetSystems = config.targetSystems as unknown;
-      if (targetSystems && (!Array.isArray(targetSystems) || targetSystems.length === 0)) {
-        return 'BOLA plugin targetSystems must be a non-empty array when provided';
-      }
-      break;
-    }
+    case 'bfla':
+    case 'bola':
     case 'ssrf': {
-      const targetUrls = config.targetUrls as unknown;
-      if (targetUrls && (!Array.isArray(targetUrls) || targetUrls.length === 0)) {
-        return 'SSRF plugin targetUrls must be a non-empty array when provided';
+      const key = { bfla: 'targetIdentifiers', bola: 'targetSystems', ssrf: 'targetUrls' }[id];
+      const value = config[key];
+      if (value && (!Array.isArray(value) || value.length === 0)) {
+        return `${id.toUpperCase()} plugin ${key} must be a non-empty array when provided`;
       }
       break;
     }
@@ -108,7 +98,6 @@ interface MultiTurnHandlerContext extends MultiTurnPromptParams {
   conversationHistory: ConversationMessage[];
   lastAssistantMessage?: ConversationMessage;
   resolvedMaxTurns: number;
-  email: string;
   effectiveGoal: string;
 }
 
@@ -117,7 +106,18 @@ const MULTI_TURN_HANDLERS: Record<MultiTurnStrategy, MultiTurnHandler> = {
   'mischievous-user': handleMischievousUserStrategy,
   crescendo: handleCrescendoLikeStrategy,
   custom: handleCrescendoLikeStrategy,
-  'jailbreak:hydra': handleHydraStrategy,
+  'jailbreak:hydra': async (ctx) =>
+    handleHydraLikeStrategy(ctx, {
+      strategyName: 'Hydra',
+      metadataPrefix: 'hydra',
+      taskId: 'hydra-decision',
+    }),
+  'jailbreak:goblin': async (ctx) =>
+    handleHydraLikeStrategy(ctx, {
+      strategyName: 'Goblin',
+      metadataPrefix: 'goblin',
+      taskId: 'goblin-decision',
+    }),
 };
 
 export async function generateMultiTurnPrompt(
@@ -146,7 +146,6 @@ export async function generateMultiTurnPrompt(
     conversationHistory,
     lastAssistantMessage: getLastAssistantMessage(conversationHistory),
     resolvedMaxTurns,
-    email: MULTI_TURN_EMAIL,
     effectiveGoal,
   });
 
@@ -240,6 +239,18 @@ function getStringMetadataValue(
   return typeof value === 'string' ? value : undefined;
 }
 
+function fetchGenerationRequest(body: Record<string, unknown>) {
+  return fetchWithRetries(
+    getRemoteGenerationUrl(),
+    {
+      method: 'POST',
+      headers: getRemoteGenerationHeaders(),
+      body: JSON.stringify(body),
+    },
+    getRequestTimeoutMs(),
+  );
+}
+
 async function handleGoatStrategy(
   ctx: MultiTurnHandlerContext,
 ): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
@@ -250,7 +261,7 @@ async function handleGoatStrategy(
     messages: ctx.conversationHistory,
     prompt: ctx.generatedPrompt,
     version: VERSION,
-    email: ctx.email,
+    email: MULTI_TURN_EMAIL,
     excludeTargetOutputFromAgenticAttackGeneration: Boolean(
       ctx.strategyConfigRecord['excludeTargetOutputFromAgenticAttackGeneration'],
     ),
@@ -259,17 +270,7 @@ async function handleGoatStrategy(
     modifiers: ctx.baseMetadata['modifiers'],
   };
 
-  const response = await fetchWithRetries(
-    getRemoteGenerationUrl(),
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(goatBody),
-    },
-    getRequestTimeoutMs(),
-  );
+  const response = await fetchGenerationRequest(goatBody);
 
   if (!response.ok) {
     throw new Error(`GOAT task failed with status ${response.status}: ${await response.text()}`);
@@ -315,17 +316,7 @@ async function handleMischievousUserStrategy(
     history: ctx.conversationHistory,
   };
 
-  const response = await fetchWithRetries(
-    getRemoteGenerationUrl(),
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(mischievousBody),
-    },
-    getRequestTimeoutMs(),
-  );
+  const response = await fetchGenerationRequest(mischievousBody);
 
   if (!response.ok) {
     throw new Error(
@@ -362,8 +353,13 @@ async function handleMischievousUserStrategy(
   };
 }
 
-async function handleHydraStrategy(
+async function handleHydraLikeStrategy(
   ctx: MultiTurnHandlerContext,
+  options: {
+    strategyName: 'Hydra' | 'Goblin';
+    metadataPrefix: 'hydra' | 'goblin';
+    taskId: 'hydra-decision' | 'goblin-decision';
+  },
 ): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
   const turnNumber = ctx.turn + 1;
   const stateful =
@@ -376,9 +372,12 @@ async function handleHydraStrategy(
     ctx.generatedPrompt ||
     `${ctx.pluginId}-${ctx.strategyId}`;
 
-  const hydraTestRunId =
-    typeof ctx.baseMetadata['hydraTestRunId'] === 'string'
-      ? (ctx.baseMetadata['hydraTestRunId'] as string)
+  const testRunIdMetadataKey = `${options.metadataPrefix}TestRunId`;
+  const scanIdMetadataKey = `${options.metadataPrefix}ScanId`;
+
+  const testRunId =
+    typeof ctx.baseMetadata[testRunIdMetadataKey] === 'string'
+      ? (ctx.baseMetadata[testRunIdMetadataKey] as string)
       : sha256(
           JSON.stringify({
             pluginId: ctx.pluginId,
@@ -387,12 +386,12 @@ async function handleHydraStrategy(
           }),
         ).slice(0, 32);
 
-  const hydraScanId =
-    typeof ctx.baseMetadata['hydraScanId'] === 'string'
-      ? (ctx.baseMetadata['hydraScanId'] as string)
+  const scanId =
+    typeof ctx.baseMetadata[scanIdMetadataKey] === 'string'
+      ? (ctx.baseMetadata[scanIdMetadataKey] as string)
       : typeof ctx.baseMetadata['scanId'] === 'string'
         ? (ctx.baseMetadata['scanId'] as string)
-        : hydraTestRunId;
+        : testRunId;
 
   let modifiers: Record<string, string> | undefined;
   if (ctx.baseMetadata['modifiers'] && typeof ctx.baseMetadata['modifiers'] === 'object') {
@@ -405,9 +404,9 @@ async function handleHydraStrategy(
   }
 
   const innerRequest = {
-    task: 'hydra-decision',
-    testRunId: hydraTestRunId,
-    scanId: hydraScanId,
+    task: options.taskId,
+    testRunId,
+    scanId,
     turn: turnNumber,
     goal: ctx.effectiveGoal,
     purpose: ctx.purpose ?? undefined,
@@ -420,29 +419,21 @@ async function handleHydraStrategy(
     ),
   };
 
-  const hydraBody = {
-    task: 'hydra-decision',
+  const requestBody = {
+    task: options.taskId,
     prompt: JSON.stringify(innerRequest),
     jsonOnly: true,
     preferSmallModel: false,
     step: `turn-${turnNumber}`,
-    email: ctx.email,
+    email: MULTI_TURN_EMAIL,
   };
 
-  const response = await fetchWithRetries(
-    getRemoteGenerationUrl(),
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(hydraBody),
-    },
-    getRequestTimeoutMs(),
-  );
+  const response = await fetchGenerationRequest(requestBody);
 
   if (!response.ok) {
-    throw new Error(`Hydra task failed with status ${response.status}: ${await response.text()}`);
+    throw new Error(
+      `${options.strategyName} task failed with status ${response.status}: ${await response.text()}`,
+    );
   }
 
   const data = await response.json();
@@ -457,7 +448,7 @@ async function handleHydraStrategy(
           : '';
 
   if (!nextPrompt) {
-    throw new Error('Hydra task did not return a valid next prompt');
+    throw new Error(`${options.strategyName} task did not return a valid next prompt`);
   }
 
   const done = nextPrompt.trim() === '###STOP###' || turnNumber >= ctx.resolvedMaxTurns;
@@ -468,9 +459,9 @@ async function handleHydraStrategy(
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
-      hydra: {
-        testRunId: hydraTestRunId,
-        scanId: hydraScanId,
+      [options.metadataPrefix]: {
+        testRunId,
+        scanId,
         stateful,
         tokenUsage: data?.tokenUsage,
       },
@@ -516,17 +507,7 @@ async function handleCrescendoLikeStrategy(
     step: `round-${roundNumber}`,
   };
 
-  const response = await fetchWithRetries(
-    getRemoteGenerationUrl(),
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(providerRequest),
-    },
-    getRequestTimeoutMs(),
-  );
+  const response = await fetchGenerationRequest(providerRequest);
 
   if (!response.ok) {
     throw new Error(

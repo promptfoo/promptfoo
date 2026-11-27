@@ -23,7 +23,7 @@ These attacks can be particularly effective because:
 
 - The LLM treats retrieved content as authoritative, and the content may occupy a privileged position in the context window
 - Document embeddings may not capture semantic attacks
-- Traditional content filtering may miss sophisticated attacks
+- Content filters may miss instructions embedded in retrieved documents
 
 ## Usage
 
@@ -46,6 +46,12 @@ promptfoo redteam poison document1.txt document2.txt --goal "Extract API keys"
 This will create poisoned versions of your documents that attempt to exploit common RAG vulnerabilities.
 
 Note that `goal` is optional, but can be used to specify the type of poisoning you want to test.
+
+The poison command sends the complete document contents, requested goal, and account email to the
+configured remote-generation endpoint. It has no local fallback. Setting either
+`PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or
+`PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` prevents the command from sending the document;
+the command exits with an error instead.
 
 You can also use folders or globs to target multiple documents:
 

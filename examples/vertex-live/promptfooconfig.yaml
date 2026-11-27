@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Grade Vertex Live response transcripts
+
+prompts:
+  - 'Answer briefly: {{question}}'
+
+providers:
+  - vertex:live:gemini-3.8-live
+
+defaultTest:
+  assert:
+    - type: icontains
+      value: '{{answer}}'
+      transform: output.text
+
+tests:
+  - vars:
+      question: What is the capital of France?
+      answer: Paris
+  - vars:
+      question: Which planet is known as the Red Planet?
+      answer: Mars

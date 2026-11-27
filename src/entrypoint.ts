@@ -4,8 +4,8 @@
  * This file intentionally has NO dependencies to ensure the Node.js version
  * check runs before any module loading that might fail on older versions.
  *
- * Some dependencies (like string-width via ora) use ES2024 features (e.g., RegExp /v flag)
- * that cause cryptic syntax errors on Node.js < 20. By checking the version first,
+ * Some dependencies (like string-width via ora) use modern language features (e.g., RegExp /v flag)
+ * that cause cryptic syntax errors on unsupported Node.js versions. By checking the version first,
  * we can provide a helpful error message instead.
  */
 import * as path from 'node:path';
@@ -27,9 +27,17 @@ type ParseNodeEngineVersionOptions = {
 declare const __PROMPTFOO_NODE_ENGINE_RANGE__: string | undefined;
 declare const __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__: NodeEngineComparator[][] | undefined;
 
-const fallbackNodeEngineRange = '>=20.0.0';
+const fallbackNodeEngineRange = '^22.22.2 || ^24.15.0 || >=26';
 const fallbackNodeEngineComparatorSets: NodeEngineComparator[][] = [
-  [{ operator: '>=', version: '20.0.0' }],
+  [
+    { operator: '>=', version: '22.22.2' },
+    { operator: '<', version: '23.0.0' },
+  ],
+  [
+    { operator: '>=', version: '24.15.0' },
+    { operator: '<', version: '25.0.0' },
+  ],
+  [{ operator: '>=', version: '26.0.0' }],
 ];
 
 const nodeEngineRange =
@@ -40,8 +48,6 @@ const nodeEngineComparatorSets =
   typeof __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ === 'undefined'
     ? fallbackNodeEngineComparatorSets
     : __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__;
-const deprecatedNodeMajorVersions = new Set([20]);
-
 function parseNodeEngineVersion(
   version: string,
   options: ParseNodeEngineVersionOptions = {},
@@ -65,16 +71,8 @@ function compareNodeEngineVersion(
   left: NodeEngineVersionTuple,
   right: NodeEngineVersionTuple,
 ): number {
-  for (let index = 0; index < left.length; index++) {
-    if (left[index] > right[index]) {
-      return 1;
-    }
-    if (left[index] < right[index]) {
-      return -1;
-    }
-  }
-
-  return 0;
+  const index = left.findIndex((part, index) => part !== right[index]);
+  return index === -1 ? 0 : left[index] > right[index] ? 1 : -1;
 }
 
 function satisfiesNodeEngineComparator(
@@ -109,21 +107,10 @@ function isSupportedNodeEngineVersion(currentVersion: string): boolean | null {
     return null;
   }
 
-  return nodeEngineComparatorSets.some(
-    (comparatorSet) =>
-      comparatorSet.length === 0 ||
-      comparatorSet.every((comparator) =>
-        satisfiesNodeEngineComparator(parsedCurrentVersion, comparator),
-      ),
-  );
-}
-
-function shouldWarnForDeprecatedNodeVersion(currentVersion: string): boolean {
-  const parsedCurrentVersion = parseNodeEngineVersion(currentVersion);
-  return (
-    parsedCurrentVersion !== null &&
-    isSupportedNodeEngineVersion(currentVersion) === true &&
-    deprecatedNodeMajorVersions.has(parsedCurrentVersion[0])
+  return nodeEngineComparatorSets.some((comparatorSet) =>
+    comparatorSet.every((comparator) =>
+      satisfiesNodeEngineComparator(parsedCurrentVersion, comparator),
+    ),
   );
 }
 
@@ -147,17 +134,6 @@ function formatMalformedNodeVersionMessage(currentVersion: string): string {
   ].join('\n');
 }
 
-function formatDeprecatedNodeVersionMessage(currentVersion: string): string {
-  return [
-    '\x1b[33mWarning: Node.js 20 has reached end-of-life and is deprecated in promptfoo.',
-    '',
-    `Detected: ${currentVersion}`,
-    'Recommended: Node.js >=22.22.0 (Node.js 24 LTS preferred)',
-    '',
-    'Upgrade your Node.js runtime to avoid disruption in a future promptfoo release.\x1b[0m',
-  ].join('\n');
-}
-
 // Skip version check for alternative runtimes (Bun, Deno) - they support modern JS features
 const isBun = typeof (globalThis as Record<string, unknown>).Bun !== 'undefined';
 const isDeno = typeof (globalThis as Record<string, unknown>).Deno !== 'undefined';
@@ -171,9 +147,6 @@ if (!isBun && !isDeno) {
   if (!isSupportedVersion) {
     console.error(formatUnsupportedNodeVersionMessage(process.version));
     process.exit(1);
-  }
-  if (shouldWarnForDeprecatedNodeVersion(process.version)) {
-    console.warn(formatDeprecatedNodeVersionMessage(process.version));
   }
 }
 

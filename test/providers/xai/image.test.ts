@@ -3,6 +3,16 @@ import { callOpenAiImageApi } from '../../../src/providers/openai/image';
 import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
+
+const createImageResponse = () => ({
+  created: 1234567890,
+  data: [
+    {
+      url: 'https://example.com/image.jpg',
+    },
+  ],
+});
 
 vi.mock('../../../src/logger');
 vi.mock('../../../src/providers/openai/image', async () => {
@@ -17,43 +27,16 @@ describe('XAI Image Provider', () => {
   const mockApiKey = 'test-api-key';
   const mockPrompt = 'test prompt';
 
-  const mockSuccessResponse = {
-    data: {
-      created: 1234567890,
-      data: [
-        {
-          url: 'https://example.com/image.jpg',
-        },
-      ],
-    },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  };
+  const mockSuccessResponse = createMockFetchResponse(createImageResponse());
 
-  const mockBase64Response = {
-    data: {
-      created: 1234567890,
-      data: [{ b64_json: 'base64EncodedImageData' }],
-    },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  };
+  const mockBase64Response = createMockFetchResponse({
+    created: 1234567890,
+    data: [{ b64_json: 'base64EncodedImageData' }],
+  });
 
-  const mockCachedResponse = {
-    data: {
-      created: 1234567890,
-      data: [
-        {
-          url: 'https://example.com/image.jpg',
-        },
-      ],
-    },
+  const mockCachedResponse = createMockFetchResponse(createImageResponse(), {
     cached: true,
-    status: 200,
-    statusText: 'OK',
-  };
+  });
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -200,6 +183,68 @@ describe('XAI Image Provider', () => {
         getRequestTimeoutMs(),
       );
       expect(result.cost).toBe(0.05);
+    });
+
+    it('prices grok-imagine-image-2.0 by quality and resolution tier', async () => {
+      // Tiers from xAI /v1/models/grok-imagine-image-2.0 `pricing`, verified live
+      // 2026-08-31: low/1k $0.04, low/2k $0.06, medium/1k $0.06, medium/2k $0.08.
+      const cases: {
+        quality?: 'low' | 'medium' | 'auto';
+        resolution?: '1k' | '2k';
+        expected: number;
+      }[] = [
+        { expected: 0.04 },
+        { quality: 'auto', resolution: '1k', expected: 0.04 },
+        { quality: 'low', resolution: '1k', expected: 0.04 },
+        { quality: 'low', resolution: '2k', expected: 0.06 },
+        { quality: 'medium', resolution: '1k', expected: 0.06 },
+        { quality: 'medium', resolution: '2k', expected: 0.08 },
+      ];
+
+      for (const { quality, resolution, expected } of cases) {
+        const provider = new XAIImageProvider('grok-imagine-image-2.0', {
+          config: { apiKey: mockApiKey, quality, resolution },
+        });
+
+        const result = await provider.callApi('Generate a cat');
+
+        expect(callOpenAiImageApi).toHaveBeenCalledWith(
+          'https://api.x.ai/v1/images/generations',
+          expect.objectContaining({ model: 'grok-imagine-image-2.0' }),
+          expect.any(Object),
+          getRequestTimeoutMs(),
+        );
+        expect(result.cost).toBeCloseTo(expected, 10);
+      }
+    });
+
+    it('does not price grok-imagine-image-2.0 at the quality-model fallback rate', async () => {
+      // Regression guard: before grok-imagine-image-2.0 was indexed it fell through
+      // the "unknown grok-imagine-* slug" branch and was billed at $0.05/$0.07.
+      const provider = new XAIImageProvider('grok-imagine-image-2.0', {
+        config: { apiKey: mockApiKey, quality: 'low', resolution: '1k' },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      expect(result.cost).not.toBeCloseTo(0.05, 10);
+      expect(result.cost).toBeCloseTo(0.04, 10);
+    });
+
+    it('prices auto-quality grok-imagine-image-2.0 edits at the medium output tier', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-2.0', {
+        config: {
+          apiKey: mockApiKey,
+          quality: 'auto',
+          resolution: '1k',
+          image: { url: 'https://example.com/source.png' },
+        },
+      });
+
+      const result = await provider.callApi('Edit the cat');
+
+      // Auto currently serves medium for edits: $0.06 output + $0.01 input image.
+      expect(result.cost).toBeCloseTo(0.07, 10);
     });
 
     it('routes Grok Imagine quality aliases to the canonical model slug', async () => {
@@ -400,17 +445,14 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey, n: 2 },
       });
 
-      vi.mocked(callOpenAiImageApi).mockResolvedValue({
-        data: {
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(
+        createMockFetchResponse({
           data: [
             { url: 'https://example.com/image-1.jpg' },
             { url: 'https://example.com/image-2.jpg' },
           ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const result = await provider.callApi('test prompt');
 
@@ -537,12 +579,10 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      const errorResponse = {
-        data: { error: { message: 'API error message', type: 'api_error', code: 'error_code' } },
-        cached: false,
-        status: 400,
-        statusText: 'Bad Request',
-      };
+      const errorResponse = createMockFetchResponse(
+        { error: { message: 'API error message', type: 'api_error', code: 'error_code' } },
+        { status: 400, statusText: 'Bad Request' },
+      );
 
       vi.mocked(callOpenAiImageApi).mockResolvedValue(errorResponse);
 
@@ -557,12 +597,12 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      vi.mocked(callOpenAiImageApi).mockResolvedValue({
-        data: 'Error message',
-        cached: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      });
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(
+        createMockFetchResponse('Error message', {
+          status: 500,
+          statusText: 'Internal Server Error',
+        }),
+      );
 
       const result = await provider.callApi('test prompt');
 
@@ -588,12 +628,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      vi.mocked(callOpenAiImageApi).mockResolvedValue({
-        data: { data: [{}] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(createMockFetchResponse({ data: [{}] }));
 
       const result = await provider.callApi('test prompt');
 
@@ -606,12 +641,12 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      vi.mocked(callOpenAiImageApi).mockResolvedValue({
-        data: { error: 'Invalid request' },
-        cached: false,
-        status: 400,
-        statusText: 'Bad Request',
-      });
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(
+        createMockFetchResponse(
+          { error: 'Invalid request' },
+          { status: 400, statusText: 'Bad Request' },
+        ),
+      );
 
       const result = await provider.callApi(mockPrompt);
       expect(result.error).toMatch(/API error: 400 Bad Request/);
@@ -653,12 +688,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey, response_format: 'b64_json' },
       });
 
-      vi.mocked(callOpenAiImageApi).mockResolvedValue({
-        data: { data: [{}] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(createMockFetchResponse({ data: [{}] }));
 
       const result = await provider.callApi('test prompt');
 
@@ -834,19 +864,14 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey, n: 3 },
       });
 
-      const multiImageResponse = {
-        data: {
-          created: 1234567890,
-          data: [
-            { url: 'https://example.com/image1.jpg' },
-            { url: 'https://example.com/image2.jpg' },
-            { url: 'https://example.com/image3.jpg' },
-          ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const multiImageResponse = createMockFetchResponse({
+        created: 1234567890,
+        data: [
+          { url: 'https://example.com/image1.jpg' },
+          { url: 'https://example.com/image2.jpg' },
+          { url: 'https://example.com/image3.jpg' },
+        ],
+      });
 
       vi.mocked(callOpenAiImageApi).mockResolvedValue(multiImageResponse);
 

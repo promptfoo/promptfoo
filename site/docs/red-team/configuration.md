@@ -38,6 +38,33 @@ shared.
 promptfoo redteam run --tag ci.run-id="$CI_RUN_ID" --tag git.sha="$GIT_SHA"
 ```
 
+### Generation token accounting
+
+Generated configurations include `metadata.generation`, which identifies when the test suite was
+created and, when available, records the model requests and tokens used to create it:
+
+```yaml
+metadata:
+  generation:
+    id: 4d2f4d7f-9b99-4a51-85c5-7fc5f6c03f88
+    generatedAt: '2026-08-17T12:00:00.000Z'
+    tokenUsage:
+      total: 1200
+      prompt: 900
+      completion: 300
+      numRequests: 4
+```
+
+Generation usage includes system-purpose extraction, entity extraction, attack-goal extraction,
+and test generation. A failed request still increments `numRequests` when its token count is
+unavailable. Reusing a complete cached response adds neither requests nor newly consumed tokens;
+provider-side prompt caching during an actual model request still counts that request.
+
+`promptfoo redteam run` attributes generation tokens to the evaluation only when it generated the
+suite during that run. Running an existing generated suite does not charge its historical
+generation usage again. `metadata.generationAccounting` is reserved for internally persisted
+current-run accounting and should not be added to reusable configurations.
+
 ## Configuration Structure
 
 The red team configuration uses the following YAML structure:
@@ -52,7 +79,7 @@ targets:
       message: 'The user message to process'
 
 redteam:
-  plugins: Array<string | { id: string, numTests?: number, config?: Record<string, any> }>
+  plugins: Array<string | { id: string, numTests?: number, severity?: "critical" | "high" | "medium" | "low" | "informational", config?: Record<string, any> }>
   strategies: Array<string | { id: string }>
   numTests: number
   maxCharsPerMessage: number
@@ -90,10 +117,11 @@ For multi-input testing, define `inputs` on the target/provider rather than unde
 
 ### Framework Filtering
 
-Use the optional `redteam.frameworks` array when you only care about a subset of the built-in compliance programs. This filters which frameworks appear in the generated report, `promptfoo redteam run`, and future automation surfaces.
+Use `redteam.frameworks` to filter the frameworks shown in the report and its framework exports. This does not select tests. Use `redteam.plugins` to choose what to run.
 
 Examples of allowed framework IDs:
 
+- `aiuc:1`
 - `mitre:atlas`
 - `nist:ai:measure`
 - `owasp:api`
@@ -337,7 +365,7 @@ If `redteam.maxCharsPerMessage` is set, it applies to every plugin and strategy 
 
 ### Plugins
 
-[Plugins](/docs/red-team/plugins/) are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the red team system.
+Specify [plugins](/docs/red-team/plugins/) as an array of plugin IDs or objects with `id` and optional `numTests`, `severity`, and `config` properties. Use a supported plugin ID.
 
 See [Plugins](/docs/red-team/plugins/) for more information.
 
@@ -346,7 +374,7 @@ See [Plugins](/docs/red-team/plugins/) for more information.
 - As a string: `"plugin-id"`
 - As an object: `{ id: "plugin-id", numTests: 10 }`
 
-If `numTests` is not specified for a plugin, it will use the global `numTests` value.
+Plugins use the global `numTests` value unless an override is set. The web setup preserves per-plugin settings through import, editing, and export. Per-plugin counts must be positive integers; invalid stored overrides are omitted on export or run so the global count applies. Workload estimates expand plugin collections and aliases before applying their counts.
 
 #### Available Plugins
 
@@ -398,6 +426,50 @@ plugins:
 ### Standards
 
 Promptfoo supports several preset configurations based on common security frameworks and standards.
+
+#### AIUC-1
+
+Select **AIUC-1** under **Plugins → Presets** in scan setup. In YAML, use `aiuc:1` for the whole preset or select individual controls.
+
+```yaml
+redteam:
+  frameworks: [aiuc:1] # Report filter
+  plugins: [aiuc:1] # Or select controls, e.g. [aiuc:1:a009, aiuc:1:d004]
+  strategies: [basic, jailbreak:meta, crescendo]
+```
+
+A009 through E018 are the five [third-party evaluation controls](https://standard.aiuc-1.com/evidence/third-party-evals). [F001](https://standard.aiuc-1.com/society/prevent-ai-cyber-misuse) and [F002](https://standard.aiuc-1.com/society/prevent-catastrophic-misuse) are Society controls. Their plugins test how the target responds to misuse attempts. They don't verify provider documentation or monitoring. Running the preset doesn't establish AIUC-1 certification.
+
+| Control                  | Plugin alias  | What the preset tests                                                                          |
+| ------------------------ | ------------- | ---------------------------------------------------------------------------------------------- |
+| A009 Data and privacy    | `aiuc:1:a009` | PII, access, cross-session and system prompt leaks, exfiltration, copyright and imitation      |
+| B001 Security            | `aiuc:1:b001` | Hijacking, indirect prompt injection, object and function authorization, coding agent security |
+| C010 Safety              | `aiuc:1:c010` | Harmful content, specialized advice, bias and teen safety                                      |
+| D004 Reliability         | `aiuc:1:d004` | Hallucinations, unverifiable claims and RAG source attribution. Tool execution is untested.    |
+| E018 Accountability      | None          | No built-in AI disclosure test yet. Reported as untested.                                      |
+| F001 Cyber misuse        | `aiuc:1:f001` | Cybercrime and malicious code                                                                  |
+| F002 Catastrophic misuse | `aiuc:1:f002` | Chemical, biological and indiscriminate weapons misuse                                         |
+
+The preset adds no strategies of its own. For a small first run, try `promptfoo redteam generate --plugins aiuc:1:d004 --strategies basic -n 1`. This requests three tests, one per reliability plugin. Some plugins, including RAG source attribution, require remote generation.
+
+All three D004 plugins can pass even if an agent calls a tool with the wrong arguments. The report and both exports mark tool execution as untested.
+
+For A009, set `config.systemPrompt` on [prompt extraction](/docs/red-team/plugins/prompt-extraction/) to the instructions you want to check for leaks. [Data exfiltration](/docs/red-team/plugins/data-exfil/) needs a browsing agent and Cloud tracking.
+
+All 17 B001 plugins require remote generation, and 13 assume a [coding agent working in a repository](/docs/red-team/plugins/coding-agent/). With remote generation disabled, `promptfoo redteam generate --plugins aiuc:1:b001 --strategies basic` warns and can exit 0 with no tests. Add `--strict` in CI to exit 1 in that case.
+
+For [indirect prompt injection](/docs/red-team/plugins/indirect-prompt-injection/), specify the variable that holds untrusted content. Without it, scan setup requests configuration and CLI generation warns and skips that plugin.
+
+```yaml
+redteam:
+  plugins:
+    - aiuc:1:b001
+    - id: indirect-prompt-injection
+      config:
+        indirectInjectionVar: document # Must match your prompt's variable
+```
+
+An explicit plugin overrides the preset entry instead of running twice.
 
 #### NIST AI Risk Management Framework (AI RMF)
 
@@ -601,7 +673,7 @@ The severity levels affect:
 - Issue prioritization in vulnerability tables
 - Dashboard statistics and metrics
 
-See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/constants.ts#L553) for a list of default severity levels.
+See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/constants/metadata.ts#L504) for a list of default severity levels.
 
 ### Strategies
 
@@ -1157,6 +1229,8 @@ The `redteam.yaml` file contains a metadata section with a configHash value at t
 
 1. Do not modify or remove the metadata section
 2. Keep a backup of your custom tests
+
+Configuration fingerprints use SHA-256 so cache checks work when the crypto provider rejects MD5. Outputs with older MD5 fingerprints regenerate on the next generation run; back up custom tests before upgrading.
 
 :::
 

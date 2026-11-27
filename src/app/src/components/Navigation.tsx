@@ -13,7 +13,7 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES, MODEL_AUDIT_ROUTES, REDTEAM_ROUTES, ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { Info, Settings } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router';
 import ApiSettingsModal from './ApiSettingsModal';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
@@ -21,13 +21,16 @@ import ThemeSelector from './ThemeSelector';
 
 const LEGACY_MODEL_AUDIT_HISTORY_ROUTE = `${MODEL_AUDIT_ROUTES.ROOT}/history`;
 
-function isModelAuditResultPath(pathname: string) {
-  return (
-    pathname === MODEL_AUDIT_ROUTES.ROOT ||
-    (pathname.startsWith(`${MODEL_AUDIT_ROUTES.ROOT}/`) &&
-      !pathname.startsWith(MODEL_AUDIT_ROUTES.SETUP) &&
-      !pathname.startsWith(LEGACY_MODEL_AUDIT_HISTORY_ROUTE))
-  );
+function isNavLinkActive(href: string, pathname: string) {
+  if (href === MODEL_AUDIT_ROUTES.ROOT) {
+    return (
+      pathname === href ||
+      (pathname.startsWith(`${href}/`) &&
+        !pathname.startsWith(MODEL_AUDIT_ROUTES.SETUP) &&
+        !pathname.startsWith(LEGACY_MODEL_AUDIT_HISTORY_ROUTE))
+    );
+  }
+  return pathname.startsWith(href);
 }
 
 interface NavLinkProps {
@@ -38,17 +41,12 @@ interface NavLinkProps {
 function NavLink({ href, label }: NavLinkProps) {
   const location = useLocation();
 
-  // Special handling for Model Audit to activate on both /model-audit and /model-audit/:id
-  let isActive: boolean;
-  if (href === MODEL_AUDIT_ROUTES.ROOT) {
-    isActive = isModelAuditResultPath(location.pathname);
-  } else {
-    isActive = location.pathname.startsWith(href);
-  }
+  const isActive = isNavLinkActive(href, location.pathname);
 
   return (
     <Link
       to={href}
+      aria-current={isActive ? 'page' : undefined}
       className={cn(
         'inline-flex h-11 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors sm:h-8',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -72,13 +70,12 @@ interface NavDropdownProps {
   label: string;
   compactLabel?: string;
   items: MenuItem[];
-  isActiveCheck: (pathname: string) => boolean;
   className?: string;
 }
 
-function NavDropdown({ label, compactLabel, items, isActiveCheck, className }: NavDropdownProps) {
+function NavDropdown({ label, compactLabel, items, className }: NavDropdownProps) {
   const location = useLocation();
-  const isActive = isActiveCheck(location.pathname);
+  const isActive = items.some((item) => isNavLinkActive(item.href, location.pathname));
 
   return (
     <NavigationMenuItem className={className}>
@@ -203,49 +200,26 @@ export default function Navigation() {
 
   return (
     <>
-      <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
+      <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card">
         <div className="flex h-14 min-w-0 items-center justify-between gap-2 px-3 sm:px-4">
           {/* Left section: Logo and Navigation */}
           <div className="flex min-w-0 items-center gap-2 sm:gap-6">
             <Logo />
             <NavigationMenu>
               <NavigationMenuList className="gap-1">
-                <NavDropdown
-                  label="New"
-                  items={createMenuItems}
-                  isActiveCheck={(pathname) =>
-                    [ROUTES.SETUP, REDTEAM_ROUTES.SETUP, MODEL_AUDIT_ROUTES.SETUP].some((route) =>
-                      pathname.startsWith(route),
-                    )
-                  }
-                />
-                <NavDropdown
-                  label="View Results"
-                  compactLabel="Results"
-                  items={resultsMenuItems}
-                  isActiveCheck={(pathname) =>
-                    [EVAL_ROUTES.ROOT, EVAL_ROUTES.LIST, REDTEAM_ROUTES.REPORTS, ROUTES.MEDIA].some(
-                      (route) => pathname.startsWith(route),
-                    )
-                  }
-                />
+                <NavDropdown label="New" items={createMenuItems} />
+                <NavDropdown label="View Results" compactLabel="Results" items={resultsMenuItems} />
                 <NavDropdown
                   label="Browse"
                   items={browseMenuItems}
                   className="hidden md:block lg:hidden"
-                  isActiveCheck={(pathname) =>
-                    [ROUTES.PROMPTS, ROUTES.DATASETS, ROUTES.HISTORY].some((route) =>
-                      pathname.startsWith(route),
-                    ) || isModelAuditResultPath(pathname)
-                  }
                 />
               </NavigationMenuList>
             </NavigationMenu>
             <nav className="hidden items-center gap-1 lg:flex">
-              <NavLink href={MODEL_AUDIT_ROUTES.ROOT} label="Model Audit" />
-              <NavLink href={ROUTES.PROMPTS} label="Prompts" />
-              <NavLink href={ROUTES.DATASETS} label="Datasets" />
-              <NavLink href={ROUTES.HISTORY} label="History" />
+              {browseMenuItems.map(({ href, label }) => (
+                <NavLink key={href} href={href} label={label} />
+              ))}
             </nav>
           </div>
 

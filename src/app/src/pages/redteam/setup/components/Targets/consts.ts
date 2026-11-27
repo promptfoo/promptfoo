@@ -1,17 +1,5 @@
 import dedent from 'dedent';
 
-export const AGENT_FRAMEWORKS = [
-  'langchain',
-  'autogen',
-  'crewai',
-  'llamaindex',
-  'langgraph',
-  'openai-agents-sdk',
-  'pydantic-ai',
-  'google-adk',
-  'generic-agent',
-];
-
 export const AGENT_TEMPLATE = `import os
 
 """

@@ -5,17 +5,11 @@ prompts:
   - '{{message}}'
 
 providers:
-  # Reasoning models - specialized for complex problems
-  - id: mistral:magistral-medium-latest
-    label: magistral-medium
+  # Enable reasoning for this provider
+  - id: mistral:mistral-medium-3-5
+    label: mistral-medium-3-5
     config:
-      temperature: 0.7
-      top_p: 0.95
-      max_tokens: 40960
-
-  - id: mistral:magistral-small-latest
-    label: magistral-small
-    config:
+      reasoning_effort: high
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960
@@ -41,7 +35,8 @@ defaultTest:
   options:
     # Use Mistral Large for grading and Mistral embeddings for similarity
     provider:
-      id: mistral:mistral-large-latest
+      text:
+        id: mistral:mistral-large-latest
       embedding:
         id: mistral:embedding:mistral-embed
 
@@ -68,10 +63,10 @@ tests:
       - type: contains
         value: paint
 
-  # Reasoning scenarios - where Magistral models should excel
+  # Reasoning scenarios
   - description: Mathematical reasoning
     vars:
-      message: 'Solve this step by step: If a pizza has 8 slices and you eat 3 slices, then your friend eats twice as many slices as you did, how many slices are left?'
+      message: 'Solve this step by step: If a pizza has 8 slices and you eat 3 slices, then your friend eats 3 more slices, how many slices are left?'
     assert:
       - type: contains
         value: '2'

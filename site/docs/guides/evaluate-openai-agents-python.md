@@ -14,13 +14,15 @@ The built-in [`openai:agents:*` provider](/docs/providers/openai-agents) is for 
 
 ## Quick Start
 
+The example uses OpenAI Agents SDK 0.22.x and requires Python 3.10 or later. The sandbox and skill scenarios run local shell commands and require macOS/Linux or WSL.
+
 ```bash
 npx promptfoo@latest init --example openai-agents
 cd openai-agents
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 export OPENAI_API_KEY=your_api_key_here
 
@@ -28,6 +30,7 @@ export OPENAI_API_KEY=your_api_key_here
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 
 # Optional: also emit a provider-level Python OpenTelemetry span
+python -m pip install "opentelemetry-api>=1.44,<2" "opentelemetry-sdk>=1.44,<2" "opentelemetry-exporter-otlp-proto-http>=1.44,<2"
 PROMPTFOO_ENABLE_OTEL=true npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 npx promptfoo@latest view
 ```
@@ -35,7 +38,7 @@ npx promptfoo@latest view
 ## What The Example Covers
 
 - multi-turn execution over a persistent `SQLiteSession`
-- SDK 0.14 `SandboxAgent` execution over a staged Unix-local Python workspace
+- SDK `SandboxAgent` execution over a staged Unix-local Python workspace
 - local-shell skill mounting with `ShellTool(environment={"type": "local", "skills": [...]})`
 - specialist handoffs between a triage agent, an FAQ agent, and a seat-booking agent
 - Promptfoo trace ingestion of the SDK's internal spans
@@ -56,7 +59,7 @@ If you skip this exporter, Promptfoo will not see the SDK's tool and handoff spa
 
 If you also enable Promptfoo's Python OpenTelemetry wrapper instrumentation with `PROMPTFOO_ENABLE_OTEL=true`, the example will emit a provider-level Python span as well. The custom SDK spans will inherit that active OpenTelemetry span as their parent. The example config accepts both OTLP JSON and OTLP/protobuf because the SDK bridge emits JSON while the wrapper exporter uses protobuf by default.
 
-SDK 0.14 adds custom spans for sandbox lifecycle work, and the SandboxAgent's shell tool emits `exec_command` function-tool spans. The example bridge maps SDK custom spans into normal OTLP attributes such as `sandbox.operation`, `command`, and `process.exit.code`, while Promptfoo normalizes OpenAI Agents `exec_command` tool spans as command trajectory steps. The same mapping also exposes command spans emitted by the SDK's experimental Codex tool as `command` and `codex.command`.
+The SDK emits custom spans for sandbox lifecycle work, and the SandboxAgent's shell tool emits `exec_command` function-tool spans. The example bridge maps SDK custom spans into normal OTLP attributes such as `sandbox.operation`, `command`, and `process.exit.code`, while Promptfoo normalizes OpenAI Agents `exec_command` tool spans as command trajectory steps. The same mapping also exposes command spans emitted by the SDK's experimental Codex tool as `command` and `codex.command`.
 
 ## Assertion Pattern
 
@@ -263,7 +266,7 @@ agent = Agent(
 
 Evaluate that agent through the same Python provider pattern. The example tracing bridge exposes Codex command execution spans as `command` and `codex.command`, so Promptfoo's trajectory assertions can verify that Codex actually inspected files or ran commands.
 
-If Codex itself is the system under test, prefer Promptfoo's dedicated [`openai:codex-sdk`](/docs/providers/openai-codex-sdk) or [`openai:codex-app-server`](/docs/providers/openai-codex-app-server) providers. The app-server provider supports `approvals_reviewer: auto_review` (`guardian_subagent` remains a legacy alias); the Python `openai-agents` SDK 0.14.1 package does not expose a public automatic-review API.
+If Codex itself is the system under test, prefer Promptfoo's dedicated [`openai:codex-sdk`](/docs/providers/openai-codex-sdk) or [`openai:codex-app-server`](/docs/providers/openai-codex-app-server) providers. The app-server provider supports `approvals_reviewer: auto_review` (`guardian_subagent` remains a legacy alias); the Python `openai-agents` SDK 0.22.3 package does not expose a public automatic-review API.
 
 ## Red Team The Agent
 

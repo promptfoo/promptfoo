@@ -4,6 +4,8 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'agentic-sdk-comparison': 'compare-agentic-sdks',
   'amazon-bedrock': 'amazon-bedrock/models',
   'amazon-sagemaker': 'provider-amazon-sagemaker',
+  'anthropic/opus-4-6-coding': 'anthropic/opus-5-coding',
+  'anthropic/opus-4-8-coding': 'anthropic/opus-5-coding',
   'assertion-scoring-override': 'eval-assertion-scoring-override',
   'assertions-generate': 'eval-assertions-generate',
   'bedrock-agents': 'amazon-bedrock/agents',
@@ -53,7 +55,6 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'function-tools-callback': 'eval-function-tools-callback',
   'g-eval': 'eval-g-eval',
   'github-action': 'integration-github-action',
-  'github-models': 'provider-github-models',
   'golang-provider': 'provider-golang',
   'google-adk-example': 'integration-google-adk',
   'google-sheets': 'integration-google-sheets',
@@ -85,6 +86,7 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'huggingface-similarity': 'huggingface/similarity',
   hyperbolic: 'provider-hyperbolic',
   'image-classification': 'eval-image-classification',
+  'integration-hermeneutic': 'eval-python-assert',
   'javascript-assert-external': 'eval-javascript-assert-external',
   'javascript-test-cases': 'config-javascript-test-cases',
   'jest-integration': 'integration-jest',
@@ -186,6 +188,8 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
 // Aliases where the old example was removed and we route to the closest maintained alternative.
 export const EXAMPLE_REPLACEMENTS: Record<string, string> = {
   'dbrx-benchmark': 'dbrx-benchmark was removed because DBRX is no longer available.',
+  'integration-hermeneutic':
+    'The Hermeneutic integration was removed. Use the maintained Python assertion example for custom output checks.',
 };
 
 // Examples that were intentionally removed from current examples/
@@ -216,5 +220,15 @@ export const REMOVED_EXAMPLES: Record<
   'gemma-vs-mistral': {
     legacyRef: '0.120.26',
     reason: 'gemma-vs-mistral was removed because the underlying model is no longer available.',
+  },
+  'openai-deep-research': {
+    legacyRef: '31b566872971532e6d428c0cbad4487d22d936c5',
+    reason:
+      'This historical example uses retired OpenAI deep-research models and cannot run against the current OpenAI API.',
+  },
+  'redteam-dalle': {
+    legacyRef: '31b566872971532e6d428c0cbad4487d22d936c5',
+    reason:
+      'This historical example uses retired DALL·E models and cannot run against the current OpenAI API.',
   },
 };

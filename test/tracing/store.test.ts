@@ -130,7 +130,11 @@ describe('TraceStore', () => {
     });
 
     it('returns an empty object (not undefined) when the row exists but metadata is null', async () => {
-      mockDb.select().from().where().limit.mockResolvedValueOnce([{ metadata: null }]);
+      mockDb
+        .select()
+        .from()
+        .where()
+        .limit.mockResolvedValueOnce([{ metadata: null }]);
 
       await expect(traceStore.getTraceMetadata('trace-2')).resolves.toEqual({});
     });
@@ -143,6 +147,27 @@ describe('TraceStore', () => {
   });
 
   describe('addSpans', () => {
+    it('ignores existing and repeated spans through the database uniqueness constraint', async () => {
+      await traceStore.addSpans(
+        'test-trace-id',
+        [
+          { spanId: 'existing', name: 'existing', startTime: 1 },
+          { spanId: 'new', name: 'new', startTime: 2 },
+          { spanId: 'new', name: 'duplicate', startTime: 3 },
+        ],
+        { skipTraceCheck: true },
+      );
+
+      expect(mockDb.insert().values).toHaveBeenCalledWith([
+        expect.objectContaining({ spanId: 'existing' }),
+        expect.objectContaining({ spanId: 'new', name: 'new' }),
+        expect.objectContaining({ spanId: 'new', name: 'duplicate' }),
+      ]);
+      expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith(
+        expect.objectContaining({ target: expect.any(Array) }),
+      );
+    });
+
     it('should add spans to an existing trace', async () => {
       // Mock trace exists check
       mockDb
@@ -407,6 +432,9 @@ describe('TraceStore', () => {
             'gen_ai.usage.input_tokens': 100,
             'gen_ai.usage.output_tokens': 50,
             'gen_ai.usage.total_tokens': 150,
+            'llm.usage.prompt_tokens': 100,
+            'llm.usage.completion_tokens': 50,
+            'llm.usage.total_tokens': 150,
           },
           statusCode: null,
           statusMessage: null,
@@ -445,6 +473,9 @@ describe('TraceStore', () => {
         'gen_ai.usage.input_tokens': 100,
         'gen_ai.usage.output_tokens': 50,
         'gen_ai.usage.total_tokens': 150,
+        'llm.usage.prompt_tokens': 100,
+        'llm.usage.completion_tokens': 50,
+        'llm.usage.total_tokens': 150,
       });
     });
 

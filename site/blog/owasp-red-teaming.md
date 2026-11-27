@@ -147,7 +147,7 @@ strategies:
   - jailbreak # Single-shot optimization of safety bypass techniques
   - jailbreak:composite # Combines multiple jailbreak techniques for enhanced effectiveness
   - jailbreak:likert # Jailbreak technique published by Anthropic and Stanford
-  - prompt-injection # Tests for direct prompt injection vulnerabilities
+  - jailbreak-templates # Applies known static jailbreak templates (DAN, etc.)
 ```
 
 Running baseline red teams against foundation models is a recommended best practice to identify the foundation model you want to use and understand its inherent security risks.
@@ -305,6 +305,6 @@ For additional guidance, consider checking out:
 
 Stay updated on generative AI red teaming by:
 
-- [Joining our Discord](https://discord.com/invite/promptfoo)
+- [Joining our Discord](https://discord.gg/gHPS9jjfbs)
 - Following our [blog](/blog/)
 - [Scheduling a demo](/contact/) to learn how Promptfoo can help secure your AI applications

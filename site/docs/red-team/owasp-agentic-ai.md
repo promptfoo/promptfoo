@@ -39,7 +39,7 @@ redteam:
     - owasp:agentic
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
     - crescendo
 ```
 
@@ -76,7 +76,7 @@ redteam:
     - intent
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
     - jailbreak:composite
 ```
 
@@ -100,7 +100,7 @@ redteam:
     - tool-discovery
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## ASI03: Identity and Privilege Abuse
@@ -124,12 +124,12 @@ redteam:
     - imitation
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## ASI04: Agentic Supply Chain Vulnerabilities
 
-Compromised tools, plugins, prompt templates, and external servers introduce vulnerabilities that agents may unknowingly leverage.
+Compromised tools, plugins, prompt templates, and external servers can expose agents to malicious instructions or code.
 
 ### Attack Scenarios
 
@@ -145,7 +145,7 @@ redteam:
     - indirect-prompt-injection
     - mcp
   strategies:
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## ASI05: Unexpected Code Execution
@@ -169,7 +169,7 @@ redteam:
     - ssrf
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## ASI06: Memory and Context Poisoning
@@ -214,7 +214,7 @@ redteam:
     - hijacking
     - imitation
   strategies:
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## ASI08: Cascading Failures
@@ -237,7 +237,7 @@ redteam:
     - divergent-repetition
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## ASI09: Human Agent Trust Exploitation
@@ -299,7 +299,7 @@ The OWASP Top 10 for Agentic Applications extends and complements the OWASP LLM 
 | ASI06: Memory and Context Poisoning | LLM04: Data and Model Poisoning        |
 | ASI08: Cascading Failures           | LLM09: Misinformation                  |
 
-Test both frameworks together for comprehensive coverage:
+Run both framework presets together:
 
 ```yaml
 redteam:
@@ -308,7 +308,7 @@ redteam:
     - owasp:llm
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
     - crescendo
 ```
 
