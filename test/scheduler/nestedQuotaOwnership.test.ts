@@ -107,9 +107,62 @@ describe('actual iterative manager child quota ownership', () => {
     return { state, done, controller };
   }
 
-  it.each(['response', 'exception'] as const)(
-    'does not replay a strategy after its target exhausts %s retries',
-    async (kind) => {
+  function runStrategy(provider: ApiProvider, prompt: string) {
+    return runEval({
+      provider,
+      prompt: { raw: prompt, label: prompt },
+      test: {},
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+      conversations: {},
+      registers: {},
+      rateLimitRegistry: registry,
+    });
+  }
+
+  it('fails a status-only parent 429 after successful child work without retrying', async () => {
+    const target: ApiProvider = {
+      id: () => 'successful-child',
+      callApi: vi.fn(async () => ({ output: 'ok' })),
+    };
+    const strategy: ApiProvider = {
+      id: () => 'limited-parent',
+      config: { maxRetries: 2 },
+      callApi: vi.fn(async () => {
+        await callTargetProvider(target, 'fixture');
+        return {
+          output: 'Too many requests',
+          metadata: { http: { status: 429, statusText: 'Too Many Requests', headers: {} } },
+        };
+      }),
+    };
+    const [row] = await withCacheEnabled(false, () => runStrategy(strategy, 'fixture'));
+    expect(row).toMatchObject({
+      success: false,
+      score: 0,
+      error: expect.stringMatching(/rate limit/i),
+    });
+    expect(strategy.callApi).toHaveBeenCalledOnce();
+    expect(target.callApi).toHaveBeenCalledOnce();
+    expect(registry.getMetrics()[getRateLimitKey(strategy)]).toMatchObject({
+      retriedRequests: 0,
+      rateLimitHits: 0,
+      failedRequests: 1,
+    });
+  });
+
+  it.each(
+    (['explicit context', 'native evaluator'] as const).flatMap((entry) =>
+      (['response', 'exception'] as const).flatMap((kind) =>
+        [0, 1].map((maxRetries) => ({ entry, kind, maxRetries })),
+      ),
+    ),
+  )(
+    'does not replay a strategy after its target exhausts $kind retries through $entry, maxRetries=$maxRetries',
+    async ({ entry, kind, maxRetries }) => {
       const failure = {
         error: '429 rate limit',
         metadata: {
@@ -122,7 +175,7 @@ describe('actual iterative manager child quota ownership', () => {
       };
       const target: ApiProvider = {
         id: () => 'exhausted-target',
-        config: { maxRetries: 1 },
+        config: { maxRetries },
         callApi: vi.fn(async () => {
           if (kind === 'exception') {
             throw new Error('429 rate limit; retry after 0');
@@ -135,21 +188,82 @@ describe('actual iterative manager child quota ownership', () => {
         config: { maxRetries: 2 },
         callApi: vi.fn(async () => callTargetProvider(target, 'fixture')),
       };
-      const result = withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
-        wrapProviderWithRateLimiting(strategy, registry).callApi('fixture'),
+      const result = (
+        entry === 'native evaluator'
+          ? runStrategy(strategy, 'fixture')
+          : withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+              wrapProviderWithRateLimiting(strategy, registry).callApi('fixture'),
+            )
       ).catch((error) => error);
       await vi.advanceTimersByTimeAsync(10000);
-      await result;
-      expect(target.callApi).toHaveBeenCalledTimes(2);
+      const outcome = await result;
+      if (entry === 'native evaluator') {
+        expect(outcome).toEqual([
+          expect.objectContaining({ error: expect.stringContaining('429') }),
+        ]);
+      }
+      expect(target.callApi).toHaveBeenCalledTimes(maxRetries + 1);
       expect(strategy.callApi).toHaveBeenCalledOnce();
       expect(registry.getMetrics()[getRateLimitKey(strategy)]).toMatchObject({
         retriedRequests: 0,
         rateLimitHits: 0,
       });
       expect(registry.getMetrics()[getRateLimitKey(target)]).toMatchObject({
-        retriedRequests: 1,
-        rateLimitHits: 2,
+        retriedRequests: maxRetries,
+        rateLimitHits: maxRetries + 1,
       });
+    },
+  );
+
+  it.each([0, 2])(
+    'preserves an overlapping native parent-only retry budget of %s after a sibling delegates',
+    async (maxRetries) => {
+      const failure = {
+        error: '429 rate limit',
+        metadata: {
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '0' },
+          },
+        },
+      };
+      const target: ApiProvider = {
+        id: () => 'nested-sibling-target',
+        config: { maxRetries: 1 },
+        callApi: vi.fn(async () => failure),
+      };
+      const strategy: ApiProvider = {
+        id: () => 'shared-sibling-strategy',
+        config: { maxRetries },
+        callApi: vi.fn(async (prompt) =>
+          prompt === 'nested' ? callTargetProvider(target, prompt) : failure,
+        ),
+      };
+      const done = Promise.all([
+        runStrategy(strategy, 'nested'),
+        runStrategy(strategy, 'parent-only'),
+      ]);
+      await vi.advanceTimersByTimeAsync(10000);
+      const rows = await done;
+
+      expect(rows).toEqual([
+        [expect.objectContaining({ error: expect.stringContaining('429') })],
+        [expect.objectContaining({ error: expect.stringContaining('429') })],
+      ]);
+      expect(vi.mocked(strategy.callApi).mock.calls.map(([prompt]) => prompt)).toEqual([
+        'nested',
+        ...Array<string>(maxRetries + 1).fill('parent-only'),
+      ]);
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+      expect(registry.getMetrics()[getRateLimitKey(strategy)]).toMatchObject({
+        totalRequests: 2,
+        retriedRequests: maxRetries,
+        rateLimitHits: maxRetries + 1,
+        activeRequests: 0,
+        queueDepth: 0,
+      });
+      expect(getProviderCallExecutionContext()).toBeUndefined();
     },
   );
 
