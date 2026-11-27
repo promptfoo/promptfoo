@@ -33,7 +33,10 @@ vi.mock('../../src/esm', () => ({
 vi.mock('../../src/python/pythonUtils', () => ({
   runPython: vi.fn(),
 }));
-vi.mock('../../src/util/fileExtensions');
+vi.mock(import('../../src/util/fileExtensions'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  isJavascriptFile: vi.fn(),
+}));
 vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),

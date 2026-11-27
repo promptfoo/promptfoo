@@ -915,6 +915,147 @@ describe('readTest', () => {
     );
   });
 
+  it('loads structured vars from their declaring file once and retains their provenance', async () => {
+    vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce('nested: { data: file://payload.json }');
+    const payload = { path: 'file://from-payload.txt' };
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValueOnce(payload);
+    const result = await readTest({ vars: 'cases/vars.yaml' }, '/project');
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      'file://payload.json',
+      undefined,
+      path.dirname('/project/cases/vars.yaml'),
+    );
+    expect(result.vars).toEqual({ nested: { data: payload } });
+    expect(result.metadata?.__promptfoo?.varsFileKeys).toEqual(['nested']);
+  });
+
+  it('follows a vars file whose whole YAML content is a file:// reference to the real mapping', async () => {
+    vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce('file://shared.yaml');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValueOnce({ sharedVar: 'value1' });
+
+    const result = await readTest({ vars: 'cases/vars.yaml' }, '/project');
+
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://shared.yaml');
+    expect(result.vars).toEqual({ sharedVar: 'value1' });
+  });
+
+  it('keeps nested file:// strings literal when the vars-file root was itself a file:// load', async () => {
+    vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce('file://shared.json');
+    const mapping = { cfg: { path: 'file:///private/canary.txt' } };
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValueOnce(mapping);
+
+    const result = await readTest({ vars: 'cases/vars.yaml' }, '/project');
+
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledTimes(1);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://shared.json');
+    expect(result.vars).toEqual({ cfg: { path: 'file:///private/canary.txt' } });
+    expect(result.metadata?.__promptfoo?.varsFileKeys).toEqual(['cfg']);
+  });
+
+  it('marks glob-expanded string array vars as loaded and keeps nested file:// literal', async () => {
+    vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce('docs:\n  - file://reports/*.json\n');
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    const loaded = [{ path: 'file:///private/canary.txt' }];
+    vi.mocked(maybeLoadConfigFromExternalFile)
+      .mockImplementationOnce((config) => config)
+      .mockReturnValueOnce(loaded);
+
+    const result = await readTest({ vars: 'cases/vars.yaml' }, '/project');
+
+    expect(result.vars?.docs).toEqual([loaded]);
+    expect(result.metadata?.__promptfoo?.varsFileKeys).toEqual(['docs']);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves config base path for string array vars and avoids rebasing in nested vars references', async () => {
+    vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce('docs:\n  - file://a.txt\n  - file://b.txt');
+
+    const varsFileResult = await readTest({ vars: 'cases/vars.yaml' }, '/project');
+
+    // Only template rendering in vars context: no file is loaded and nothing is rebased.
+    expect(vi.mocked(maybeLoadConfigFromExternalFile).mock.calls).toEqual([
+      ['file://a.txt', 'vars'],
+      ['file://b.txt', 'vars'],
+    ]);
+    expect(varsFileResult.vars).toEqual({ docs: ['file://a.txt', 'file://b.txt'] });
+    expect(varsFileResult.metadata?.__promptfoo?.varsFileKeys).toBeUndefined();
+    expect(varsFileResult.metadata?.__promptfoo?.varsFileKeys ?? []).not.toContain('docs');
+
+    const testCaseResult = await readTest(
+      {
+        vars: {
+          docs: ['file://a.txt', 'file://b.txt'],
+        },
+        assert: [{ type: 'equals', value: '1' }],
+      },
+      '/project/cases',
+    );
+    expect(testCaseResult.vars?.docs).toEqual(['file://a.txt', 'file://b.txt']);
+  });
+
+  it('leaves string array package references untouched in vars file and excludes them from varsFileKeys', async () => {
+    vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      'source:\n  - package:pkg:first\n  - package:pkg:second',
+    );
+
+    const result = await readTest({ vars: 'cases/vars.yaml' }, '/project');
+
+    expect(result.vars?.source).toEqual(['package:pkg:first', 'package:pkg:second']);
+    expect(result.metadata?.__promptfoo?.varsFileKeys).toBeUndefined();
+    expect(result.metadata?.__promptfoo?.varsFileKeys ?? []).not.toContain('source');
+  });
+
+  it('rebases string array vars when disableVarExpansion is true and preserves them without the option', async () => {
+    const disabledResult = await readTest(
+      {
+        options: { disableVarExpansion: true },
+        vars: {
+          docs: ['file://report.txt'],
+        },
+        assert: [{ type: 'equals', value: '1' }],
+      },
+      '/project/cases',
+    );
+    expect(disabledResult.vars?.docs).toEqual([
+      `file://${path.resolve('/project/cases', 'report.txt')}`,
+    ]);
+
+    const defaultResult = await readTest(
+      {
+        vars: {
+          docs: ['file://report.txt'],
+        },
+        assert: [{ type: 'equals', value: '1' }],
+      },
+      '/project/cases',
+    );
+    expect(defaultResult.vars?.docs).toEqual(['file://report.txt']);
+  });
+
+  it('rebases string array vars in a nested tests file when PROMPTFOO_DISABLE_VAR_EXPANSION is set', async () => {
+    vi.mocked(getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_DISABLE_VAR_EXPANSION');
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(dedent`
+      vars:
+        docs:
+          - file://report.txt
+      assert:
+        - type: equals
+          value: '1'
+    `);
+
+    const result = await readTest('cases/case.yaml', '/project');
+
+    expect(result.vars?.docs).toEqual([
+      `file://${path.resolve('/project/cases', 'report.txt')}`,
+    ]);
+  });
+
   it('readTest with TestCase that contains a vars glob input', async () => {
     const input: TestCaseWithVarsFile = {
       description: 'Test 1',
