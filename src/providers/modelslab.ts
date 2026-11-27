@@ -17,6 +17,7 @@ import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { fetchWithProxy } from '../util/fetch/index';
 import { ellipsize } from '../util/text';
+import { sleep, sleepWithAbort } from '../util/time';
 import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -104,8 +105,10 @@ export class ModelsLabImageProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const signal = callApiOptions?.abortSignal;
+    signal?.throwIfAborted();
     if (!this.apiKey) {
       return {
         error:
@@ -147,12 +150,14 @@ export class ModelsLabImageProvider implements ApiProvider {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
+          ...(signal && { signal }),
         },
         getRequestTimeoutMs(),
         'json',
         true,
       );
 
+      signal?.throwIfAborted();
       let data = response.data as ModelsLabResponse;
       let cached = response.cached;
 
@@ -162,7 +167,7 @@ export class ModelsLabImageProvider implements ApiProvider {
           model: this.modelName,
           requestId,
         });
-        data = await this.pollForCompletion(requestId);
+        data = await this.pollForCompletion(requestId, signal);
         cached = false;
       }
 
@@ -178,7 +183,12 @@ export class ModelsLabImageProvider implements ApiProvider {
           return { error: 'ModelsLab returned no image URLs' };
         }
         const imageUrl = data.output[0];
-        const { url: resolvedUrl, blobRef } = await this.maybeDownloadToBlob(imageUrl, context);
+        const { url: resolvedUrl, blobRef } = await this.maybeDownloadToBlob(
+          imageUrl,
+          context,
+          signal,
+        );
+        signal?.throwIfAborted();
         const sanitizedPrompt = prompt
           .replace(/\r?\n|\r/g, ' ')
           .replace(/\[/g, '(')
@@ -196,6 +206,7 @@ export class ModelsLabImageProvider implements ApiProvider {
         error: `Unexpected ModelsLab response status: ${(data as ModelsLabResponse).status}`,
       };
     } catch (err) {
+      signal?.throwIfAborted();
       return { error: `ModelsLab API call error: ${String(err)}` };
     }
   }
@@ -203,13 +214,15 @@ export class ModelsLabImageProvider implements ApiProvider {
   private async maybeDownloadToBlob(
     imageUrl: string,
     context?: CallApiContextParams,
+    signal?: AbortSignal,
   ): Promise<{ url: string; blobRef?: BlobRef }> {
+    signal?.throwIfAborted();
     if (!isBlobStorageEnabled()) {
       return { url: imageUrl };
     }
 
     try {
-      const response = await fetchWithProxy(imageUrl);
+      const response = await fetchWithProxy(imageUrl, signal ? { signal } : undefined);
       if (!response.ok) {
         logger.warn('[ModelsLab] Failed to download image for blob storage', {
           url: imageUrl,
@@ -219,6 +232,7 @@ export class ModelsLabImageProvider implements ApiProvider {
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());
+      signal?.throwIfAborted();
       const mimeType = response.headers.get('content-type')?.split(';')[0] || 'image/png';
       const { ref } = await storeBlob(buffer, mimeType, {
         evalId: context?.evaluationId,
@@ -229,6 +243,7 @@ export class ModelsLabImageProvider implements ApiProvider {
       });
       return { url: ref.uri, blobRef: ref };
     } catch (error) {
+      signal?.throwIfAborted();
       logger.warn('[ModelsLab] Failed to store image as blob, using URL', {
         url: imageUrl,
         error: String(error),
@@ -239,11 +254,16 @@ export class ModelsLabImageProvider implements ApiProvider {
 
   private async pollForCompletion(
     requestId: string,
+    signal?: AbortSignal,
   ): Promise<ModelsLabSuccessResponse | ModelsLabErrorResponse> {
     const fetchUrl = `${MODELSLAB_BASE_URL}/images/fetch/${requestId}`;
 
     for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      if (signal) {
+        await sleepWithAbort(POLL_INTERVAL_MS, signal);
+      } else {
+        await sleep(POLL_INTERVAL_MS);
+      }
 
       try {
         const pollResponse = await fetchWithCache(
@@ -252,12 +272,14 @@ export class ModelsLabImageProvider implements ApiProvider {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ key: this.apiKey }),
+            ...(signal && { signal }),
           },
           getRequestTimeoutMs(),
           'json',
           true,
         );
 
+        signal?.throwIfAborted();
         const data = pollResponse.data as ModelsLabResponse;
 
         logger.debug('[ModelsLab] Poll attempt', {
@@ -270,6 +292,7 @@ export class ModelsLabImageProvider implements ApiProvider {
           return data;
         }
       } catch (error) {
+        signal?.throwIfAborted();
         logger.warn('[ModelsLab] Poll attempt failed', {
           attempt: attempt + 1,
           requestId,

@@ -99,6 +99,9 @@ tests:
 
 ModelsLab uses an async generation pattern. When an image request returns `status: "processing"`, the provider automatically polls the fetch endpoint every 3 seconds until the image is ready (up to 3 minutes).
 
+Cancellation stops local requests, polling waits, and image downloads. It does not
+cancel a generation job that ModelsLab has already accepted.
+
 ## Authentication
 
 ModelsLab uses key-in-body authentication. The API key is sent as the `key` field in the JSON request body rather than as a Bearer token header.
