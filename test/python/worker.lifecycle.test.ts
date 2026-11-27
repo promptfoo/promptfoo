@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -122,6 +123,7 @@ if not marker.exists():
 
 def call_api(mode):
     if mode == "timeout":
+        marker.with_name("started").touch()
         time.sleep(60)
     return os.getpid()
 `,
@@ -131,10 +133,24 @@ def call_api(mode):
     let operation: Promise<unknown> | undefined;
     try {
       await pool.initialize();
-      operation =
-        mode === 'shutdown'
-          ? pool.shutdown()
-          : pool.execute('call_api', ['timeout']).catch((error) => error);
+      if (mode === 'shutdown') {
+        operation = pool.shutdown();
+      } else {
+        const realSleep = sleep;
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        operation = pool.execute('call_api', ['timeout']).catch((error) => error);
+        try {
+          const started = path.join(directory, 'started');
+          const startup = AbortSignal.timeout(3000);
+          while (!existsSync(started)) {
+            await realSleep(10, undefined, { signal: startup });
+          }
+        } finally {
+          // Trigger the request deadline, then let process and pipe cleanup use real time.
+          vi.advanceTimersByTime(1000);
+          vi.useRealTimers();
+        }
+      }
       // Bound cleanup even when the descendant retains the worker's output pipes.
       const outcome = await Promise.race([
         operation,
@@ -170,8 +186,8 @@ def call_api(mode):
           // It may have already exited while the test was cleaning up.
         }
       }
-      await operation;
       await pool.shutdown();
+      await operation;
       await fs.rm(directory, { recursive: true, force: true });
     }
   },
