@@ -1204,6 +1204,7 @@ describe('AwsBedrockConverseProvider', () => {
       const parsed = JSON.parse(result.output as string);
       expect(parsed.type).toBe('tool_use');
       expect(parsed.name).toBe('calculator');
+      expect(result.finishReason).toBe('tool_calls');
     });
 
     it('should include metadata with latency and stop reason', async () => {
@@ -1228,6 +1229,7 @@ describe('AwsBedrockConverseProvider', () => {
         expect(typeof result.metadata.latencyMs).toBe('number');
         expect(typeof result.metadata.stopReason).toBe('string');
       }
+      expect(result.finishReason).toBe('length');
     });
 
     it('should handle guardrail intervention', async () => {
@@ -3701,6 +3703,7 @@ Third line`;
       expect(result.output).toBe('Hello World');
       expect(result.tokenUsage?.prompt).toBe(10);
       expect(result.tokenUsage?.completion).toBe(5);
+      expect(result.finishReason).toBe('stop');
     });
 
     it('prices Kimi K3 using the tier in Converse stream metadata', async () => {

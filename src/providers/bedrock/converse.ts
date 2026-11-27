@@ -20,6 +20,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
   getClaudeModelWarningName,
@@ -1472,6 +1473,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     if (response.stopReason) {
       metadata.stopReason = response.stopReason;
     }
+    const finishReason = normalizeFinishReason(response.stopReason);
 
     // Add cache token info
     if (cacheReadTokens !== undefined || cacheWriteTokens !== undefined) {
@@ -1626,6 +1628,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         tokenUsage,
         ...(cost === undefined ? {} : { cost }),
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+        ...(finishReason ? { finishReason } : {}),
         ...(guardrails ? { guardrails } : {}),
         ...(error ? { error } : {}),
       };
@@ -1640,6 +1643,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       tokenUsage,
       ...(cost === undefined ? {} : { cost }),
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+      ...(finishReason ? { finishReason } : {}),
       ...(guardrails ? { guardrails } : {}),
       ...(malformedError ? { error: malformedError } : {}),
     };
@@ -1805,6 +1809,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (stopReason) {
         metadata.stopReason = stopReason;
       }
+      const finishReason = normalizeFinishReason(stopReason);
       if (stopReason === 'malformed_model_output') {
         malformedError =
           'Model produced invalid output. The response could not be parsed correctly.';
@@ -1843,6 +1848,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         tokenUsage,
         ...(cost === undefined ? {} : { cost }),
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+        ...(finishReason ? { finishReason } : {}),
         ...(error ? { error } : {}),
       };
     } catch (err: any) {
