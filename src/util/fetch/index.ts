@@ -21,6 +21,9 @@ import {
   extractRateLimitErrorType,
   getAbortError,
   HttpRateLimitError,
+  isDefinitiveBillingCode,
+  isHardQuotaCode,
+  isTransientRateLimitCode,
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
@@ -641,6 +644,35 @@ export function rateLimitTimingFromHeaders(headers: Record<string, string>): {
 } {
   const parsed = parseRateLimitHeaders(headers);
   return { retryAfterMs: parsed.retryAfterMs, resetAt: parsed.resetAt };
+}
+
+/**
+ * Classify an HTTP 429 that an SDK reported as data rather than a `Response`. Codes come from the
+ * parsed body records and from code-shaped words in free-text diagnostics; a hard quota takes precedence
+ * over a transient or generic wrapper. Timing comes from the response headers.
+ */
+export function classifySdkRateLimit({
+  records,
+  texts = [],
+  headers = {},
+}: {
+  records: unknown[];
+  texts?: Array<string | undefined>;
+  headers?: Record<string, string>;
+}): HttpRateLimitError {
+  const codes = [
+    ...records.map((record) => extractRateLimitErrorCode(record)?.toLowerCase()),
+    ...texts.flatMap((text) => text?.toLowerCase().match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? []),
+  ].filter((code): code is string => Boolean(code));
+  const types = records.map((record) => extractRateLimitErrorType(record)?.toLowerCase());
+  const quota = (values: Array<string | undefined>) =>
+    values.find(isDefinitiveBillingCode) ?? values.find(isHardQuotaCode);
+  return new HttpRateLimitError({
+    status: 429,
+    code: quota(codes) ?? codes.find(isTransientRateLimitCode) ?? codes[0],
+    type: quota(types) ?? types.find(Boolean),
+    ...rateLimitTimingFromHeaders(headers),
+  });
 }
 
 export function buildHttpRateLimitError(
