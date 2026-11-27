@@ -833,6 +833,14 @@ async function doEvalWithEnv(
       }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
+
+      // Resume resolves the test suite again from the saved config.
+      const savedDefaultTest =
+        typeof config.defaultTest === 'object' ? config.defaultTest : undefined;
+      config.defaultTest = {
+        ...savedDefaultTest,
+        vars: { ...savedDefaultTest?.vars, ...cmdObj.var },
+      };
     }
     const runtimeTags = resumeEval ? undefined : runtimeTagsForEval(cmdObj, commandLineOptions);
     if (runtimeTags) {
