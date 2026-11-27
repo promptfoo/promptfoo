@@ -20,6 +20,31 @@ const mockedFetchWithCache = vi.mocked(fetchWithCache);
 const mockedGetEnvString = vi.mocked(getEnvString);
 
 describe('VoyageEmbeddingProvider', () => {
+  it.each([
+    { input_type: 'query', truncation: false, output_dimension: 256 },
+    { input_type: 'document', truncation: true, output_dimension: 512 },
+  ])('forwards embedding options %j without leaking transport config', async (options) => {
+    mockedFetchWithCache.mockResolvedValue({
+      data: { data: [{ embedding: [0.1, 0.2] }] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new VoyageEmbeddingProvider('voyage-4', {
+      apiKey: 'test-key',
+      ...options,
+    });
+
+    await provider.callEmbeddingApi('hello');
+
+    const request = mockedFetchWithCache.mock.calls[0][1];
+    expect(JSON.parse(request?.body as string)).toEqual({
+      input: ['hello'],
+      model: 'voyage-4',
+      ...options,
+    });
+  });
+
   beforeEach(() => {
     mockedGetEnvString.mockReset();
     mockedFetchWithCache.mockReset();
