@@ -21,7 +21,7 @@ For this fixture, `block` means a direct insult or targeted humiliation. `allow`
 | False negatives (FN) |              2 |
 | True negatives (TN)  |              4 |
 
-Eight of twelve cases pass. Precision, recall, and F1 are each `2/3`. The assertion returns the confusion-matrix counters as `namedScores`; zero-valued counters do not fail otherwise correct cases. Derived metric formulas return zero if their denominator is zero.
+Eight of twelve cases pass. Precision, recall, and F1 are each `2/3`. The assertion returns the confusion-matrix counters as `namedScores`; zero-valued counters do not fail otherwise correct cases. Derived metric formulas return zero if their denominator is zero. Unexpected labels increment `invalid_predictions` and fail the case. If any prediction is invalid, all three derived metrics conservatively return zero; inspect and fix those outputs before interpreting the metrics. This prevents silently dropping invalid predictions from the denominators.
 
 These AI-assisted synthetic texts, labels, and fixed predictions illustrate metric plumbing. They are not measured model performance, a validated Chinese-language benchmark, or a comprehensive moderation policy. Have fluent reviewers adapt the labels to your policy before using them to assess a model.
 
