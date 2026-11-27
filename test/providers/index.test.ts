@@ -129,7 +129,7 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-vi.mock('glob', async (importOriginal) => {
+vi.mock('glob/raw', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     globSync: vi.fn(),
@@ -578,22 +578,25 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with openai:completion', async () => {
-    const provider = await loadApiProvider('openai:completion');
-    expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
+    await expect(loadApiProvider('openai:completion')).rejects.toThrow('has been retired');
   });
 
   it('loadApiProvider with openai:assistant', async () => {
-    const provider = await loadApiProvider('openai:assistant:foobar');
+    const provider = await loadApiProvider('openai:assistant:foobar', {
+      options: { config: { apiBaseUrl: 'https://gateway.example/v1' } },
+    });
     expect(provider).toBeInstanceOf(OpenAiAssistantProvider);
   });
 
   it('loadApiProvider with openai:chat:modelName', async () => {
-    const provider = await loadApiProvider('openai:chat:gpt-3.5-turbo');
+    const provider = await loadApiProvider('openai:chat:gpt-4.1-mini');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
   });
 
   it('loadApiProvider with openai:completion:modelName', async () => {
-    const provider = await loadApiProvider('openai:completion:text-davinci-003');
+    const provider = await loadApiProvider('openai:completion:text-davinci-003', {
+      options: { config: { apiBaseUrl: 'https://gateway.example/v1' } },
+    });
     expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
   });
 

@@ -1,4 +1,5 @@
-import { FOUNDATION_PLUGINS, PII_PLUGINS } from './plugins';
+import { CODING_AGENT_PLUGINS } from './codingAgents';
+import { BIAS_PLUGINS, FOUNDATION_PLUGINS, PII_PLUGINS, TEEN_SAFETY_PLUGINS } from './plugins';
 
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
@@ -6,6 +7,7 @@ import type { Strategy } from './strategies';
 type FrameworkMapping = { plugins: Plugin[]; strategies: Strategy[] };
 
 export const FRAMEWORK_NAMES: Record<string, string> = {
+  'aiuc:1': 'AIUC-1',
   'dod:ai:ethics': 'DoD AI Ethical Principles',
   'mitre:atlas': 'MITRE ATLAS',
   'nist:ai:measure': 'NIST AI RMF',
@@ -15,6 +17,83 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'eu:ai-act': 'EU AI Act',
   'iso:42001': 'ISO/IEC 42001',
   gdpr: 'GDPR',
+};
+
+// Technical tests only, not a certification assessment. Keep concrete IDs here so
+// generation, workload previews and reports all use the same set of plugins.
+// Strategies are chosen by the caller, not added once per control.
+// https://standard.aiuc-1.com/evidence/third-party-evals
+export const AIUC_1_MAPPING: Record<
+  string,
+  FrameworkMapping & { name: string; untestedBehavior?: string }
+> = {
+  'aiuc:1:a009': {
+    name: 'A009. Data and privacy',
+    plugins: [
+      ...PII_PLUGINS,
+      'rbac',
+      'cross-session-leak',
+      'data-exfil',
+      'prompt-extraction',
+      'harmful:privacy',
+      'harmful:copyright-violations',
+      'harmful:intellectual-property',
+      'imitation',
+    ],
+    strategies: [],
+  },
+  'aiuc:1:b001': {
+    name: 'B001. Security',
+    plugins: ['hijacking', 'indirect-prompt-injection', 'bola', 'bfla', ...CODING_AGENT_PLUGINS],
+    strategies: [],
+  },
+  'aiuc:1:c010': {
+    name: 'C010. Safety',
+    plugins: [
+      'harmful:child-exploitation',
+      'harmful:graphic-content',
+      'harmful:harassment-bullying',
+      'harmful:hate',
+      'harmful:illegal-activities',
+      'harmful:illegal-drugs',
+      'harmful:insults',
+      'harmful:misinformation-disinformation',
+      'harmful:non-violent-crime',
+      'harmful:profanity',
+      'harmful:radicalization',
+      'harmful:self-harm',
+      'harmful:sex-crime',
+      'harmful:sexual-content',
+      'harmful:specialized-advice',
+      'harmful:unsafe-practices',
+      'harmful:violent-crime',
+      ...BIAS_PLUGINS,
+      ...TEEN_SAFETY_PLUGINS,
+    ],
+    strategies: [],
+  },
+  'aiuc:1:d004': {
+    name: 'D004. Reliability',
+    untestedBehavior: 'Tool execution',
+    plugins: ['hallucination', 'rag-source-attribution', 'unverifiable-claims'],
+    strategies: [],
+  },
+  'aiuc:1:e018': {
+    name: 'E018. Accountability',
+    // No built-in AI disclosure test yet. Report the gap, never substitute a policy.
+    plugins: [],
+    strategies: [],
+  },
+  'aiuc:1:f001': {
+    name: 'F001. Cyber misuse',
+    plugins: ['harmful:cybercrime', 'harmful:cybercrime:malicious-code'],
+    strategies: [],
+  },
+  'aiuc:1:f002': {
+    name: 'F002. Catastrophic misuse',
+    plugins: ['harmful:chemical-biological-weapons', 'harmful:indiscriminate-weapons'],
+    strategies: [],
+  },
 };
 
 export const OWASP_LLM_TOP_10_NAMES = [
@@ -978,6 +1057,8 @@ export const DOD_AI_ETHICS_MAPPING: Record<string, { plugins: Plugin[]; strategi
 
 // Aliased plugins are like collections, except they are hidden from the standard plugin list.
 export const ALIASED_PLUGINS = [
+  'aiuc:1',
+  ...Object.keys(AIUC_1_MAPPING).filter((id) => AIUC_1_MAPPING[id].plugins.length > 0),
   'dod:ai:ethics',
   'mitre:atlas',
   'nist:ai',
@@ -1012,8 +1093,12 @@ export const ALIASED_PLUGINS = [
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
   string,
-  Record<string, { plugins: string[]; strategies: string[] }>
+  Record<
+    string,
+    { plugins: string[]; strategies: string[]; name?: string; untestedBehavior?: string }
+  >
 > = {
+  'aiuc:1': AIUC_1_MAPPING,
   'dod:ai:ethics': DOD_AI_ETHICS_MAPPING,
   'mitre:atlas:ml-attack-staging': MITRE_ATLAS_LEGACY_MAPPING,
   'mitre:atlas': MITRE_ATLAS_MAPPING,

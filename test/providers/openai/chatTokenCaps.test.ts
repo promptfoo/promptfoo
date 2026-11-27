@@ -41,7 +41,8 @@ describe('Chat output cap compatibility', () => {
         ] as const) {
           const { body } = await new OpenAiChatCompletionProvider(model, {
             requestPolicy: 'openai',
-            config: providerConfig,
+            // A compatible gateway can still expose retired model IDs.
+            config: { apiBaseUrl: 'https://proxy.example.test/v1', ...providerConfig },
           }).getOpenAiBody('Say ready.', {
             vars: {},
             prompt: { raw: 'Say ready.', label: 'ready', config: promptConfig },
@@ -133,7 +134,7 @@ describe('Chat output cap compatibility', () => {
   ])('preserves the existing request defaults for legacy family %s', async (model) => {
     const { body } = await new OpenAiChatCompletionProvider(model, {
       requestPolicy: 'openai',
-      config: { reasoning_effort: 'high' },
+      config: { apiBaseUrl: 'https://proxy.example.test/v1', reasoning_effort: 'high' },
     }).getOpenAiBody('Say ready.');
     expect(body).toMatchObject({ max_tokens: 1024, temperature: 0 });
     expect(body).not.toHaveProperty('max_completion_tokens');

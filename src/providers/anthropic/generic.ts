@@ -177,6 +177,27 @@ export function hashAnthropicCacheValue(value: unknown): string {
     .digest('hex');
 }
 
+class PromptfooAnthropicClient extends Anthropic {
+  // Promptfoo resolves credentials itself. Bedrock authenticates only at dispatch.
+  protected override _shouldResolveDefaultCredentials(): boolean {
+    return false;
+  }
+
+  protected override async authHeaders(options: Parameters<Anthropic['authHeaders']>[0]) {
+    const headers = await super.authHeaders(options);
+    if (headers) {
+      // Existing evals and compatible gateways use the original Messages protocol.
+      // SDK default and per-request custom headers can still override this value.
+      headers.values.set('anthropic-version', '2023-06-01');
+      if (this.apiKey) {
+        headers.values.delete('authorization');
+        headers.values.set('x-api-key', this.apiKey);
+      }
+    }
+    return headers;
+  }
+}
+
 /**
  * Generic provider class for Anthropic APIs.
  *
@@ -311,11 +332,13 @@ export class AnthropicGenericProvider implements ApiProvider {
       setCaseInsensitiveHeaderValue(clientDefaultHeaders, 'authorization', `Bearer ${authToken}`);
     }
 
-    this.anthropic = new Anthropic(
+    this.anthropic = new PromptfooAnthropicClient(
       this.buildAnthropicClientOptions({
         apiKey: this.apiKey ?? null,
         authToken: authToken ?? null,
         baseURL: this.getApiBaseUrl(),
+        // Promptfoo owns generation spans; SDK spans would duplicate traced requests.
+        openTelemetry: false,
         ...(Object.keys(clientDefaultHeaders).length > 0
           ? { defaultHeaders: clientDefaultHeaders }
           : {}),
@@ -346,17 +369,12 @@ export class AnthropicGenericProvider implements ApiProvider {
   /**
    * Whether promptfoo's preflight check should require an API key before
    * dispatching requests to this provider. Returns `false` only for
-   * OAuth-capable subclasses (see {@link SUPPORTS_CLAUDE_CODE_OAUTH}) when
-   * the user has opted in via `apiKeyRequired: false`. All other subclasses
-   * keep the preflight check so missing-credential errors surface upfront
-   * rather than at per-request call time.
+   * providers that loaded a Claude Code OAuth credential. Opting in via
+   * `apiKeyRequired: false` alone does not guarantee that a credential was
+   * found, so missing-credential errors must still surface upfront.
    */
   requiresApiKey(): boolean {
-    const subclass = this.constructor as typeof AnthropicGenericProvider;
-    if (subclass.SUPPORTS_CLAUDE_CODE_OAUTH && this.config.apiKeyRequired === false) {
-      return false;
-    }
-    return true;
+    return !this.usingClaudeCodeOAuth;
   }
 
   getApiKey(): string | undefined {

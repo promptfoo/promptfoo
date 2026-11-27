@@ -3,16 +3,17 @@ import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
 import FrameworkCompliance from './FrameworkCompliance';
-import CSVExporter from './FrameworkCsvExporter';
+import { getFrameworkPlugins } from './FrameworkComplianceUtils';
+import FrameworkExporter from './FrameworkExporter';
 import { useReportStore } from './store';
 
 vi.mock('./store');
 vi.mock('./FrameworkCard');
-vi.mock('./FrameworkCsvExporter');
+vi.mock('./FrameworkExporter');
 
 const mockUseReportStore = vi.mocked(useReportStore);
 const mockFrameworkCard = vi.mocked(FrameworkCard);
-const mockCSVExporter = vi.mocked(CSVExporter);
+const mockFrameworkExporter = vi.mocked(FrameworkExporter);
 
 describe('FrameworkCompliance', () => {
   beforeEach(() => {
@@ -21,7 +22,7 @@ describe('FrameworkCompliance', () => {
     mockFrameworkCard.mockImplementation(({ framework, frameworkSeverity }) => (
       <div data-testid={`framework-card-${framework}`} data-severity={frameworkSeverity} />
     ));
-    mockCSVExporter.mockImplementation(() => <div data-testid="csv-exporter" />);
+    mockFrameworkExporter.mockImplementation(() => <div data-testid="csv-exporter" />);
   });
 
   const renderFrameworkCompliance = (
@@ -106,7 +107,7 @@ describe('FrameworkCompliance', () => {
     expect(calls.some((call) => call[0].frameworkSeverity !== undefined)).toBe(true);
   });
 
-  it('should render the CSVExporter component with the correct categoryStats and pluginPassRateThreshold props', () => {
+  it('should render the FrameworkExporter component with the correct categoryStats and pluginPassRateThreshold props', () => {
     const pluginPassRateThreshold = 0.75;
     const categoryStats = {
       bola: { pass: 5, total: 10, passWithFilter: 5, failCount: 5 },
@@ -115,8 +116,8 @@ describe('FrameworkCompliance', () => {
 
     renderFrameworkCompliance(categoryStats, pluginPassRateThreshold);
 
-    expect(mockCSVExporter).toHaveBeenCalledTimes(1);
-    expect(mockCSVExporter).toHaveBeenCalledWith(
+    expect(mockFrameworkExporter).toHaveBeenCalledTimes(1);
+    expect(mockFrameworkExporter).toHaveBeenCalledWith(
       expect.objectContaining({
         categoryStats: categoryStats,
         pluginPassRateThreshold: pluginPassRateThreshold,
@@ -133,8 +134,8 @@ describe('FrameworkCompliance', () => {
         rbac: { pass: 0, total: 0, passWithFilter: 0, failCount: 0 },
       },
       strategyStats: {},
-      expectedText: /0\.00% Attack Success Rate/,
-      expectedFailedText: /\(0\/0 tests failed across 0 plugins\)/,
+      expectedText: /No test results for the mapped framework plugins/,
+      expectedFailedText: null,
     },
     {
       name: 'no tests at all (totalTests = 0)',
@@ -145,8 +146,8 @@ describe('FrameworkCompliance', () => {
         ssrf: { pass: 0, total: 0, passWithFilter: 0, failCount: 0 },
       },
       strategyStats: { jailbreak: { pass: 0, total: 0 } },
-      expectedText: /0\.00% Attack Success Rate/,
-      expectedFailedText: /\(0\/0 tests failed across 0 plugins\)/,
+      expectedText: /No test results for the mapped framework plugins/,
+      expectedFailedText: null,
     },
     {
       name: 'empty categoryStats and strategyStats',
@@ -163,6 +164,23 @@ describe('FrameworkCompliance', () => {
     if (expectedFailedText) {
       expect(screen.getByText(expectedFailedText)).toBeInTheDocument();
     }
+  });
+
+  it('does not count an untested AIUC-1 framework as compliant', () => {
+    renderFrameworkCompliance({}, 0.9, { redteam: { frameworks: ['aiuc:1'] } });
+    expect(screen.getByText('Framework Compliance (0/1)')).toBeInTheDocument();
+    expect(mockFrameworkExporter.mock.calls[0][0].frameworksToShow).toEqual(['aiuc:1']);
+  });
+
+  it('does not count AIUC-1 as compliant when all mapped plugins pass but E018 has no tests', () => {
+    const stats = Object.fromEntries(
+      [...getFrameworkPlugins('aiuc:1', {})].map((id) => [
+        id,
+        { pass: 1, total: 1, failCount: 0, passWithFilter: 0 },
+      ]),
+    );
+    renderFrameworkCompliance(stats, 0.9, { redteam: { frameworks: ['aiuc:1'] } });
+    expect(screen.getByText('Framework Compliance (0/1)')).toBeInTheDocument();
   });
 
   it('should filter frameworks based on config', () => {
@@ -198,12 +216,21 @@ describe('FrameworkCompliance', () => {
 
     renderFrameworkCompliance(categoryStats, 0.9, undefined);
 
-    // Should render FrameworkCards for all frameworks (9 total)
-    const frameworkCardCalls = mockFrameworkCard.mock.calls;
-    expect(frameworkCardCalls.length).toBe(9); // All FRAMEWORK_COMPLIANCE_IDS
+    expect(mockFrameworkCard.mock.calls.map(([props]) => props.framework)).toEqual([
+      'mitre:atlas',
+      'nist:ai:measure',
+      'owasp:api',
+      'owasp:llm',
+      'owasp:agentic',
+      'eu:ai-act',
+      'iso:42001',
+      'gdpr',
+      'dod:ai:ethics',
+      'aiuc:1',
+    ]);
   });
 
-  it('should pass frameworksToShow to CSVExporter', () => {
+  it('should pass frameworksToShow to FrameworkExporter', () => {
     const categoryStats = {
       bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
     };
@@ -215,8 +242,8 @@ describe('FrameworkCompliance', () => {
 
     renderFrameworkCompliance(categoryStats, 0.9, config);
 
-    // CSVExporter should receive the filtered frameworks
-    expect(mockCSVExporter).toHaveBeenCalledWith(
+    // FrameworkExporter should receive the filtered frameworks
+    expect(mockFrameworkExporter).toHaveBeenCalledWith(
       expect.objectContaining({
         frameworksToShow: ['owasp:llm'],
       }),

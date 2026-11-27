@@ -1776,7 +1776,8 @@
         "eu:ai-act",
         "iso:42001",
         "gdpr",
-        "dod:ai:ethics"
+        "dod:ai:ethics",
+        "aiuc:1"
       ]
     },
     "__schema49": {
@@ -1887,6 +1888,13 @@
       "enum": [
         "aegis",
         "agentic:memory-poisoning",
+        "aiuc:1",
+        "aiuc:1:a009",
+        "aiuc:1:b001",
+        "aiuc:1:c010",
+        "aiuc:1:d004",
+        "aiuc:1:f001",
+        "aiuc:1:f002",
         "ascii-smuggling",
         "beavertails",
         "bfla",
@@ -2186,6 +2194,13 @@
       "enum": [
         "aegis",
         "agentic:memory-poisoning",
+        "aiuc:1",
+        "aiuc:1:a009",
+        "aiuc:1:b001",
+        "aiuc:1:c010",
+        "aiuc:1:d004",
+        "aiuc:1:f001",
+        "aiuc:1:f002",
         "ascii-smuggling",
         "beavertails",
         "bfla",

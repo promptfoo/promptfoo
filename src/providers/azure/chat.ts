@@ -25,7 +25,12 @@ import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { applyGpt6RequestRules, getGpt6Variant, isGpt6Model } from '../openai/gpt6';
 import { resolveChatReasoningEffort } from '../openai/reasoning';
-import { isLegacyOpenAiChatModel, resolveChatOutputCap } from '../openai/tokenCaps';
+import {
+  isLegacyChatOutputCapCleared,
+  isLegacyOpenAiChatModel,
+  resolveChatOutputCap,
+} from '../openai/tokenCaps';
+import { getOpenAICompletionTokenDetails } from '../openai/util';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
@@ -232,8 +237,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       !isLegacyOpenAiChatModel(capabilityModelName);
     const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const gpt6Variant = getGpt6Variant(capabilityModelName);
-    const useModelDefaults =
-      gpt6Variant === 'sol' || gpt6Variant === 'luna' || gpt6Variant === '6.1-sol';
+    const useModelDefaults = gpt6Variant !== undefined && gpt6Variant !== 'astra';
     const requestPolicy = {
       tokenField: isReasoningModel || useOpenAiAliasPolicy ? 'max_completion_tokens' : 'max_tokens',
       defaultTokenBudget: useOpenAiAliasPolicy || useModelDefaults ? undefined : 1024,
@@ -342,6 +346,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
+      ...(gpt6Variant && config.verbosity ? { verbosity: config.verbosity } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_options ? { prompt_cache_options: config.prompt_cache_options } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
@@ -389,19 +398,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         body.max_completion_tokens = outputCap;
       }
     }
-    if (!usesModernTokenCap) {
-      const promptConfig = context?.prompt?.config;
-      const legacyCap = [
-        promptConfig?.passthrough?.max_tokens,
-        promptConfig?.max_tokens,
-        (this.config.passthrough as { max_tokens?: unknown } | undefined)?.max_tokens,
-        this.config.max_tokens,
-      ].find((value) => value !== undefined);
-      if (legacyCap === null) {
-        delete body.max_tokens;
-      }
+    if (!usesModernTokenCap && isLegacyChatOutputCapCleared(this.config, context?.prompt?.config)) {
+      delete body.max_tokens;
     }
-    applyGpt6RequestRules(body, capabilityModelName, 'chat');
+    applyGpt6RequestRules(body, capabilityModelName, 'chat', { isAzure: true });
 
     return {
       body,
@@ -508,13 +508,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let latencyMs: number | undefined;
 
     try {
-      const url = config.dataSources
-        ? `${this.getApiBaseUrl()}/openai/deployments/${
-            this.deploymentName
-          }/extensions/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`
-        : `${this.getApiBaseUrl()}/openai/deployments/${
-            this.deploymentName
-          }/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`;
+      const variant = getGpt6Variant(config.modelName ?? this.deploymentName);
+      const useV1 =
+        config.apiVersion === 'v1' || (!config.apiVersion && variant?.startsWith('6.2-'));
+      const chatPath = config.dataSources ? 'extensions/chat/completions' : 'chat/completions';
+      const url =
+        useV1 && !config.dataSources
+          ? `${this.getApiBaseUrl()}/openai/v1/chat/completions`
+          : `${this.getApiBaseUrl()}/openai/deployments/${this.deploymentName}/${chatPath}?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`;
 
       const {
         data: responseData,
@@ -675,6 +676,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         );
       }
 
+      const completionDetails = data.usage && getOpenAICompletionTokenDetails(data.usage);
       return {
         output,
         tokenUsage: cached
@@ -686,17 +688,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               ...(data.usage?.prompt_tokens_details?.cached_tokens !== undefined && {
                 cached: data.usage.prompt_tokens_details.cached_tokens,
               }),
-              ...(data.usage?.completion_tokens_details
-                ? {
-                    completionDetails: {
-                      reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                      acceptedPrediction:
-                        data.usage.completion_tokens_details.accepted_prediction_tokens,
-                      rejectedPrediction:
-                        data.usage.completion_tokens_details.rejected_prediction_tokens,
-                    },
-                  }
-                : {}),
+              ...(completionDetails ? { completionDetails } : {}),
             },
         cached,
         latencyMs,

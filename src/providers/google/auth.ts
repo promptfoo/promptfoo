@@ -21,7 +21,7 @@ import type { GoogleAuthOptions } from 'google-auth-library';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
 
-// gcp-metadata (8.x) emits a `MetadataLookupWarning` of the form
+// gcp-metadata emits a `MetadataLookupWarning` of the form
 // `received unexpected error = ${err.message} code = ${code}` when the optional ADC probe cannot
 // reach the metadata host. Match the stable prefix (scoped by the warning type) rather than the
 // fully-interpolated string: the err.message/code suffix varies by failure mode (the codeless
@@ -142,6 +142,14 @@ export interface ApiKeyResult {
  * - Conflict detection and warnings
  */
 export class GoogleAuthManager {
+  /** A scoped empty path masks ambient ADC. Callers decide whether credentials are required. */
+  static getAdcFilename(env?: EnvOverrides): string | undefined {
+    return (
+      getProviderEnvString(env, 'GOOGLE_APPLICATION_CREDENTIALS') ??
+      getEnvString('GOOGLE_APPLICATION_CREDENTIALS')
+    );
+  }
+
   private static cachedHasDefaultCredentials: boolean | undefined;
   private static pendingHasDefaultCredentials: Promise<boolean> | undefined;
 
@@ -276,10 +284,7 @@ export class GoogleAuthManager {
 
     // Vertex mode requires either API key or project ID
     if (vertexai && !apiKey && !projectId && !hasProjectEnvironment && !credentials) {
-      const hasAdc = Boolean(
-        env?.GOOGLE_APPLICATION_CREDENTIALS ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
-      );
-      if (!hasAdc) {
+      if (!GoogleAuthManager.getAdcFilename(env)) {
         logger.debug(
           '[Google] Vertex AI mode enabled but no projectId, credentials, or ADC detected. ' +
             'Authentication may fail.',

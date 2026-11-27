@@ -22,7 +22,7 @@ cd integration-crewai
 This example requires the following:
 
 1. **Python 3.10–3.13**
-2. **Node.js >=22.22.0 (Node.js 24 LTS recommended)**
+2. A [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support)
 3. **Provider credentials** - The default model requires a valid OpenAI API key
 
 ## Environment Setup
@@ -75,7 +75,7 @@ $env:PROMPTFOO_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe).Path
 ```
 
 CrewAI installs the OpenAI SDK, Pydantic, and its other runtime dependencies.
-This example uses CrewAI 1.15.22 or newer within the 1.x release series.
+This example uses CrewAI 1.15.28 or newer within the 1.x release series.
 
 Keep the environment activated when running Promptfoo so its Python provider uses
 the installed packages. Alternatively, set `PROMPTFOO_PYTHON` to the virtual

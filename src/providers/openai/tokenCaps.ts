@@ -23,6 +23,20 @@ type ChatOutputCapConfig = {
   passthrough?: unknown;
 };
 
+export function isLegacyChatOutputCapCleared(
+  providerConfig: ChatOutputCapConfig,
+  promptConfig: ChatOutputCapConfig | undefined,
+): boolean {
+  return (
+    [
+      getObject(promptConfig?.passthrough)?.max_tokens,
+      promptConfig?.max_tokens,
+      getObject(providerConfig.passthrough)?.max_tokens,
+      providerConfig.max_tokens,
+    ].find((value) => value !== undefined) === null
+  );
+}
+
 function getChatOutputCap(config: ChatOutputCapConfig | undefined, isOpenRouter: boolean) {
   const passthrough = getObject(config?.passthrough) as
     | Omit<ChatOutputCapConfig, 'passthrough'>

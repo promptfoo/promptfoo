@@ -7,10 +7,7 @@ import { cn } from '@app/lib/utils';
 import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
   ALIASED_PLUGIN_MAPPINGS,
-  DOD_AI_ETHICS_PRINCIPLE_NAMES,
   FRAMEWORK_NAMES,
-  OWASP_API_TOP_10_NAMES,
-  OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
   Severity,
   severityDisplayNames,
@@ -22,6 +19,9 @@ import {
   categorizePlugins,
   expandPluginCollections,
   FRAMEWORK_DESCRIPTIONS,
+  getAiucCoverageGap,
+  getCategoryLabel,
+  hasNamedCategories,
 } from './FrameworkComplianceUtils';
 import FrameworkPluginResult from './FrameworkPluginResult';
 
@@ -62,12 +62,6 @@ const severitySortOrder: Record<Severity, number> = {
   [Severity.Informational]: 4,
 };
 
-const categoryNamesByFramework: Partial<Record<string, string[]>> = {
-  'owasp:llm': OWASP_LLM_TOP_10_NAMES,
-  'owasp:api': OWASP_API_TOP_10_NAMES,
-  'dod:ai:ethics': DOD_AI_ETHICS_PRINCIPLE_NAMES,
-};
-
 const getPluginSeverity = (plugin: string): Severity => {
   return riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
 };
@@ -76,17 +70,6 @@ const sortPluginsBySeverity = (plugins: string[]): string[] => {
   return [...plugins].sort((a, b) => {
     return severitySortOrder[getPluginSeverity(a)] - severitySortOrder[getPluginSeverity(b)];
   });
-};
-
-const getCategoryDisplay = (
-  framework: string,
-  categoryId: string,
-): { categoryNumber: string; categoryName: string } => {
-  const categoryNumber = categoryId.split(':').pop() ?? categoryId;
-  const categoryNameList = categoryNamesByFramework[framework];
-  const categoryIndex = Number.parseInt(categoryNumber, 10) - 1;
-  const categoryName = categoryNameList?.[categoryIndex] ?? `Category ${categoryNumber}`;
-  return { categoryNumber, categoryName };
 };
 
 type CategoryBadgeVariant = 'success' | 'secondary' | 'destructive';
@@ -98,8 +81,8 @@ const getCategoryBadgeData = (
 ): { variant: CategoryBadgeVariant; label: string } => {
   if (testedCount === 0 && visibleUntestedCount === 0) {
     return {
-      variant: nonCompliantCount === 0 ? 'success' : 'secondary',
-      label: 'No Plugins',
+      variant: 'secondary',
+      label: 'Not tested',
     };
   }
 
@@ -220,12 +203,20 @@ const FrameworkCard = ({
     [nonCompliantPlugins, sortPluginsByASR],
   );
 
+  const coverageGap =
+    framework === 'aiuc:1' && !nonCompliantPlugins.length
+      ? getAiucCoverageGap(categoryStats)
+      : undefined;
+
   return (
     <Card
       className={cn(
         'framework-item',
-        isCompliant ? 'compliant' : 'non-compliant',
-        isCompliant ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : 'bg-red-50/50 dark:bg-red-950/20',
+        !coverageGap && (isCompliant ? 'compliant' : 'non-compliant'),
+        !coverageGap &&
+          (isCompliant
+            ? 'bg-emerald-50/50 dark:bg-emerald-950/20'
+            : 'bg-red-50/50 dark:bg-red-950/20'),
         idx !== 0 && 'break-inside-avoid print:break-inside-avoid',
       )}
     >
@@ -241,7 +232,9 @@ const FrameworkCard = ({
             </Tooltip>
           </div>
           <div className="flex items-center">
-            {isCompliant ? (
+            {coverageGap ? (
+              <Badge variant="secondary">{coverageGap}</Badge>
+            ) : isCompliant ? (
               <CheckCircle className="icon-compliant size-5 text-emerald-600 dark:text-emerald-500" />
             ) : (
               <Tooltip>
@@ -262,19 +255,12 @@ const FrameworkCard = ({
         </div>
         {/* Always expanded */}
         <div className="mt-4">
-          {(framework === 'owasp:api' ||
-            framework === 'owasp:llm' ||
-            framework === 'dod:ai:ethics') &&
+          {hasNamedCategories(framework) &&
           Object.keys(ALIASED_PLUGIN_MAPPINGS[framework]).length > 0 ? (
             // Show categorized plugins for frameworks with named categories
             <div className="space-y-4">
               {Object.entries(ALIASED_PLUGIN_MAPPINGS[framework]).map(
-                ([categoryId, { plugins: categoryPlugins }]) => {
-                  const { categoryNumber, categoryName } = getCategoryDisplay(
-                    framework,
-                    categoryId,
-                  );
-
+                ([categoryId, { plugins: categoryPlugins, untestedBehavior }]) => {
                   const expandedPlugins = expandPluginCollections(categoryPlugins, categoryStats);
                   const {
                     compliant: compliantCategoryPlugins,
@@ -291,11 +277,23 @@ const FrameworkCard = ({
                     compliantCategoryPlugins.length + nonCompliantCategoryPlugins.length;
                   const showHeaderBorder =
                     testedCount > 0 && nonCompliantCategoryPlugins.length > 0;
-                  const categoryBadge = getCategoryBadgeData(
-                    testedCount,
-                    nonCompliantCategoryPlugins.length,
-                    visibleUntestedItems.length,
-                  );
+                  const partial =
+                    framework === 'aiuc:1' &&
+                    testedCount > 0 &&
+                    !nonCompliantCategoryPlugins.length &&
+                    (untestedPlugins.length > 0 || untestedBehavior);
+                  const categoryBadge = partial
+                    ? {
+                        variant: 'secondary' as const,
+                        label: untestedPlugins.length
+                          ? `${testedCount} / ${expandedPlugins.size} plugins tested`
+                          : 'Partial coverage',
+                      }
+                    : getCategoryBadgeData(
+                        testedCount,
+                        nonCompliantCategoryPlugins.length,
+                        visibleUntestedItems.length,
+                      );
 
                   return (
                     <div key={categoryId} className="overflow-hidden rounded border border-border">
@@ -306,16 +304,21 @@ const FrameworkCard = ({
                         )}
                       >
                         <span className="text-sm font-medium">
-                          {categoryNumber}. {categoryName}
+                          {getCategoryLabel(framework, categoryId)}
                         </span>
                         <Badge
                           variant={categoryBadge.variant}
                           className="h-5 whitespace-nowrap text-[0.7rem]"
                         >
-                          {categoryBadge.label}
+                          {categoryPlugins.length === 0 ? 'No built-in tests' : categoryBadge.label}
                         </Badge>
                       </div>
 
+                      {untestedBehavior && (
+                        <p className="px-2 py-1 text-xs text-muted-foreground">
+                          {untestedBehavior} not tested
+                        </p>
+                      )}
                       <div>
                         <FrameworkPluginSection
                           title="Failed:"

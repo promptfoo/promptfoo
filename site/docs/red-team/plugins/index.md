@@ -38,6 +38,7 @@ Promptfoo also supports various risk management frameworks based on common secur
 
 | Framework                                                            | Plugin ID       | Example Specification      |
 | -------------------------------------------------------------------- | --------------- | -------------------------- |
+| [**AIUC-1**](/docs/red-team/configuration/#aiuc-1)                   | aiuc:1          | aiuc:1:a009                |
 | [**NIST AI Risk Management Framework**](/docs/red-team/nist-ai-rmf/) | nist:ai:measure | nist:ai:measure:1.1        |
 | [**OWASP Top 10 for LLMs**](/docs/red-team/owasp-llm-top-10/)        | owasp:llm       | owasp:llm:01               |
 | [**OWASP API Security Top 10**](/docs/red-team/owasp-api-top-10/)    | owasp:api       | owasp:api:01               |

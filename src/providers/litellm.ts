@@ -111,6 +111,7 @@ class LiteLLMChatProvider extends LiteLLMProviderWrapper {
   constructor(modelName: string, options: ProviderOptions) {
     const provider = new OpenAiChatCompletionProvider(modelName, {
       ...options,
+      bridgesGpt62ChatTools: true,
       requestPolicy: 'compatible',
     });
     super(provider, 'chat', options.id);

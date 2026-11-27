@@ -2,7 +2,17 @@ const REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const UNKNOWN_PERSISTED_EFFORT = Symbol('unknown persisted effort');
 const COMPACTED_EFFORT = Symbol('effort before compaction');
 
-type Gpt6Variant = 'astra' | 'sol' | 'luna' | '6.1-sol';
+const MODEL_LABELS = {
+  astra: 'GPT-6 Astra',
+  sol: 'GPT-6 Sol',
+  luna: 'GPT-6 Luna',
+  '6.1-sol': 'GPT-6.1 Sol',
+  '6.1-terra': 'GPT-6.1 Terra',
+  '6.2-astra': 'GPT-6.2 Astra',
+  '6.2-sol': 'GPT-6.2 Sol',
+} as const;
+
+type Gpt6Variant = keyof typeof MODEL_LABELS;
 type Gpt6Reasoning = { effort?: unknown; enabled?: unknown; mode?: unknown } | null | undefined;
 
 function getGpt6BaseModelName(modelName: string): string {
@@ -16,12 +26,12 @@ export function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
     return undefined;
   }
   const baseModel = getGpt6BaseModelName(modelName);
-  if (/(?:^|[.-])gpt-6\.1-sol(?:[-:]|$)/.test(baseModel)) {
-    return '6.1-sol';
-  }
-  return /(?:^|[.-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(baseModel)?.[1] as
-    | Gpt6Variant
-    | undefined;
+  const versioned = /(?:^|[.-])gpt-(6\.1-(?:sol|terra)|6\.2-(?:astra|sol))(?:[-:]|$)/.exec(
+    baseModel,
+  );
+  const variant =
+    versioned?.[1] ?? /(?:^|[.-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(baseModel)?.[1];
+  return variant as Gpt6Variant | undefined;
 }
 
 export function isGpt6Model(modelName: unknown): boolean {
@@ -32,10 +42,81 @@ export function isGpt6Model(modelName: unknown): boolean {
   return getGpt6Variant(baseModel) !== undefined || /(?:^|[/-])gpt-6(?:[.-]|$)/.test(baseModel);
 }
 
+type ReasoningConfig = { reasoning?: unknown; reasoning_effort?: unknown; passthrough?: unknown };
+
 function getObject(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function firstDefined(...values: unknown[]): unknown {
+  return values.find((value) => value !== undefined);
+}
+
+function renderResponsesReasoning(
+  value: unknown,
+  render: (value: unknown) => unknown,
+  resolveEffort: boolean,
+): unknown {
+  const object = getObject(value);
+  if (!resolveEffort && object) {
+    const { effort: _effort, ...options } = object;
+    return render(options);
+  }
+  const result = render(value);
+  const renderedObject = getObject(result);
+  if (!resolveEffort && renderedObject) {
+    const { effort: _effort, ...options } = renderedObject;
+    return options;
+  }
+  return result;
+}
+
+function getResponsesReasoning(
+  config: ReasoningConfig | undefined,
+  render: (value: unknown) => unknown,
+  resolveEffort = true,
+) {
+  const typed = renderResponsesReasoning(config?.reasoning, render, resolveEffort);
+  const typedEffort = typed === null ? null : getObject(typed)?.effort;
+  const passthrough = renderResponsesReasoning(
+    getObject(config?.passthrough)?.reasoning,
+    render,
+    resolveEffort && typedEffort === undefined,
+  );
+  for (const value of [typed, passthrough]) {
+    if (value != null && !getObject(value)) {
+      throw new Error('GPT-6 Responses reasoning must be an object or null. Use { effort: low }.');
+    }
+  }
+  const options = { ...getObject(passthrough), ...getObject(typed) };
+  const nestedEffort = firstDefined(
+    typedEffort,
+    passthrough === null ? null : getObject(passthrough)?.effort,
+  );
+  const effort =
+    nestedEffort === undefined && resolveEffort ? render(config?.reasoning_effort) : nestedEffort;
+  return { options, effort, clearOptions: typed === null || passthrough === null };
+}
+
+export function getGpt6ResponsesReasoning(
+  providerConfig: ReasoningConfig,
+  promptConfig: ReasoningConfig | undefined,
+  render: (value: unknown) => unknown,
+): Record<string, unknown> | undefined {
+  const prompt = getResponsesReasoning(promptConfig, render);
+  const provider = prompt.clearOptions
+    ? undefined
+    : getResponsesReasoning(providerConfig, render, prompt.effort === undefined);
+  const options = { ...provider?.options, ...prompt.options };
+  const effort = firstDefined(prompt.effort, provider?.effort);
+  if (effort === null) {
+    delete options.effort;
+  } else if (effort !== undefined) {
+    options.effort = effort;
+  }
+  return Object.keys(options).length ? options : undefined;
 }
 
 function normalizeReasoning(body: Record<string, unknown>): Gpt6Reasoning {
@@ -103,21 +184,25 @@ function getOpenRouterChatEffortUpdates(messages: unknown): unknown[] {
   return efforts;
 }
 
+function supportsReasoningNone(variant: Gpt6Variant): boolean {
+  return variant === 'sol' || variant === 'luna' || variant === '6.1-terra';
+}
+
 function validateReasoningEffort(effort: unknown, variant: Gpt6Variant, modelLabel: string): void {
-  const requiresReasoning = variant === 'astra' || variant === '6.1-sol';
+  const supportsNone = supportsReasoningNone(variant);
   if (
     effort == null ||
     effort === '' ||
     (typeof effort === 'string' &&
-      (REASONING_EFFORTS.has(effort) || (!requiresReasoning && effort === 'none')))
+      (REASONING_EFFORTS.has(effort) || (supportsNone && effort === 'none')))
   ) {
     return;
   }
 
   throw new Error(
-    requiresReasoning
-      ? `${modelLabel} supports reasoning effort low, medium, high, xhigh, or max. Use low instead of none or minimal.`
-      : `${modelLabel} supports reasoning effort none, low, medium, high, xhigh, or max.`,
+    supportsNone
+      ? `${modelLabel} supports reasoning effort none, low, medium, high, xhigh, or max.`
+      : `${modelLabel} supports reasoning effort low, medium, high, xhigh, or max. Use low instead of none or minimal.`,
   );
 }
 
@@ -143,9 +228,10 @@ function validateChatTools(
     return;
   }
 
-  if (variant === 'astra' || variant === '6.1-sol') {
+  if (variant !== 'sol' && variant !== 'luna') {
+    const model = variant === 'astra' ? 'gpt-6-astra' : `gpt-${variant}`;
     throw new Error(
-      `${modelLabel} tool calling requires the Responses API. Use openai:responses:${variant === '6.1-sol' ? 'gpt-6.1-sol' : 'gpt-6-astra'} or azure:responses:<deployment>.`,
+      `${modelLabel} tool calling requires the Responses API. Use openai:responses:${model} or azure:responses:<deployment>.`,
     );
   }
   for (const [selector, definitions] of [
@@ -207,6 +293,8 @@ export function applyGpt6RequestRules(
   api: 'chat' | 'responses',
   options: {
     isOpenRouter?: boolean;
+    isAzure?: boolean;
+    bridgesGpt62ChatTools?: boolean;
     defaultResponsesTemperature?: number;
     supportsPersistedEffortUpdates?: boolean;
   } = {},
@@ -215,8 +303,7 @@ export function applyGpt6RequestRules(
   if (!variant) {
     return;
   }
-  const modelLabel =
-    variant === '6.1-sol' ? 'GPT-6.1 Sol' : `GPT-6 ${variant[0].toUpperCase()}${variant.slice(1)}`;
+  const modelLabel = MODEL_LABELS[variant];
 
   const reasoning = normalizeReasoning(body);
   if (api === 'responses' && body.reasoning_effort !== undefined) {
@@ -238,7 +325,15 @@ export function applyGpt6RequestRules(
   validateReasoningEffort(effort, variant, modelLabel);
 
   if (api === 'chat') {
-    validateChatTools(body, variant, modelLabel, effort, options.isOpenRouter ?? false);
+    if (options.isAzure && variant.startsWith('6.2-')) {
+      delete body.presence_penalty;
+      delete body.frequency_penalty;
+      delete body.logit_bias;
+    }
+    const allowChatTools =
+      !!options.isOpenRouter ||
+      (!!options.bridgesGpt62ChatTools && (variant === '6.2-astra' || variant === '6.2-sol'));
+    validateChatTools(body, variant, modelLabel, effort, allowChatTools);
   }
   const samplingEffort = getSamplingEffort(
     body,
@@ -261,8 +356,7 @@ export function applyGpt6RequestRules(
   }
 
   if (
-    variant === 'astra' ||
-    variant === '6.1-sol' ||
+    !supportsReasoningNone(variant) ||
     (samplingEffort !== UNKNOWN_PERSISTED_EFFORT && samplingEffort !== 'none')
   ) {
     for (const key of ['temperature', 'top_p', 'logprobs', 'top_logprobs']) {
