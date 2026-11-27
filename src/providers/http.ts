@@ -1914,7 +1914,7 @@ export class HttpProvider implements ApiProvider {
 
       // Calculate expiration time
       // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
-      const expiresInSeconds = tokenData.expires_in || 3600;
+      const expiresInSeconds = tokenData.expires_in ?? 3600;
       const expiresAt = Date.now() + expiresInSeconds * 1000;
       const cachedToken = this.cacheToken(cacheKey, tokenData.access_token, expiresAt);
 
