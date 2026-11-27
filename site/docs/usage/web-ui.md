@@ -45,6 +45,18 @@ See [`promptfoo view`](/docs/usage/command-line#promptfoo-view) for CLI options.
 - **Inference details** - Tokens, latency, cost, tokens/sec
 - **Media** - Image size limits; double-click for lightbox
 
+### Set defaults for a shared viewer
+
+Set either variable when starting the viewer. For example, this starts the viewer with JSON formatting enabled and pass/fail indicators hidden:
+
+```sh
+PROMPTFOO_WEB_VIEWER_TABLE_SETTING_PRETTIFY_JSON=1 \
+PROMPTFOO_WEB_VIEWER_TABLE_SETTING_SHOW_PASS_FAIL=0 \
+npx promptfoo@latest view
+```
+
+Use `1` to enable a setting or `0` to disable it. On a first visit, the built-in defaults are JSON formatting off and pass/fail indicators on. The viewer reads these defaults from the API serving the report, including when the frontend is hosted separately. Each browser's saved table settings take precedence. **Reset to Defaults** reapplies the configured values.
+
 ## Cell Actions
 
 Hover to reveal actions. Hold `Shift` for more:
