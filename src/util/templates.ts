@@ -420,7 +420,7 @@ function astReferencesVariable(
 
 // Cached engines and imported macros share this view. Resolve keys from the current
 // async scope; enumerate process.env only when a template actually iterates it.
-const templateEnv: Record<string, string | undefined> = new Proxy(
+export const templateEnv: Record<string, string | undefined> = new Proxy(
   {},
   {
     get(_target, key) {
@@ -497,6 +497,9 @@ export function getNunjucksEngine(
         callback(null, template);
         return;
       }
+      return template;
+    }
+    if (!callback && typeof template === 'string' && !template.includes('{')) {
       return template;
     }
     return renderString(template, { env: templateEnv, ...context }, callback);
