@@ -1696,6 +1696,21 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Detects when the model emits path-traversal or related filesystem exploit payloads',
+    label: 'technical',
+    link: '/docs/red-team/plugins/path-traversal-output/',
+    name: 'Path Traversal Output',
+    pluginId: 'path-traversal-output',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
     description: 'PII exposed through API or database',
     label: 'pii',
     link: '/docs/red-team/plugins/pii/',
