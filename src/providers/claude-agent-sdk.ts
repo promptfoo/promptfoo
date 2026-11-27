@@ -14,6 +14,7 @@ import logger from '../logger';
 import {
   addActiveSpanRoleAttribute,
   emitTurnMarkerSpan,
+  endProviderSpan,
   GenAIAttributes,
   getGenAITracer,
   getTraceparent,
@@ -241,7 +242,7 @@ function emitToolSpan(
     span.setStatus({
       code: isError || incomplete ? SpanStatusCode.ERROR : SpanStatusCode.OK,
     });
-    span.end(endTimeMs);
+    endProviderSpan(span, endTimeMs);
   } catch (err) {
     logger.warn(`[ClaudeAgentSDK] Failed to emit tool span for ${entry.name}: ${err}`);
   }

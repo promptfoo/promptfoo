@@ -12,6 +12,27 @@ afterEach(async () => {
 });
 
 describe('providerRegistry', () => {
+  it('reports nested target replays only to the enclosing provider call', async () => {
+    const provider = { id: () => 'fixture' };
+    const replay = vi.fn();
+    const live = vi.fn();
+    const run = (cached: boolean, observe: (cached: boolean) => void) =>
+      providerRegistry.withProvider(
+        provider,
+        () =>
+          providerRegistry.withProvider(provider, async () => {
+            await Promise.resolve();
+            providerRegistry.reportTargetCacheStatus(cached);
+          }),
+        undefined,
+        observe,
+      );
+    await Promise.all([run(true, replay), run(false, live)]);
+    providerRegistry.reportTargetCacheStatus(true);
+    expect(replay.mock.calls).toEqual([[true]]);
+    expect(live.mock.calls).toEqual([[false]]);
+  });
+
   it.each([
     { reuse: false, reject: false },
     { reuse: false, reject: true },

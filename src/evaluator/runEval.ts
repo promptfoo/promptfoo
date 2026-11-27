@@ -1,5 +1,9 @@
 import { LRUCache } from 'lru-cache';
-import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
+import {
+  hasTraceAwareAssertions,
+  hasTraceAwareRedteamAssertions,
+  runAssertions,
+} from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
@@ -499,25 +503,42 @@ async function callProviderForRunEval({
         cached: false,
       };
     } else {
-      response = await callActiveProvider({
-        abortSignal,
-        pauseSignal,
-        evalId,
-        filters,
-        onProviderInvoked: () => {
-          providerInvoked = true;
-        },
-        promptForRender,
-        provider,
-        rateLimitRegistry,
-        renderedPrompt,
-        repeatIndex,
-        test,
-        testIndex,
-        testSuite,
-        traceContext,
-        vars,
-      });
+      const needsLiveTrace =
+        traceContext?.traceparent && hasTraceAwareRedteamAssertions(test, provider);
+      const invoke = () =>
+        callActiveProvider({
+          abortSignal,
+          pauseSignal,
+          evalId,
+          filters,
+          onProviderInvoked: () => {
+            providerInvoked = true;
+          },
+          promptForRender,
+          provider,
+          rateLimitRegistry,
+          renderedPrompt,
+          repeatIndex,
+          test,
+          testIndex,
+          testSuite,
+          traceContext,
+          vars,
+        });
+      const call = await (needsLiveTrace ? withCacheEnabled(false, invoke) : invoke());
+      response = call.response;
+      if (needsLiveTrace && (call.hadCachedTarget || response.cached)) {
+        // Discard stale evidence without losing the cost of live turns in a mixed response.
+        const { cached, cost, incurredCost, latencyMs, tokenUsage } = response;
+        response = {
+          cached,
+          cost,
+          incurredCost,
+          latencyMs,
+          tokenUsage,
+          error: 'Trace-aware redteam grading requires a live target response.',
+        };
+      }
     }
 
     sanitizeResponseMetadata(response);
@@ -537,6 +558,7 @@ async function callProviderForRunEval({
       try {
         await collectExternalTraceAfterProviderCall({
           abortSignal,
+          provider,
           providerFailed,
           response,
           test,
@@ -560,6 +582,7 @@ async function callProviderForRunEval({
 
 async function collectExternalTraceAfterProviderCall({
   abortSignal,
+  provider,
   providerFailed,
   response,
   test,
@@ -567,6 +590,7 @@ async function collectExternalTraceAfterProviderCall({
   traceContext,
 }: {
   abortSignal?: AbortSignal;
+  provider: ApiProvider;
   providerFailed: boolean;
   response?: ProviderResponse;
   test: AtomicTestCase;
@@ -591,7 +615,7 @@ async function collectExternalTraceAfterProviderCall({
     !response?.error &&
     response?.output !== null &&
     response?.output !== undefined &&
-    hasTraceAwareAssertions(test.assert);
+    hasTraceAwareAssertions(test.assert, test, provider);
 
   try {
     if (needsTraceForGrading) {
@@ -654,7 +678,7 @@ async function callActiveProvider({
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
-}): Promise<ProviderResponse> {
+}): Promise<{ response: ProviderResponse; hadCachedTarget: boolean }> {
   const originalProvider = maybeWrapMcpProviderForRedteam(provider, test);
   const cleanupOwner = isApiProvider(test.provider) ? test.provider : provider;
   const activeProvider =
@@ -675,6 +699,11 @@ async function callActiveProvider({
     vars,
   });
   let completedResponse: ProviderResponse | undefined;
+  // A strategy may discard a replayed turn or combine it with fresh responses.
+  let hadCachedTarget = false;
+  const onTargetCacheStatus = (cached: boolean) => {
+    hadCachedTarget ||= cached;
+  };
   const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
   const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
     // A previous response belongs only to backoff until the next attempt starts.
@@ -702,6 +731,7 @@ async function callActiveProvider({
           return result;
         },
         abortSignal,
+        onTargetCacheStatus,
       );
     return withProviderCallExecutionContext(
       {
@@ -709,6 +739,7 @@ async function callActiveProvider({
         rateLimitRegistry,
         rateLimitProvider: activeProvider,
         onTargetResponse: (prompt, response) => {
+          onTargetCacheStatus(response.cached === true);
           completedTargets.push({ prompt, response });
         },
       },
@@ -773,7 +804,7 @@ async function callActiveProvider({
 
   logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
   logger.debug(`Provider response cached property explicitly: ${response.cached}`);
-  return response;
+  return { response, hadCachedTarget };
 }
 
 function buildCallApiContext({
@@ -1119,7 +1150,7 @@ async function gradeRunEvalResponse({
   const traceId = getTraceId(traceContext);
   if (
     traceId &&
-    hasTraceAwareAssertions(test.assert) &&
+    hasTraceAwareAssertions(test.assert, test, provider) &&
     !isExternalTraceProvider(testSuite?.tracing?.provider)
   ) {
     await flushOtel();

@@ -728,6 +728,11 @@ function traceAttributeEvidenceSource(
     return 'agent-response';
   }
 
+  // Process attributes can come from the resource shared by every span. Only
+  // local command projection can link them to an executed command.
+  if (/^process[._]/.test(normalizedAttributeName)) {
+    return undefined;
+  }
   if (
     normalizedAttributeName === 'codex.command' ||
     normalizedAttributeName.includes('command.line') ||
@@ -739,7 +744,10 @@ function traceAttributeEvidenceSource(
   return undefined;
 }
 
-function evidenceFromTraceData(traceData?: Pick<TraceData, 'spans'> | null): TargetEvidence[] {
+function evidenceFromTraceData(
+  traceData?: Pick<TraceData, 'spans'> | null,
+  commandsProjected = false,
+): TargetEvidence[] {
   if (!traceData) {
     return [];
   }
@@ -753,7 +761,7 @@ function evidenceFromTraceData(traceData?: Pick<TraceData, 'spans'> | null): Tar
       }
 
       const evidenceSource = traceAttributeEvidenceSource(attributeName.toLowerCase());
-      if (!evidenceSource) {
+      if (!evidenceSource || (commandsProjected && evidenceSource === 'command')) {
         continue;
       }
 
@@ -783,7 +791,12 @@ function targetEvidence(
           : '',
     },
     ...evidenceFromProviderRaw(gradingContext?.providerResponse?.raw),
-    ...evidenceFromTraceData(gradingContext?.traceData),
+    ...(gradingContext?.localTraceActions ?? []).map(({ step, confirmedCommand }) => ({
+      evidenceSource: 'command' as const,
+      location: `trace step ${step} command`,
+      text: confirmedCommand ?? '',
+    })),
+    ...evidenceFromTraceData(gradingContext?.traceData, !!gradingContext?.localTraceActions),
     ...evidenceFromTraceData(gradingContext?.traceContext),
   ];
 

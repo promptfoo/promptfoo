@@ -1,3 +1,6 @@
+import { isDeepStrictEqual } from 'node:util';
+
+import { getLocalEvaluatorSpans, SPAN_ROLE_ATTRIBUTE } from '../tracing/spanRoles';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
@@ -20,6 +23,7 @@ export interface TrajectoryStepMatcher {
 export interface TrajectoryStep {
   aliases: string[];
   args?: unknown;
+  attributes?: TraceSpan['attributes'];
   name: string;
   spanName: string;
   statusCode?: number;
@@ -27,6 +31,7 @@ export interface TrajectoryStep {
   type: TrajectoryStepType;
 }
 
+const EXIT_CODE_ATTRIBUTE = /(?:^|[._])exit[._]?code$/i;
 const GENERIC_QUERY_ATTRIBUTE_KEYS = ['query'] as const;
 const DEFAULT_COMMAND_TOOL_NAMES = ['exec_command', 'local_shell', 'shell'] as const;
 
@@ -213,31 +218,30 @@ function extractToolArgs(span: TraceSpan): unknown {
   return undefined;
 }
 
-function extractCommand(
-  span: TraceSpan,
-  toolName = extractToolName(span),
-  getToolArgs = () => extractToolArgs(span),
-  commandToolNames = resolveCommandToolNames(undefined),
-): string | undefined {
-  const attributes = span.attributes || {};
-
+function commandAttribute(attributes: Record<string, unknown>, local: boolean): string | undefined {
   const directMatch = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
   if (directMatch) {
     return directMatch;
   }
 
   for (const [key, value] of Object.entries(attributes)) {
-    if (typeof value !== 'string' || !value.trim()) {
+    if (
+      typeof value !== 'string' ||
+      !value.trim() ||
+      !/command/i.test(key) ||
+      /output|result/i.test(key) ||
+      EXIT_CODE_ATTRIBUTE.test(key) ||
+      (local && /^process[._]/i.test(key))
+    ) {
       continue;
     }
-
-    if (/command/i.test(key) && !/output|result/i.test(key)) {
-      return value.trim();
-    }
+    return value.trim();
   }
+  return undefined;
+}
 
-  const toolArgs = getToolArgs();
-  if (isCommandToolName(toolName, commandToolNames) && toolArgs && typeof toolArgs === 'object') {
+function commandFromToolArgs(toolArgs: unknown): string | undefined {
+  if (toolArgs && typeof toolArgs === 'object') {
     const args = toolArgs as Record<string, unknown>;
     const commandSource =
       args.cmd === undefined
@@ -261,12 +265,62 @@ function extractCommand(
       }
     }
   }
+  return undefined;
+}
 
-  if (span.name.startsWith('exec ')) {
-    return span.name.slice('exec '.length).trim();
+function extractCommand(
+  span: TraceSpan,
+  toolName: string | undefined,
+  getToolArgs: () => unknown,
+  commandToolNames: ReadonlySet<string>,
+  local: boolean,
+): string | undefined {
+  const attributes = span.attributes || {};
+  const attribute = commandAttribute(attributes, local);
+  if (!local && attribute) {
+    return attribute;
+  }
+  const tool = isCommandToolName(toolName, commandToolNames)
+    ? commandFromToolArgs(getToolArgs())
+    : undefined;
+  const named = span.name.startsWith('exec ') ? span.name.slice('exec '.length).trim() : undefined;
+  if (!local) {
+    return tool ?? named;
   }
 
-  return undefined;
+  const lines = Object.keys(attributes)
+    .filter((key) => !/^process[._]/i.test(key) && /(?:^|[._])command[._]line$/i.test(key))
+    .map((key) => getFirstStringAttribute(attributes, [key]));
+  const codex = getFirstStringAttribute(attributes, ['codex.command']);
+  const command = getFirstStringAttribute(attributes, ['command']);
+  const actions = [codex, ...lines, command, tool, named];
+  // Full span commands outrank short labels. A recorded shell input or command
+  // line is an action even when the executable takes no arguments.
+  const action =
+    actions.find((value) => value && /\s/.test(value)) ??
+    tool ??
+    lines.find(Boolean) ??
+    codex ??
+    command;
+  if (action) {
+    return action;
+  }
+
+  // OTLP resources can attach the host process to every span. It can expand
+  // a matching executable label, but cannot establish a command by itself.
+  const label = attribute ?? named;
+  const processLine = getFirstStringAttribute(attributes, [
+    'process.command_line',
+    'process.command.line',
+  ]);
+  if (label && processLine) {
+    const executable = /^(?:"([^"]+)"|'([^']+)')/.exec(processLine);
+    const path = executable?.[1] ?? executable?.[2] ?? getCommandExecutable(processLine);
+    if (path === label || path?.split(/[\\/]/).pop() === label) {
+      return processLine;
+    }
+  }
+  return label;
 }
 
 function extractSearchQuery(span: TraceSpan): string | undefined {
@@ -307,7 +361,10 @@ function isMessageSpan(span: TraceSpan): boolean {
   return span.name === 'agent response' || span.name === 'send input';
 }
 
-export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
+export function extractTrajectorySteps(
+  trace: TraceData,
+  preferSpanCommands = false,
+): TrajectoryStep[] {
   const commandToolNames = getTraceCommandToolNames(trace);
 
   return [...(trace.spans || [])]
@@ -337,7 +394,13 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
         }
         return toolArgs;
       };
-      const command = extractCommand(span, toolName, getToolArgs, commandToolNames);
+      const command = extractCommand(
+        span,
+        toolName,
+        getToolArgs,
+        commandToolNames,
+        preferSpanCommands,
+      );
       const searchQuery = extractSearchQuery(span);
 
       let type: TrajectoryStepType = 'span';
@@ -496,7 +559,72 @@ function truncateJudgeTrajectorySteps(
 }
 
 export function summarizeTrajectoryForJudge(trace: TraceData): string {
-  const rawSteps = extractTrajectorySteps(trace).map((step, index) => {
+  return formatTrajectorySummary(extractTrajectorySteps(trace), trace.traceId);
+}
+
+/** Only deterministic coding-agent checks may inspect full command arguments. */
+export function projectRedteamTrace(trace: TraceData, codingAgent: boolean) {
+  const localSpans = codingAgent && getLocalEvaluatorSpans();
+  if (localSpans && localSpans.size > 0) {
+    // Retain untrusted spans, target actions and unexpected attributes.
+    const spans = trace.spans.filter((span) => {
+      const local = localSpans.get(span.spanId);
+      if (
+        local?.traceId !== trace.traceId ||
+        local.name !== span.name ||
+        span.attributes?.[SPAN_ROLE_ATTRIBUTE] !== local.role ||
+        Object.keys(span.attributes).some((key) => !local.attributes.includes(key))
+      ) {
+        return true;
+      }
+      const { provider } = local;
+      return (
+        provider !== undefined &&
+        ((span.statusCode !== undefined && span.statusCode !== provider.statusCode) ||
+          Object.entries(provider.attributes).some(
+            ([key, value]) => !isDeepStrictEqual(span.attributes?.[key], value),
+          ))
+      );
+    });
+    trace = { ...trace, spans };
+  }
+  const steps = extractTrajectorySteps(trace, true);
+  const localTraceActions = codingAgent
+    ? steps.flatMap((step, index) => {
+        if (step.type === 'message' || step.type === 'reasoning') {
+          return [];
+        }
+        // Tool, search and opaque spans can name resources in their private
+        // labels or arguments. Their omission prevents a conclusive model pass.
+        const completedCommand =
+          step.type === 'command' &&
+          step.statusCode === 1 &&
+          !Object.entries(step.attributes ?? {}).some(
+            ([key, value]) => EXIT_CODE_ATTRIBUTE.test(key) && value !== 0 && value !== '0',
+          );
+        const confirmedCommand = completedCommand ? step.name : undefined;
+        return [{ step: index + 1, confirmedCommand }];
+      })
+    : undefined;
+  return {
+    traceData: trace,
+    traceSummary: formatTrajectorySummary(steps),
+    ...(localTraceActions?.length && { localTraceActions }),
+  };
+}
+
+function formatTrajectorySummary(trajectory: TrajectoryStep[], traceId?: string): string {
+  const rawSteps = trajectory.map((step, index) => {
+    // Commands, search terms, span names and status messages can contain credentials.
+    if (traceId === undefined) {
+      return {
+        index: index + 1,
+        type: step.type,
+        name: step.type,
+        status:
+          step.statusCode === 1 || step.statusCode === 2 ? { code: step.statusCode } : undefined,
+      };
+    }
     const status = getTrajectoryStepStatus(step);
     return {
       index: index + 1,
@@ -511,7 +639,7 @@ export function summarizeTrajectoryForJudge(trace: TraceData): string {
 
   return JSON.stringify(
     {
-      traceId: trace.traceId,
+      traceId,
       stepCount: rawSteps.length,
       compactedStepCount: compactedSteps.length,
       steps,

@@ -16,6 +16,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { hasTraceOrImages } from '../../grading/evidence';
 import { getTargetConversation } from '../../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
@@ -811,8 +812,15 @@ export class HydraProvider implements ApiProvider {
       });
       lastResponseMessages = [...this.conversationHistory];
 
-      // Check for refusal and backtrack if in stateless mode and backtracking enabled
-      const isRefusal = isBasicRefusal(targetResponse.output);
+      const gradingContext: RedteamGradingContext = {
+        providerResponse: targetResponse,
+        ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
+        ...(tracingOptions.includeInGrading
+          ? { traceContext, traceSummary: computedTraceSummary }
+          : {}),
+      };
+      const isRefusal =
+        !hasTraceOrImages(gradingContext) && isBasicRefusal(targetResponse.output, 'grading');
 
       if (!this.stateful && this.maxBacktracks > 0 && isRefusal) {
         logger.debug(`${this.logPrefix} Response rejected (basic refusal), backtracking...`, {
@@ -857,27 +865,11 @@ export class HydraProvider implements ApiProvider {
       // Grade the response
       let graderResult: GradingResult | undefined = undefined;
 
-      // Prepare trace summaries for attack generation and grading
-      const attackTraceSummary = tracingOptions.includeInAttack ? computedTraceSummary : undefined;
-      const gradingTraceSummary = tracingOptions.includeInGrading
-        ? computedTraceSummary
-        : undefined;
-
-      // Update previous trace summary for next turn's attack generation
-      previousTraceSummary = attackTraceSummary;
+      previousTraceSummary = tracingOptions.includeInAttack ? computedTraceSummary : undefined;
 
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          // Build grading context with image outputs, tracing, and exfil tracking data.
-          const gradingContext: RedteamGradingContext = {
-            providerResponse: targetResponse,
-            ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
-            ...(tracingOptions.includeInGrading
-              ? { traceContext, traceSummary: gradingTraceSummary }
-              : {}),
-          };
-
           // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
           // In layer mode (e.g., hydra → indirect-web-pwn), lastTransformResult.metadata is the
           // ONLY source for webPageUuid (set by indirect-web-pwn strategy during applyRuntimeTransforms)
@@ -948,6 +940,7 @@ export class HydraProvider implements ApiProvider {
             {
               prompt: lastFinalAttackPrompt || nextMessage,
               output: targetResponse.output,
+              images: targetResponse.images,
               pluginId: test.metadata?.pluginId,
               assertion: assertToUse,
             },
@@ -1066,6 +1059,7 @@ export class HydraProvider implements ApiProvider {
     return preserveSelectedError(
       {
         output: lastTargetResponse?.output || '',
+        ...(lastTargetResponse?.images?.length && { images: lastTargetResponse.images }),
         ...(failClosedError
           ? { error: failClosedError }
           : lastTargetResponse?.error

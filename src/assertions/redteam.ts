@@ -7,12 +7,14 @@ import {
   getTargetConversation,
   withGradingUsage,
 } from '../redteam/grading/storedResult';
-import { isAttackProvider } from '../redteam/shared/attackProviders';
+import {
+  resolveStrategyProvider,
+  resolveTracingOptions,
+} from '../redteam/providers/tracingOptions';
 import { checkExfilTracking, getWebPageTrackingIds } from '../redteam/strategies/indirectWebPwn';
-import { isApiProvider, isProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
-import { summarizeTrajectoryForJudge } from './trajectoryUtils';
+import { projectRedteamTrace } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
 import type {
@@ -60,36 +62,36 @@ function analyzeGraderErrors(
   return { hasAnyErrors, allTurnsHaveErrors };
 }
 
-function getConfiguredProviderId(
+export function redteamGraderUsesTrace(
+  assertion: Assertion,
   test: AtomicTestCase,
   provider: ApiProvider | undefined,
-): string | undefined {
-  const configuredProvider = test.provider ?? provider;
-  return typeof configuredProvider === 'string'
-    ? configuredProvider
-    : isApiProvider(configuredProvider)
-      ? configuredProvider.id()
-      : isProviderOptions(configuredProvider)
-        ? configuredProvider.id
-        : undefined;
+  suppliedTrace: boolean,
+): boolean {
+  const tracing = resolveTracingOptions({ test, provider });
+  return (
+    tracing.includeInGrading &&
+    (tracing.enabled ||
+      suppliedTrace ||
+      assertion.type.startsWith('promptfoo:redteam:coding-agent:'))
+  );
 }
 
 function matchesStoredGraderResult(
   assertion: Assertion,
   storedResult: GradingResult,
   test: AtomicTestCase,
-  provider: ApiProvider | undefined,
+  strategy: ReturnType<typeof resolveStrategyProvider>,
 ): boolean {
   const pluginId = test.metadata?.pluginId;
-  const providerId = getConfiguredProviderId(test, provider);
 
   // A target can return arbitrary metadata. Only the configured attack executor
   // may supply a grade or its usage; a marker in the response is not provenance.
   if (
     !pluginId ||
     !test.metadata?.strategyId ||
-    !providerId?.startsWith('promptfoo:redteam:') ||
-    !isAttackProvider(providerId)
+    !strategy.providerId?.startsWith('promptfoo:redteam:') ||
+    !strategy.attack
   ) {
     return false;
   }
@@ -153,26 +155,6 @@ function getRedteamPrompt(
   return undefined;
 }
 
-function createInitialGradingContext({
-  assertionValueContext,
-  providerResponse,
-  conversationTranscript,
-}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'> & {
-  conversationTranscript?: string;
-}): RedteamGradingContext {
-  const gradingContext: RedteamGradingContext = {
-    providerResponse,
-    ...(conversationTranscript === undefined ? {} : { conversationTranscript }),
-  };
-
-  if (assertionValueContext.trace) {
-    gradingContext.traceData = assertionValueContext.trace;
-    gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace);
-  }
-
-  return gradingContext;
-}
-
 /**
  * As the name implies, this function "handles" redteam assertions by either calling the
  * grader or preferably returning a `storedGraderResult` if it exists on the provider response.
@@ -218,23 +200,27 @@ export const handleRedteam = async (
 
   // Hydra and Goblin retain their current-turn grading behavior. Their saved
   // messages are still available for attack generation and reporting.
-  const providerId = getConfiguredProviderId(test, provider);
+  const strategy = resolveStrategyProvider(test, provider);
+  const { providerId } = strategy;
   const gradesCurrentTurnOnly =
     providerId === 'promptfoo:redteam:hydra' ||
     providerId === 'promptfoo:redteam:goblin' ||
     ['hydra', 'goblin', 'jailbreak:hydra', 'jailbreak:goblin'].includes(
       test.metadata?.strategyId ?? '',
     );
+  const gradedImages = gradesCurrentTurnOnly ? providerResponse.images : undefined;
 
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
   const hasStrategyGrade =
-    storedResult && matchesStoredGraderResult(assertion, storedResult, test, provider);
+    storedResult && matchesStoredGraderResult(assertion, storedResult, test, strategy);
   const getStoredTokens = () =>
     hasStrategyGrade && storedResult.tokensUsed && claimStoredGradingUsage()
       ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
       : undefined;
   if (
     hasStrategyGrade &&
+    // Strategy hashes cover text and conversation, but omit locally captured actions.
+    !assertionValueContext.trace?.spans.length &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
     storedResult.metadata?.redteamGradingInputHash ===
@@ -243,6 +229,7 @@ export const handleRedteam = async (
         outputString,
         gradesCurrentTurnOnly ? undefined : gradingMessages,
         test.metadata?.pluginId,
+        gradedImages,
       )
   ) {
     // Check if any turns had grader errors (even though we have a stored result)
@@ -274,11 +261,16 @@ export const handleRedteam = async (
   // captured assertion trace data. Keep raw trace data in-process for deterministic
   // graders; pass only a compact trajectory summary into model-graded rubrics.
   // This includes exfil tracking data from indirect-web-pwn strategy
-  let gradingContext = createInitialGradingContext({
-    assertionValueContext,
+  let gradingContext: RedteamGradingContext = {
     providerResponse,
-    conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
-  });
+    ...(!gradesCurrentTurnOnly &&
+      conversationTranscript !== undefined && { conversationTranscript }),
+    ...(assertionValueContext.trace &&
+      projectRedteamTrace(
+        assertionValueContext.trace,
+        assertion.type.startsWith('promptfoo:redteam:coding-agent:'),
+      )),
+  };
   const trackingIds =
     getWebPageTrackingIds(
       providerResponse.metadata,
@@ -339,7 +331,7 @@ export const handleRedteam = async (
 
     // A fresh verdict resolves only the matching final turn, not earlier ungraded attempts.
     const { hasAnyErrors } = analyzeGraderErrors(
-      isAttackProvider(providerId ?? '') ? providerResponse.metadata?.redteamHistory : undefined,
+      strategy.attack ? providerResponse.metadata?.redteamHistory : undefined,
       grade.metadata?.graderError === true
         ? undefined
         : {
@@ -350,6 +342,7 @@ export const handleRedteam = async (
               outputString,
               undefined,
               test.metadata?.pluginId,
+              gradedImages,
             ),
           },
     );

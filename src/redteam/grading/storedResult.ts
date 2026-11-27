@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 
-import type { GradingResult } from '../../types/index';
+import type { GradingResult, ProviderResponse } from '../../types/index';
 
 /** Opaque runtime values cannot safely identify a reusable assertion configuration. */
 export function getGradingAssertionHash(assertion: unknown): string | undefined {
@@ -37,6 +37,7 @@ export function getGradingInputHash(
   output: string,
   messages?: unknown,
   pluginId?: string,
+  images?: ProviderResponse['images'],
 ): string {
   const conversation = Array.isArray(messages)
     ? messages
@@ -47,9 +48,14 @@ export function getGradingInputHash(
         )
         .map(({ role, content }) => ({ role, content }))
     : [];
-  return createHash('sha256')
-    .update(JSON.stringify([pluginId, prompt, output, conversation]))
-    .digest('hex');
+  const hash = createHash('sha256').update(
+    JSON.stringify([pluginId, prompt, output, conversation]),
+  );
+  // Preserve existing text-only hashes. Include both inline images and externalized references.
+  if (images?.length) {
+    hash.update(JSON.stringify(images));
+  }
+  return hash.digest('hex');
 }
 
 export function getTargetConversation(messages: unknown): {

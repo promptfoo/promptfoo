@@ -45,6 +45,7 @@ export class ProviderRegistry {
   private readonly currentProvider = new AsyncLocalStorage<{
     state: ProviderState;
     signal?: AbortSignal;
+    onTargetCacheStatus?: (cached: boolean) => void;
   }>();
   private readonly releasingResource = new AsyncLocalStorage<{
     state: ResourceState;
@@ -109,11 +110,17 @@ export class ProviderRegistry {
     return ready ? this.waitForScope(scope, ready, signal) : undefined;
   }
 
+  /** Let aggregating providers report a target replay without exposing individual turns. */
+  reportTargetCacheStatus(cached: boolean): void {
+    this.currentProvider.getStore()?.onTargetCacheStatus?.(cached);
+  }
+
   /** Keep a provider and any resources it opens alive until its actual call settles. */
   async withProvider<T>(
     provider: IdleCleanupProvider,
     run: () => Promise<T>,
     signal?: AbortSignal,
+    onTargetCacheStatus = this.currentProvider.getStore()?.onTargetCacheStatus,
   ): Promise<T> {
     const scope = this.evaluation.getStore();
     signal?.throwIfAborted();
@@ -131,7 +138,7 @@ export class ProviderRegistry {
       finish = resolve;
     });
     this.activeCalls.add(finished);
-    return this.currentProvider.run({ state, signal }, async () => {
+    return this.currentProvider.run({ state, signal, onTargetCacheStatus }, async () => {
       try {
         if (ready) {
           await this.waitForScope(scope, ready, signal);

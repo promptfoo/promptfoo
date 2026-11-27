@@ -18,6 +18,7 @@ import {
 import {
   getActiveTraceparent,
   type PromptfooSpanRole,
+  recordEvaluatorSpan,
   SPAN_ROLE_ATTRIBUTE,
   withSpanRole,
 } from './spanRoles';
@@ -130,14 +131,20 @@ export async function withTargetSpan<T>(
     attributes[PromptfooAttributes.TEST_INDEX] = ctx.testIndex;
   }
 
-  return getGenAITracer().startActiveSpan(
+  const name =
     role === 'grader'
       ? `grader provider ${ctx.label || ctx.providerId}`
-      : ctx.label || ctx.providerId,
+      : ctx.label || ctx.providerId;
+  return getGenAITracer().startActiveSpan(
+    name,
     { kind: SpanKind.CLIENT, attributes },
     parentContext,
     async (span) => {
       try {
+        recordEvaluatorSpan(span, role, name, [
+          ...Object.keys(attributes),
+          PromptfooAttributes.CACHE_HIT,
+        ]);
         const result = await withSpanRole(role, () => fn(span));
         if (result && typeof result === 'object' && 'cached' in result) {
           span.setAttribute(PromptfooAttributes.CACHE_HIT, Boolean(result.cached));
@@ -300,12 +307,19 @@ export async function withGraderSpan<T>(ctx: GraderSpanContext, fn: () => Promis
     attributes[PromptfooAttributes.TEST_INDEX] = ctx.testIndex;
   }
 
+  const name = `grader ${ctx.graderId}`;
   return getGenAITracer().startActiveSpan(
-    `grader ${ctx.graderId}`,
+    name,
     { kind: SpanKind.INTERNAL, attributes },
     parentContext,
     async (span) => {
       try {
+        recordEvaluatorSpan(span, 'grader', name, [
+          ...Object.keys(attributes),
+          GenAIAttributes.EVALUATION_SCORE_LABEL,
+          GenAIAttributes.EVALUATION_SCORE_VALUE,
+          GenAIAttributes.EVALUATION_EXPLANATION,
+        ]);
         const result = await withSpanRole('grader', fn);
         setEvaluationResultAttributes(span, result);
         span.setStatus({ code: SpanStatusCode.OK });

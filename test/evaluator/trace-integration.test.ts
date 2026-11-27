@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { isCacheEnabled, withCacheEnabled } from '../../src/cache';
 import { evaluate, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
+import { PromptfooSimulatedUserProvider } from '../../src/providers/promptfoo';
+import { SequenceProvider } from '../../src/providers/sequence';
+import { SimulatedUser } from '../../src/providers/simulatedUser';
+import { SsrfGrader } from '../../src/redteam/plugins/ssrf';
+import { callTargetProvider } from '../../src/redteam/providers/shared';
 import { resolveTracingOptions } from '../../src/redteam/providers/tracingOptions';
 import { getProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { getTraceStore } from '../../src/tracing/store';
+import { TokenUsageTracker } from '../../src/util/tokenUsage';
 import { createMockProvider } from '../factories/provider';
 import { createDeferred } from '../util/utils';
 
@@ -60,7 +67,8 @@ vi.mock('../../src/tracing/traceContext', async (importOriginal) => ({
 }));
 
 // Mock evaluatorTracing module
-vi.mock('../../src/tracing/evaluatorTracing', () => ({
+vi.mock('../../src/tracing/evaluatorTracing', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/evaluatorTracing')>()),
   generateTraceId: vi.fn(() => 'abcdef1234567890abcdef1234567890'),
   generateSpanId: vi.fn(() => '0123456789abcdef'),
   generateTraceparent: vi.fn((traceId, spanId) => `00-${traceId}-${spanId}-01`),
@@ -784,6 +792,139 @@ describe('evaluator trace integration', () => {
       expect(debug).not.toHaveBeenCalledWith(
         `[Evaluator] Successfully fetched traces for traceId=${traceId}`,
       );
+    });
+
+    it.each([true, false])(
+      'scopes live target caching to trace-aware red team assertions (%s)',
+      async (redteam) => {
+        let cacheEnabled: boolean | undefined;
+        const provider = createMockProvider({
+          callApi: async () => {
+            cacheEnabled = isCacheEnabled();
+            return { output: 'Cached output', cached: true };
+          },
+        });
+        const options = createRunOptions(provider);
+        if (redteam) {
+          options.test.assert = [{ type: 'promptfoo:redteam:coding-agent:secret-env-read' }];
+        }
+        const [result] = await withCacheEnabled(true, () => runEval(options));
+
+        expect(cacheEnabled).toBe(!redteam);
+        expect(result.success).toBe(!redteam);
+        if (redteam) {
+          expect(result.error).toContain('requires a live target response');
+        }
+      },
+    );
+
+    it.each(
+      (['adaptive', 'sequence', 'simulation'] as const).flatMap((kind) => [
+        { kind, cached: true, includeInGrading: true },
+        { kind, cached: false, includeInGrading: true },
+        { kind, cached: true, includeInGrading: false },
+      ]),
+    )(
+      'checks nested $kind target freshness with cached=$cached and includeInGrading=$includeInGrading',
+      async ({ kind, cached, includeInGrading }) => {
+        const provider = createMockProvider();
+        provider.callApi
+          .mockResolvedValueOnce({ output: 'First', cached })
+          .mockResolvedValueOnce({ output: 'Last' });
+        const adaptive = createMockProvider({
+          id: 'promptfoo:redteam:hydra',
+          callApi: async (prompt, context, options) => {
+            await callTargetProvider(provider, prompt, context, options);
+            const last = await callTargetProvider(provider, prompt, context, options);
+            return {
+              ...last,
+              cost: 0.2,
+              incurredCost: cached ? 0.1 : 0.2,
+              latencyMs: 123,
+              metadata: { evidence: 'private-fixture' },
+              tokenUsage: {
+                numRequests: 2,
+                total: 10,
+                incurredTokenUsage: { numRequests: cached ? 1 : 2, total: cached ? 5 : 10 },
+              },
+            };
+          },
+        });
+        // Replays from the simulated user say nothing about the target's freshness.
+        vi.spyOn(PromptfooSimulatedUserProvider.prototype, 'callApi').mockResolvedValue({
+          output: 'Next',
+          cached: true,
+        });
+        const judge = vi.spyOn(SsrfGrader.prototype, 'getResult').mockResolvedValue({
+          grade: { pass: true, score: 1, reason: 'Fixture' },
+          rubric: 'Fixture',
+        });
+        const track = vi.spyOn(TokenUsageTracker.getInstance(), 'trackResponseUsage');
+        const options = createRunOptions(provider);
+        options.test.provider = {
+          adaptive,
+          sequence: new SequenceProvider({ id: 'sequence', config: { inputs: ['First', 'Last'] } }),
+          simulation: new SimulatedUser({
+            id: 'promptfoo:simulated-user',
+            config: { maxTurns: 2 },
+          }),
+        }[kind];
+        options.test.metadata = {
+          ...options.test.metadata,
+          purpose: 'Describe fixtures',
+          tracing: { enabled: true, includeInGrading },
+        };
+        options.test.assert = [{ type: 'promptfoo:redteam:ssrf' }];
+        const [result] = await withCacheEnabled(true, () => runEval(options));
+        const rejected = cached && includeInGrading;
+        expect(provider.callApi).toHaveBeenCalledTimes(2);
+        expect(result.success).toBe(!rejected);
+        if (rejected) {
+          expect(result.error).toContain('requires a live target response');
+          expect(result.response?.output).toBeUndefined();
+          expect(JSON.stringify(result)).not.toContain('private-fixture');
+          expect(judge).not.toHaveBeenCalled();
+          expect(track).toHaveBeenCalledOnce();
+        } else {
+          expect(judge).toHaveBeenCalledOnce();
+          expect(result.response?.output).toContain('Last');
+        }
+        expect(result.response?.cached).not.toBe(true);
+        const usage = result.response?.tokenUsage;
+        expect(usage?.numRequests).toBe(kind === 'simulation' ? 4 : 2);
+        expect((usage?.incurredTokenUsage ?? usage)?.numRequests).toBe(cached ? 1 : 2);
+        if (kind === 'adaptive') {
+          expect(result).toMatchObject({
+            cost: 0.2,
+            incurredCost: cached ? 0.1 : 0.2,
+            latencyMs: 123,
+            tokenUsage: { total: 10, incurredTokenUsage: { total: cached ? 5 : 10 } },
+          });
+        }
+      },
+    );
+
+    it('accepts cached red team responses when only a sibling may need the trace', async () => {
+      const provider = createMockProvider({
+        callApi: async () => {
+          expect(isCacheEnabled()).toBe(true);
+          return { output: 'I cannot help with that.', cached: true };
+        },
+      });
+      const options = createRunOptions(provider);
+      options.test.metadata = {
+        ...options.test.metadata,
+        purpose: 'Describe fixtures',
+        tracing: { enabled: true, includeInGrading: false },
+      };
+      options.test.assert = [
+        { type: 'assert-set', assert: [{ type: 'promptfoo:redteam:ssrf' }] },
+        { type: 'not-is-json', value: 'file://test/fixtures/schemas/math-response.json' },
+      ];
+      const [result] = await withCacheEnabled(true, () => runEval(options));
+      expect(result.error).toBeFalsy();
+      expect(result.success).toBe(true);
+      expect(result.response?.cached).toBe(true);
     });
 
     it('skips external trace collection for cached provider responses', async () => {

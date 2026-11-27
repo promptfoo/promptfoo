@@ -33,6 +33,12 @@ export function resetTracingState(): void {
   logger.debug('[EvaluatorTracing] Tracing state reset');
 }
 
+/** Read raw span attributes for local assertions, keeping the store lazy until needed. */
+export async function readAssertionTrace(traceId: string) {
+  const { getTraceStore } = await import('./store');
+  return getTraceStore().getTrace(traceId, { sanitizeAttributes: false });
+}
+
 /**
  * Generate a 16-byte trace ID
  */

@@ -11,6 +11,22 @@ afterEach(() => {
 });
 
 describe('resolveTracingOptions', () => {
+  it('preserves grading opt-outs across conflicting aliases without affecting unrelated strategies', () => {
+    const config = {
+      tracing: {
+        strategies: {
+          'jailbreak:meta': { includeInGrading: false },
+          'iterative-meta': { includeInGrading: true, maxSpans: 7 },
+        },
+      },
+    };
+    expect(resolveTracingOptions({ strategyId: 'iterative:meta', config })).toMatchObject({
+      includeInGrading: false,
+      maxSpans: 7,
+    });
+    expect(resolveTracingOptions({ strategyId: 'jailbreak', config }).includeInGrading).toBe(true);
+  });
+
   it('prefers request-scoped tracing configuration to stale process-global configuration', async () => {
     cliState.config = {
       tracing: {

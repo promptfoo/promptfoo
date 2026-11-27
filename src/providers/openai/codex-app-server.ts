@@ -4,7 +4,15 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
-import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import {
+  type Attributes,
+  type Context,
+  context,
+  type Span,
+  SpanKind,
+  SpanStatusCode,
+  trace,
+} from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -13,6 +21,7 @@ import logger from '../../logger';
 import {
   addActiveSpanRoleAttribute,
   closeTurnSpan,
+  endProviderSpan,
   GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
@@ -335,6 +344,7 @@ interface ServerRequestRecord {
 }
 
 interface CodexAppServerTurnState {
+  tracingContext: Context;
   connection: CodexAppServerConnection;
   connectionKey: string;
   connectionInstanceId: string;
@@ -2600,6 +2610,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     appServerEnv: Record<string, string>,
   ): CodexAppServerTurnState {
     return {
+      tracingContext: context.active(),
       connection,
       connectionKey,
       connectionInstanceId,
@@ -2646,7 +2657,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     if (state.turnId) {
       this.activeTurnsByTurn.delete(state.turnId);
     }
-    this.endUnclosedItemSpans(state);
+    context.with(state.tracingContext, () => this.endUnclosedItemSpans(state));
   }
 
   private protectThread(threadId: string): void {
@@ -2688,7 +2699,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       logger.debug('[CodexAppServer] Notification without active turn', { method: message.method });
       return;
     }
+    // A reused process can deliver notifications in the context of an earlier grader or target.
+    context.with(state.tracingContext, () => this.handleTurnNotification(state, message));
+  }
 
+  private handleTurnNotification(state: CodexAppServerTurnState, message: JsonRpcMessage): void {
+    const params = message.params ?? {};
     if (!this.reserveTurnEvent(state, message)) {
       return;
     }
@@ -2821,7 +2837,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       );
     const startTime = state.itemStartTimes.get(itemId) ?? state.lastEventTime;
     this.applyItemCompletionAttributes(span, completedItem, eventTime, startTime);
-    span.end();
+    endProviderSpan(span);
     state.activeSpans.delete(itemId);
     state.itemStartTimes.delete(itemId);
   }
@@ -3674,7 +3690,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     for (const [itemId, span] of state.activeSpans) {
       logger.warn('[CodexAppServer] Item span not properly closed', { itemId });
       span.setStatus({ code: SpanStatusCode.ERROR, message: 'Span not properly closed' });
-      span.end();
+      endProviderSpan(span);
     }
     state.activeSpans.clear();
     state.itemStartTimes.clear();

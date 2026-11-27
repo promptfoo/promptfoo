@@ -10,6 +10,7 @@ import { getProcessEnv } from '../../envars';
 import {
   addActiveSpanRoleAttribute,
   closeTurnSpan,
+  endProviderSpan,
   GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
@@ -1323,7 +1324,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       hadStartEvent,
     );
 
-    span.end();
+    endProviderSpan(span);
     state.activeSpans.delete(itemId);
     state.itemStartTimes.delete(itemId);
     logger.debug('Codex item completed', {
@@ -1512,7 +1513,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     for (const [itemId, span] of state.activeSpans) {
       logger.warn('Codex item span not properly closed', { itemId });
       span.setStatus({ code: SpanStatusCode.ERROR, message: 'Span not properly closed' });
-      span.end();
+      endProviderSpan(span);
     }
     state.activeSpans.clear();
     state.itemStartTimes.clear();
