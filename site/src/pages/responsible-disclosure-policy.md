@@ -1,5 +1,5 @@
 ---
-description: Report security vulnerabilities in Promptfoo responsibly - guidelines for disclosure, safe harbor provisions, and response times
+description: How to report security vulnerabilities in Promptfoo privately, which issues are in scope, and how safe harbor applies to security research.
 ---
 
 # Responsible Vulnerability Disclosure Policy
@@ -30,7 +30,7 @@ Report disclosures to a user, tenant, or destination the operator did not author
 
 ### Cloud Services
 
-Promptfoo Cloud operates with higher isolation expectations. The following are **in scope and treated as critical**:
+The following Promptfoo Cloud vulnerabilities are **critical and in scope**.
 
 - Cross-tenant data access or isolation failures
 - Sandbox escapes or privilege escalation
@@ -43,7 +43,7 @@ Promptfoo Cloud operates with higher isolation expectations. The following are *
 
 Report privately via:
 
-- **GitHub Security Advisories:** "Report a vulnerability" button (preferred)
+- **GitHub Security Advisories:** [Report a vulnerability](https://github.com/promptfoo/promptfoo/security/advisories/new) (preferred)
 - **Email:** security@promptfoo.dev (fallback: support@promptfoo.dev)
 
 Include:
@@ -61,10 +61,6 @@ To speed triage, also include:
 - A real browser-based PoC for browser-origin claims; spoofed `Origin` or `Sec-Fetch-Site` headers from `curl` or other non-browser clients are not sufficient
 - Why the issue exceeds the OSS trust model described in [SECURITY.md](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md)
 
-## Response Time
-
-We will acknowledge your report within **1 business day** and keep you informed throughout remediation.
-
 ## Responsible Disclosure Guidelines
 
 When researching or disclosing vulnerabilities:
@@ -80,16 +76,7 @@ We ask that you keep details private until:
 - A fix is released, or
 - We agree on a disclosure date
 
-We will work with you to establish a reasonable timeline.
-
-## Our Commitment
-
-Upon receiving your disclosure, we commit to:
-
-- Acknowledge within 1 business day
-- Keep you informed throughout remediation
-- Resolve vulnerabilities in a timely manner
-- Credit you (with consent) in security acknowledgments or changelogs
+See also [OpenAI's Coordinated Vulnerability Disclosure Policy](https://openai.com/policies/coordinated-vulnerability-disclosure-policy/).
 
 ## Safe Harbor
 
