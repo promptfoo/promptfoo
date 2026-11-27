@@ -91,14 +91,15 @@ export type RedteamProviderSelectionSource = 'explicit' | 'cache' | 'fallback' |
 /**
  * A provider chosen for one red-team generation request.
  *
- * localProviderSpec is intentionally runtime-only: provider option objects can
- * contain resolved credentials, but are still needed to build local JSON-only
- * variants of an explicitly configured provider. Only persistableId may cross
- * a serialization boundary.
+ * cachedJsonOnlyProvider and localProviderSpec are intentionally runtime-only:
+ * the cached provider must remain request-scoped, and provider option objects
+ * can contain resolved credentials. Only persistableId may cross a serialization
+ * boundary.
  */
 export interface RedteamProviderSelection {
   provider: ApiProvider;
   source: RedteamProviderSelectionSource;
+  cachedJsonOnlyProvider?: ApiProvider;
   localProviderSpec?: RedteamFileConfig['provider'];
   persistableId?: string;
 }
@@ -190,7 +191,7 @@ class RedteamProviderManager {
   /**
    * Wrap a provider with rate limiting if a registry is configured.
    */
-  private wrapProvider(provider: ApiProvider): ApiProvider {
+  wrapProvider(provider: ApiProvider): ApiProvider {
     if (this.rateLimitRegistry) {
       return wrapProviderWithRateLimiting(provider, this.rateLimitRegistry);
     }
@@ -356,6 +357,9 @@ class RedteamProviderManager {
     return {
       provider: await this.loadProviderCandidate(candidate, { jsonOnly, preferSmallModel }),
       source: candidate.source,
+      ...(candidate.source === 'cache' && candidate.cachedJsonOnlyProvider
+        ? { cachedJsonOnlyProvider: candidate.cachedJsonOnlyProvider }
+        : {}),
       localProviderSpec: candidate.spec,
       persistableId: typeof candidate.spec === 'string' ? candidate.spec : undefined,
     };
