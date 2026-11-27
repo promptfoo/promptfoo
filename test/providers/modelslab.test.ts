@@ -36,6 +36,74 @@ function mockResponse(
 describe('ModelsLabImageProvider', () => {
   const mockApiKey = 'test-modelslab-api-key';
 
+  it('does not submit an image request when already cancelled', async () => {
+    const provider = new ModelsLabImageProvider('flux', { config: { apiKey: mockApiKey } });
+    const controller = new AbortController();
+    const reason = new Error('evaluation stopped');
+    controller.abort(reason);
+
+    await expect(
+      provider.callApi('hello', undefined, { abortSignal: controller.signal }),
+    ).rejects.toBe(reason);
+    expect(mockedFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('cancels the polling wait without fetching another result', async () => {
+    mockedFetchWithCache.mockResolvedValue(mockResponse({ status: 'processing', id: 1 }));
+    const provider = new ModelsLabImageProvider('flux', { config: { apiKey: mockApiKey } });
+    const controller = new AbortController();
+    const reason = new Error('evaluation stopped');
+    const promise = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+    const rejected = expect(promise).rejects.toBe(reason);
+    await vi.advanceTimersByTimeAsync(100);
+    controller.abort(reason);
+    await vi.runAllTimersAsync();
+    await rejected;
+    expect(mockedFetchWithCache).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('forwards cancellation to submission and polling requests', async () => {
+    const controller = new AbortController();
+    const reason = new Error('evaluation stopped');
+    mockedFetchWithCache
+      .mockResolvedValueOnce(mockResponse({ status: 'processing', id: 1 }))
+      .mockImplementationOnce(async (_url, options) => {
+        expect(options?.signal).toBe(controller.signal);
+        controller.abort(reason);
+        throw reason;
+      });
+    const provider = new ModelsLabImageProvider('flux', { config: { apiKey: mockApiKey } });
+    const promise = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+    const rejected = expect(promise).rejects.toBe(reason);
+    await vi.runAllTimersAsync();
+    await rejected;
+    expect(mockedFetchWithCache).toHaveBeenCalledTimes(2);
+    expect(mockedFetchWithCache.mock.calls[0][1]?.signal).toBe(controller.signal);
+  });
+
+  it('does not turn a cancelled image download into a successful URL fallback', async () => {
+    const { isBlobStorageEnabled } = await import('../../src/blobs/extractor');
+    const { fetchWithProxy } = await import('../../src/util/fetch/index');
+    const { storeBlob } = await import('../../src/blobs/index');
+    vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
+    mockedFetchWithCache.mockResolvedValue(
+      mockResponse({ status: 'success', output: ['https://example.com/image.png'] }),
+    );
+    const controller = new AbortController();
+    const reason = new Error('evaluation stopped');
+    vi.mocked(fetchWithProxy).mockImplementationOnce(async (_url, options) => {
+      expect(options?.signal).toBe(controller.signal);
+      controller.abort(reason);
+      throw reason;
+    });
+    const provider = new ModelsLabImageProvider('flux', { config: { apiKey: mockApiKey } });
+    await expect(
+      provider.callApi('hello', undefined, { abortSignal: controller.signal }),
+    ).rejects.toBe(reason);
+    expect(storeBlob).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -342,7 +410,10 @@ describe('ModelsLabImageProvider', () => {
         blobHash: 'abc123',
       }),
     );
-    expect(fetchWithProxy).toHaveBeenCalledWith('https://modelslab.com/output/blob-test.jpg');
+    expect(fetchWithProxy).toHaveBeenCalledWith(
+      'https://modelslab.com/output/blob-test.jpg',
+      undefined,
+    );
     expect(storeBlob).toHaveBeenCalledWith(
       expect.any(Buffer),
       'image/jpeg',
