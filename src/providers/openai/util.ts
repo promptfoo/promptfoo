@@ -1622,7 +1622,7 @@ type OpenAiFunctionDefinition = Pick<
 export interface OpenAiFunction {
   name: string;
   description?: string;
-  parameters: {
+  parameters?: {
     type: 'object';
     properties: Record<string, any>;
     required?: string[];
@@ -1633,6 +1633,9 @@ export interface OpenAiTool {
   type: 'function';
   function: OpenAiFunction;
 }
+
+// Ajv caches by schema identity. Reuse the validator for parameterless tools.
+const NO_PARAMETERS = { type: 'object', additionalProperties: false };
 
 export function validateFunctionCall(
   output: string | object,
@@ -1681,13 +1684,7 @@ export function validateFunctionCall(
   }
   let validate;
   try {
-    validate = getAjv().compile(
-      definition.parameters ?? {
-        type: 'object',
-        properties: {},
-        additionalProperties: false,
-      },
-    );
+    validate = getAjv().compile(definition.parameters ?? NO_PARAMETERS);
   } catch (err) {
     throw new InvalidToolSchemaError((err as Error).message);
   }

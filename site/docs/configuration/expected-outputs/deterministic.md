@@ -614,36 +614,13 @@ Legacy - please use is-valid-function-call instead. This ensures that any JSON L
 
 This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
 
-**MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It will:
+OpenAI function definitions can omit `parameters` for functions that take no arguments. For structured calls to those functions, the assertions require an empty argument object (`{}`).
 
-- Pass if MCP tool calls succeed (output contains "MCP Tool Result")
-- Fail if MCP tool calls fail (output contains "MCP Tool Error")
-- Continue to validate traditional function tools as before
+A text-only `MCP Tool Result` record now fails this assertion. A model can generate that text without calling a tool. Structured function calls take precedence over any accompanying text. A text-only `MCP Tool Error` record can supply a diagnostic reason. To confirm execution, check trusted provider or trace evidence.
 
 `not-is-valid-openai-tools-call` and `not-is-valid-function-call` invert the validation result. A configuration error, such as no tools configured, a tool schema that does not compile, or a provider that cannot validate function calls, still fails.
 
 Negation checks for an invalid call, so a failed MCP call can also pass. To check that no tool was called, assert on the absence of tool calls instead. Custom provider validators should throw `InvalidToolCallError` from `promptfoo/contracts` for invalid calls and ordinary errors for configuration or operational failures.
-
-Example with MCP tools:
-
-```yaml
-providers:
-  - id: openai:responses:gpt-5
-    config:
-      tools:
-        - type: mcp
-          server_label: deepwiki
-          server_url: https://mcp.deepwiki.com/mcp
-          require_approval: never
-
-tests:
-  - vars:
-      query: 'What is MCP?'
-    assert:
-      - type: is-valid-openai-tools-call # Validates MCP tool success
-      - type: contains
-        value: 'MCP Tool Result' # Alternative way to check for MCP success
-```
 
 ### tool-call-f1
 
