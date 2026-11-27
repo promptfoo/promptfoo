@@ -11,14 +11,15 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 import { loadYaml } from '../util/yamlLoad';
+import { RedteamConfigSchema } from '../validators/redteam';
 import {
-  ALIASED_PLUGIN_MAPPINGS,
+  ALIASED_PLUGINS,
   BIAS_PLUGINS,
   DATASET_EXEMPT_PLUGINS,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
+  FRAMEWORK_COMPLIANCE_IDS,
   getDefaultNFanout,
   HARM_PLUGINS,
   INSURANCE_PLUGINS,
@@ -38,6 +39,7 @@ import {
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
+import { trackGenerationTokenUsage } from './generationTokenUsage';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
@@ -61,8 +63,8 @@ import {
   getShortPluginId,
 } from './util';
 
-import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
-import type { Inputs, TokenUsage } from '../types/shared';
+import type { ApiProvider, Inputs, TestCase, TestCaseWithPlugin, TokenUsage } from '../types/index';
+import type { RedteamProviderSelection } from './providers/shared';
 import type {
   FailedPluginInfo,
   Policy,
@@ -73,27 +75,6 @@ import type {
 } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
-
-function trackGenerationTokenUsage(provider: ApiProvider, tokenUsage: TokenUsage): ApiProvider {
-  const callApi = provider.callApi.bind(provider);
-  const trackedCallApi: ApiProvider['callApi'] = async (...args) => {
-    const response = await callApi(...args);
-    accumulateResponseTokenUsage(tokenUsage, response);
-    return response;
-  };
-  trackedCallApi.label = provider.callApi.label;
-
-  return new Proxy(provider, {
-    get(target, property) {
-      if (property === 'callApi') {
-        return trackedCallApi;
-      }
-
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
-}
 
 function getMaterializedMultiInputPromptSnapshot(
   metadata: TestCase['metadata'] | undefined,
@@ -616,7 +597,7 @@ async function applyStrategies(
   testCases: TestCaseWithPlugin[],
   strategies: RedteamStrategyObject[],
   injectVar: string,
-  provider: ApiProvider,
+  providerSelection: RedteamProviderSelection,
   purpose: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
@@ -698,14 +679,17 @@ async function applyStrategies(
       {
         ...(strategy.config || {}),
         ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
-        // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
-        redteamProvider: cliState.config?.redteam?.provider,
-        // Generation-time strategies that load a specialized local provider must remain in usage totals.
-        __wrapGenerationProvider: wrapGenerationProvider,
         excludeTargetOutputFromAgenticAttackGeneration,
         ...remoteGenerationContextPayload(redteamGenerationContext),
       },
       strategy.id,
+      {
+        // Keep every local strategy phase on the provider already selected for this synthesis run.
+        // The source tells strategies whether the choice was explicit or an implicit default.
+        generationProviderSelection: providerSelection,
+        // Specialized local providers still need to contribute to generation usage totals.
+        wrapGenerationProvider,
+      },
     );
 
     // Filter out null/undefined
@@ -736,7 +720,7 @@ async function applyStrategies(
           const { inputMaterialization, vars } = await rematerializeStrategyInputVars(
             t,
             injectVar,
-            provider,
+            providerSelection.provider,
             purpose,
             materializationIndex,
           );
@@ -1036,6 +1020,20 @@ export async function synthesize({
     logger.info(`Max concurrency for test generation is capped at ${MAX_MAX_CONCURRENCY}.`);
   }
 
+  // CLI configs are already expanded. Normalize aliases from direct API callers
+  // before deduplicating strategies, validating plugins or estimating the workload.
+  if (
+    plugins.some(
+      ({ id }) =>
+        ALIASED_PLUGINS.includes(id) ||
+        FRAMEWORK_COMPLIANCE_IDS.some((framework) => id.startsWith(`${framework}:`)),
+    )
+  ) {
+    const normalized = RedteamConfigSchema.parse({ plugins, strategies: [] });
+    plugins = normalized.plugins as typeof plugins;
+    strategies = [...strategies, ...(normalized.strategies as RedteamStrategyObject[])];
+  }
+
   const expandedStrategies: typeof strategies = [];
   strategies.forEach((strategy) => {
     if (isStrategyCollection(strategy.id)) {
@@ -1093,7 +1091,7 @@ export async function synthesize({
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
 
-  const providerForGeneration = await redteamProviderManager.getProvider({
+  const providerSelection = await redteamProviderManager.getProviderSelection({
     provider,
   });
   const generationTokenUsage: TokenUsage = {
@@ -1103,7 +1101,97 @@ export async function synthesize({
     prompt: 0,
     total: 0,
   };
-  const redteamProvider = trackGenerationTokenUsage(providerForGeneration, generationTokenUsage);
+  const redteamProvider = trackGenerationTokenUsage(
+    providerSelection.provider,
+    generationTokenUsage,
+  );
+  const trackedProviderSelection = {
+    ...providerSelection,
+    provider: redteamProvider,
+  };
+
+  // Handle multi-input mode: use MULTI_INPUT_VAR to prevent namespace collisions
+  const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
+  if (hasMultipleInputs) {
+    const inputKeys = Object.keys(inputs);
+    logger.info(
+      `Using multi-input mode with ${inputKeys.length} variables: ${inputKeys.join(', ')}`,
+    );
+    // In multi-input mode, use MULTI_INPUT_VAR to prevent namespace collisions
+    // with user-defined input variable names
+    injectVar = MULTI_INPUT_VAR;
+
+    // Some plugins don't support multi-input mode; skip them
+    const multiInputExcluded = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
+    const removedPlugins = plugins.filter((p) => multiInputExcluded.includes(p.id as any));
+    plugins = plugins.filter((p) => !multiInputExcluded.includes(p.id as any));
+    if (removedPlugins.length > 0) {
+      logger.info(
+        `Skipping ${removedPlugins.length} plugin${removedPlugins.length > 1 ? 's' : ''} in multi-input mode: ${removedPlugins.map((p) => p.id).join(', ')}`,
+      );
+    }
+  }
+
+  // Determine injectVar if not explicitly set (only applies to single-input mode)
+  if (typeof injectVar !== 'string') {
+    const parsedVars = extractVariablesFromTemplates(prompts);
+    if (parsedVars.length > 1) {
+      logger.warn(
+        `\nMultiple variables found in prompts: ${parsedVars.join(', ')}. Using the last one "${parsedVars[parsedVars.length - 1]}". Override this selection with --injectVar`,
+      );
+    } else if (parsedVars.length === 0) {
+      logger.warn('No variables found in prompts. Using "query" as the inject variable.');
+    }
+    // Odds are that the last variable is the user input since the user input usually goes at the end of the prompt
+    injectVar = parsedVars[parsedVars.length - 1] || 'query';
+    invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
+  }
+
+  // Expand plugins first
+  for (const [category, categoryPlugins] of Object.entries(categories)) {
+    const plugin = plugins.find((p) => p.id === category);
+    if (plugin) {
+      plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
+    }
+  }
+
+  const validatePlugin: (plugin: (typeof plugins)[0]) => boolean = (plugin) => {
+    if (Object.keys(categories).includes(plugin.id)) {
+      return false;
+    }
+    const registeredPlugin = Plugins.find((p) => p.key === plugin.id);
+
+    if (!registeredPlugin) {
+      if (!plugin.id.startsWith('file://')) {
+        logger.debug(`Plugin ${plugin.id} not registered, skipping validation`);
+      }
+    } else if (registeredPlugin.validate) {
+      try {
+        const resolvedPluginConfig = resolvePluginConfigWithMaxChars(
+          plugin.config,
+          maxCharsPerMessage,
+        );
+        registeredPlugin.validate({
+          language,
+          ...resolvedPluginConfig,
+          modifiers: buildRedteamModifiers({
+            maxCharsPerMessage,
+            pluginConfig: resolvedPluginConfig,
+            testGenerationInstructions,
+          }),
+        });
+      } catch (error) {
+        logger.warn(`Validation failed for plugin ${plugin.id}: ${error}, skipping plugin.`);
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  // Validate all plugins upfront
+  logger.debug('Validating plugins...');
+  plugins = [...new Set(plugins)].filter(validatePlugin);
 
   const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
     calculateTotalTests(plugins, strategies, language);
@@ -1191,128 +1279,6 @@ export async function synthesize({
       `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n` +
       (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
   );
-
-  // Handle multi-input mode: use MULTI_INPUT_VAR to prevent namespace collisions
-  const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
-  if (hasMultipleInputs) {
-    const inputKeys = Object.keys(inputs);
-    logger.info(
-      `Using multi-input mode with ${inputKeys.length} variables: ${inputKeys.join(', ')}`,
-    );
-    // In multi-input mode, use MULTI_INPUT_VAR to prevent namespace collisions
-    // with user-defined input variable names
-    injectVar = MULTI_INPUT_VAR;
-
-    // Some plugins don't support multi-input mode; skip them
-    const multiInputExcluded = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
-    const removedPlugins = plugins.filter((p) => multiInputExcluded.includes(p.id as any));
-    plugins = plugins.filter((p) => !multiInputExcluded.includes(p.id as any));
-    if (removedPlugins.length > 0) {
-      logger.info(
-        `Skipping ${removedPlugins.length} plugin${removedPlugins.length > 1 ? 's' : ''} in multi-input mode: ${removedPlugins.map((p) => p.id).join(', ')}`,
-      );
-    }
-  }
-
-  // Determine injectVar if not explicitly set (only applies to single-input mode)
-  if (typeof injectVar !== 'string') {
-    const parsedVars = extractVariablesFromTemplates(prompts);
-    if (parsedVars.length > 1) {
-      logger.warn(
-        `\nMultiple variables found in prompts: ${parsedVars.join(', ')}. Using the last one "${parsedVars[parsedVars.length - 1]}". Override this selection with --injectVar`,
-      );
-    } else if (parsedVars.length === 0) {
-      logger.warn('No variables found in prompts. Using "query" as the inject variable.');
-    }
-    // Odds are that the last variable is the user input since the user input usually goes at the end of the prompt
-    injectVar = parsedVars[parsedVars.length - 1] || 'query';
-    invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
-  }
-
-  // Expand plugins first
-  for (const [category, categoryPlugins] of Object.entries(categories)) {
-    const plugin = plugins.find((p) => p.id === category);
-    if (plugin) {
-      plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
-    }
-  }
-
-  const expandedPlugins: typeof plugins = [];
-  const expandPlugin = (
-    plugin: (typeof plugins)[0],
-    mapping: { plugins: string[]; strategies: string[] },
-  ) => {
-    mapping.plugins.forEach((p: string) =>
-      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
-    );
-    strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
-  };
-
-  plugins.forEach((plugin) => {
-    // First check if this is a direct plugin that should not be expanded
-    // This is for plugins like bias:gender that have a prefix matching an alias
-    const isDirectPlugin = Plugins.some((p) => p.key === plugin.id);
-
-    if (isDirectPlugin) {
-      expandedPlugins.push(plugin);
-      return;
-    }
-
-    const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
-      (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
-    );
-
-    if (mappingKey) {
-      const mapping =
-        ALIASED_PLUGIN_MAPPINGS[mappingKey][plugin.id] ||
-        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((_m) =>
-          plugin.id.startsWith(`${mappingKey}:`),
-        );
-      if (mapping) {
-        expandPlugin(plugin, mapping);
-      }
-    } else {
-      expandedPlugins.push(plugin);
-    }
-  });
-
-  const validatePlugin: (plugin: (typeof plugins)[0]) => boolean = (plugin) => {
-    if (Object.keys(categories).includes(plugin.id)) {
-      return false;
-    }
-    const registeredPlugin = Plugins.find((p) => p.key === plugin.id);
-
-    if (!registeredPlugin) {
-      if (!plugin.id.startsWith('file://')) {
-        logger.debug(`Plugin ${plugin.id} not registered, skipping validation`);
-      }
-    } else if (registeredPlugin.validate) {
-      try {
-        const resolvedPluginConfig = resolvePluginConfigWithMaxChars(
-          plugin.config,
-          maxCharsPerMessage,
-        );
-        registeredPlugin.validate({
-          language,
-          ...resolvedPluginConfig,
-          modifiers: buildRedteamModifiers({
-            maxCharsPerMessage,
-            pluginConfig: resolvedPluginConfig,
-            testGenerationInstructions,
-          }),
-        });
-      } catch (error) {
-        logger.warn(`Validation failed for plugin ${plugin.id}: ${error}, skipping plugin.`);
-        return false;
-      }
-    }
-
-    return true;
-  };
-
-  // Validate all plugins upfront
-  logger.debug('Validating plugins...');
-  plugins = [...new Set(expandedPlugins)].filter(validatePlugin).sort();
 
   // Check API health before proceeding
   if (shouldGenerateRemote()) {
@@ -1511,6 +1477,7 @@ export async function synthesize({
               plugin.id,
               policy,
               cloudTargetId,
+              redteamProvider,
             );
 
             (testCase.metadata as any).goal = extractedGoal;
@@ -1649,6 +1616,7 @@ export async function synthesize({
               plugin.id,
               policy,
               cloudTargetId,
+              redteamProvider,
             );
 
             (testCase.metadata as any).goal = extractedGoal;
@@ -1709,7 +1677,7 @@ export async function synthesize({
       pluginTestCases,
       [retryStrategy],
       injectVar,
-      redteamProvider,
+      trackedProviderSelection,
       purpose,
       undefined,
       maxCharsPerMessage,
@@ -1735,7 +1703,7 @@ export async function synthesize({
       pluginTestCases,
       nonBasicStrategies,
       injectVar,
-      redteamProvider,
+      trackedProviderSelection,
       purpose,
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,

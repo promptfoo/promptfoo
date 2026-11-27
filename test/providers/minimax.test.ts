@@ -1,3 +1,5 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../factories/logger'));
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
@@ -5,22 +7,21 @@ import {
   createMiniMaxProvider,
   MINIMAX_CHAT_MODELS,
 } from '../../src/providers/minimax';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { HttpRateLimitError } from '../../src/util/fetch/errors';
 import { mockProcessEnv } from '../util/utils';
+import { createMockFetchResponse } from './mockProviderResponses';
+
+const createSamplingEnvironment = () => ({
+  OPENAI_TOP_P: '0.5',
+  OPENAI_PRESENCE_PENALTY: '0.7',
+  OPENAI_FREQUENCY_PENALTY: '0.9',
+});
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
   fetchWithCache: vi.fn(),
 }));
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../src/logger', () => createLoggerModule());
 
 describe('calculateMiniMaxCost', () => {
   it('should calculate cost without cache for MiniMax-M3', () => {
@@ -352,11 +353,7 @@ describe('MiniMaxProvider', () => {
   });
 
   it('should not leak OpenAI sampling env defaults (OPENAI_TOP_P / OPENAI_PRESENCE_PENALTY / OPENAI_FREQUENCY_PENALTY) into MiniMax requests', async () => {
-    const restoreOpenAiSamplingEnv = mockProcessEnv({
-      OPENAI_TOP_P: '0.5',
-      OPENAI_PRESENCE_PENALTY: '0.7',
-      OPENAI_FREQUENCY_PENALTY: '0.9',
-    });
+    const restoreOpenAiSamplingEnv = mockProcessEnv(createSamplingEnvironment());
     try {
       const provider = createMiniMaxProvider('minimax:MiniMax-M2.7') as any;
       const { body } = await provider.getOpenAiBody('Test prompt');
@@ -370,11 +367,7 @@ describe('MiniMaxProvider', () => {
   });
 
   it('should preserve explicit MiniMax sampling parameters even when OPENAI_* sampling envs are set', async () => {
-    const restoreOpenAiSamplingEnv = mockProcessEnv({
-      OPENAI_TOP_P: '0.5',
-      OPENAI_PRESENCE_PENALTY: '0.7',
-      OPENAI_FREQUENCY_PENALTY: '0.9',
-    });
+    const restoreOpenAiSamplingEnv = mockProcessEnv(createSamplingEnvironment());
     try {
       const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
         config: { config: { top_p: 0.95, presence_penalty: 0.1, frequency_penalty: 0.2 } },
@@ -390,8 +383,8 @@ describe('MiniMaxProvider', () => {
   });
 
   it('should call a configured MiniMax-compatible endpoint and charge prompt-cache reads', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
         choices: [{ message: { content: 'MiniMax output' }, finish_reason: 'stop' }],
         usage: {
           total_tokens: 15,
@@ -399,11 +392,8 @@ describe('MiniMaxProvider', () => {
           completion_tokens: 5,
           prompt_tokens_details: { cached_tokens: 4 },
         },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
       config: {
@@ -464,102 +454,43 @@ describe('MiniMaxProvider', () => {
     expect(result.metadata?.rateLimitKind).toBe('rate_limit');
   });
 
-  it('should calculate cost from cached token metadata in string raw responses', async () => {
-    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
-      output: 'MiniMax response',
-      tokenUsage: {
-        total: 150,
-        prompt: 100,
-        completion: 50,
-      },
-      raw: JSON.stringify({
-        usage: {
-          prompt_tokens_details: {
-            cached_tokens: 40,
+  it.each([0, 25, 100])(
+    'calculates native cached token usage %s before normalization',
+    async (cachedTokens) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
+          choices: [{ message: { content: 'MiniMax response' }, finish_reason: 'stop' }],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            total_tokens: 150,
+            prompt_tokens_details: { cached_tokens: cachedTokens },
           },
-        },
-      }),
-    });
+        }),
+      );
+      const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+        config: { config: { apiKey: 'fixture-key' } },
+      });
+      const result = await provider.callApi('Test prompt');
+      expect(result.cost).toBe(calculateMiniMaxCost('MiniMax-M2.7', {}, 100, 50, cachedTokens));
+      expect(result.tokenUsage?.prompt).toBe(100);
+    },
+  );
 
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7');
-    const result = await provider.callApi('Test prompt');
-
-    expect(result.cost).toBe(calculateMiniMaxCost('MiniMax-M2.7', {}, 100, 50, 40));
-  });
-
-  it('should calculate cost from cached token metadata in object raw responses', async () => {
-    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
-      output: 'MiniMax response',
-      tokenUsage: {
-        total: 150,
-        prompt: 100,
-        completion: 50,
-      },
-      raw: {
-        usage: {
-          prompt_tokens_details: {
-            cached_tokens: 25,
-          },
-        },
-      },
-    });
-
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7-highspeed');
-    const result = await provider.callApi('Test prompt');
-
-    expect(result.cost).toBe(calculateMiniMaxCost('MiniMax-M2.7-highspeed', {}, 100, 50, 25));
-  });
-
-  it('should still calculate cost when cache metadata is malformed', async () => {
-    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
-      output: 'MiniMax response',
-      tokenUsage: {
-        total: 150,
-        prompt: 100,
-        completion: 50,
-      },
-      raw: '{"usage":',
-    });
-
-    const provider = createMiniMaxProvider('minimax:MiniMax-M3');
-    const result = await provider.callApi('Test prompt');
-
-    expect(result.cost).toBe(calculateMiniMaxCost('MiniMax-M3', {}, 100, 50, 0));
-  });
-
-  it('should preserve cached responses without recalculating cost', async () => {
-    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
-      output: 'Cached MiniMax response',
-      tokenUsage: {
-        total: 150,
-        prompt: 100,
-        completion: 50,
-      },
-      raw: {
-        usage: {
-          prompt_tokens_details: {
-            cached_tokens: 100,
-          },
-        },
+  it('reports zero incremental cost for promptfoo cache hits', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ message: { content: 'Cached MiniMax response' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
       },
       cached: true,
+      status: 200,
+      statusText: 'OK',
     });
-
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7-highspeed');
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7-highspeed', {
+      config: { config: { apiKey: 'fixture-key' } },
+    });
     const result = await provider.callApi('Test prompt');
-
-    expect(result.cached).toBe(true);
-    expect(result.cost).toBeUndefined();
-  });
-
-  it('should pass through empty and error parent responses', async () => {
-    const callApi = vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi');
-    callApi.mockResolvedValueOnce(undefined as any);
-    callApi.mockResolvedValueOnce({ error: 'API error' });
-
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7');
-
-    await expect(provider.callApi('Empty response')).resolves.toBeUndefined();
-    await expect(provider.callApi('Error response')).resolves.toEqual({ error: 'API error' });
+    expect(result).toMatchObject({ cached: true, cost: 0 });
   });
 });

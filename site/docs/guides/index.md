@@ -6,7 +6,7 @@ description: Step-by-step tutorials for evaluating LLMs, comparing models, and t
 
 # Eval Guides
 
-Practical tutorials to help you get the most out of promptfoo evals. Each guide walks through a real-world scenario with working configuration examples you can adapt to your own use case.
+Tutorials and example configurations for Promptfoo evals and red team testing.
 
 ## Evaluation Techniques
 
@@ -25,6 +25,14 @@ Learn how to measure specific aspects of LLM output quality.
 - [Evaluating Text-to-SQL](/docs/guides/text-to-sql-evaluation) — Measure SQL generation accuracy
 - [Sandboxed Code Evaluations](/docs/guides/sandboxed-code-evals) — Safely run and test LLM-generated code
 - [HLE Benchmark](/docs/guides/hle-benchmark) — Evaluate models on the Humanity's Last Exam benchmark
+
+## Safety and Guardrails
+
+Test provider safety controls and application-level enforcement.
+
+- [Testing and Validating Guardrails](/docs/guides/testing-guardrails) — Normalize guardrail responses, test attacks and false positives, and compare implementations
+- [Testing Google Cloud Model Armor](/docs/guides/google-cloud-model-armor) — Evaluate Model Armor prompt and response templates
+- [Automated Red Teaming](/docs/red-team/quickstart) — Generate adversarial cases and measure application vulnerabilities
 
 ## Model Comparisons
 

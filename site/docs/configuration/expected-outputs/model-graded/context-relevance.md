@@ -31,11 +31,11 @@ assert:
     threshold: 0.3 # At least 30% should be essential
 ```
 
-### Required fields
+### Fields
 
-- `query` - User's question (in test vars)
-- `context` - Retrieved text (in vars or via `contextTransform`)
-- `threshold` - Minimum score 0-1 (default: 0)
+- `query` - Required. User's question (in test vars)
+- `context` - Required. Retrieved text (in vars or via `contextTransform`)
+- `threshold` - Optional. Minimum score 0-1 (default: 0.5)
 
 ### Full example
 

@@ -137,7 +137,7 @@ describe('handleConversationRelevance with reason generation', () => {
       callApi: vi.fn().mockImplementation(async (prompt: string) => {
         callCount++;
         // First few calls are verdicts, last one is reason generation
-        if (prompt.includes('irrelevancies')) {
+        if (prompt.includes('Below is a list of irrelevancies')) {
           // This is the reason generation call
           return {
             output: JSON.stringify({

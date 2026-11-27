@@ -10,8 +10,8 @@ import {
 
 describe('Strategy IDs', () => {
   const findStrategyIdAssignments = (fileContent: string): string[] => {
-    // Look for patterns like `strategyId: 'strategy-name'`
-    const regex = /strategyId:\s*['"]([^'"]+)['"]/g;
+    // Look for literal strategyId fields and shared encoding registrations.
+    const regex = /(?:strategyId:\s*|createEncodingStrategy\(\s*)['"]([^'"]+)['"]/g;
     const matches = [];
     let match;
     while ((match = regex.exec(fileContent)) !== null) {
@@ -20,12 +20,23 @@ describe('Strategy IDs', () => {
     return matches;
   };
 
+  it('detects unknown IDs passed to shared encoding registrations', () => {
+    const source = `
+      const metadata = { strategyId: 'base64' };
+      createEncodingStrategy(
+        'misspelled-encoding', 'Encoding', () => encode,
+      );
+    `;
+
+    expect(findStrategyIdAssignments(source)).toEqual(['base64', 'misspelled-encoding']);
+  });
+
   it('should use strategy IDs that match those defined in constants', () => {
     // Get all strategy implementation files
     const strategyDir = path.resolve(__dirname, '../../../src/redteam/strategies');
     const strategyFiles = fs
       .readdirSync(strategyDir)
-      .filter((file) => file.endsWith('.ts') && !file.endsWith('.d.ts') && file !== 'index.ts');
+      .filter((file) => file.endsWith('.ts') && !file.endsWith('.d.ts'));
 
     // Track all strategy IDs used in implementations
     const usedStrategyIds: string[] = [];
@@ -86,6 +97,7 @@ describe('Strategy IDs', () => {
 
     // Simple mapping for strategy ID to expected file name
     const expectedFileNameMap: Record<string, string> = {
+      'arabic-presentation-forms': 'arabicPresentationForms.ts',
       base64: 'base64.ts',
       citation: 'citation.ts',
       crescendo: 'crescendo.ts',

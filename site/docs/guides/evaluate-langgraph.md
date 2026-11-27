@@ -1,7 +1,7 @@
 ---
 title: Evaluate LangGraph
 sidebar_label: Evaluate LangGraph
-description: Hands-on tutorial (July 2025) on evaluating and red-teaming LangGraph agents with Promptfoo—includes setup, YAML tests, and security scans.
+description: Connect a LangGraph agent to Promptfoo, define YAML test cases, run evals and red team scans, and review failures, pass rates, and logs in the dashboard.
 keywords:
   [
     LangGraph evaluation,
@@ -14,11 +14,7 @@ keywords:
 
 # Evaluate LangGraph: Red Teaming and Testing Stateful Agents
 
-[LangGraph](https://github.com/langchain-ai/langgraph) is an advanced framework built on top of LangChain, designed to enable **stateful, multi-agent graphs** for complex workflows. Whether you're building chatbots, research pipelines, data enrichment flows, or tool-using agents, LangGraph helps you orchestrate chains of language models and functions into structured, interactive systems.
-
-With **Promptfoo**, you can run structured evaluations on LangGraph agents: defining test prompts, verifying outputs, benchmarking performance, and performing red team testing to uncover biases, safety gaps, and robustness issues.
-
-By the end of this guide, you'll have a working project setup that connects LangGraph agents to Promptfoo, runs automated tests, and produces clear pass/fail insights—all reproducible and shareable with your team.
+[LangGraph](https://github.com/langchain-ai/langgraph) organizes model and tool calls into stateful graphs. Connect a LangGraph agent to Promptfoo to test responses against YAML assertions and run red team scans.
 
 ## Highlights
 
@@ -27,7 +23,7 @@ By the end of this guide, you'll have a working project setup that connects Lang
 - Writing provider and agent files
 - Configuring test cases in YAML
 - Running evaluations and viewing reports
-- (Optional) Running advanced red team scans for robustness
+- (Optional) Running red team scans
 
 To scaffold the LangGraph + Promptfoo example, you can run:
 
@@ -49,8 +45,8 @@ npx promptfoo eval
 
 Before starting, make sure you have:
 
-- Python 3.9-3.12 tested
-- Node.js v22 LTS or newer
+- Python 3.10-3.12 tested
+- A [supported Node.js version](/docs/installation#nodejs-runtime-support)
 - OpenAI API access (for GPT-5-mini and other OpenAI models)
 - An OpenAI API key
 
@@ -84,7 +80,7 @@ And check npm (Node package manager):
 npm -v
 ```
 
-You should see something like `v22.x.x` for Node and `10.x.x` for npm. Node.js v22 LTS or newer is recommended for security and performance.
+Check that `node -v` reports a supported version.
 
 **Why do we need these?**
 
@@ -114,22 +110,21 @@ Now it's time to set up the key Python packages and the promptfoo CLI.
 In your project folder, run:
 
 ```bash
-pip install langgraph langchain langchain-openai python-dotenv
+python3 -m pip install 'langgraph>=1.2.11,<2' 'langchain-openai>=1.6.2,<2' 'pydantic>=2.13.5,<3'
 npm install -g promptfoo
 ```
 
 What are these?
 
 - `langgraph`: the framework for building multi-agent workflows.
-- `langchain`: the underlying language model toolkit.
-- `langchain-openai`: OpenAI integration for LangChain (v0.3+ compatible).
-- `python-dotenv`: to securely load API keys.
+- `langchain-openai`: OpenAI integration for LangChain.
+- `pydantic`: the state schema used by the graph.
 - `promptfoo`: CLI for testing + red teaming.
 
 Check everything installed:
 
 ```bash
-python3 -c "import langgraph, langchain, dotenv ; print('✅ Python libs ready')"
+python3 -c "import langgraph, langchain_openai, pydantic ; print('✅ Python libs ready')"
 npx promptfoo --version
 ```
 
@@ -156,14 +151,10 @@ In this step, we'll define how our LangGraph research agent works, connect it to
 Inside your project folder, create a file called `agent.py` and add:
 
 ```python
-import os
 import asyncio
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
-
-# Load the OpenAI API key from environment variable
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Define the data structure (state) passed between nodes in the graph
 class ResearchState(BaseModel):
@@ -172,9 +163,9 @@ class ResearchState(BaseModel):
     summary: str = ""     # Final summarized result
 
 # Function to create and return the research agent graph
-def get_research_agent(model="gpt-5-mini"):
-    # Initialize the OpenAI LLM with the specified model and API key
-    llm = ChatOpenAI(model=model, api_key=OPENAI_API_KEY)
+def get_research_agent(model="gpt-4o", base_url=None):
+    # ChatOpenAI reads OPENAI_API_KEY from the environment when initialized
+    llm = ChatOpenAI(model=model, base_url=base_url)
 
     # Create a stateful graph with ResearchState as the shared state type
     graph = StateGraph(ResearchState)
@@ -189,7 +180,7 @@ def get_research_agent(model="gpt-5-mini"):
     def summarize_info(state: ResearchState) -> ResearchState:
         prompt = f"Summarize the following:\n{state.raw_info}"
         response = llm.invoke(prompt)  # Call the LLM to get the summary
-        return ResearchState(query=state.query, raw_info=state.raw_info, summary=response.content)
+        return ResearchState(query=state.query, raw_info=state.raw_info, summary=response.text)
 
     # Node 3: Format the final summary for output
     def output_summary(state: ResearchState) -> ResearchState:
@@ -213,9 +204,9 @@ def get_research_agent(model="gpt-5-mini"):
     return graph.compile()
 
 # Function to run the research agent with a given query prompt
-def run_research_agent(prompt):
+def run_research_agent(prompt, model="gpt-4o", base_url=None):
     # Get the compiled graph application
-    app = get_research_agent()
+    app = get_research_agent(model=model, base_url=base_url)
     # Run the asynchronous invocation and get the result
     result = asyncio.run(app.ainvoke(ResearchState(query=prompt)))
     return result
@@ -235,7 +226,7 @@ def call_api(prompt, options, context):
 
     Args:
         prompt (str): The research query or question.
-        options (dict): Additional options for future extension (currently unused).
+        options (dict): Provider configuration, including model and apiBaseUrl.
         context (dict): Contextual information (currently unused).
 
     Returns:
@@ -243,12 +234,17 @@ def call_api(prompt, options, context):
     """
     try:
         # Run the research agent and get the result
-        result = run_research_agent(prompt)
+        config = options.get("config", {})
+        result = run_research_agent(
+            prompt,
+            model=config.get("model", "gpt-4o"),
+            base_url=config.get("apiBaseUrl"),
+        )
         # Wrap and return the result inside a dictionary
         return {"output": result}
     except Exception as e:
-        # Handle any exceptions and return an error summary
-        return {"output": {"summary": f"Error: {str(e)}"}}
+        # Handle any exceptions and return a provider error
+        return {"error": str(e)}
 
 # If this file is run directly, execute a simple test
 if __name__ == "__main__":
@@ -484,8 +480,7 @@ In Custom Configuration (JSON), you can leave defaults like:
 
 ### Why this matters
 
-- This setup tells Promptfoo which system to attack with red team tests.
-- By wiring it to your local LangGraph agent, you ensure that all adversarial prompts will hit your code—helping you catch weak spots, improve safety, and make your agent more robust.
+The target configuration routes generated attacks to your local LangGraph agent.
 
 <img width="800" alt="Red team target configuration for LangGraph agent" src="/img/redteammodel-local.png" />
 <img width="800" alt="Custom target configuration details in Promptfoo" src="/img/foundationmodel-testsetup.png" />
@@ -506,10 +501,9 @@ In Custom Configuration (JSON), you can leave defaults like:
 
 These configurations fine-tune how the red teaming runs:
 
-- Delay prevents server overload
-- Extension Hook gives room for future customization
-- Attack prompts test how your agent handles unsafe, biased, or adversarial inputs
-- This helps uncover weaknesses, improve safety, and ensure your LangGraph Research Agent behaves responsibly under pressure
+- Delay spaces out requests to reduce load.
+- Extension hooks can run custom logic during the eval.
+- Attack prompts test how the agent responds to adversarial inputs.
 
 ## Step 10: Fill in Red Team Usage and Application Details
 
@@ -557,10 +551,10 @@ In this step, you:
 
 - Selected the recommended plugin set for broad coverage.
 - Picked Custom strategies like Basic, Single-shot Optimization, Composite Jailbreaks, etc.
-- Reviewed all configurations, including Purpose, Features, Domain, Rules, and Sample Data to ensure the system only tests safe research queries.
+- Reviewed all configurations, including Purpose, Features, Domain, Rules, and Sample Data to give the attacker and grader context about the intended research workflow.
 
 <img width="800" alt="Plugin configuration for LangGraph red team testing" src="/img/risk-assessment-framed.png" />
-<img width="800" alt="Strategy configuration for comprehensive LangGraph testing" src="/img/risk-category-drawer@2x.png" />
+<img width="800" alt="LangGraph strategy configuration" src="/img/risk-category-drawer@2x.png" />
 
 ## Step 12: Run and Check Final Red Team Results
 
@@ -595,18 +589,16 @@ When complete, you'll get a full summary with vulnerability checks, token usage,
 
 Go to the Promptfoo dashboard and review:
 
-- No critical, high, medium, or low issues? ✅ Great—your LangGraph agent is resilient.
-- Security, compliance, and safety sections all pass? ✅ Your agent handles prompts responsibly.
-- Check prompt history and evaluation logs for past runs and pass rates.
+- Inspect failed cases and confirm whether the agent violated the expected behavior.
+- Check which plugins and strategies ran, and review errors or skipped cases before interpreting a clean report.
+- Compare pass rates and logs with previous runs. A passing scan does not establish that the agent is secure.
 
 <img width="800" alt="LLM risk overview dashboard for LangGraph agent evaluation" src="/img/riskreport-1.png" />
 <img width="800" alt="Security summary report showing LangGraph agent safety metrics" src="/img/security-coverage.png" />
 
 ## Conclusion
 
-You've successfully set up, tested, and red-teamed your LangGraph research agent using Promptfoo.
-
-With this workflow, you can confidently check agent performance, catch weaknesses, and share clear results with your team—all in a fast, repeatable way.
+Rerun the eval after changing the agent, model, or tools, and add regression cases for confirmed failures.
 
 You're now ready to scale, improve, and deploy safer LangGraph-based systems with trust.
 

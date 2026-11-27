@@ -13,6 +13,8 @@ This example demonstrates how to setup authentication with an http provider usin
 
 ## Setup
 
+Requires a [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support).
+
 ### Installation
 
 1. Install dependencies:

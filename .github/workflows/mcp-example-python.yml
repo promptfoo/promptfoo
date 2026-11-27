@@ -1,0 +1,108 @@
+name: Python MCP Server Example
+
+on:
+  pull_request:
+    paths: &watched-paths
+      - 'examples/redteam-mcp-agent/**'
+      - '.nvmrc'
+      - '.github/workflows/mcp-example-python.yml'
+  push:
+    branches: [main]
+    paths: *watched-paths
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-server:
+    name: FastMCP on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.14']
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: '.nvmrc'
+      - name: Install JavaScript example dependencies
+        run: npm install --prefix examples/redteam-mcp-agent --ignore-scripts --no-package-lock --registry=https://registry.npmjs.org/
+      - name: Install FastMCP
+        run: |
+          python -m pip install 'fastmcp>=4.0.5,<5'
+          python -m pip check
+      - name: Test MCP tool calls without model requests
+        run: python -m unittest discover -s examples/redteam-mcp-agent -p 'server_test.py' -v
+      - name: Test the documented HTTP server with the JavaScript client
+        run: |
+          python - <<'PYTHON'
+          import os
+          from pathlib import Path
+          import socket
+          import subprocess
+          import sys
+          import time
+
+          # Fail if another process could satisfy the readiness probe.
+          with socket.socket() as port:
+              port.bind(("127.0.0.1", 8080))
+
+          log_path = Path(os.environ["RUNNER_TEMP"]) / "mcp-server.log"
+          with log_path.open("w") as log:
+              server = subprocess.Popen(
+                  [sys.executable, "examples/redteam-mcp-agent/server.py"],
+                  stdout=log,
+                  stderr=subprocess.STDOUT,
+              )
+              try:
+                  deadline = time.monotonic() + 30
+                  while True:
+                      if server.poll() is not None:
+                          raise RuntimeError("MCP server exited before startup")
+                      try:
+                          with socket.create_connection(("127.0.0.1", 8080), timeout=1):
+                              break
+                      except OSError:
+                          if time.monotonic() >= deadline:
+                              raise TimeoutError("MCP server did not listen on port 8080")
+                          time.sleep(0.2)
+
+                  subprocess.run(
+                      ["node", "--input-type=module", "--eval", """
+                  import assert from 'node:assert/strict';
+                  import MCPClient from './examples/redteam-mcp-agent/src/mcp-client.js';
+
+                  const client = new MCPClient({ url: 'http://localhost:8080/mcp' });
+                  try {
+                    await client.connect();
+                    assert((await client.listTools()).some((tool) => tool.name === 'hello'));
+                    assert.equal(await client.callTool('hello', { name: 'Promptfoo' }), 'Hello, Promptfoo!');
+                    console.log('JavaScript client called hello through the documented HTTP endpoint');
+                  } finally {
+                    await client.disconnect();
+                  }
+                  """],
+                      check=True,
+                      timeout=30,
+                  )
+                  if server.poll() is not None:
+                      raise RuntimeError("MCP server exited during the client test")
+              except BaseException:
+                  print(log_path.read_text(), file=sys.stderr)
+                  raise
+              finally:
+                  if server.poll() is None:
+                      server.terminate()
+                      try:
+                          server.wait(timeout=10)
+                      except subprocess.TimeoutExpired:
+                          server.kill()
+                          server.wait()
+          PYTHON

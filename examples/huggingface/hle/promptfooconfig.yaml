@@ -5,16 +5,22 @@ prompts:
   - file://prompt.py:create_hle_prompt
 
 providers:
-  - id: anthropic:claude-sonnet-4-6
+  - id: anthropic:claude-sonnet-5
     config:
       thinking:
-        type: enabled
-        budget_tokens: 3000
-      max_tokens: 4000
+        type: adaptive
+      effort: high
+      max_tokens: 16000 # Shared by thinking and the final answer.
   - id: openai:o4-mini
     config:
       max_completion_tokens: 4000
-  # - deepseek:deepseek-reasoner
+  # Requires DEEPSEEK_API_KEY
+  # - id: deepseek:deepseek-flash
+  #   config:
+  #     max_tokens: 8192
+  #     passthrough:
+  #       thinking:
+  #         type: enabled
 
 defaultTest:
   assert:

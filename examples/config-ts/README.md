@@ -15,7 +15,7 @@ This example demonstrates TypeScript configuration for promptfoo, including:
 
 ## Prerequisites
 
-- Node.js ^20.20.0 or >=22.22.0 (Node.js 20 support ends July 30, 2026; Node.js 24 LTS recommended)
+- A [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support)
 - TypeScript loader (`tsx` recommended)
 
 Install dependencies:

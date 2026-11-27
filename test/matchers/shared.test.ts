@@ -1,5 +1,81 @@
 import { describe, expect, it } from 'vitest';
-import { splitIntoSentences, splitTextIntoSentences } from '../../src/matchers/shared';
+import {
+  normalizeMatcherTokenUsage,
+  splitIntoSentences,
+  splitTextIntoSentences,
+} from '../../src/matchers/shared';
+
+describe('normalizeMatcherTokenUsage', () => {
+  it('derives missing totals before matcher normalization makes them indistinguishable from zero', () => {
+    expect(normalizeMatcherTokenUsage({ prompt: 7, completion: 3 })).toMatchObject({
+      total: 10,
+      prompt: 7,
+      completion: 3,
+      numRequests: 0,
+    });
+  });
+
+  it('preserves an explicitly reported zero total', () => {
+    expect(normalizeMatcherTokenUsage({ total: 0, prompt: 7, completion: 3 })).toMatchObject({
+      total: 0,
+      prompt: 7,
+      completion: 3,
+    });
+  });
+
+  it('does not recharge a fully cached response with an explicit zero request count', () => {
+    expect(
+      normalizeMatcherTokenUsage({ prompt: 10, completion: 0, cached: 10, numRequests: 0 }),
+    ).toMatchObject({ total: 0, cached: 10, numRequests: 0 });
+  });
+
+  it('preserves fresh provider-side cached prompts when request counts are omitted', () => {
+    expect(normalizeMatcherTokenUsage({ prompt: 10, completion: 0, cached: 10 })).toMatchObject({
+      total: 10,
+      cached: 10,
+    });
+  });
+
+  it('preserves incurred usage and completion details for mixed cached and fresh grading', () => {
+    expect(
+      normalizeMatcherTokenUsage({
+        total: 100,
+        prompt: 70,
+        completion: 30,
+        cached: 70,
+        numRequests: 2,
+        completionDetails: { reasoning: 9 },
+        incurredTokenUsage: {
+          total: 30,
+          prompt: 20,
+          completion: 10,
+          numRequests: 1,
+          completionDetails: { reasoning: 4 },
+        },
+      }),
+    ).toMatchObject({
+      total: 100,
+      prompt: 70,
+      completion: 30,
+      cached: 70,
+      numRequests: 2,
+      completionDetails: { reasoning: 9 },
+      incurredTokenUsage: {
+        total: 30,
+        prompt: 20,
+        completion: 10,
+        numRequests: 1,
+        completionDetails: { reasoning: 4 },
+      },
+    });
+  });
+
+  it('does not add incurred accounting when the provider did not report it', () => {
+    expect(normalizeMatcherTokenUsage({ total: 30, numRequests: 1 })).not.toHaveProperty(
+      'incurredTokenUsage',
+    );
+  });
+});
 
 describe('splitIntoSentences', () => {
   it('splits on newlines and drops blank lines', () => {

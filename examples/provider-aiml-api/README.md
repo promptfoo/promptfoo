@@ -1,40 +1,32 @@
 # provider-aiml-api (AI/ML API Provider)
 
-This example shows how to use AI/ML API to compare different language models on a fun task - telling jokes!
+Compare three models on a joke-writing task through [AI/ML API](https://aimlapi.com). The configuration uses:
 
-AI/ML API provides access to 300+ models through a single API key, making it easy to compare models from different providers.
+- DeepSeek V4 Pro (`deepseek/deepseek-v4-pro`)
+- GPT-5.6 Luna (`openai/gpt-5.6-luna`)
+- Claude Sonnet 5 (`anthropic/claude-sonnet-5`)
 
 ## Setup
 
-1. Get your API key from [AI/ML API](https://aimlapi.com)
+1. Create the example:
 
-2. Set your API key:
+   ```bash
+   npx promptfoo@latest init --example provider-aiml-api
+   cd provider-aiml-api
+   ```
+
+2. Get an [AI/ML API key](https://aimlapi.com) and set it in your environment:
 
    ```bash
    export AIML_API_KEY=your_api_key_here
    ```
 
 3. Run the evaluation:
+
    ```bash
    npx promptfoo@latest eval
    ```
 
-## What this example does
+## What the evaluation checks
 
-This example compares three different models:
-
-- **DeepSeek R1** - Advanced reasoning model
-- **GPT-4.1 Mini** - Fast and cost-effective
-- **Claude 4 Sonnet** - Balanced performance
-
-The models are asked to tell jokes about different topics, and we evaluate:
-
-- Whether the joke contains relevant keywords
-- Whether the joke is actually funny (using an LLM judge)
-
-You can run this example with:
-
-```bash
-npx promptfoo@latest init --example provider-aiml-api
-cd provider-aiml-api
-```
+Each model writes jokes about programming and artificial intelligence. The assertions check for relevant keywords and ask GPT-5.6 Luna, also through AI/ML API, to grade the jokes against the rubrics in the config. The grader uses the same `AIML_API_KEY` and makes separate model calls.

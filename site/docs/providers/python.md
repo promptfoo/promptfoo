@@ -167,7 +167,7 @@ Contains your provider configuration and metadata:
     "id": "file://my_provider.py",
     "config": {
         # Your custom configuration from promptfooconfig.yaml
-        "model_name": "gpt-3.5-turbo",
+        "model": "gpt-4.1-mini",
         "temperature": 0.7,
         "max_tokens": 100,
 
@@ -211,34 +211,24 @@ Non-serializable fields (`logger`, `getCache`, `filters`, `originalProvider`) ar
 
 ### Return Format
 
-Your function must return a dictionary with these fields:
+Your function must return a dictionary containing `output` or `error`, plus any optional fields:
 
 ```python
 def call_api(prompt, options, context):
-    # Required field
-    result = {
-        "output": "Your response here"
-    }
-
-    # Optional fields
-    result["tokenUsage"] = {
-        "total": 150,
-        "prompt": 50,
-        "completion": 100
-    }
-
-    result["cost"] = 0.0025  # in dollars
-    result["cached"] = False
-    result["logProbs"] = [-0.5, -0.3, -0.1]
-    result["latencyMs"] = 150  # custom latency in milliseconds
-    result["conversationEnded"] = False
-    result["conversationEndReason"] = "thread_closed"
-
-    # Error handling
     if something_went_wrong:
-        result["error"] = "Description of what went wrong"
+        return {"error": "Description of what went wrong"}
 
-    return result
+    return {
+        "output": "Your response here",
+        "tokenUsage": {"total": 150, "prompt": 50, "completion": 100},
+        "cost": 0.0025,  # in dollars
+        "cached": False,
+        "logProbs": [-0.5, -0.3, -0.1],
+        "latencyMs": 150,  # custom latency in milliseconds
+        "conversationEnded": False,
+        "conversationEndReason": "thread_closed",
+        "guardrails": {"flagged": False},
+    }
 ```
 
 For workflows that make multiple model calls, set `tokenUsage.numRequests` yourself. Fresh Python-provider results that omit it are recorded as one request.
@@ -258,10 +248,16 @@ class CallApiContextParams:
     test: Optional[Dict[str, Any]]         # Full test case including metadata
 
 class TokenUsage:
-    total: int
-    prompt: int
-    completion: int
-    numRequests: int
+    total: Optional[int]
+    prompt: Optional[int]
+    completion: Optional[int]
+    numRequests: Optional[int]
+
+class GuardrailResponse:
+    flagged: Optional[bool]
+    flaggedInput: Optional[bool]
+    flaggedOutput: Optional[bool]
+    reason: Optional[str]
 
 class ProviderResponse:
     output: Optional[Union[str, Dict[str, Any]]]
@@ -273,6 +269,7 @@ class ProviderResponse:
     latencyMs: Optional[int]  # overrides measured latency
     conversationEnded: Optional[bool]
     conversationEndReason: Optional[str]
+    guardrails: Optional[GuardrailResponse]
     metadata: Optional[Dict[str, Any]]
 
 class ProviderEmbeddingResponse:
@@ -288,7 +285,7 @@ class ProviderClassificationResponse:
 ```
 
 :::tip
-Always include the `output` field in your response, even if it's an empty string when an error occurs.
+Return at least one of `output` or `error`. Represent an expected safety block as a non-empty `output` plus `guardrails`; use `error` for provider or guardrail execution failures.
 :::
 
 For multi-turn red team strategies, return `conversationEnded: True` (with optional
@@ -324,7 +321,7 @@ def call_api(prompt, options, context):
     # Make API call
     try:
         response = client.chat.completions.create(
-            model=config.get('model', 'gpt-3.5-turbo'),
+            model=config.get('model', 'gpt-4.1-mini'),
             messages=messages,
             temperature=config.get('temperature', 0.7),
             max_tokens=config.get('max_tokens', 150)
@@ -544,6 +541,14 @@ Or set globally for all providers:
 export REQUEST_TIMEOUT_MS=600000  # 10 minutes
 ```
 
+When a call times out, promptfoo restarts that worker's Python process so later calls don't wait behind the stuck one. Any global state in that worker is lost.
+
+#### Crashes
+
+If a worker's Python process exits unexpectedly, only the call it was running fails and the worker restarts. After three crashes or failed restarts in a row, with no completed call in between, the worker stops restarting. Once every worker for a provider has stopped, remaining calls fail with an error instead of waiting.
+
+A script that fails at import time fails provider startup immediately. The Python traceback is logged from the worker's stderr.
+
 ### Environment Configuration
 
 #### Custom Python Executable
@@ -579,10 +584,13 @@ Promptfoo automatically detects your Python installation in this priority order:
    - Windows: `python`, `python3`, `py -3`, `py`
    - macOS/Linux: `python3`, `python`
 
-This enhanced detection is especially helpful on Windows where the Python launcher (`py.exe`) might not be available.
+This detection helps on Windows where the Python launcher (`py.exe`) might not be available.
 Use `pythonExecutable` when one provider needs a different interpreter than the global default.
 
 #### Environment Variables
+
+Python inherits environment variables from your shell and `--env-file`. Set `PATH`
+and `PYTHONPATH` there; provider `env` overrides do not change the child process environment.
 
 ```bash
 # Use specific Python version
@@ -645,6 +653,7 @@ def call_api(prompt, options, context):
 ```python
 def call_api(prompt, options, context):
     """Provider with safety guardrails."""
+    config = options.get("config", {})
 
     # Check for prohibited content
     prohibited_terms = config.get('prohibited_terms', [])
@@ -654,6 +663,8 @@ def call_api(prompt, options, context):
                 "output": "I cannot process this request.",
                 "guardrails": {
                     "flagged": True,
+                    "flaggedInput": True,
+                    "flaggedOutput": False,
                     "reason": "Prohibited content detected"
                 }
             }
@@ -663,13 +674,23 @@ def call_api(prompt, options, context):
 
     # Post-process checks
     if check_output_safety(result):
-        return {"output": result}
+        return {
+            "output": result,
+            "guardrails": {"flagged": False}
+        }
     else:
         return {
             "output": "[Content filtered]",
-            "guardrails": {"flagged": True}
+            "guardrails": {
+                "flagged": True,
+                "flaggedInput": False,
+                "flaggedOutput": True,
+                "reason": "Generated content failed output safety checks"
+            }
         }
 ```
+
+Set the aggregate `flagged` field explicitly; the directional fields do not control the [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails) by themselves. Return guardrail service failures through `error` rather than treating them as unflagged.
 
 ### OpenTelemetry Tracing
 
@@ -683,7 +704,7 @@ pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-prot
 
 **Enable tracing:**
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tracing:
   enabled: true
   otlp:
@@ -704,7 +725,7 @@ When wrapper OTEL instrumentation is enabled, the Python provider wrapper:
 - Captures token usage from `tokenUsage` in your response
 - Includes evaluation and test case metadata
 
-The spans follow [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) with attributes like `gen_ai.request.model`, `gen_ai.usage.input_tokens`, and `gen_ai.usage.output_tokens`.
+The wrapper identifies Python execution through `promptfoo.provider.type`, `promptfoo.provider.function`, and, when configured, `promptfoo.provider.model`. Token counts use standard [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/), including `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens`. Instrument the model library inside your provider when you also want separate model-inference spans.
 
 This span covers the provider call itself. If you need internal workflow telemetry for tools, agents, or handoffs, create custom child spans or export framework-native traces into Promptfoo. See the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python) for a full example that makes `trajectory:*` assertions work with the Python `openai-agents` SDK.
 
@@ -774,7 +795,7 @@ For red team runs, [image](/docs/red-team/strategies/image), [audio](/docs/red-t
 | `audio`           | Raw MP3 base64 from remote generation, no `data:` prefix | `context['test']['metadata']['originalText']`                                  | Requires remote generation. Forward with MIME type `audio/mpeg` or your provider's equivalent audio format.                                                                                                                        |
 | `video`           | Raw MP4 base64 when local FFmpeg generation succeeds     | `context['vars']['video_text']`, `context['test']['metadata']['originalText']` | Install FFmpeg and set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` for real MP4 bytes. If generation falls back, the value may decode to the original text instead of an MP4. |
 
-Audio and video have opposite generation requirements today: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
+Audio and video have opposite generation requirements: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
 
 ```python title="multimodal_provider.py"
 import os

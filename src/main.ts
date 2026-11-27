@@ -42,7 +42,6 @@ import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/di
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
 import { redteamRunCommand } from './redteam/commands/run';
-import { runStartupRuntimeAndUpdateChecks } from './runtimeCompatibilityNotice';
 import { ServerError } from './server/errors';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
@@ -61,8 +60,7 @@ async function main() {
     Object.assign(process.env, { PROMPTFOO_DISABLE_UPDATE: 'true' });
   }
 
-  // Avoid duplicating post-cutoff runtime guidance in the ordinary update check.
-  await runStartupRuntimeAndUpdateChecks({ checkForUpdates });
+  await checkForUpdates();
   await runDbMigrations({ suppressBindingErrorLogging: true });
 
   const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
@@ -71,20 +69,7 @@ async function main() {
     : await loadDefaultConfig();
 
   const program = new Command('promptfoo');
-  program
-    .version(VERSION)
-    .showHelpAfterError()
-    .showSuggestionAfterError()
-    .on('option:*', function (this: Command) {
-      const unknownArgs = this.args.filter((arg) => arg.startsWith('-'));
-      if (unknownArgs.length > 0) {
-        logger.error(`Invalid option(s): ${unknownArgs.join(', ')}`);
-      } else {
-        logger.error('Invalid option(s)');
-      }
-      program.help();
-      process.exitCode = 1;
-    });
+  program.version(VERSION).showHelpAfterError().showSuggestionAfterError();
 
   // Main commands
   const evalCmd = evalCommand(program, defaultConfig, defaultConfigPath);
