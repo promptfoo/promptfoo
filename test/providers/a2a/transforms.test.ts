@@ -77,6 +77,18 @@ describe('A2A createTransformResponse', () => {
     });
   });
 
+  it.each([
+    '(\n json,\n text,\n context\n) => `${json.task.id}:${text}:${context.mode}`',
+    'function extract(json, text, context) { return `${json.task.id}:${text}:${context.mode}`; }',
+    'async (\n json,\n text,\n context\n) => `${json.task.id}:${text}:${context.mode}`',
+    'async function extract(json, text, context) { return `${json.task.id}:${text}:${context.mode}`; }',
+  ])('invokes multiline and named string transforms: %s', async (source) => {
+    const transform = createTransformResponse(source);
+    await expect(transform(finalResponse, 'fallback text', context)).resolves.toEqual({
+      output: 'task-1:fallback text:stream',
+    });
+  });
+
   it('wraps object string-expression results without provider response fields', async () => {
     const transform = createTransformResponse('({ taskId: result.task.id })');
 

@@ -83,6 +83,18 @@ describe('MCP createTransformResponse', () => {
     });
   });
 
+  it.each([
+    '(\n result,\n content,\n context\n) => `${result.structuredContent.name}:${content}:${context.toolName}`',
+    'function extract(result, content, context) { return `${result.structuredContent.name}:${content}:${context.toolName}`; }',
+    'async (\n result,\n content,\n context\n) => `${result.structuredContent.name}:${content}:${context.toolName}`',
+    'async function extract(result, content, context) { return `${result.structuredContent.name}:${content}:${context.toolName}`; }',
+  ])('invokes multiline and named string transforms: %s', async (source) => {
+    const transform = createTransformResponse(source);
+    await expect(
+      transform({ structuredContent: { name: 'Ada' } }, 'fallback text', context),
+    ).resolves.toEqual({ output: 'Ada:fallback text:lookup_user' });
+  });
+
   it('should throw if file transforms are not pre-loaded', () => {
     expect(() => createTransformResponse('file://parser.js')).toThrow(
       /should be pre-loaded before calling createTransformResponse/,

@@ -46,7 +46,7 @@ export function createTransformResponse(
     return async (result, content, context) => {
       try {
         const trimmedParser = parser.trim();
-        const isFunctionExpression = /^(async\s+)?(\(.*?\)\s*=>|function\s*\(.*?\))/.test(
+        const isFunctionExpression = /^(async\s+)?(\(.*?\)\s*=>|function\b[\w$\s]*\(.*?\))/s.test(
           trimmedParser,
         );
         const transformFn = new Function(
