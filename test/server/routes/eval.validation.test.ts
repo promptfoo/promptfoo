@@ -241,6 +241,37 @@ describe('Eval Routes - Zod Validation', () => {
       expect(response.body.error).toBeDefined();
     });
 
+    it('should return 404 when the eval does not exist', async () => {
+      mockFindById.mockResolvedValue(undefined);
+
+      const response = await api.patch('/api/eval/missing-id').send({
+        config: { description: 'Updated description' },
+      });
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'Eval not found' });
+      expect(mockFindById).toHaveBeenCalledWith('missing-id');
+    });
+
+    it('should update an existing eval', async () => {
+      const mockEval = {
+        id: 'test-id',
+        config: {},
+        save: mockSave,
+        setTable: vi.fn(),
+      };
+      mockFindById.mockResolvedValue(mockEval);
+
+      const response = await api.patch('/api/eval/test-id').send({
+        config: { description: 'Updated description' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ message: 'Eval updated successfully' });
+      expect(mockEval.config).toEqual({ description: 'Updated description' });
+      expect(mockSave).toHaveBeenCalledTimes(1);
+    });
+
     it('should return 500 when the eval update write fails', async () => {
       const mockEval = {
         id: 'test-id',

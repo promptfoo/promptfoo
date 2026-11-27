@@ -114,18 +114,23 @@ export async function readResult(
   }
 }
 
+/**
+ * Updates a stored eval's config and/or table.
+ *
+ * @returns `false` when no eval with this ID exists, `true` once the update is saved.
+ */
 export async function updateResult(
   id: string,
   newConfig?: Partial<UnifiedConfig>,
   newTable?: EvaluateTable,
-): Promise<void> {
+): Promise<boolean> {
   try {
     // Fetch the existing eval data from the database
     const existingEval = await Eval.findById(id);
 
     if (!existingEval) {
       logger.error(`Eval with ID ${id} not found.`);
-      return;
+      return false;
     }
 
     if (newConfig) {
@@ -138,6 +143,7 @@ export async function updateResult(
     await existingEval.save();
 
     logger.info(`Updated eval with ID ${id}`);
+    return true;
   } catch (err) {
     logger.error(`Failed to update eval with ID ${id}:\n${err}`);
     throw err;
