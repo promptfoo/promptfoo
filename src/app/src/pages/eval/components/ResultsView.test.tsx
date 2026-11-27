@@ -344,9 +344,7 @@ async function expectChartsUnavailable(...reasonTexts: string[]) {
   expect(screen.queryByRole('button', { name: 'Why no charts?' })).toBeNull();
   expect(screen.queryByText('Charts are unavailable for this evaluation')).toBeNull();
   expect(
-    screen.queryByText(
-      'We can show charts when the results include comparable prompts and chartable scores.',
-    ),
+    screen.queryByText('Charts need at least one prompt and a meaningful set of scores.'),
   ).toBeNull();
 
   for (const reasonText of reasonTexts) {
@@ -360,9 +358,7 @@ async function expectChartsUnavailable(...reasonTexts: string[]) {
   expect(screen.queryByTestId('results-charts')).toBeNull();
   expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
   expect(
-    screen.getByText(
-      'We can show charts when the results include comparable prompts and chartable scores.',
-    ),
+    screen.getByText('Charts need at least one prompt and a meaningful set of scores.'),
   ).toBeInTheDocument();
 
   for (const reasonText of reasonTexts) {
@@ -808,7 +804,8 @@ describe('ResultsView Chart Rendering', () => {
 
     vi.mocked(useTableStore).mockReturnValue(createTableStore(createEmptyTableState()));
   });
-  it('shows an unavailable reason on demand if there is only one prompt', async () => {
+  it('renders charts for one prompt with meaningful scores', () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
     vi.mocked(useTableStore).mockReturnValue(
       createTableStore({
         table: {
@@ -823,7 +820,8 @@ describe('ResultsView Chart Rendering', () => {
 
     renderResultsView(mockOnRecentEvalSelected);
 
-    await expectChartsUnavailable('Charts require at least two prompts to compare side by side.');
+    expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
 
   it('shows an unavailable reason on demand if all scores are binary edge values (all 1s)', async () => {
@@ -874,24 +872,17 @@ describe('ResultsView Chart Rendering', () => {
     expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
 
+  const ineligibleTable = {
+    ...createComparisonTable(),
+    body: [{ outputs: [{ score: 0 }, { score: 0 }] }],
+  };
+
   it('recomputes the default chart visibility when navigating between evals', async () => {
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
 
     let tableStoreValue = {
       author: 'Test Author',
-      table: {
-        head: {
-          prompts: [
-            {
-              label: 'Initial Prompt',
-              provider: 'openai:gpt-4',
-              raw: 'Initial prompt',
-            },
-          ],
-          vars: ['input'],
-        },
-        body: [{ outputs: [{ score: 0.8 }] }],
-      },
+      table: ineligibleTable,
       config: {
         description: 'Initial Evaluation',
         sharing: true,
@@ -993,19 +984,7 @@ describe('ResultsView Chart Rendering', () => {
 
     tableStoreValue = {
       ...tableStoreValue,
-      table: {
-        head: {
-          prompts: [
-            {
-              label: 'Only Prompt',
-              provider: 'openai:gpt-4',
-              raw: 'Only Prompt',
-            },
-          ],
-          vars: ['input'],
-        },
-        body: [{ outputs: [{ score: 0.8 }] }],
-      },
+      table: ineligibleTable,
       config: {
         description: 'Ineligible Evaluation',
         sharing: true,

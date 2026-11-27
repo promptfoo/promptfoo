@@ -221,10 +221,7 @@ export function ResultsChartsSection({
               <AlertContent>
                 <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
                 <AlertDescription className="space-y-3">
-                  <p>
-                    We can show charts when the results include comparable prompts and chartable
-                    scores.
-                  </p>
+                  <p>Charts need at least one prompt and a meaningful set of scores.</p>
                   <ul className="list-disc pl-5 space-y-1">
                     {resultsChartsUnavailableReasons.map((reason) => (
                       <li key={reason}>{reason}</li>
@@ -750,8 +747,8 @@ export default function ResultsView({
       reasons.push('This evaluation is still loading its chart configuration.');
     }
 
-    if (table.head.prompts.length <= 1) {
-      reasons.push('Charts require at least two prompts to compare side by side.');
+    if (table.head.prompts.length === 0) {
+      reasons.push('Charts require at least one prompt.');
     }
 
     if (resultsChartsScores.length === 0) {
