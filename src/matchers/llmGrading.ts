@@ -249,7 +249,7 @@ export async function matchesLlmRubric(
       const categories = Object.entries(structuredRubric.taxonomy.categories)
         .map(
           ([label, category]) =>
-            `${label}${category.allow ? ' [allowed]' : ''}: ${category.description}`,
+            `${label}: ${category.allow ? '[allowed] ' : ''}${category.description}`,
         )
         .join('\n');
       judgeRubric = `${structuredRubric.policy}\n\nCategories:\n${categories}`;

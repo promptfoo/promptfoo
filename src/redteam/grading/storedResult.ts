@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 
 import type { GradingResult } from '../../types/index';
+import type { RedteamGradingContext } from './types';
 
 /** Opaque runtime values cannot safely identify a reusable assertion configuration. */
 export function getGradingAssertionHash(assertion: unknown): string | undefined {
@@ -54,8 +55,7 @@ export function getGradingInputHash(
 
 export function getTargetConversation(messages: unknown): {
   lastUserPrompt?: string;
-  conversationTranscript?: string;
-} {
+} & Pick<RedteamGradingContext, 'conversationTranscript' | 'priorMessages'> {
   if (!Array.isArray(messages)) {
     return {};
   }
@@ -72,17 +72,19 @@ export function getTargetConversation(messages: unknown): {
 
   // Keep the current turn separate from prior context. Only use the target
   // conversation, never the attacker history or abandoned search branches.
-  const conversationTranscript = messages
+  const priorMessages = messages
     .slice(0, lastUserIndex)
     .filter(
       (message) =>
         (message?.role === 'user' || message?.role === 'assistant') &&
         typeof message.content === 'string',
     )
+    .map(({ role, content }) => ({ role, content }));
+  const conversationTranscript = priorMessages
     .map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.content}`)
     .join('\n\n');
 
-  return { lastUserPrompt: messages[lastUserIndex].content, conversationTranscript };
+  return { lastUserPrompt: messages[lastUserIndex].content, conversationTranscript, priorMessages };
 }
 
 /** Attach cumulative usage without marking fresh work as a cached response. */

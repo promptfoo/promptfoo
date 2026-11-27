@@ -851,6 +851,10 @@ describe('redteam strategy result grading', () => {
       undefined,
       expect.objectContaining({
         conversationTranscript: 'User: My contact is Casey Morgan.\n\nAssistant: Acknowledged.',
+        priorMessages: [
+          { role: 'user', content: 'My contact is Casey Morgan.' },
+          { role: 'assistant', content: 'Acknowledged.' },
+        ],
       }),
     );
     expect(providerResponse).toEqual(before);

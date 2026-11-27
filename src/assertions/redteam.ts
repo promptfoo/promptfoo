@@ -158,12 +158,13 @@ function createInitialGradingContext({
   assertionValueContext,
   providerResponse,
   conversationTranscript,
-}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'> & {
-  conversationTranscript?: string;
-}): RedteamGradingContext {
+  priorMessages,
+}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'> &
+  Pick<RedteamGradingContext, 'conversationTranscript' | 'priorMessages'>): RedteamGradingContext {
   const gradingContext: RedteamGradingContext = {
     providerResponse,
     ...(conversationTranscript === undefined ? {} : { conversationTranscript }),
+    ...(priorMessages?.length && { priorMessages }),
   };
 
   if (assertionValueContext.trace) {
@@ -213,7 +214,7 @@ export const handleRedteam = async (
       gradingMessages = reportedConversation.lastUserPrompt ? providerResponse.prompt : undefined;
     }
   }
-  const { lastUserPrompt, conversationTranscript } = conversation;
+  const { lastUserPrompt, conversationTranscript, priorMessages } = conversation;
   const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
@@ -284,6 +285,7 @@ export const handleRedteam = async (
     assertionValueContext,
     providerResponse,
     conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
+    priorMessages: gradesCurrentTurnOnly ? undefined : priorMessages,
   });
   const trackingIds =
     getWebPageTrackingIds(

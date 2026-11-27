@@ -605,7 +605,13 @@ export abstract class RedteamGraderBase {
       ...(this.structuredRubric && {
         structuredRubric: {
           policy: withGradingGuidance(
-            this.renderRubricTemplate(this.structuredRubric.policy, vars),
+            this.renderRubricTemplate(this.structuredRubric.policy, {
+              ...vars,
+              // Only recorded target messages can supply speaker roles for a structured policy.
+              priorMessages: gradingContext?.priorMessages ?? [],
+              hasPriorAssistantMessage:
+                gradingContext?.priorMessages?.some(({ role }) => role === 'assistant') ?? false,
+            }),
           ),
           taxonomy: this.structuredRubric.taxonomy,
         },

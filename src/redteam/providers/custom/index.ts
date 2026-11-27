@@ -576,10 +576,12 @@ export class CustomProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
+            const { conversationTranscript, priorMessages } =
+              getTargetConversation(lastResponseMessages);
             const gradingContext: RedteamGradingContext | undefined = {
               providerResponse: lastResponse,
-              conversationTranscript:
-                getTargetConversation(lastResponseMessages).conversationTranscript,
+              conversationTranscript,
+              priorMessages,
               ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
             };
             const gradedTurn = {

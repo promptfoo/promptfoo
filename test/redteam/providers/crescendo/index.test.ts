@@ -2100,6 +2100,8 @@ describe('CrescendoProvider', () => {
       expect(result.metadata?.messages).toHaveLength(2);
       expect(result.guardrails).toBeUndefined();
 
+      const regrade = vi.fn();
+      mockGetGraderById.mockReturnValue({ getResult: regrade });
       const grade = await runAssertions({
         prompt: 'test prompt',
         providerResponse: result,
@@ -2114,7 +2116,7 @@ describe('CrescendoProvider', () => {
       });
       expect(grade.pass).toBe(false);
       expect(grade.reason).toBe('Jailbreak detected');
-      expect(mockGetGraderById).toHaveBeenCalledTimes(2);
+      expect(regrade).not.toHaveBeenCalled();
     });
 
     it('reports the last guardrail result when no round is flagged', async () => {

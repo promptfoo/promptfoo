@@ -18,6 +18,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { getTargetConversation } from '../../grading/storedResult';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -693,6 +694,7 @@ export class CrescendoProvider implements ApiProvider {
               ...(gradingContext ?? {}),
               redteamHistory: [...redteamHistory],
               conversationHistory: conversationHistoryForGrading,
+              priorMessages: getTargetConversation(lastResponseMessages).priorMessages,
               conversationTranscript: formatRedteamHistoryAsTranscript(
                 conversationHistoryForGrading,
               ),

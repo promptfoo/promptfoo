@@ -233,7 +233,7 @@ describe('matchesLlmRubric', () => {
       });
       expect(result.pass).toBe(false);
       expect(provider.callApi.mock.calls[0][0]).toContain(
-        'privacy.general_access_guidance [allowed]: General access instructions',
+        'privacy.general_access_guidance: [allowed] General access instructions',
       );
       if (allowedPass) {
         expect(result.findings?.map(({ label, pass }) => ({ label, pass }))).toEqual([

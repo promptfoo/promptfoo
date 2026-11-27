@@ -749,9 +749,11 @@ export default class GoatProvider implements ApiProvider {
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
         if (test && assertToUse && grader && finalOutput) {
           // Build grading context with image outputs, tracing, and exfil tracking data.
+          const { conversationTranscript, priorMessages } = getTargetConversation(messages);
           let gradingContext: RedteamGradingContext | undefined = {
             providerResponse: finalResponse,
-            conversationTranscript: getTargetConversation(messages).conversationTranscript,
+            conversationTranscript,
+            priorMessages,
             ...(finalResponse.images?.length ? { imageOutputs: finalResponse.images } : {}),
           };
 
