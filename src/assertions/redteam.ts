@@ -1,5 +1,5 @@
+import { hasMatchingTaxonomy } from '../contracts/gradingTaxonomy';
 import logger from '../logger';
-import { hasMatchingTaxonomy } from '../matchers/taxonomy';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import {

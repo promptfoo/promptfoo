@@ -8,6 +8,7 @@ import {
 } from '../src/redteam/remoteGeneration';
 import { doRemoteGrading } from '../src/remoteGrading';
 import { getActiveTraceparent } from '../src/tracing/spanRoles';
+import { fetchWithProxy } from '../src/util/fetch/index';
 import { createMockFetchResponse } from './providers/mockProviderResponses';
 
 const mockLoggerDebug = vi.hoisted(() => vi.fn());
@@ -24,6 +25,8 @@ function containsString(value: unknown, needle: string): boolean {
   }
   return false;
 }
+
+vi.mock('../src/util/fetch/index', () => ({ fetchWithProxy: vi.fn() }));
 
 vi.mock('../src/cache', () => ({
   fetchWithCache: vi.fn(),
@@ -58,10 +61,16 @@ describe('doRemoteGrading', () => {
   });
 
   it.each(['current', 'legacy', 'wrong version'])('reads %s hosted grades', async (kind) => {
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue(
+      `https://${kind.replace(' ', '-')}.test/task`,
+    );
+    vi.mocked(fetchWithProxy).mockResolvedValue(
+      Response.json({ capabilities: ['structured-rubric'] }),
+    );
     const taxonomy = {
       id: 'example',
       version: 1,
-      categories: { 'example.contact': 'Contact details' },
+      categories: { 'example.contact': { description: 'Contact details' } },
     };
     const findings = [
       {
@@ -89,7 +98,12 @@ describe('doRemoteGrading', () => {
       rubric: 'Allow',
       output: 'Amy',
       vars: {},
-      config: { structuredRubric: { policy: 'Allow', taxonomy } },
+      policy: 'Allow',
+      taxonomy,
+    });
+    expect(JSON.parse(String(vi.mocked(fetchWithCache).mock.calls[0][1]?.body))).toMatchObject({
+      policy: 'Allow',
+      taxonomy,
     });
     expect(result).toMatchObject(verdict);
     expect(result.findings).toEqual(kind === 'current' ? findings : undefined);
@@ -97,6 +111,47 @@ describe('doRemoteGrading', () => {
       kind === 'current' ? { id: 'example', version: 1 } : undefined,
     );
   });
+
+  it.each(['unadvertised', 'unavailable'])(
+    'sends only the original fields when support is %s',
+    async (kind) => {
+      vi.mocked(getRemoteGenerationUrl).mockReturnValue(
+        `https://legacy-${kind}.test/api/task?region=local`,
+      );
+      if (kind === 'unavailable') {
+        vi.mocked(fetchWithProxy).mockRejectedValue(new Error('No version route'));
+      } else {
+        vi.mocked(fetchWithProxy).mockResolvedValue(Response.json({ version: '1' }));
+      }
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
+          result: { pass: true, score: 1, reason: 'Legacy verdict' },
+        }) as any,
+      );
+      const request = {
+        task: 'llm-rubric',
+        rubric: 'Original policy',
+        output: 'Answer',
+        vars: {},
+        policy: 'New policy',
+        taxonomy: { id: 'sample', version: 1, categories: { 'sample.a': { description: 'A' } } },
+      };
+      await Promise.all([doRemoteGrading(request), doRemoteGrading(request)]);
+      expect(fetchWithProxy).toHaveBeenCalledExactlyOnceWith(
+        `https://legacy-${kind}.test/api/task/version?region=local`,
+        expect.any(Object),
+      );
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+      for (const [, options] of vi.mocked(fetchWithCache).mock.calls) {
+        expect(JSON.parse(String(options?.body))).toEqual({
+          task: 'llm-rubric',
+          rubric: 'Original policy',
+          output: 'Answer',
+          vars: {},
+        });
+      }
+    },
+  );
 
   it('preserves grader error metadata from remote grading results', async () => {
     vi.mocked(getUserEmail).mockReturnValue('user@example.com');

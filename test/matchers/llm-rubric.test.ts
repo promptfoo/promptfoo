@@ -167,7 +167,10 @@ describe('matchesLlmRubric', () => {
     const taxonomy = {
       id: 'example',
       version: 2,
-      categories: { [allowed.label]: 'Contact information', [absent.label]: 'Location' },
+      categories: {
+        [allowed.label]: { description: 'Contact information' },
+        [absent.label]: { description: 'Location' },
+      },
     };
     const provider = createMockProvider({
       response: {
@@ -187,6 +190,61 @@ describe('matchesLlmRubric', () => {
     expect(result.findings).toEqual([{ ...allowed, evidence: [{ start: 3, end: 8 }] }, absent]);
     expect(result.metadata?.taxonomy).toEqual({ id: 'example', version: 2 });
   });
+
+  it.each([true, false])(
+    'validates a scoped allowance alongside a disclosure (allowed row passes: %s)',
+    async (allowedPass) => {
+      const output = 'Request access. Record 42 exists.';
+      const guidance = {
+        label: 'privacy.general_access_guidance',
+        observed: true,
+        pass: allowedPass,
+        reason: 'Access instructions',
+        evidence: ['Request access.'],
+      };
+      const disclosure = {
+        label: 'privacy.system_information',
+        observed: true,
+        pass: false,
+        reason: 'Record confirmed',
+        evidence: ['Record 42 exists.'],
+      };
+      const taxonomy = {
+        id: 'privacy',
+        version: 2,
+        categories: {
+          [guidance.label]: { description: 'General access instructions', allow: true as const },
+          [disclosure.label]: { description: 'Specific records' },
+        },
+      };
+      const provider = createMockProvider({
+        response: {
+          output: {
+            pass: false,
+            score: 0,
+            reason: 'Record confirmed',
+            findings: [guidance, disclosure],
+          },
+        },
+      });
+      const result = await matchesLlmRubric('Legacy policy', output, {
+        provider,
+        structuredRubric: { policy: 'Protect records', taxonomy },
+      });
+      expect(result.pass).toBe(false);
+      expect(provider.callApi.mock.calls[0][0]).toContain(
+        'privacy.general_access_guidance [allowed]: General access instructions',
+      );
+      if (allowedPass) {
+        expect(result.findings?.map(({ label, pass }) => ({ label, pass }))).toEqual([
+          { label: guidance.label, pass: true },
+          { label: disclosure.label, pass: false },
+        ]);
+      } else {
+        expect(result.findings).toBeUndefined();
+      }
+    },
+  );
 
   it.each(['missing', 'duplicate', 'unmatched excerpt', 'unknown label'])(
     'keeps the verdict for %s findings',
@@ -225,7 +283,7 @@ describe('matchesLlmRubric', () => {
           taxonomy: {
             id: 'example',
             version: 1,
-            categories: { 'example.a': 'A', 'example.b': 'B' },
+            categories: { 'example.a': { description: 'A' }, 'example.b': { description: 'B' } },
           },
         },
       });
@@ -2468,7 +2526,7 @@ Evaluate the response
     const taxonomy = {
       id: 'example',
       version: 1,
-      categories: { 'example.contact': 'Contact details' },
+      categories: { 'example.contact': { description: 'Contact details' } },
     };
     const structuredRubric = { policy: 'Apply contact permissions', taxonomy };
     const remoteGeneration = await import('../../src/redteam/remoteGeneration');
@@ -2482,7 +2540,7 @@ Evaluate the response
       rubric: 'Protect contacts',
       output: 'Answer',
       vars: {},
-      config: { structuredRubric },
+      ...structuredRubric,
     });
     expect(result).toMatchObject(createPassingGrade());
     expect(result.findings).toBeUndefined();

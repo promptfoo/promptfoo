@@ -95,3 +95,9 @@ export * from './shared.js';
 export * from './transform.js';
 export * from './validators/prompts.js';
 export * from './validators/shared.js';
+
+export type {
+  GradingTaxonomy,
+  StructuredGradingRubric,
+  TaxonomyFinding,
+} from './gradingTaxonomy.js';

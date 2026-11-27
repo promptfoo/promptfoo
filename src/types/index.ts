@@ -19,6 +19,14 @@ import {
   normalizeConfigProviderAlias,
 } from './configAliases';
 
+import type { GradingTaxonomy, TaxonomyFinding } from '../contracts/gradingTaxonomy';
+
+export type {
+  GradingTaxonomy,
+  StructuredGradingRubric,
+  TaxonomyFinding,
+} from '../contracts/gradingTaxonomy';
+
 import type { ResultFailureReason } from './results';
 
 export { ProvidersSchema };
@@ -541,29 +549,6 @@ export interface ResultSuggestion {
   type: string;
   action: 'replace-prompt' | 'pre-filter' | 'post-filter' | 'note';
   value: string;
-}
-
-/** Identifies the findings expected from a single rubric evaluation. */
-export interface GradingTaxonomy {
-  id: string;
-  version: number;
-  /** Stable labels mapped to descriptions of the content to classify. */
-  categories: Record<string, string>;
-}
-
-/** A policy decides what is allowed. The taxonomy identifies what was observed. */
-export interface StructuredGradingRubric {
-  policy: string;
-  taxonomy: GradingTaxonomy;
-}
-
-export interface TaxonomyFinding {
-  label: string;
-  observed: boolean;
-  pass: boolean;
-  reason: string;
-  /** Half-open UTF-16 offsets into the evaluated output. */
-  evidence: { start: number; end: number }[];
 }
 
 export interface GradingResult {

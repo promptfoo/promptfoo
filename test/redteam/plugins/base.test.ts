@@ -1275,7 +1275,7 @@ describe('RedteamGraderBase', () => {
         taxonomy: {
           id: 'example',
           version: 1,
-          categories: { 'example.contact': 'Contact details' },
+          categories: { 'example.contact': { description: 'Contact details' } },
         },
       };
     }

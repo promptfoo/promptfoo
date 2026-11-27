@@ -1,6 +1,33 @@
 import { z } from 'zod';
 
-import type { GradingResult, GradingTaxonomy, TaxonomyFinding } from '../types/index';
+/** Identifies the findings expected from a single rubric evaluation. */
+export interface GradingTaxonomy {
+  id: string;
+  version: number;
+  categories: Record<
+    string,
+    {
+      description: string;
+      /** Allows the matching content only. Omit to apply the policy. */
+      allow?: true;
+    }
+  >;
+}
+
+/** A policy decides what is allowed. The taxonomy identifies what was observed. */
+export interface StructuredGradingRubric {
+  policy: string;
+  taxonomy: GradingTaxonomy;
+}
+
+export interface TaxonomyFinding {
+  label: string;
+  observed: boolean;
+  pass: boolean;
+  reason: string;
+  /** Half-open UTF-16 offsets into the evaluated output. */
+  evidence: { start: number; end: number }[];
+}
 
 const findingFields = z.object({
   label: z.string(),
@@ -40,7 +67,11 @@ export function parseTaxonomyFindings(
   const findings: TaxonomyFinding[] = [];
   for (const label of labels) {
     const finding = byLabel.get(label);
-    if (!finding || !hasConsistentObservation(finding)) {
+    if (
+      !finding ||
+      !hasConsistentObservation(finding) ||
+      (taxonomy.categories[label].allow && !finding.pass)
+    ) {
       return undefined;
     }
     const evidence = [];
@@ -66,7 +97,7 @@ const storedFindings = z.array(
 
 /** Saved and remote grades carry offsets rather than the judge's original excerpts. */
 export function hasMatchingTaxonomy(
-  grade: GradingResult,
+  grade: { findings?: unknown; metadata?: { taxonomy?: Pick<GradingTaxonomy, 'id' | 'version'> } },
   expected: GradingTaxonomy,
   output: string,
 ): boolean {
@@ -85,6 +116,7 @@ export function hasMatchingTaxonomy(
       (finding) =>
         expectedLabels.delete(finding.label) &&
         hasConsistentObservation(finding) &&
+        (!expected.categories[finding.label].allow || finding.pass) &&
         finding.evidence.every(({ start, end }) => start < end && end <= output.length),
     )
   );

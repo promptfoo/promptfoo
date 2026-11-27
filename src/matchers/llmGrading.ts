@@ -226,7 +226,7 @@ export async function matchesLlmRubric(
         ...(await doRemoteGrading({
           task: 'llm-rubric',
           rubric,
-          ...(structuredRubric && { config: { structuredRubric } }),
+          ...structuredRubric,
           output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
@@ -247,7 +247,10 @@ export async function matchesLlmRubric(
     let judgeRubric = rubric;
     if (structuredRubric) {
       const categories = Object.entries(structuredRubric.taxonomy.categories)
-        .map(([label, description]) => `${label}: ${description}`)
+        .map(
+          ([label, category]) =>
+            `${label}${category.allow ? ' [allowed]' : ''}: ${category.description}`,
+        )
         .join('\n');
       judgeRubric = `${structuredRubric.policy}\n\nCategories:\n${categories}`;
       if (grading.rubricPrompt) {

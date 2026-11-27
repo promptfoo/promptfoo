@@ -3,6 +3,7 @@ import path from 'path';
 
 import { loadFromJavaScriptFile } from '../assertions/utils';
 import cliState from '../cliState';
+import { parseTaxonomyFindings } from '../contracts/gradingTaxonomy';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
@@ -15,7 +16,6 @@ import { getNunjucksEngine } from '../util/templates';
 import { loadYaml } from '../util/yamlLoad';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { graderFail, normalizeMatcherTokenUsage } from './shared';
-import { parseTaxonomyFindings } from './taxonomy';
 
 import type {
   ApiProvider,
