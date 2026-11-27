@@ -235,7 +235,7 @@ export const handleRedteam = async (
       ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
       : undefined;
   const grader = getGraderById(assertion.type);
-  const taxonomy = grader?.gradingTaxonomy;
+  const taxonomy = grader?.taxonomy;
   if (
     hasStrategyGrade &&
     (!taxonomy || hasMatchingTaxonomy(storedResult, taxonomy, outputString)) &&

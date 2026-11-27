@@ -547,7 +547,8 @@ export interface ResultSuggestion {
 export interface GradingTaxonomy {
   id: string;
   version: number;
-  labels: string[];
+  /** Stable labels mapped to descriptions of the content to classify. */
+  categories: Record<string, string>;
 }
 
 export interface TaxonomyFinding {

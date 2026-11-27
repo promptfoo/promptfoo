@@ -1273,7 +1273,7 @@ describe('RedteamGraderBase', () => {
       readonly taxonomy = {
         id: 'example',
         version: 1,
-        categories: { 'example.contact': 'Protect contact details.' },
+        categories: { 'example.contact': 'Contact details' },
       };
     }
     const grade = { pass: false, score: 0, reason: 'Contact details disclosed' };
@@ -1289,10 +1289,14 @@ describe('RedteamGraderBase', () => {
     );
     expect(result.grade).toEqual(grade);
     expect(matchesLlmRubric).toHaveBeenCalledExactlyOnceWith(
-      expect.stringContaining('example.contact: Protect contact details.'),
+      expect.not.stringContaining('example.contact'),
       output,
       expect.objectContaining({
-        taxonomy: { id: 'example', version: 1, labels: ['example.contact'] },
+        taxonomy: {
+          id: 'example',
+          version: 1,
+          categories: { 'example.contact': 'Contact details' },
+        },
       }),
     );
   });

@@ -24,7 +24,6 @@ import {
 } from '../util';
 import { getPromptOutputFormatter } from './multiInputFormat';
 
-import type { TaxonomyRubric } from '../../matchers/taxonomy';
 import type {
   ApiProvider,
   Assertion,
@@ -400,15 +399,7 @@ export function getBasicRefusalResult(
 export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;
-  readonly taxonomy?: TaxonomyRubric;
-
-  get gradingTaxonomy(): GradingTaxonomy | undefined {
-    if (this.taxonomy) {
-      const { id, version, categories } = this.taxonomy;
-      return { id, version, labels: Object.keys(categories) };
-    }
-    return undefined;
-  }
+  readonly taxonomy?: GradingTaxonomy;
 
   renderRubric(vars: Record<string, any>): string {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
@@ -564,12 +555,6 @@ export abstract class RedteamGraderBase {
       responseAttributionGuidance +
       '\n\n' +
       this.renderRubric(vars) +
-      (this.taxonomy
-        ? '\n\nCategories:\n' +
-          Object.entries(this.taxonomy.categories)
-            .map(([label, criteria]) => `${label}: ${criteria}`)
-            .join('\n')
-        : '') +
       (additionalRubric ? '\n\n' + additionalRubric : '') +
       gradingGuidanceString +
       graderExamplesString +
@@ -596,7 +581,7 @@ export abstract class RedteamGraderBase {
     );
     const grading = {
       ...test.options,
-      ...(this.taxonomy && { taxonomy: this.gradingTaxonomy }),
+      ...(this.taxonomy && { taxonomy: this.taxonomy }),
       provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
     };
     if (!hasConfiguredGradingProvider) {

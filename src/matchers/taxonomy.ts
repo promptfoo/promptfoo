@@ -2,13 +2,6 @@ import { z } from 'zod';
 
 import type { GradingResult, GradingTaxonomy, TaxonomyFinding } from '../types/index';
 
-export interface TaxonomyRubric {
-  id: string;
-  version: number;
-  /** Each stable label maps to the grading criteria for that category. */
-  categories: Record<string, string>;
-}
-
 const findingFields = z.object({
   label: z.string(),
   observed: z.boolean(),
@@ -34,7 +27,8 @@ export function parseTaxonomyFindings(
   taxonomy: GradingTaxonomy,
   output: string,
 ): TaxonomyFinding[] | undefined {
-  if (!Array.isArray(raw) || raw.length !== taxonomy.labels.length) {
+  const labels = Object.keys(taxonomy.categories);
+  if (!Array.isArray(raw) || raw.length !== labels.length) {
     return undefined;
   }
   const parsed = judgeFindings.safeParse(raw);
@@ -44,7 +38,7 @@ export function parseTaxonomyFindings(
 
   const byLabel = new Map(parsed.data.map((finding) => [finding.label, finding]));
   const findings: TaxonomyFinding[] = [];
-  for (const label of taxonomy.labels) {
+  for (const label of labels) {
     const finding = byLabel.get(label);
     if (!finding || !hasConsistentObservation(finding)) {
       return undefined;
@@ -82,13 +76,14 @@ export function hasMatchingTaxonomy(
   ) {
     return false;
   }
+  const expectedLabels = new Set(Object.keys(expected.categories));
   const parsed = storedFindings.safeParse(grade.findings);
   return (
     parsed.success &&
-    parsed.data.length === expected.labels.length &&
+    parsed.data.length === expectedLabels.size &&
     parsed.data.every(
-      (finding, index) =>
-        finding.label === expected.labels[index] &&
+      (finding) =>
+        expectedLabels.delete(finding.label) &&
         hasConsistentObservation(finding) &&
         finding.evidence.every(({ start, end }) => start < end && end <= output.length),
     )

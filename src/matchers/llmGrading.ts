@@ -243,6 +243,18 @@ export async function matchesLlmRubric(
   }
 
   try {
+    // Keep the wire rubric identical for legacy servers. Only the taxonomy-aware
+    // matcher adds the category descriptions to the local judge's prompt.
+    let judgeRubric = rubric;
+    if (taxonomy) {
+      const categories = Object.entries(taxonomy.categories)
+        .map(([label, description]) => `${label}: ${description}`)
+        .join('\n');
+      judgeRubric = `${typeof rubric === 'string' ? rubric : JSON.stringify(rubric)}\n\nCategories:\n${categories}`;
+      if (grading.rubricPrompt) {
+        judgeRubric += `\n\n${TAXONOMY_GRADING_INSTRUCTIONS}`;
+      }
+    }
     return await runJsonGradingPrompt({
       assertion,
       checkName: 'llm-rubric check',
@@ -258,10 +270,7 @@ export async function matchesLlmRubric(
       vars: {
         ...(vars || {}),
         output: taxonomy ? gradingOutput : tryParse(gradingOutput),
-        rubric:
-          taxonomy && grading.rubricPrompt
-            ? `${typeof rubric === 'string' ? rubric : JSON.stringify(rubric)}\n\n${TAXONOMY_GRADING_INSTRUCTIONS}`
-            : rubric,
+        rubric: judgeRubric,
       },
     });
   } catch (error) {

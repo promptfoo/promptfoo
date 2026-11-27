@@ -58,7 +58,11 @@ describe('doRemoteGrading', () => {
   });
 
   it.each(['current', 'legacy', 'wrong version'])('reads %s hosted grades', async (kind) => {
-    const taxonomy = { id: 'example', version: 1, labels: ['example.contact'] };
+    const taxonomy = {
+      id: 'example',
+      version: 1,
+      categories: { 'example.contact': 'Contact details' },
+    };
     const findings = [
       {
         label: 'example.contact',

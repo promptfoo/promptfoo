@@ -164,7 +164,11 @@ describe('matchesLlmRubric', () => {
       reason: 'Absent',
       evidence: [],
     };
-    const taxonomy = { id: 'example', version: 2, labels: [allowed.label, absent.label] };
+    const taxonomy = {
+      id: 'example',
+      version: 2,
+      categories: { [allowed.label]: 'Contact information', [absent.label]: 'Location' },
+    };
     const provider = createMockProvider({
       response: {
         output: { pass: true, score: 1, reason: 'Allowed', findings: [absent, allowed] },
@@ -177,6 +181,7 @@ describe('matchesLlmRubric', () => {
 
     expect(provider.callApi).toHaveBeenCalledTimes(1);
     expect(provider.callApi.mock.calls[0][0]).toContain('findings');
+    expect(provider.callApi.mock.calls[0][0]).toContain('example.contact: Contact information');
     expect(result.findings).toEqual([{ ...allowed, evidence: [{ start: 3, end: 8 }] }, absent]);
     expect(result.metadata?.taxonomy).toEqual({ id: 'example', version: 2 });
   });
@@ -213,7 +218,7 @@ describe('matchesLlmRubric', () => {
       });
       const result = await matchesLlmRubric('example.a and example.b', 'value', {
         provider,
-        taxonomy: { id: 'example', version: 1, labels: ['example.a', 'example.b'] },
+        taxonomy: { id: 'example', version: 1, categories: { 'example.a': 'A', 'example.b': 'B' } },
       });
       expect(result).toMatchObject({ pass: false, score: 0, reason: 'Disclosure' });
       expect(result.findings).toBeUndefined();
@@ -2451,16 +2456,20 @@ Evaluate the response
   });
 
   it('sends category labels under config and accepts a legacy hosted verdict', async () => {
-    const taxonomy = { id: 'example', version: 1, labels: ['example.contact'] };
+    const taxonomy = {
+      id: 'example',
+      version: 1,
+      categories: { 'example.contact': 'Contact details' },
+    };
     const remoteGeneration = await import('../../src/redteam/remoteGeneration');
     vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
     (cliState as any).config = { redteam: {} };
-    const result = await matchesLlmRubric('example.contact: protect contacts', 'Answer', {
+    const result = await matchesLlmRubric('Protect contacts', 'Answer', {
       taxonomy,
     });
     expect(remoteGrading.doRemoteGrading).toHaveBeenCalledExactlyOnceWith({
       task: 'llm-rubric',
-      rubric: 'example.contact: protect contacts',
+      rubric: 'Protect contacts',
       output: 'Answer',
       vars: {},
       config: { taxonomy },
