@@ -534,6 +534,8 @@ For example, `contains-xml` with `root.child` passes for `Text <root><child>Cont
 
 The `is-sql` assertion checks if the LLM output is a non-empty valid SQL statement. For simple column lists, it treats `SELECT a b FROM t` as a likely missing comma rather than implicit aliasing. This check also applies after leading modifiers such as `DISTINCT`.
 
+Output containing only comments or semicolons fails because it contains no SQL statement.
+
 Example:
 
 ```yaml
