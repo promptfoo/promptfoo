@@ -39,12 +39,7 @@ import {
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost, usesAzureOpenAiBilling } from './billing';
-import {
-  applyGpt6RequestRules,
-  getGpt6ChatReasoningEffort,
-  isGpt6Model,
-  resolveGpt6ChatOutputCap,
-} from './gpt6';
+import { applyGpt6RequestRules, isGpt6Model } from './gpt6';
 import {
   isOpenAiJsonSchemaFormat,
   prepareOpenAiFunctions,
@@ -52,6 +47,12 @@ import {
   prepareOpenAiResponseFormat,
   prepareOpenAiTools,
 } from './prepare';
+import { resolveChatReasoningEffort } from './reasoning';
+import {
+  isLegacyChatOutputCapCleared,
+  isLegacyOpenAiChatModel,
+  resolveChatOutputCap,
+} from './tokenCaps';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -81,7 +82,7 @@ import type {
 import type { ProviderOptions } from '../../types/providers';
 import type { McpToolCallEntry } from '../mcp/types';
 import type { OpenAiBillingConfig, OpenAiChatConfig, OpenAiRequestBody } from './config';
-import type { ReasoningEffort } from './types';
+import type { OpenAiRequestPolicy } from './types';
 
 export type OpenAiChatCompletionCostData = Partial<
   Pick<OpenAI.Chat.Completions.ChatCompletion, 'created' | 'service_tier' | 'usage'>
@@ -336,6 +337,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   config: OpenAiChatConfig;
   private readonly bridgesGpt62ChatTools: boolean;
+  private readonly requestPolicy: OpenAiRequestPolicy;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
   private initializationPending = false;
@@ -347,6 +349,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     modelName: string,
     options: Pick<ProviderOptions<OpenAiChatConfig>, 'config' | 'id' | 'env'> & {
       bridgesGpt62ChatTools?: boolean;
+      /** Select unknown-model request fields and defaults. Direct consumers retain compatibility. */
+      requestPolicy?: OpenAiRequestPolicy;
     } = {},
   ) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelName)) {
@@ -354,6 +358,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
     super(modelName, options);
     this.bridgesGpt62ChatTools = options.bridgesGpt62ChatTools ?? false;
+    this.requestPolicy = options.requestPolicy ?? 'compatible';
     this.config = options.config ? { ...options.config } : {};
 
     if (this.config.mcp?.enabled) {
@@ -490,11 +495,21 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
     const isGPT6Model = isGpt6Model(capabilityModelName);
-    const isOpenRouterGpt6 = isGPT6Model && this.usesOpenRouter();
+    const isOpenRouter = this.usesOpenRouter();
+    const isOpenRouterGpt6 = isGPT6Model && isOpenRouter;
     const isReasoningModel = usesConfiguredCapabilities
       ? this.isReasoningModel()
       : this.isReasoningCapabilityModel(capabilityModelName);
-    const maxCompletionTokens = isReasoningModel
+    // OpenAI aliases may conceal a newer model family. Dedicated compatible adapters
+    // retain their own capability overrides and legacy request defaults.
+    const assumeModernModel =
+      (config.useLegacyTokenCap === false ||
+        (this.requestPolicy === 'openai' && config.useLegacyTokenCap !== true)) &&
+      !isReasoningModel &&
+      !isLegacyOpenAiChatModel(capabilityModelName);
+    const usesModernTokenCap = isReasoningModel || isGPT5Model || assumeModernModel;
+    const normalizeTokenCap = assumeModernModel || super.isReasoningModel(capabilityModelName);
+    const maxCompletionTokens = usesModernTokenCap
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
     const maxTokensDefault = config.omitDefaults
@@ -502,14 +517,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvInt('OPENAI_MAX_TOKENS')
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const maxTokens =
-      isReasoningModel || isGPT5Model ? undefined : (config.max_tokens ?? maxTokensDefault);
+    const maxTokens = usesModernTokenCap ? undefined : (config.max_tokens ?? maxTokensDefault);
 
-    const temperatureDefault = config.omitDefaults
-      ? getEnvString('OPENAI_TEMPERATURE') === undefined
-        ? undefined
-        : getEnvFloat('OPENAI_TEMPERATURE')
-      : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperatureDefault =
+      config.omitDefaults || assumeModernModel
+        ? getEnvString('OPENAI_TEMPERATURE') === undefined
+          ? undefined
+          : getEnvFloat('OPENAI_TEMPERATURE')
+        : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const supportsTemperature =
       isGPT6Model ||
       (usesConfiguredCapabilities
@@ -518,9 +533,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const temperature = supportsTemperature
       ? (config.temperature ?? temperatureDefault)
       : undefined;
+    const resolvesReasoning = usesModernTokenCap || capabilityModelName.includes('gpt-oss');
     const reasoningEffort =
-      isReasoningModel && !isGPT6Model
-        ? (renderVarsInObject(config.reasoning_effort, context?.vars ?? {}) as ReasoningEffort)
+      resolvesReasoning && !isOpenRouterGpt6
+        ? resolveChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
+            renderVarsInObject(value, context?.vars ?? {}),
+          )
         : undefined;
 
     // --- MCP tool injection logic ---
@@ -603,15 +621,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const body: OpenAiRequestBody<typeof bodyFields> = bodyFields;
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
-    // Handle reasoning_effort and reasoning parameters for reasoning models
-    if (
-      !isGPT6Model &&
-      config.reasoning_effort &&
-      (isReasoningModel || capabilityModelName.includes('gpt-oss'))
-    ) {
-      body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars ?? {});
-    }
-
     if (config.reasoning && isOSeriesModel) {
       body.reasoning = prepareOpenAiReasoning(config.reasoning, context?.vars);
     }
@@ -627,53 +636,44 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.store = config.store;
     }
 
-    // Sanitize body for models that reject max_tokens (e.g. GPT-5, reasoning models).
-    // This catches max_tokens introduced via passthrough or YAML anchors that bypass
-    // the normal maxTokens variable logic above.
-    if ((isReasoningModel || isGPT5Model) && 'max_tokens' in body) {
+    if (normalizeTokenCap) {
+      const outputCap = resolveChatOutputCap(this.config, context?.prompt?.config, isOpenRouter, {
+        maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
+        // OPENAI_MAX_TOKENS limits the visible output of non-reasoning requests. As a GPT-6
+        // cap it would also limit reasoning, as it never has for o-series or GPT-5 Chat
+        // requests, so it applies only when reasoning is turned off. OpenRouter requests,
+        // which have always honored it, keep falling back to it.
+        maxTokens:
+          isOpenRouterGpt6 || (isGPT6Model && reasoningEffort === 'none')
+            ? getEnvInt('OPENAI_MAX_TOKENS')
+            : undefined,
+      });
       delete body.max_tokens;
-    }
-
-    // Whether a native GPT-6 request reasons decides which environment limit applies to it.
-    const gpt6Effort =
-      isGPT6Model && !isOpenRouterGpt6
-        ? getGpt6ChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
-            renderVarsInObject(value, context?.vars ?? {}),
-          )
-        : undefined;
-    if (isGPT6Model) {
-      const outputCap = resolveGpt6ChatOutputCap(
-        this.config,
-        context?.prompt?.config,
-        isOpenRouterGpt6,
-        {
-          maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
-          // OPENAI_MAX_TOKENS limits the visible output of non-reasoning requests. As a GPT-6
-          // cap it would also limit reasoning, as it never has for o-series or GPT-5 Chat
-          // requests, so it applies only when reasoning is turned off. OpenRouter requests,
-          // which have always honored it, keep falling back to it.
-          maxTokens:
-            isOpenRouterGpt6 || gpt6Effort === 'none' ? getEnvInt('OPENAI_MAX_TOKENS') : undefined,
-        },
-      );
       if (outputCap === undefined) {
         delete body.max_completion_tokens;
       } else {
         body.max_completion_tokens = outputCap;
       }
+    } else if (usesModernTokenCap) {
+      // Compatible adapters can override reasoning capabilities without adopting
+      // OpenAI's cap alias and null-clearing policy.
+      delete body.max_tokens;
+    }
+    if (!usesModernTokenCap && isLegacyChatOutputCapCleared(this.config, context?.prompt?.config)) {
+      delete body.max_tokens;
     }
     if (isOpenRouterGpt6) {
       reconcileOpenRouterReasoning(body, this.config, context?.prompt?.config, context?.vars);
-    } else if (isGPT6Model) {
-      if (config.reasoning != null) {
+    } else if (resolvesReasoning) {
+      if (isGPT6Model && config.reasoning != null) {
         throw new Error(
           'GPT-6 Chat Completions requests use reasoning_effort. Configure reasoning_effort, or use the Responses API for config.reasoning.',
         );
       }
-      if (gpt6Effort === undefined) {
+      if (reasoningEffort == null || reasoningEffort === '') {
         delete body.reasoning_effort;
       } else {
-        body.reasoning_effort = gpt6Effort;
+        body.reasoning_effort = reasoningEffort;
       }
     }
     applyGpt6RequestRules(body, capabilityModelName, 'chat', {

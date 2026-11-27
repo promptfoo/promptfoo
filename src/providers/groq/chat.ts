@@ -1,5 +1,6 @@
-import { getEnvString } from '../../envars';
+import { getEnvInt, getEnvString } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { resolveChatOutputCap } from '../openai/tokenCaps';
 import { serializeProvider } from '../serialization';
 import {
   assertGroqChatServiceTier,
@@ -65,13 +66,15 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
   ) {
     const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
     if (typeof body.model === 'string' && this.isReasoningModel(body.model)) {
-      const maxCompletionTokens =
-        config.passthrough?.max_completion_tokens ??
-        config.max_completion_tokens ??
-        config.passthrough?.max_tokens ??
-        config.max_tokens ??
-        body.max_tokens;
-      if (maxCompletionTokens !== undefined) {
+      const maxCompletionTokens = resolveChatOutputCap(
+        this.config,
+        context?.prompt?.config,
+        false,
+        { maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') },
+      );
+      if (maxCompletionTokens === undefined) {
+        delete body.max_completion_tokens;
+      } else {
         body.max_completion_tokens = maxCompletionTokens;
       }
       delete body.max_tokens;

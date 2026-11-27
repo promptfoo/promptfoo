@@ -3,6 +3,7 @@ import { getAnthropicEnvHeaderSuppressions } from './anthropic/generic';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { resolveChatOutputCap } from './openai/tokenCaps';
 import { serializeProvider } from './serialization';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 
@@ -160,7 +161,7 @@ function assertSupportedReasoningEffort(effort: unknown): void {
 function applyMetaChatOutputCap(
   body: Record<string, unknown>,
   passthrough: Record<string, unknown>,
-  value: number | undefined,
+  value: number | null | undefined,
 ): void {
   if ('max_completion_tokens' in passthrough) {
     return;
@@ -176,7 +177,7 @@ function applyMetaChatOutputCap(
 function applyMetaResponsesOutputCap(
   body: Record<string, unknown>,
   passthrough: Record<string, unknown>,
-  value: number | undefined,
+  value: number | null | undefined,
 ): void {
   delete body.max_completion_tokens;
   if ('max_output_tokens' in passthrough) {
@@ -420,7 +421,25 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     // The Meta API caps generation with max_completion_tokens (max_tokens is
     // only a deprecated alias); honor an explicit max_tokens as the canonical
     // field rather than silently dropping it.
-    applyMetaChatOutputCap(body, passthrough, config.max_completion_tokens ?? config.max_tokens);
+    const promptConfig = context?.prompt?.config;
+    const promptPassthrough = promptConfig?.passthrough;
+    const hasPromptCap = [
+      promptPassthrough?.max_completion_tokens,
+      promptPassthrough?.max_tokens,
+      promptConfig?.max_completion_tokens,
+      promptConfig?.max_tokens,
+    ].some((value) => value !== undefined);
+    if (hasPromptCap) {
+      // Resolve the prompt scope before the provider scope, including explicit clears.
+      const cap = resolveChatOutputCap(this.config, promptConfig, true, {});
+      if (cap === undefined) {
+        delete body.max_completion_tokens;
+      } else {
+        body.max_completion_tokens = cap;
+      }
+    } else {
+      applyMetaChatOutputCap(body, passthrough, config.max_completion_tokens ?? config.max_tokens);
+    }
     applyMetaSamplingHygiene(body, config, passthrough, [
       'top_p',
       'presence_penalty',
@@ -525,11 +544,30 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
 
     // The Responses API caps generation with max_output_tokens; map the
     // chat-style caps across so a config shared with meta:<model> keeps its cap.
-    applyMetaResponsesOutputCap(
-      body,
-      passthrough,
-      config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens,
-    );
+    const promptConfig = context?.prompt?.config;
+    const promptPassthrough = promptConfig?.passthrough;
+    const promptCap = [
+      promptPassthrough?.max_output_tokens,
+      promptPassthrough?.max_completion_tokens,
+      promptPassthrough?.max_tokens,
+      promptConfig?.max_output_tokens,
+      promptConfig?.max_completion_tokens,
+      promptConfig?.max_tokens,
+    ].find((value) => value !== undefined);
+    if (promptCap === undefined) {
+      applyMetaResponsesOutputCap(
+        body,
+        passthrough,
+        config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens,
+      );
+    } else {
+      delete body.max_completion_tokens;
+      if (promptCap === null) {
+        delete body.max_output_tokens;
+      } else {
+        body.max_output_tokens = promptCap;
+      }
+    }
     applyMetaSamplingHygiene(body, config, passthrough, ['top_p']);
 
     return result;

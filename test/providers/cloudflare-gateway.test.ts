@@ -341,6 +341,13 @@ describe('CloudflareGateway Provider', () => {
   });
 
   describe('CloudflareGatewayAnthropicProvider', () => {
+    it('does not forward an OpenAI null token-limit clear to Anthropic', () => {
+      const provider = new CloudflareGatewayAnthropicProvider('claude-sonnet-4-20250514', {
+        config: { ...minimumConfig, max_tokens: null },
+      });
+      expect(provider.config).not.toHaveProperty('max_tokens');
+    });
+
     it('should return correct id()', () => {
       const provider = new CloudflareGatewayAnthropicProvider('claude-sonnet-4-20250514', {
         config: minimumConfig,

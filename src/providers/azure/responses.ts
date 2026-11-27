@@ -9,12 +9,9 @@ import {
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { hasUnpricedAzureResponsesToolUsage } from '../openai/billing';
-import {
-  applyGpt6RequestRules,
-  getGpt6ResponsesReasoning,
-  getGpt6Variant,
-  isGpt6Model,
-} from '../openai/gpt6';
+import { applyGpt6RequestRules, getGpt6Variant, isGpt6Model } from '../openai/gpt6';
+import { applyResponsesReasoningClears, resolveResponsesReasoningState } from '../openai/reasoning';
+import { isLegacyOpenAiChatModel } from '../openai/tokenCaps';
 import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
@@ -26,7 +23,6 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { ReasoningEffort } from '../openai/types';
 import type { AzureProviderOptions, AzureResponsesOptions } from './types';
 
 // Azure Responses API uses the v1 preview API version
@@ -160,6 +156,24 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
     const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const isGPT6Model = isGpt6Model(capabilityModelName);
+    const supportsReasoningConfig =
+      isReasoningModel ||
+      (config.isReasoningModel !== false && !isLegacyOpenAiChatModel(capabilityModelName));
+    // Azure deployments can target third-party models with their own raw JSON contract.
+    const allowRawReasoning =
+      !isGPT6Model && !/(?:^|[\/-])(?:gpt-|chatgpt-|o[134](?:-|$))/.test(capabilityModelName);
+    const resolvedReasoning = supportsReasoningConfig
+      ? resolveResponsesReasoningState(
+          this.config,
+          context?.prompt?.config,
+          (value) => renderVarsInObject(value, context?.vars ?? {}),
+          { includeEffort: !isFixedReasoningModel, allowRawPassthrough: allowRawReasoning },
+        )
+      : undefined;
+    const renderedReasoning = resolvedReasoning?.reasoning;
+    // Explicit clears also defer to the model's defaults rather than restoring client defaults.
+    const hasExplicitReasoning =
+      resolvedReasoning?.hasExplicitConfig === true && resolvedReasoning.rawReasoning === undefined;
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -169,10 +183,12 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
       config.max_output_tokens ??
-      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
+      (isReasoningModel || hasExplicitReasoning
+        ? reasoningMaxOutputTokensDefault
+        : maxOutputTokensDefault);
 
     const temperatureDefault =
-      config.omitDefaults || isGPT6Model
+      config.omitDefaults || isGPT6Model || hasExplicitReasoning
         ? getEnvString('OPENAI_TEMPERATURE') === undefined
           ? undefined
           : getEnvFloat('OPENAI_TEMPERATURE')
@@ -180,15 +196,6 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
     const temperature =
       isGPT6Model || this.supportsTemperature(capabilityModelName)
         ? (config.temperature ?? temperatureDefault)
-        : undefined;
-    const gpt6Reasoning = isGPT6Model
-      ? getGpt6ResponsesReasoning(this.config, context?.prompt?.config, (value) =>
-          renderVarsInObject(value, context?.vars),
-        )
-      : undefined;
-    const reasoningEffort =
-      isReasoningModel && !isGPT6Model && !isFixedReasoningModel
-        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
         : undefined;
 
     const instructions = config.instructions;
@@ -261,7 +268,6 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       model: this.deploymentName,
       input,
       ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
-      ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
@@ -289,6 +295,27 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       ...(config.passthrough || {}),
     };
 
+    if (supportsReasoningConfig) {
+      if (resolvedReasoning?.rawReasoning !== undefined) {
+        body.reasoning = resolvedReasoning.rawReasoning;
+      } else if (renderedReasoning) {
+        Object.assign(body, { reasoning: renderedReasoning });
+      } else {
+        delete body.reasoning;
+      }
+    } else {
+      const cleared = applyResponsesReasoningClears(
+        body.reasoning,
+        this.config,
+        context?.prompt?.config,
+      );
+      if (cleared === undefined) {
+        delete body.reasoning;
+      } else {
+        body.reasoning = cleared;
+      }
+    }
+
     if (isFixedReasoningModel && body.reasoning && typeof body.reasoning === 'object') {
       body.reasoning = { ...body.reasoning };
       delete body.reasoning.effort;
@@ -297,13 +324,6 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       }
     }
 
-    if (isGPT6Model) {
-      if (gpt6Reasoning) {
-        Object.assign(body, { reasoning: gpt6Reasoning });
-      } else {
-        delete body.reasoning;
-      }
-    }
     applyGpt6RequestRules(body, capabilityModelName, 'responses', {
       defaultResponsesTemperature: config.omitDefaults ? undefined : 0,
     });

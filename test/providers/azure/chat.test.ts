@@ -128,6 +128,7 @@ describe('AzureChatCompletionProvider', () => {
     beforeEach(() => {
       provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
+          modelName: 'gpt-4o',
           apiHost: 'test.azure.com',
           apiKey: 'test-key',
           functions: [{ name: 'provider_func', parameters: {} }],
@@ -173,6 +174,7 @@ describe('AzureChatCompletionProvider', () => {
 
       provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
+          modelName: 'gpt-4o',
           apiHost: 'test.azure.com',
           apiKey: 'test-key',
           omitDefaults: true,
@@ -244,6 +246,7 @@ describe('AzureChatCompletionProvider', () => {
             modelName,
             apiVersion,
             reasoning_effort: 'xhigh',
+            max_completion_tokens: 4096,
             verbosity: 'low',
             prompt_cache_key: 'policy',
             prompt_cache_options: { mode: 'explicit', ttl: '30m' },
@@ -262,17 +265,26 @@ describe('AzureChatCompletionProvider', () => {
           }),
         );
 
-        const result = await provider.callApi('Check the policy.');
+        const result = await provider.callApi('Check the policy.', {
+          vars: {},
+          prompt: {
+            raw: 'Check the policy.',
+            label: 'policy',
+            config: { max_tokens: 128 },
+          },
+        });
         const [url, request] = vi.mocked(fetchWithCache).mock.lastCall!;
         expect(url).toBe(`https://test.azure.com${path}`);
         const body = JSON.parse(request!.body as string);
         expect(body).toMatchObject({
           model: 'prod',
+          max_completion_tokens: 128,
           reasoning_effort: 'xhigh',
           verbosity: 'low',
           prompt_cache_key: 'policy',
           prompt_cache_options: { mode: 'explicit', ttl: '30m' },
         });
+        expect(body).not.toHaveProperty('max_tokens');
         expect(body).not.toHaveProperty('presence_penalty');
         expect(body).not.toHaveProperty('frequency_penalty');
         expect(result.tokenUsage?.completionDetails).toMatchObject({

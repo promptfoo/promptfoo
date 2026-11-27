@@ -374,12 +374,12 @@ const ConversationFields = TextRequestFields.extend({
   omitDefaults: z.boolean().optional(),
 });
 const ChatFields = ConversationFields.extend({
-  max_tokens: CompletionFields.shape.max_tokens,
+  max_tokens: CompletionFields.shape.max_tokens.unwrap().nullable().optional(),
   frequency_penalty: CompletionFields.shape.frequency_penalty,
   presence_penalty: CompletionFields.shape.presence_penalty,
   stop: CompletionFields.shape.stop,
   seed: CompletionFields.shape.seed,
-  max_completion_tokens: z.number().optional(),
+  max_completion_tokens: z.number().nullable().optional(),
   functions: z.union([FileReferenceInputSchema, z.array(ChatFunctionDefinition)]).optional(),
   function_call: z
     .union([z.enum(['none', 'auto']), z.strictObject({ name: z.string() })])
@@ -416,13 +416,19 @@ const ChatFields = ConversationFields.extend({
 export const OpenAiCompletionConfigInputSchema = CompletionFields.describe(
   'Serializable legacy OpenAI Completions configuration',
 );
-export const OpenAiChatConfigInputSchema = ChatFields.describe(
-  'Serializable OpenAI Chat Completions configuration',
-);
+export const OpenAiChatConfigInputSchema = ChatFields.extend({
+  useLegacyTokenCap: z
+    .boolean()
+    .optional()
+    .describe(
+      'True uses max_tokens and default settings; false uses modern fields for custom aliases',
+    ),
+}).describe('Serializable OpenAI Chat Completions configuration');
 export const OpenAiResponsesConfigInputSchema = ConversationFields.extend({
   prompt_cache_options: PromptCacheOptions.extend({
     ttl: z.enum(['30m', '12h']).optional(),
   }).optional(),
+  reasoning: Reasoning.nullable().optional(),
   tools: ResponsesTools.optional(),
   tool_choice: ToolChoice.optional(),
   response_format: ResponsesResponseFormat.optional(),

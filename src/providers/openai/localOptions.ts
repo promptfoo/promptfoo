@@ -27,6 +27,7 @@ const LOCAL_OPTIONS = {
   functionToolCallbacks: true,
   showThinking: true,
   omitDefaults: true,
+  useLegacyTokenCap: true,
   basePath: true,
   linkedTargetId: true,
 } satisfies Record<keyof OpenAiSharedOptions, boolean> &
