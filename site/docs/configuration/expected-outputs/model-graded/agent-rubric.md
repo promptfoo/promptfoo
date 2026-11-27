@@ -38,6 +38,8 @@ tests:
 
 Install and authenticate the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk) before using the implicit default.
 
+When the target runs with [`copy_working_dir`](/docs/guides/evaluate-coding-agents#isolated-workspaces), the grader runs in the workspace of the call it grades, in place of its own `working_dir`. It sees the files as the agent left them.
+
 ## Supported agent providers
 
 `agent-rubric` accepts the coding-agent runtimes that promptfoo can run as providers:

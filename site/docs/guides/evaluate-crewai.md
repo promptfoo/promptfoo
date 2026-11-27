@@ -1,17 +1,11 @@
 ---
 sidebar_label: Red Teaming a CrewAI Agent
-description: Evaluate CrewAI agent security and performance with automated red team testing. Compare agent responses across 100+ test cases to identify vulnerabilities.
+description: Connect a CrewAI agent to Promptfoo, configure YAML test cases, compare responses against assertions, run red team tests, and review results in the web viewer.
 ---
 
 # Red Teaming a CrewAI Agent
 
-[CrewAI](https://github.com/joaomdmoura/crewai) is a cutting-edge multi-agent platform designed to help teams streamline complex workflows by connecting multiple automated agents. Whether you’re building recruiting bots, research agents, or task automation pipelines, CrewAI gives you a flexible way to run and manage them on any cloud or local setup.
-
-With **promptfoo**, you can set up structured evaluations to test how well your CrewAI agents perform across different tasks. You’ll define test prompts, check outputs, run automated comparisons, and even carry out red team testing to catch unexpected failures or weaknesses.
-
-By the end of this guide, you’ll have a **hands-on project setup** that connects CrewAI agents to promptfoo, runs tests across hundreds of cases, and gives you clear pass/fail insights — all reproducible and shareable with your team.
-
----
+[CrewAI](https://github.com/joaomdmoura/crewai) runs workflows with multiple agents. Connect a CrewAI agent to Promptfoo to test its responses against YAML assertions and run adversarial tests.
 
 ## Highlights
 
@@ -20,7 +14,7 @@ By the end of this guide, you’ll have a **hands-on project setup** that connec
 - Writing provider and agent files
 - Configuring test cases in YAML
 - Running evaluations and viewing reports
-- (Optional) Running advanced red team scans for robustness
+- (Optional) Running red team scans
 
 To scaffold the CrewAI + Promptfoo example, you can run:
 
@@ -28,11 +22,7 @@ To scaffold the CrewAI + Promptfoo example, you can run:
 npx promptfoo@latest init --example integration-crewai
 ```
 
-This will:
-
-- Initialize a ready-to-go project
-- Set up promptfooconfig.yaml, agent scripts, test cases
-- Let you immediately run:
+The example includes `promptfooconfig.yaml`, agent scripts, and test cases. Run it with:
 
 ```
 promptfoo eval
@@ -42,16 +32,12 @@ promptfoo eval
 
 Before starting, make sure you have:
 
-- Python 3.10+
-- Node.js `>=22.22.0`
+- Python 3.10–3.13
+- A [supported Node.js version](/docs/installation#nodejs-runtime-support)
 - OpenAI API access for GPT-4.1, the model selected by this example
 - An OpenAI API key
 
 ## Step 1: Initial Setup
-
-Before we dive into building or testing anything, let’s make sure your system has all the basics installed and working.
-
-Here’s what to check:
 
 **Python installed**
 
@@ -61,7 +47,7 @@ Run this in your terminal:
 python3 --version
 ```
 
-If you see something like `Python 3.10.12` (or newer), you’re good to go.
+Use Python 3.10 through 3.13 for the CrewAI version used by this example.
 
 **Node.js and npm installed**
 
@@ -77,7 +63,7 @@ And check npm (Node package manager):
 npm -v
 ```
 
-In our example, you can see `v22.22.0` for Node and `10.9.0` for npm — that’s solid. Promptfoo requires Node.js `>=22.22.0`.
+Check that `node -v` reports a supported version.
 
 **Why do we need these?**
 
@@ -105,26 +91,24 @@ What’s happening here?
 
 Now it’s time to set up the key Python packages and the Promptfoo CLI.
 
-In your project folder, run:
+In your project folder, use a virtual environment and run:
 
-```
-pip install crewai
+```bash
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install "crewai>=1.15.28,<2"
 npm install -g promptfoo
 ```
 
 Here’s what’s happening:
 
-- **`pip install crewai`** →
+- **`python -m pip install "crewai>=1.15.28,<2"`** →
   This installs CrewAI for creating and managing multi-agent workflows.
-  Note: The `openai` package and other dependencies (langchain, pydantic, etc.) will be automatically installed as dependencies of crewai.
+  CrewAI installs the OpenAI SDK, Pydantic, and its other runtime dependencies.
 - **`npm install -g promptfoo`** →
   Installs Promptfoo globally using Node.js, so you can run its CLI commands anywhere.
 
-Optional: If you want to use `.env` files for API keys, also install:
-
-```bash
-pip install python-dotenv
-```
+To load API keys from a `.env` file, run `promptfoo eval --env-file .env`. No extra Python package is needed.
 
 **Verify the installation worked**
 
@@ -251,7 +235,7 @@ async def run_recruitment_agent(prompt, model='openai/gpt-4.1'):
     crew = get_recruitment_agent(model)
     try:
         # ⚡ Trigger the agent to start working
-        result = crew.kickoff(inputs={'job_requirements': prompt})
+        result = await crew.kickoff_async(inputs={'job_requirements': prompt})
 
         # The result might be a string, or an object with a 'raw' attribute.
         output_text = ""
@@ -562,7 +546,7 @@ We describe that it’s an **AI recruitment assistant** built using CrewAI that:
 - Identifies and recommends top candidates for specific job roles.
 - Focuses on Ruby on Rails and React developer positions.
 - Returns structured candidate lists with names and experience summaries.
-- Ensures recommendations are accurate and filters out irrelevant or unsafe outputs.
+- Is expected to return accurate recommendations and exclude irrelevant or unsafe outputs.
 
 **Key features provided:**
 

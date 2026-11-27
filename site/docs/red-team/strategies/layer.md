@@ -6,7 +6,7 @@ sidebar_label: Layer
 
 # Layer Strategy
 
-The Layer strategy allows you to compose multiple red team strategies sequentially, creating sophisticated attack chains by feeding the output of one strategy into the next. This enables complex transformations like applying multiple encoding layers or combining agentic attacks with multi-modal output (audio/image).
+The Layer strategy sends the output of each strategy to the next. Use it to stack encodings or combine agentic attacks with audio or image transformations.
 
 ## Quick Start
 
@@ -37,7 +37,7 @@ When all steps are transforms (base64, rot13, leetspeak, etc.), layer works as a
 
 ### Mode 2: Agentic + Per-Turn Transforms
 
-When the **first step** is an agentic strategy (hydra, crescendo, goat, jailbreak, etc.), layer enables powerful multi-turn/multi-attempt attacks with per-turn transformations:
+When the **first step** is an agentic strategy (hydra, crescendo, goat, jailbreak, etc.), layer applies the remaining transformations to each attack turn or attempt:
 
 1. **Agentic Orchestration**: The agentic strategy controls the attack loop
 2. **Per-Turn Transforms**: Remaining steps (e.g., audio, image) are applied to each turn dynamically
@@ -207,7 +207,7 @@ redteam:
 
 ### Multi-Turn Audio Attack
 
-Test voice-enabled AI agents with sophisticated jailbreak attempts:
+Test voice-enabled agents with jailbreak attempts:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
@@ -455,7 +455,7 @@ The following strategies can be used as the first step with per-turn transforms:
 
 - [Audio Strategy](./audio.md) - Text-to-speech conversion
 - [Image Strategy](./image.md) - Text-to-image conversion
-- [Hydra Strategy](./multi-turn.md) - Multi-turn jailbreak attacks
+- [Hydra Strategy](./hydra.md) - Multi-turn jailbreak attacks
 - [ROT13](./rot13.md) - Simple cipher encoding
 - [Base64](./base64.md) - Common encoding technique
 - [Custom Strategy Scripts](./custom.md) - Create your own strategies

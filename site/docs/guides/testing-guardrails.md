@@ -233,7 +233,7 @@ Use the built-in Bedrock provider to apply a guardrail during model inference:
 
 ```yaml
 providers:
-  - id: bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
     config:
       region: us-east-1
       guardrailIdentifier: your-guardrail-id

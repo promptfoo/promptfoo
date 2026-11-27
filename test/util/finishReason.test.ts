@@ -13,6 +13,10 @@ describe('normalizeFinishReason', () => {
     it('should map function_call to tool_calls', () => {
       expect(normalizeFinishReason('function_call')).toBe('tool_calls');
     });
+
+    it('should map Responses max_output_tokens to length', () => {
+      expect(normalizeFinishReason('max_output_tokens')).toBe('length');
+    });
   });
 
   describe('Anthropic mappings', () => {
@@ -27,6 +31,13 @@ describe('normalizeFinishReason', () => {
 
     it('should preserve pause_turn as-is', () => {
       expect(normalizeFinishReason('pause_turn')).toBe('pause_turn');
+    });
+  });
+
+  describe('Vercel AI SDK mappings', () => {
+    it('should map hyphenated AI SDK reasons to standard values', () => {
+      expect(normalizeFinishReason('tool-calls')).toBe('tool_calls');
+      expect(normalizeFinishReason('content-filter')).toBe('content_filter');
     });
   });
 

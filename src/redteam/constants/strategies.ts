@@ -9,6 +9,7 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
   'iso:42001',
   'gdpr',
   'dod:ai:ethics',
+  'aiuc:1',
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
@@ -71,6 +72,7 @@ export const DATASET_PLUGINS = [
 ] as const;
 
 export const ADDITIONAL_STRATEGIES = [
+  'arabic-presentation-forms',
   'audio',
   'authoritative-markup-injection',
   'base64',
@@ -146,6 +148,7 @@ export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGUR
  * Set of strategy IDs that represent encoding transformations where originalText should be shown
  */
 export const ENCODING_STRATEGIES = new Set([
+  'arabic-presentation-forms',
   'base64',
   'hex',
   'rot13',

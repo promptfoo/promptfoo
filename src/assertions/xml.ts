@@ -455,7 +455,7 @@ function hasElementPath(value: unknown, path: string[]): boolean {
     }
 
     const record = current as Record<string, unknown>;
-    if (record[key] === undefined) {
+    if (!Object.prototype.hasOwnProperty.call(record, key) || record[key] === undefined) {
       return false;
     }
 
@@ -482,6 +482,8 @@ function validateXmlCandidate(xmlString: string, requiredElements?: string[]): X
     ignoreAttributes: false,
     parseAttributeValue: true,
     parseTagValue: true,
+    // Required paths use XML names; own-property checks prevent inherited matches.
+    onDangerousProperty: (name) => name,
   });
 
   try {
@@ -599,7 +601,7 @@ export const handleIsXml = ({
   if (typeof renderedValue === 'string') {
     requiredElements = renderedValue.split(',').map((el) => el.trim());
   } else if (Array.isArray(renderedValue) && renderedValue.length > 0) {
-    requiredElements = renderedValue.map((el) => el.toString());
+    requiredElements = renderedValue.map((element: { toString(): string }) => element.toString());
   } else if (
     renderedValue !== null &&
     typeof renderedValue === 'object' &&

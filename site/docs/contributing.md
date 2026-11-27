@@ -4,7 +4,7 @@ sidebar_label: Contributing
 description: Contribute to promptfoo by submitting code, documentation, providers, and features following our development guidelines
 ---
 
-We welcome contributions from the community to help make promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/promptfoo) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
+Contributions are welcome. For questions, use [Discord](https://discord.gg/gHPS9jjfbs) or open a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
 
 ## Project Overview
 
@@ -16,7 +16,7 @@ There are several ways to contribute to promptfoo:
 
 1. **Submit Pull Requests**: Anyone can contribute by forking the repository and submitting pull requests. You don't need to be a collaborator to contribute code or documentation changes.
 
-2. **Report Issues**: Help us by reporting bugs or suggesting improvements through GitHub issues or [Discord](https://discord.gg/promptfoo).
+2. **Report Issues**: Help us by reporting bugs or suggesting improvements through GitHub issues or [Discord](https://discord.gg/gHPS9jjfbs).
 
 3. **Improve Documentation**: Documentation improvements are always welcome, including fixing typos, adding examples, or writing guides.
 
@@ -90,7 +90,7 @@ We particularly welcome contributions in the following areas:
 
    :::
 
-If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=state%3Aopen%20label%3Agood-first-issue%20is%3Aissue) or join our [Discord community](https://discord.gg/promptfoo) for guidance.
+If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=state%3Aopen%20label%3Agood-first-issue%20is%3Aissue) or join our [Discord community](https://discord.gg/gHPS9jjfbs) for guidance.
 
 ## Development Workflow
 
@@ -136,7 +136,7 @@ Don't hesitate to ask for help. We're here to support you. If you're worried abo
 
 ### Running Tests
 
-We use both Vitest and Jest. To run the test suite:
+We use Vitest. To run the test suite:
 
 ```bash
 npm test
@@ -148,14 +148,12 @@ To run tests in watch mode:
 npm run test:watch
 ```
 
+For the web UI's real browser tests, install Chromium once with `npx playwright install chromium`, then run `npm run test:app:browser` from the repository root. Browser binaries are not downloaded by `npm install`.
+
 You can also run specific tests with:
 
 ```bash
-# Vitest
 npx vitest [pattern]
-
-# Jest
-npx jest [pattern]
 
 # Example:
 # Runs all provider tests
@@ -166,10 +164,10 @@ npx vitest providers
 
 When writing tests, please:
 
-- **Use Vitest for new test files.** When modifying existing files, use whichever framework that file uses.
+- **Use Vitest for tests in `test/`, `src/app/`, and `site/`.**
 - Ensure proper test isolation by:
   - Using `beforeEach` and `afterEach` to set up and clean up mocks
-  - Calling `vi.clearAllMocks()` or `vi.restoreAllMocks()` for Vitest (or `jest.clearAllMocks()` for Jest)
+  - Calling `vi.clearAllMocks()` or `vi.restoreAllMocks()`
   - Avoiding shared state between tests
 - Check the coverage report to ensure your changes are covered.
 - Avoid adding additional logs to the console.
@@ -464,7 +462,7 @@ This project uses [release-please](https://github.com/googleapis/release-please)
 2. release-please creates/updates a release PR with changelog entries, version bumps, and updated `package.json`
 3. When merged, a GitHub release is created and the npm package is published
 
-For urgent releases, contact maintainers on [Discord](https://discord.gg/promptfoo).
+For urgent releases, contact maintainers on [Discord](https://discord.gg/gHPS9jjfbs).
 
 ## AI-Assisted Contributions
 
@@ -526,7 +524,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) format for PR t
 If you need help or have questions, you can:
 
 - Open an issue on GitHub.
-- Join our [Discord community](https://discord.gg/promptfoo).
+- Join our [Discord community](https://discord.gg/gHPS9jjfbs).
 
 ## Code of Conduct
 

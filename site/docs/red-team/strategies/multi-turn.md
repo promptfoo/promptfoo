@@ -130,8 +130,9 @@ strategies:
 When `continueAfterSuccess: true`:
 
 - The strategy will continue generating attacks even after finding successful ones
-- All successful attacks are recorded in the metadata
+- All successful attacks are recorded in the metadata, and `redteamHistory` keeps the whole conversation
 - The strategy only stops when `maxTurns` is reached
+- The verdict, guardrail checks, and displayed inputs stay with the first flagged turn. Later refusals or guardrail blocks cannot erase it.
 - This can help discover multiple attack vectors or progressively stronger attacks, but it will take longer to complete and cost more.
 
 ### Unblocking Feature

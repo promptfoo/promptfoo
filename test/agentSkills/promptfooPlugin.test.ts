@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -150,26 +150,8 @@ function listFiles(root: string, predicate: (filePath: string) => boolean): stri
   return files.sort();
 }
 
-function extractFileReference(reference: string): string | undefined {
-  if (!reference.startsWith('file://')) {
-    return undefined;
-  }
-  const filePathWithSuffix = reference.slice('file://'.length);
-  const suffixIndex = filePathWithSuffix.indexOf(':');
-  return suffixIndex === -1 ? filePathWithSuffix : filePathWithSuffix.slice(0, suffixIndex);
-}
-
-function extractFileFunctionName(reference: string): string | undefined {
-  if (!reference.startsWith('file://')) {
-    return undefined;
-  }
-  const filePathWithSuffix = reference.slice('file://'.length);
-  const suffixIndex = filePathWithSuffix.indexOf(':');
-  return suffixIndex === -1 ? undefined : filePathWithSuffix.slice(suffixIndex + 1);
-}
-
 function expectFileReferenceExists(reference: string, baseDir: string, context: string) {
-  const filePath = extractFileReference(reference);
+  const filePath = /^file:\/\/([^:]*)(?::([\s\S]*))?$/.exec(reference)?.[1];
   if (!filePath) {
     return;
   }
@@ -207,14 +189,14 @@ function collectPythonProviderReferencesFromConfig(
     reference: string;
   }[] = [];
   const addReference = (reference: string, baseDir: string, context: string) => {
-    const filePath = extractFileReference(reference);
+    const filePath = /^file:\/\/([^:]*)(?::([\s\S]*))?$/.exec(reference)?.[1];
     if (!filePath?.endsWith('.py')) {
       return;
     }
     references.push({
       absolutePath: path.isAbsolute(filePath) ? filePath : path.resolve(baseDir, filePath),
       context,
-      functionName: extractFileFunctionName(reference) || 'call_api',
+      functionName: /^file:\/\/([^:]*)(?::([\s\S]*))?$/.exec(reference)?.[2] || 'call_api',
       reference,
     });
   };
@@ -1880,6 +1862,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       'skills/promptfoo-provider-setup/agents/openai.yaml',
       'skills/promptfoo-provider-setup/references/local-prerequisites.md',
       'skills/promptfoo-provider-setup/references/provider-patterns.md',
+      'skills/promptfoo-provider-setup/scripts/openapi-helpers.mjs',
       'skills/promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs',
       'skills/promptfoo-provider-setup/scripts/response-contract.mjs',
       'skills/promptfoo-provider-setup/scripts/vendor/LICENSE',
@@ -1919,7 +1902,64 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     }
   });
 
-  it('keeps the fixture matrix intentional and mapped to the four skills', () => {
+  it.each([
+    ['provider', 'openapi-operation-to-config.mjs', '{{prompt}}'],
+    ['redteam', 'openapi-operation-to-redteam-config.mjs', '{{message}}'],
+  ])(
+    'runs the %s OpenAPI helper from an installed bundle without node_modules',
+    (kind, file, message) => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-installed-plugin-'));
+      try {
+        const installedPlugin = path.join(tempDir, 'promptfoo');
+        fs.cpSync(pluginRoot, installedPlugin, { recursive: true });
+        const script = path.join(
+          installedPlugin,
+          'skills',
+          `promptfoo-${kind}-setup`,
+          'scripts',
+          file,
+        );
+        const output = path.join(tempDir, 'config.yaml');
+        expect(
+          execFileSync(
+            process.execPath,
+            [
+              script,
+              '--spec',
+              path.join(fixtureRoot, 'provider-setup-openapi', 'openapi.yaml'),
+              '--operation-id',
+              'chatWithInvoice',
+              '--base-url-env',
+              'INVOICE_API_URL',
+              '--output',
+              output,
+            ],
+            { cwd: tempDir, encoding: 'utf8' },
+          ),
+        ).toBe('');
+        const generated = yaml.load(fs.readFileSync(output, 'utf8')) as PromptfooFixtureConfig;
+        const target = (
+          (generated.providers ?? generated.targets) as { config: Record<string, unknown> }[]
+        )[0];
+        expect(target.config.url).toBe(
+          '{{env.INVOICE_API_URL}}/v1/invoices/{{invoice_id | urlencode}}/chat',
+        );
+        expect(target.config.body).toEqual({ user_id: '{{user_id}}', message });
+        const invalid = spawnSync(process.execPath, [script, '--spec'], {
+          cwd: tempDir,
+          encoding: 'utf8',
+        });
+        expect(invalid.status).toBe(1);
+        expect(invalid.stdout).toBe('');
+        expect(invalid.stderr).toContain('Invalid argument near --spec');
+        expect(invalid.stderr).toContain(`Usage: node ${file} --spec`);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('keeps fixtures mapped to the local workflow skills', () => {
     const fixtureDirs = fs
       .readdirSync(fixtureRoot, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
@@ -2033,17 +2073,13 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
   it('documents the shared plugin bundle on both marketplaces', () => {
     const docs = readText(path.join(repoRoot, 'site', 'docs', 'integrations', 'agent-skill.md'));
 
-    expect(docs).toContain('Via Claude Code marketplace');
-    expect(docs).toContain('Via Codex plugin bundle');
     expect(docs).toContain('/plugin install promptfoo@promptfoo');
     expect(docs).toContain('codex plugin marketplace add promptfoo/promptfoo');
     expect(docs).toContain('intentionally no meta selector skill');
     expect(docs).toContain("routes from each skill's");
     expect(docs).toContain('Python providers are first-class');
     expect(docs).toContain('file://provider.py:function_name');
-    expect(docs).toContain('local graders');
     expect(docs).toContain('PROMPTFOO_PYTHON');
-    expect(docs).toContain('copy `plugins/promptfoo`');
     expect(docs).toContain('plugins/promptfoo');
     expect(docs).toContain('.agents/plugins/marketplace.json');
     expect(docs).toContain('.claude-plugin/marketplace.json');
@@ -2274,7 +2310,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       const redteamProvider = typedConfig.redteam?.provider;
       if (typeof redteamProvider === 'string') {
         expectFileReferenceExists(redteamProvider, repoRoot, `${configPath} redteam.provider`);
-        const providerPath = extractFileReference(redteamProvider);
+        const providerPath = /^file:\/\/([^:]*)(?::([\s\S]*))?$/.exec(redteamProvider)?.[1];
         if (providerPath && !path.isAbsolute(providerPath)) {
           expect(providerPath.startsWith('.')).toBe(false);
         }

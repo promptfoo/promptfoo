@@ -16,12 +16,11 @@ providers:
       showThinking: true # Set to false to hide thinking content
 
   # Claude for comparison
-  - id: bedrock:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6
+  - id: bedrock:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5
     config:
       region: us-west-2
       max_tokens: 2048
-      temperature: 0.7
 
   # Qwen3 Coder 30B - Smaller MoE model for efficient coding tasks
   - id: bedrock:qwen.qwen3-coder-30b-a3b-v1:0

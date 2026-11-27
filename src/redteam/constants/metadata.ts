@@ -16,6 +16,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
+  'arabic-presentation-forms':
+    'Tests handling of Arabic presentation-forms encoding and Unicode normalization in content filters',
   'authoritative-markup-injection': 'Tests vulnerability to authoritative markup injection attacks',
   layer: 'Applies multiple strategies in a defined order',
   base64: 'Tests handling of Base64-encoded malicious payloads',
@@ -271,6 +273,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   aegis: 'Aegis Dataset',
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
+  'arabic-presentation-forms': 'Arabic Presentation Forms',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
@@ -1273,6 +1276,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
 
 export const strategyDescriptions: Record<Strategy, string> = {
   audio: 'Tests detection and handling of audio-based malicious payloads',
+  'arabic-presentation-forms':
+    'Tests detection and handling of Arabic text using isolated Unicode presentation forms',
   'authoritative-markup-injection':
     'Tests detection and handling of authoritative markup injection attacks',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
@@ -1324,6 +1329,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 
 export const strategyDisplayNames: Record<Strategy, string> = {
   audio: 'Audio',
+  'arabic-presentation-forms': 'Arabic Presentation Forms',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Encoding',
   basic: 'Basic',
@@ -1363,6 +1369,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 };
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
+  'AIUC-1': 'Technical tests for AIUC-1 readiness, not certification',
   Custom: 'Choose your own plugins',
   'DoD AI Ethical Principles': 'DoD AI ethical principles framework',
   'EU AI Act': 'Prohibited & high-risk requirements',
