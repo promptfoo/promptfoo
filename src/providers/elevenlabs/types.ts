@@ -1,5 +1,3 @@
-import type { EnvOverrides } from '../../types/env';
-
 /**
  * Base configuration shared across all ElevenLabs providers
  */
@@ -22,42 +20,4 @@ export interface AudioData {
   format: string; // 'mp3', 'pcm', 'wav', etc.
   durationMs?: number;
   sizeBytes?: number;
-}
-
-/**
- * Usage metrics tracked across providers
- */
-export interface UsageMetrics {
-  characters?: number; // For TTS
-  seconds?: number; // For STT
-  minutes?: number; // For Agents
-  llmTokens?: {
-    total: number;
-    prompt: number;
-    completion: number;
-  };
-}
-
-/**
- * Cost breakdown by capability
- */
-export interface CostMetrics {
-  estimatedCost: number;
-  currency: 'USD';
-  breakdown: {
-    tts?: number;
-    stt?: number;
-    agent?: number;
-    llm?: number;
-  };
-}
-
-/**
- * Options that can be passed when constructing a provider
- */
-export interface ElevenLabsProviderOptions {
-  config?: ElevenLabsBaseConfig;
-  id?: string;
-  label?: string;
-  env?: EnvOverrides;
 }

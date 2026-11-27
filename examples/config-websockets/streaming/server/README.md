@@ -4,7 +4,7 @@ Simple Node.js server using Express and native WebSockets that exposes two real-
 
 ## Requirements
 
-- Node.js >= 18.17
+- A [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support)
 - An OpenAI API key
 
 ## Setup

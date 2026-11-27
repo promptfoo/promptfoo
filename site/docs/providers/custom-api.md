@@ -91,10 +91,43 @@ module.exports = class OpenAIProvider {
   cached: false,
   conversationEnded: false, // Optional: set true to stop multi-turn redteam gracefully
   conversationEndReason: 'thread_closed', // Optional reason when conversationEnded=true
+  guardrails: { // Optional: normalized target guardrail decision
+    flagged: false,
+    flaggedInput: false,
+    flaggedOutput: false,
+  },
   metadata: {}, // Additional data
   ...
 }
 ```
+
+Return an `error` for failed requests. Omitting `output` or returning `output: null` or `output: undefined` also produces an error, including in red team scans. The literal strings `"null"` and `"undefined"` are response content and are graded normally.
+
+### Looking up text-token prices
+
+Custom providers can import `getModelPricing` from `promptfoo` to look up the installed version's OpenAI or Anthropic catalog rates. Pass the provider name (`openai` or `anthropic`) and an exact model ID; unknown providers, unknown models, and models without catalog prices return `undefined`.
+
+```javascript
+import { getModelPricing } from 'promptfoo';
+
+const pricing = getModelPricing('anthropic', 'claude-3-haiku-20240307');
+const promptTokens = 1000;
+const completionTokens = 200;
+const rates =
+  pricing?.longContext && promptTokens > pricing.longContext.threshold
+    ? pricing.longContext
+    : pricing;
+const cost = rates ? rates.input * promptTokens + rates.output * completionTokens : undefined;
+// Include cost and tokenUsage in your ProviderResponse.
+```
+
+`input` and `output` are USD per text token. `longContext`, when present in the catalog, includes an input-token `threshold` and the rates above that threshold. The returned object is a copy. This is a catalog lookup, not a complete billing calculator: it does not fetch live prices or include cache discounts, service tiers, regional adjustments, tools, audio, or image charges. Prefer a provider-reported total when available.
+
+### Guardrail Responses
+
+To use [`guardrails` or `not-guardrails`](/docs/configuration/expected-outputs/guardrails), return `guardrails` beside `output`, not inside `output` or `metadata`. Set `flagged` explicitly; the directional fields only identify the stage that fired. Keep vendor-specific assessments and scores under `metadata`.
+
+Return expected policy blocks as a scorable `output`. If the guardrail itself failed, return `error` so Promptfoo cannot mistake the failure for a clean decision. See [Testing and Validating Guardrails](/docs/guides/testing-guardrails) for the full mapping pattern.
 
 ### Context Parameter
 
@@ -108,7 +141,7 @@ The `context` parameter provides test case information and utility objects:
     vars: {},
     metadata: {
       pluginId: '...',   // Redteam plugin (e.g. "promptfoo:redteam:harmful:hate")
-      strategyId: '...',  // Redteam strategy (e.g. "jailbreak", "prompt-injection")
+      strategyId: '...',  // Redteam strategy (e.g. "jailbreak", "jailbreak-templates")
     },
   },
   originalProvider: {},  // Original provider when overridden
@@ -258,9 +291,8 @@ For path aliases such as `@/utils`, define the alias in `tsconfig.json`:
 ```json
 {
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   }
 }
@@ -279,10 +311,15 @@ providers:
 
 ### Embeddings API
 
-```javascript title="embeddingProvider.js"
-async callEmbeddingApi(text) {
+To stop embedding grading when an eval is cancelled, set `supportsEmbeddingCancellation` to `true` and pass the third argument's `abortSignal` to your request. Without this flag, promptfoo calls `callEmbeddingApi` with only the input.
+
+```javascript
+supportsEmbeddingCancellation = true;
+
+async callEmbeddingApi(text, _context, { abortSignal } = {}) {
   const response = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
+    signal: abortSignal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -326,7 +363,7 @@ Custom providers handle multimodal content the same way whether the media comes 
 
 For standard evals, provide the media value through `tests[].vars`, `defaultTest.vars`, a dataset column, or a dynamic variable:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - '{{image}} {{question}}'
 
@@ -346,7 +383,7 @@ For red team runs, [image](/docs/red-team/strategies/image), [audio](/docs/red-t
 | `audio`           | Raw MP3 base64 from remote generation, no `data:` prefix | `context.test.metadata.originalText`                            | Requires remote generation. Forward with MIME type `audio/mpeg` or your provider's equivalent audio format.                                                                                                                        |
 | `video`           | Raw MP4 base64 when local FFmpeg generation succeeds     | `context.vars.video_text`, `context.test.metadata.originalText` | Install FFmpeg and set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` for real MP4 bytes. If generation falls back, the value may decode to the original text instead of an MP4. |
 
-Audio and video have opposite generation requirements today: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
+Audio and video have opposite generation requirements: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
 
 ```javascript title="multimodalProvider.js"
 module.exports = class MultimodalProvider {
@@ -438,7 +475,7 @@ const { data, cached } = await promptfoo.cache.fetchWithCache(
 
 ### Provider Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: file://./myProvider.mjs # ES6 modules
     label: 'My Custom API' # Display name in UI

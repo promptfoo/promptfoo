@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import {
+  AIUC_1_MAPPING,
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
   ALL_STRATEGIES,
@@ -26,7 +27,7 @@ import {
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
 import { isCustomStrategy } from '../redteam/constants/strategies';
-import { isJavascriptFile } from '../util/fileExtensions';
+import { isJavascriptFile } from '../validation/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
 import type { Collection, FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
@@ -85,30 +86,40 @@ const frameworkOptions = FRAMEWORK_COMPLIANCE_IDS as unknown as [
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
 ].sort();
+
+function createPluginIdSchema() {
+  return z.union([
+    z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
+      if (!pluginOptions.includes(val)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Invalid plugin name "${val}". Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
+        });
+      }
+    }),
+    z.string().superRefine((val, ctx) => {
+      if (AIUC_1_MAPPING[val]?.plugins?.length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `${val} has no built-in tests yet. Select a supported AIUC-1 control or configure a custom policy.`,
+        });
+        return;
+      }
+      if (!val.startsWith('file://')) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
+        });
+      }
+    }),
+  ]);
+}
+
 /**
  * Schema for individual redteam plugins
  */
 export const RedteamPluginObjectSchema = z.object({
-  id: z
-    .union([
-      z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
-        if (!pluginOptions.includes(val)) {
-          ctx.addIssue({
-            code: 'custom',
-            message: `Invalid plugin name "${val}". Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
-          });
-        }
-      }),
-      z.string().superRefine((val, ctx) => {
-        if (!val.startsWith('file://')) {
-          ctx.addIssue({
-            code: 'custom',
-            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
-          });
-        }
-      }),
-    ])
-    .describe('Name of the plugin'),
+  id: createPluginIdSchema().describe('Name of the plugin'),
   numTests: z
     .int()
     .positive()
@@ -126,26 +137,7 @@ const RedteamConfigPluginObjectSchema = RedteamPluginObjectSchema.extend({
  * Schema for individual redteam plugins or their shorthand.
  */
 export const RedteamPluginSchema = z.union([
-  z
-    .union([
-      z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
-        if (!pluginOptions.includes(val)) {
-          ctx.addIssue({
-            code: 'custom',
-            message: `Invalid plugin name "${val}". Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
-          });
-        }
-      }),
-      z.string().superRefine((val, ctx) => {
-        if (!val.startsWith('file://')) {
-          ctx.addIssue({
-            code: 'custom',
-            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
-          });
-        }
-      }),
-    ])
-    .describe('Name of the plugin or path to custom plugin'),
+  createPluginIdSchema().describe('Name of the plugin or path to custom plugin'),
   RedteamConfigPluginObjectSchema,
 ]);
 
@@ -222,6 +214,8 @@ export const RedteamGenerateOptionsSchema = z.object({
     .optional()
     .describe('Delay in milliseconds between plugin API calls'),
   envFile: z.string().optional().describe('Path to the environment file'),
+  filterProviders: z.string().optional().describe('Regex used to select providers'),
+  filterTargets: z.string().optional().describe('Regex used to select targets'),
   force: z.boolean().describe('Whether to force generation').prefault(false),
   injectVar: z.string().optional().describe('Variable to inject'),
   language: z
@@ -405,6 +399,7 @@ export const RedteamConfigSchema = z
       pluginMap.set(key, pluginObject);
     };
 
+    const selectedIds = new Set(data.plugins.map((p) => (typeof p === 'string' ? p : p.id)));
     const expandCollection = (
       collection: string[] | ReadonlySet<Plugin>,
       config: PluginConfig | undefined,
@@ -412,6 +407,9 @@ export const RedteamConfigSchema = z
       severity?: Severity,
     ) => {
       (Array.isArray(collection) ? collection : Array.from(collection)).forEach((item) => {
+        if (!config && !severity && selectedIds.has(item)) {
+          return;
+        }
         // Only add the plugin if it doesn't already exist or if the existing one has undefined numTests
         const existingPlugin = pluginMap.get(`${item}:${JSON.stringify(config)}:${severity || ''}`);
         if (!existingPlugin || existingPlugin.numTests === undefined) {
@@ -426,30 +424,22 @@ export const RedteamConfigSchema = z
       numTests: number | undefined,
       severity?: Severity,
     ) => {
-      if (id === 'foundation') {
-        expandCollection([...FOUNDATION_PLUGINS], config, numTests, severity);
-      } else if (id === 'harmful') {
-        expandCollection(Object.keys(HARM_PLUGINS), config, numTests, severity);
-      } else if (id === 'pii') {
-        expandCollection([...PII_PLUGINS], config, numTests, severity);
-      } else if (id === 'medical') {
-        expandCollection([...MEDICAL_PLUGINS], config, numTests, severity);
-      } else if (id === 'pharmacy') {
-        expandCollection([...PHARMACY_PLUGINS], config, numTests, severity);
-      } else if (id === 'insurance') {
-        expandCollection([...INSURANCE_PLUGINS], config, numTests, severity);
-      } else if (id === 'financial') {
-        expandCollection([...FINANCIAL_PLUGINS], config, numTests, severity);
-      } else if (id === 'teen-safety') {
-        expandCollection([...TEEN_SAFETY_PLUGINS], config, numTests, severity);
-      } else if (id === 'default') {
-        expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
-      } else if (id === 'guardrails-eval') {
-        expandCollection([...GUARDRAILS_EVALUATION_PLUGINS], config, numTests, severity);
-      } else if (id === 'coding-agent:core') {
-        expandCollection([...CODING_AGENT_CORE_PLUGINS], config, numTests, severity);
-      } else if (id === 'coding-agent:all') {
-        expandCollection([...CODING_AGENT_PLUGINS], config, numTests, severity);
+      const collection = new Map<Collection, () => string[]>([
+        ['foundation', () => [...FOUNDATION_PLUGINS]],
+        ['harmful', () => Object.keys(HARM_PLUGINS)],
+        ['pii', () => [...PII_PLUGINS]],
+        ['medical', () => [...MEDICAL_PLUGINS]],
+        ['pharmacy', () => [...PHARMACY_PLUGINS]],
+        ['insurance', () => [...INSURANCE_PLUGINS]],
+        ['financial', () => [...FINANCIAL_PLUGINS]],
+        ['teen-safety', () => [...TEEN_SAFETY_PLUGINS]],
+        ['default', () => [...REDTEAM_DEFAULT_PLUGINS]],
+        ['guardrails-eval', () => [...GUARDRAILS_EVALUATION_PLUGINS]],
+        ['coding-agent:core', () => [...CODING_AGENT_CORE_PLUGINS]],
+        ['coding-agent:all', () => [...CODING_AGENT_PLUGINS]],
+      ]).get(id)?.();
+      if (collection) {
+        expandCollection(collection, config, numTests, severity);
       }
     };
 
@@ -462,22 +452,35 @@ export const RedteamConfigSchema = z
               numTests: plugin.numTests ?? data.numTests ?? DEFAULT_NUM_TESTS_PER_PLUGIN,
             };
 
+      const expandPlugin = (id: string) => {
+        // A specific plugin (including its configured variants) overrides the preset
+        // regardless of declaration order. Don't also schedule an unconfigured copy.
+        const isAiuc = pluginObj.id === 'aiuc:1' || pluginObj.id.startsWith('aiuc:1:');
+        if (selectedIds.has(id) && (isAiuc || (!pluginObj.config && !pluginObj.severity))) {
+          return;
+        }
+        if (COLLECTIONS.includes(id as Collection)) {
+          handleCollectionExpansion(
+            id as Collection,
+            pluginObj.config,
+            pluginObj.numTests,
+            pluginObj.severity,
+          );
+        } else {
+          addPlugin(id, pluginObj.config, pluginObj.numTests, pluginObj.severity);
+        }
+      };
+
       if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
-        Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {
-          plugins.forEach((id) => {
-            if (COLLECTIONS.includes(id as Collection)) {
-              handleCollectionExpansion(
-                id as Collection,
-                pluginObj.config,
-                pluginObj.numTests,
-                pluginObj.severity,
-              );
-            } else {
-              addPlugin(id, pluginObj.config, pluginObj.numTests, pluginObj.severity);
-            }
-          });
+        for (const [control, { plugins, strategies }] of Object.entries(
+          ALIASED_PLUGIN_MAPPINGS[pluginObj.id],
+        )) {
+          if (pluginObj.id === 'aiuc:1' && selectedIds.has(control)) {
+            continue;
+          }
+          plugins.forEach(expandPlugin);
           strategies.forEach((strategy) => strategySet.add(strategy as Strategy));
-        });
+        }
       } else if (COLLECTIONS.includes(pluginObj.id as Collection)) {
         handleCollectionExpansion(
           pluginObj.id as Collection,
@@ -491,18 +494,7 @@ export const RedteamConfigSchema = z
         );
         if (mapping) {
           const [, aliasedMapping] = mapping;
-          aliasedMapping[pluginObj.id].plugins.forEach((id) => {
-            if (COLLECTIONS.includes(id as Collection)) {
-              handleCollectionExpansion(
-                id as Collection,
-                pluginObj.config,
-                pluginObj.numTests,
-                pluginObj.severity,
-              );
-            } else {
-              addPlugin(id, pluginObj.config, pluginObj.numTests, pluginObj.severity);
-            }
-          });
+          aliasedMapping[pluginObj.id].plugins.forEach(expandPlugin);
           aliasedMapping[pluginObj.id].strategies.forEach((strategy) =>
             strategySet.add(strategy as Strategy),
           );

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import EvalsTable from '../../evals/components/EvalsTable';
 import EvalSelectorDialog from './EvalSelectorDialog';

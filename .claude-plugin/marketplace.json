@@ -4,17 +4,17 @@
     "name": "promptfoo"
   },
   "metadata": {
-    "description": "Agent skills for building and maintaining promptfoo evaluations"
+    "description": "Agent skills for connecting, evaluating, and red teaming LLM applications with promptfoo"
   },
   "plugins": [
     {
-      "name": "promptfoo-evals",
-      "source": "./plugins/promptfoo-evals",
-      "description": "Teaches AI coding agents to create promptfoo eval suites with deterministic assertions, provider configs, and best practices",
+      "name": "promptfoo",
+      "source": "./plugins/promptfoo",
+      "description": "Connect providers and targets, write eval suites, and set up or run red team scans with promptfoo",
       "homepage": "https://www.promptfoo.dev/docs/integrations/agent-skill",
       "repository": "https://github.com/promptfoo/promptfoo",
       "license": "MIT",
-      "keywords": ["eval", "testing", "llm", "promptfoo"],
+      "keywords": ["eval", "redteam", "provider", "testing", "llm", "promptfoo"],
       "category": "productivity"
     }
   ]

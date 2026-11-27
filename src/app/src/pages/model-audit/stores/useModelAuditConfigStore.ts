@@ -35,13 +35,11 @@ interface ModelAuditConfigState {
 
   // Actions - Recent scans
   addRecentScan: (paths: ScanPath[], label?: string) => void;
-  removeRecentScan: (id: string) => void;
   removeRecentPath: (scanId: string, pathToRemove: string) => void;
   clearRecentScans: () => void;
 
   // Actions - Scan configuration
   setPaths: (paths: ScanPath[]) => void;
-  addPath: (path: ScanPath) => void;
   removePath: (path: string) => void;
   setScanOptions: (options: ScanOptions) => void;
 
@@ -49,19 +47,14 @@ interface ModelAuditConfigState {
   setIsScanning: (isScanning: boolean) => void;
   setScanResults: (results: ScanResult | null) => void;
   setError: (error: string | null) => void;
-  clearScanState: () => void;
   startNewScan: () => void;
 
   // Actions - Installation status
-  setInstallationStatus: (status: Partial<InstallationStatus>) => void;
   checkInstallation: () => Promise<{ installed: boolean; cwd: string }>;
 
   // Actions - UI state
   setShowFilesDialog: (show: boolean) => void;
   setShowOptionsDialog: (show: boolean) => void;
-
-  // Computed
-  getRecentScans: () => RecentScan[];
 }
 
 const MAX_RECENT_SCANS = 10;
@@ -78,7 +71,7 @@ export const DEFAULT_SCAN_OPTIONS: ScanOptions = {
 
 export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       // Initial state
       recentScans: [],
       paths: [],
@@ -108,12 +101,6 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
         }));
       },
 
-      removeRecentScan: (id) => {
-        set((state) => ({
-          recentScans: state.recentScans.filter((scan) => scan.id !== id),
-        }));
-      },
-
       removeRecentPath: (scanId, pathToRemove) => {
         set((state) => ({
           recentScans: state.recentScans
@@ -139,10 +126,6 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
       // Actions - Scan configuration
       setPaths: (paths) => set({ paths }),
 
-      addPath: (path) => {
-        set((state) => ({ paths: [...state.paths, path] }));
-      },
-
       removePath: (pathToRemove) => {
         set((state) => ({
           paths: state.paths.filter((p) => p.path !== pathToRemove),
@@ -155,16 +138,9 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
       setIsScanning: (isScanning) => set({ isScanning }),
       setScanResults: (scanResults) => set({ scanResults, error: null }),
       setError: (error) => set({ error }),
-      clearScanState: () => set({ scanResults: null, error: null, isScanning: false }),
       startNewScan: () => set({ paths: [], scanResults: null, error: null, isScanning: false }),
 
       // Actions - Installation status
-      setInstallationStatus: (status) => {
-        set((state) => ({
-          installationStatus: { ...state.installationStatus, ...status },
-        }));
-      },
-
       checkInstallation: async () => {
         // If already checking, return existing promise
         if (checkInstallationPromise != null) {
@@ -222,9 +198,6 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
       // Actions - UI state
       setShowFilesDialog: (showFilesDialog) => set({ showFilesDialog }),
       setShowOptionsDialog: (showOptionsDialog) => set({ showOptionsDialog }),
-
-      // Computed
-      getRecentScans: () => get().recentScans,
     }),
     {
       name: 'model-audit-config-store',
@@ -244,8 +217,7 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
           const oldStoreData = localStorage.getItem(oldStoreKey);
           if (oldStoreData) {
             try {
-              const parsed = JSON.parse(oldStoreData);
-              const oldState = parsed.state || {};
+              const oldState = JSON.parse(oldStoreData).state || {};
 
               // Merge old data with persisted state
               const migratedState = {

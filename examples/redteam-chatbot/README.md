@@ -15,6 +15,8 @@ The example includes session ID generation using `transformVars` to ensure each 
 
 ## Setup
 
+Requires a [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support).
+
 ### Installation
 
 1. Install dependencies:
@@ -49,6 +51,8 @@ promptfoo view
 ```
 
 ## Node.js Webserver Example Usage
+
+The server accepts only `api_provider: "openai"`, which selects `openai:chat:gpt-6-sol`. To change models, edit the provider ID in `app.js`; request bodies cannot select arbitrary providers or URLs.
 
 ### Single Message Request
 

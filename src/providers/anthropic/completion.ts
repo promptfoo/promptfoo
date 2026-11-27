@@ -1,15 +1,36 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { getCache, isCacheEnabled } from '../../cache';
+import {
+  getCache,
+  getCacheClearGeneration,
+  getCacheTtlMs,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
+import { formatLegacyCompletionPrompt } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type { ProviderResponse } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { AnthropicCompletionOptions } from './types';
 
-function getCompletionRequestMetadata(params: Anthropic.CompletionCreateParams) {
+interface CompletionRequest {
+  model: string;
+  prompt: string;
+  max_tokens_to_sample: number;
+  temperature: number;
+  stop_sequences: string[];
+}
+
+interface CompletionResponse {
+  model: string;
+  stop_reason: string | null;
+  type: 'completion';
+  completion: string;
+}
+
+function getCompletionRequestMetadata(params: CompletionRequest) {
   return {
     model: params.model,
     promptLength: params.prompt.length,
@@ -21,7 +42,7 @@ function getCompletionRequestMetadata(params: Anthropic.CompletionCreateParams) 
   };
 }
 
-function getCompletionResponseMetadata(response: Anthropic.Completion) {
+function getCompletionResponseMetadata(response: CompletionResponse) {
   return {
     model: response.model,
     stopReason: response.stop_reason,
@@ -33,9 +54,10 @@ function getCompletionResponseMetadata(response: Anthropic.Completion) {
 export class AnthropicCompletionProvider extends AnthropicGenericProvider {
   // NOTE: As of March 15, 2025, all legacy completion models are retired
   // and should not be used for new applications.
-  // Recommended alternatives:
-  // - For claude-1.x and claude-instant-1.x: use claude-3-5-haiku-20241022
-  // - For claude-2.x: use claude-3-5-sonnet-20241022
+  // Recommended alternatives — these are Messages API models, so migrating means switching
+  // provider too (`anthropic:messages:<model>`), not just changing the id here:
+  // - For claude-1.x and claude-instant-1.x: use anthropic:messages:claude-haiku-4-5
+  // - For claude-2.x: use anthropic:messages:claude-sonnet-4-6
   static ANTHROPIC_COMPLETION_MODELS = [
     // All models below are deprecated and will be retired soon
     // Only kept for reference - migrate to newer models in new code
@@ -47,7 +69,10 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: AnthropicCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: Pick<
+      ProviderOptions<AnthropicCompletionOptions>,
+      'config' | 'id' | 'label' | 'env'
+    > = {},
   ) {
     super(modelName, options);
   }
@@ -68,23 +93,36 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
       throw new Error(`ANTHROPIC_STOP is not a valid JSON string: ${err}`);
     }
 
-    const params: Anthropic.CompletionCreateParams = {
+    const scopedTemperature = Number.parseFloat(this.env?.ANTHROPIC_TEMPERATURE ?? '');
+    const params: CompletionRequest = {
       model: this.modelName,
-      prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
+      prompt: formatLegacyCompletionPrompt(prompt),
       max_tokens_to_sample:
         this.config?.max_tokens_to_sample ?? getEnvInt('ANTHROPIC_MAX_TOKENS', 1024),
-      temperature: this.config.temperature ?? getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
+      temperature:
+        this.config.temperature ??
+        (Number.isNaN(scopedTemperature)
+          ? getEnvFloat('ANTHROPIC_TEMPERATURE', 0)
+          : scopedTemperature),
       stop_sequences: stop,
     };
 
     logger.debug('Calling Anthropic API', { params: getCompletionRequestMetadata(params) });
 
     const cache = await getCache();
-    const cacheKey = `anthropic:completion:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheAuthNamespace()}:${hashAnthropicCacheValue(params)}`;
+    const cacheKey = `anthropic:completion:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheNamespace()}:${hashAnthropicCacheValue(params)}`;
+    const ephemeralCacheKey = getScopedCacheKey(cacheKey);
+    const cacheClearGeneration = getCacheClearGeneration();
+    const shouldUseResponseCache = isCacheEnabled() && !this.hasCustomHeaders();
 
-    if (isCacheEnabled()) {
+    if (shouldUseResponseCache) {
       // Try to get the cached response
-      const cachedResponse = await cache.get(cacheKey);
+      const cachedResponse = await this.getCachedResponse(
+        cache,
+        cacheKey,
+        ephemeralCacheKey,
+        cacheClearGeneration,
+      );
       if (cachedResponse) {
         logger.debug('Returning cached Anthropic completion response', { model: this.modelName });
         return {
@@ -97,29 +135,36 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
     let response;
     try {
-      response = await this.anthropic.completions.create(params);
+      response = await this.anthropic.post<CompletionResponse>('/v1/complete', {
+        body: params,
+        headers: this.config.headers,
+      });
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
     logger.debug('\tAnthropic API response', { response: getCompletionResponseMetadata(response) });
-    if (isCacheEnabled()) {
+    if (shouldUseResponseCache) {
       try {
-        await cache.set(cacheKey, JSON.stringify(response.completion));
+        await this.setCachedResponse(
+          cache,
+          cacheKey,
+          ephemeralCacheKey,
+          cacheClearGeneration,
+          getCacheTtlMs(),
+          JSON.stringify(response.completion),
+        );
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
       }
     }
-    try {
-      return {
-        output: response.completion,
-        tokenUsage: createEmptyTokenUsage(), // Legacy Completion API doesn't expose token usage in its response type
-      };
-    } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
-      };
-    }
+    // No try/catch here: `response.completion` was already dereferenced above by
+    // getCompletionResponseMetadata (outside any try), so a malformed response has
+    // already thrown by this point, and createEmptyTokenUsage cannot throw.
+    return {
+      output: response.completion,
+      tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 }, // Legacy Completion API doesn't expose token usage in its response type
+    };
   }
 }

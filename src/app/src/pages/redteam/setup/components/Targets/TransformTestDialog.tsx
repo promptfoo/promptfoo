@@ -17,7 +17,7 @@ import {
 } from '@app/components/ui/dialog';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import Prism from '@app/lib/prism';
+import { highlightJS, highlightJSON } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
 import { AlertCircle, AlignLeft, CheckCircle, ChevronDown, Code2, Info, Play } from 'lucide-react';
 
@@ -48,30 +48,6 @@ interface TransformTestDialogProps {
     outputLabel: string;
   };
 }
-
-const highlightJS = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.javascript;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'javascript');
-  } catch {
-    return code;
-  }
-};
-
-const highlightJSON = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.json;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'json');
-  } catch {
-    return code;
-  }
-};
 
 const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
   open,

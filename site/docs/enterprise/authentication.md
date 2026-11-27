@@ -8,6 +8,8 @@ keywords: [authentication, login, logout, promptfoo enterprise, promptfoo app, s
 
 # Authentication
 
+For customer-hosted deployments, see [On-Prem SSO](./sso.md) for identity-provider setup and team/role mapping.
+
 ## Setting Up SSO
 
 [Promptfoo Enterprise](/docs/enterprise/) supports both basic authentication and SSO through SAML 2.0 and OIDC. To configure SSO with Promptfoo Enterprise, reach out to the support team with your IdP information and the Promptfoo team will configure it. The authentication endpoint is `auth.promptfoo.app`.
@@ -51,7 +53,7 @@ If your organization has multiple teams, you can manage which team context you'r
 promptfoo auth teams list
 ```
 
-This shows all available teams with a marker (●) next to your current team.
+This shows the teams accessible to your API key in its organization, with a marker (●) next to your current team.
 
 ### Switching Teams
 
@@ -61,6 +63,8 @@ promptfoo auth teams set "Data Science"
 ```
 
 You can use the team name, slug, or ID. Your selection persists across CLI sessions.
+
+To switch organizations, run `promptfoo auth login --api-key <apiKey>` with a key from the organization you want to use.
 
 ### Checking Current Team
 

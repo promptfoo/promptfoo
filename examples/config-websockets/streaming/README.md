@@ -21,7 +21,7 @@ cd config-websockets/streaming
 
 ## Prerequisites
 
-- Node.js 20+
+- A [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support)
 - An OpenAI API key set as `OPENAI_API_KEY`
 
 ## 1) Start the local WebSocket server

@@ -1,9 +1,20 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../../src/envOverrides';
 import logger from '../../../src/logger';
 import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import { loadApiProvider } from '../../../src/providers/index';
+import { checkProviderApiKeys } from '../../../src/util/provider';
 import { mockProcessEnv } from '../../util/utils';
+
+const { createProxyAgentFactory } = await vi.hoisted(() => import('../../factories/moduleMocks'));
+
+const createMessagesRequest = () => ({
+  method: 'post',
+  path: '/v1/messages',
+  body: { model: 'claude-3-5-sonnet-20241022', max_tokens: 1, messages: [] },
+});
 
 const claudeCodeAuthMocks = vi.hoisted(() => ({
   loadClaudeCodeCredential: vi.fn(),
@@ -19,18 +30,56 @@ vi.mock('../../../src/providers/anthropic/claudeCodeAuth', async (importOriginal
   };
 });
 
-vi.mock('proxy-agent', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    ProxyAgent: vi.fn().mockImplementation(function () {
-      return {};
-    }),
-  };
-});
+vi.mock('proxy-agent', createProxyAgentFactory());
 
 describe('AnthropicGenericProvider', () => {
   describe('constructor', () => {
+    it.each([
+      [undefined, 'provider-value'],
+      ['X-Scoped-Header: explicit-value', 'explicit-value'],
+      ['', null],
+    ])(
+      'loads provider-only custom headers with explicit override %j',
+      async (headers, expected) => {
+        const restoreEnv = mockProcessEnv({
+          ANTHROPIC_CUSTOM_HEADERS: 'X-Ambient-Secret: inherited-secret',
+        });
+        const previousProvider = getEnvOverridesProvider();
+        setEnvOverridesProvider(
+          (layer) => ({
+            ANTHROPIC_CUSTOM_HEADERS: `X-Scoped-Header: ${layer}-value`,
+          }),
+          { providerLayer: true },
+        );
+        try {
+          const provider = (await loadApiProvider('anthropic:messages:fixture', {
+            env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Scoped-Header: suite-value' },
+            options: {
+              config: { apiKey: 'test-key', apiBaseUrl: 'https://third-party.example' },
+              env: headers === undefined ? undefined : { ANTHROPIC_CUSTOM_HEADERS: headers },
+            },
+          })) as AnthropicMessagesProvider;
+          const { req } = await (provider.anthropic as any).buildRequest(createMessagesRequest());
+          expect(req.headers.get('x-scoped-header')).toBe(expected);
+          expect(req.headers.has('x-ambient-secret')).toBe(false);
+          expect(req.headers.get('x-api-key')).toBe('test-key');
+        } finally {
+          setEnvOverridesProvider(previousProvider);
+          restoreEnv();
+        }
+      },
+    );
+
+    it('sends the compatible API version and x-api-key to a custom endpoint', async () => {
+      const provider = new AnthropicGenericProvider('claude-sonnet-4-6', {
+        config: { apiKey: 'gateway-key', apiBaseUrl: 'https://third-party.example' },
+      });
+      const { req } = await (provider.anthropic as any).buildRequest(createMessagesRequest());
+      expect(req.headers.get('anthropic-version')).toBe('2023-06-01');
+      expect(req.headers.get('x-api-key')).toBe('gateway-key');
+      expect(req.headers.has('authorization')).toBe(false);
+    });
+
     it('should initialize with the given model name', () => {
       const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022');
       expect(provider.modelName).toBe('claude-3-5-sonnet-20241022');
@@ -57,6 +106,68 @@ describe('AnthropicGenericProvider', () => {
       });
 
       expect(provider.id()).toBe('custom-id');
+    });
+
+    it('clears inherited Anthropic custom headers for a provider-scoped env override', async () => {
+      const restoreEnv = mockProcessEnv({
+        ANTHROPIC_CUSTOM_HEADERS:
+          'X-Api-Key: ambient-wrong-key\nX-Proxy-Secret: inherited-secret\nX-Gateway: internal',
+      });
+
+      try {
+        const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022', {
+          config: { apiKey: 'test-key', apiBaseUrl: 'https://third-party.example' },
+          env: { ANTHROPIC_CUSTOM_HEADERS: '' },
+        });
+        const { req } = await (provider.anthropic as any).buildRequest(createMessagesRequest());
+        const headers = new Headers(req.headers);
+
+        expect(headers.has('x-proxy-secret')).toBe(false);
+        expect(headers.has('x-gateway')).toBe(false);
+        expect(headers.get('x-api-key')).toBe('test-key');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('replaces inherited Anthropic custom headers with provider-scoped headers', async () => {
+      const restoreEnv = mockProcessEnv({
+        ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: inherited-secret',
+      });
+
+      try {
+        const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022', {
+          config: { apiKey: 'test-key', apiBaseUrl: 'https://third-party.example' },
+          env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Target-Header: configured-value' },
+        });
+        const { req } = await (provider.anthropic as any).buildRequest(createMessagesRequest());
+        const headers = new Headers(req.headers);
+
+        expect(headers.has('x-proxy-secret')).toBe(false);
+        expect(headers.get('x-target-header')).toBe('configured-value');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('clears every duplicate-case inherited auth header for a provider-scoped override', async () => {
+      const restoreEnv = mockProcessEnv({
+        ANTHROPIC_CUSTOM_HEADERS:
+          'x-api-key: first-wrong-key\nX-Api-Key: second-wrong-key\nX-Proxy-Secret: first-proxy\nx-proxy-secret: second-proxy',
+      });
+
+      try {
+        const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022', {
+          config: { apiKey: 'test-key', apiBaseUrl: 'https://third-party.example' },
+          env: { ANTHROPIC_CUSTOM_HEADERS: '' },
+        });
+        const { req } = await (provider.anthropic as any).buildRequest(createMessagesRequest());
+
+        expect(req.headers.get('x-api-key')).toBe('test-key');
+        expect(req.headers.get('x-proxy-secret')).toBeNull();
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
@@ -150,6 +261,8 @@ describe('AnthropicGenericProvider', () => {
     let restoreEnv: (() => void) | undefined;
 
     beforeEach(() => {
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReset();
+      claudeCodeAuthMocks.isCredentialExpired.mockReset();
       restoreEnv = mockProcessEnv({
         ANTHROPIC_API_KEY: undefined,
         ANTHROPIC_AUTH_TOKEN: undefined,
@@ -174,11 +287,30 @@ describe('AnthropicGenericProvider', () => {
 
       expect(provider.usingClaudeCodeOAuth).toBe(true);
       expect(provider.requiresApiKey()).toBe(false);
+      expect(checkProviderApiKeys([provider])).toEqual(new Map());
       expect(provider.apiKey).toBeUndefined();
       // Bearer auth should be configured via the underlying Anthropic SDK.
       expect(provider.anthropic).toBeInstanceOf(Anthropic);
       expect(provider.anthropic.authToken).toBe('sk-ant-oat-test');
       expect(provider.anthropic.apiKey).toBeNull();
+    });
+
+    it('forwards provider-scoped env overrides to the credential lookup', () => {
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue({
+        accessToken: 'sk-ant-oat-test',
+        expiresAt: Date.now() + 60_000,
+      });
+      claudeCodeAuthMocks.isCredentialExpired.mockReturnValue(false);
+
+      const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
+        config: { apiKeyRequired: false },
+        env: { CLAUDE_CONFIG_DIR: '/provider-scoped/claude-config' },
+      });
+
+      expect(provider.usingClaudeCodeOAuth).toBe(true);
+      expect(claudeCodeAuthMocks.loadClaudeCodeCredential).toHaveBeenCalledWith({
+        CLAUDE_CONFIG_DIR: '/provider-scoped/claude-config',
+      });
     });
 
     it('does not attempt to load a Claude Code credential when apiKeyRequired defaults to true', () => {
@@ -204,21 +336,28 @@ describe('AnthropicGenericProvider', () => {
 
       expect(provider.usingClaudeCodeOAuth).toBe(false);
       expect(provider.apiKey).toBe('config-key');
+      expect(checkProviderApiKeys([provider])).toEqual(new Map());
       // With an explicit key we should not have loaded a credential at all.
       expect(claudeCodeAuthMocks.loadClaudeCodeCredential).not.toHaveBeenCalled();
     });
 
-    it('leaves usingClaudeCodeOAuth false when no credential is found', () => {
-      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(null);
+    it.each([undefined, 'https://custom.anthropic.api'])(
+      'reports missing credentials during preflight with base URL %s',
+      (apiBaseUrl) => {
+        claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(null);
 
-      const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
-        config: { apiKeyRequired: false },
-      });
+        const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
+          config: { apiKeyRequired: false, apiBaseUrl },
+        });
 
-      expect(provider.usingClaudeCodeOAuth).toBe(false);
-      expect(provider.apiKey).toBeUndefined();
-      expect(provider.anthropic.authToken).toBeNull();
-    });
+        expect(provider.usingClaudeCodeOAuth).toBe(false);
+        expect(provider.apiKey).toBeUndefined();
+        expect(provider.anthropic.authToken).toBeNull();
+        expect(checkProviderApiKeys([provider])).toEqual(
+          new Map([['ANTHROPIC_API_KEY', [provider.id()]]]),
+        );
+      },
+    );
 
     it('warns and stashes an expired credential so subclasses can throw at request time', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);

@@ -1,0 +1,601 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  calculateBedrockCost,
+  calculateBedrockInvokeModelCost,
+} from '../../../src/providers/bedrock/pricing';
+
+const INPUT_TOKENS = 10_000;
+const OUTPUT_TOKENS = 5_000;
+const costAtRates = (input: number, output: number) =>
+  (INPUT_TOKENS / 1e6) * input + (OUTPUT_TOKENS / 1e6) * output;
+
+describe('Bedrock Converse GPT-6 profile pricing', () => {
+  it.each([
+    ['us.openai.gpt-6-luna', 0.11, 0.011, 0.1375, 0.55],
+    ['global.openai.gpt-6-luna', 0.1, 0.01, 0.125, 0.5],
+    ['us.openai.gpt-6.2-astra', 8.8, 0.44, 11, 44],
+    ['global.openai.gpt-6.2-sol', 2, 0.1, 2.5, 10],
+    ['us.openai.gpt-6.1-sol', 2.2, 0.11, 2.75, 11],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.openai.gpt-6.1-sol',
+      2,
+      0.1,
+      2.5,
+      10,
+    ],
+    ['us.openai.gpt-6.1-terra', 1.1, 0.055, 1.375, 5.5],
+    ['global.openai.gpt-6.1-terra', 1, 0.05, 1.25, 5],
+    ['us.openai.gpt-6-sol', 2.2, 0.22, 2.75, 11],
+    ['global.openai.gpt-6-sol', 2, 0.2, 2.5, 10],
+    ['us.openai.gpt-6-astra', 11, 1.1, 13.75, 55],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.openai.gpt-6-astra',
+      10,
+      1,
+      12.5,
+      50,
+    ],
+  ] as const)(
+    'prices every token in %s at the published context tier',
+    (model, input, read, write, output) => {
+      const shortInputCost = (271_500 * input + 200 * read + 300 * write) / 1e6;
+      expect(calculateBedrockCost(model, 271_500, 100, 200, 300, 'us-east-1')).toBeCloseTo(
+        shortInputCost + (100 * output) / 1e6,
+        12,
+      );
+      expect(calculateBedrockCost(model, 271_501, 100, 200, 300, 'us-east-1')).toBeCloseTo(
+        2 * (shortInputCost + input / 1e6) + (100 * 1.5 * output) / 1e6,
+        12,
+      );
+    },
+  );
+
+  it.each([
+    'openai.gpt-6-luna',
+    'eu.openai.gpt-6-luna',
+    'us.openai.gpt-6.1-sol-future',
+    'us.openai.gpt-6.99-fakemodel',
+    'eu.openai.gpt-6.1-terra',
+    'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/us.openai.gpt-6-luna',
+  ])('leaves unsupported profile %s unpriced', (model) => {
+    expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1')).toBeUndefined();
+  });
+
+  const usLuna = 'us.openai.gpt-6-luna';
+  const globalLuna = 'global.openai.gpt-6-luna';
+  const profileArn = `arn:aws:bedrock:us-east-1:123456789012:inference-profile/${usLuna}`;
+
+  it.each([
+    [usLuna, undefined],
+    [usLuna, 'eu-west-1'],
+    [profileArn, 'us-west-2'],
+    [globalLuna, 'cn-north-1'],
+    [globalLuna, 'us-gov-east-1'],
+    [globalLuna, 'invalid-region'],
+  ] as const)('leaves an incompatible billing route unpriced: %s / %s', (model, region) => {
+    expect(calculateBedrockCost(model, 1000, 100, 0, 0, region)).toBeUndefined();
+  });
+
+  it('can use the ARN region or a commercial global source region', () => {
+    expect(calculateBedrockCost(profileArn, 1000, 100)).toBeCloseTo(0.000165, 12);
+    expect(calculateBedrockCost(globalLuna, 1000, 100, 0, 0, 'eu-west-1')).toBeCloseTo(0.00015, 12);
+  });
+
+  it.each([
+    [undefined, 100, 0, 0],
+    [1000, undefined, 0, 0],
+    [-1, 100, 0, 0],
+    [1000, NaN, 0, 0],
+    [1000, 100, -1, 0],
+    [1000, 100, 0, 0.5],
+    [Number.MAX_SAFE_INTEGER, 100, 1, 0],
+  ])('leaves invalid or missing usage unpriced: %s, %s, %s, %s', (input, output, read, write) => {
+    expect(calculateBedrockCost(usLuna, input, output, read, write, 'us-east-1')).toBeUndefined();
+  });
+
+  it.each(['priority', 'flex', 'reserved'] as const)('does not guess %s pricing', (type) => {
+    // AWS publishes only Standard meters for these profiles.
+    for (const model of [
+      usLuna,
+      'us.openai.gpt-6.1-terra',
+      'global.openai.gpt-6-sol',
+      'us.openai.gpt-6-astra',
+    ]) {
+      expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1', { type })).toBeUndefined();
+    }
+  });
+
+  it('does not price unpublished one-hour cache writes', () => {
+    expect(
+      calculateBedrockCost(usLuna, 1000, 100, 0, 100, 'us-east-1', undefined, 100),
+    ).toBeUndefined();
+  });
+});
+
+describe('Bedrock GovCloud OpenAI inference profiles', () => {
+  it.each([
+    ['us-gov.openai.gpt-5.6-terra', 2.7, 16.2],
+    [
+      'arn:aws-us-gov:bedrock:us-gov-east-1:123456789012:inference-profile/us-gov.openai.gpt-5.6-luna',
+      0.27,
+      1.62,
+    ],
+  ] as const)(
+    'prices the exact %s profile at the inclusive short-context boundary',
+    (model, input, output) => {
+      const expectedInput = (271_500 * input + 200 * input * 0.1 + 300 * input * 1.25) / 1e6;
+      expect(calculateBedrockCost(model, 271_500, 1000, 200, 300, 'us-gov-east-1')).toBeCloseTo(
+        expectedInput + (1000 * output) / 1e6,
+        10,
+      );
+      expect(calculateBedrockCost(model, 271_501, 1000, 200, 300, 'us-gov-west-1')).toBeCloseTo(
+        2 * (expectedInput + input / 1e6) + (1500 * output) / 1e6,
+        10,
+      );
+      expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1')).toBeUndefined();
+      expect(
+        calculateBedrockCost(model, 1000, 100, 0, 0, 'us-gov-east-1', { type: 'flex' }),
+      ).toBeUndefined();
+    },
+  );
+});
+
+describe('Grok 4.6 AWS profile pricing', () => {
+  it.each([
+    ['us.xai.grok-4.6', 2.2, 6.6, 0.55],
+    ['global.xai.grok-4.6', 2, 6, 0.5],
+    ['arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.xai.grok-4.6', 2.2, 6.6, 0.55],
+  ])('prices %s with its AWS cached-input rate', (model, input, output, cached) => {
+    const expected = (800 * input + 200 * cached + 500 * output) / 1e6;
+    expect(calculateBedrockCost(model, 800, 500, 200)).toBeCloseTo(expected, 12);
+    expect(calculateBedrockInvokeModelCost(model, 800, 500, 200)).toBeCloseTo(expected, 12);
+  });
+  it.each(['xai.grok-4.6', 'us.xai.grok-4.6-future', 'global.xai.grok-4.5'])(
+    'does not infer an AWS price for %s',
+    (model) => {
+      expect(calculateBedrockInvokeModelCost(model, 800, 500, 200)).toBeUndefined();
+    },
+  );
+  it.each(['priority', 'flex', 'reserved'] as const)(
+    'leaves unpublished %s rates unknown',
+    (type) => {
+      expect(
+        calculateBedrockCost('us.xai.grok-4.6', 800, 500, 200, 0, 'us-east-1', { type }),
+      ).toBeUndefined();
+    },
+  );
+  it('does not invent a cache-write price', () => {
+    expect(calculateBedrockCost('global.xai.grok-4.6', 800, 500, 200, 100)).toBeUndefined();
+  });
+});
+
+describe('calculateBedrockCost', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe('Amazon Nova prompt caching', () => {
+    // AWS Price List (us-east-1, 2026-09-01): every Nova `-cache-read-input-token-count`
+    // meter is exactly 25% of the model's input rate, and every cache-write meter is $0.
+    // Before this, cache reads on Nova were billed at $0 — a silent undercharge.
+    it('bills Nova cache reads at 25% of the input rate', () => {
+      const cost = calculateBedrockCost('amazon.nova-lite-v1:0', 1000, 0, 10_000, 0, 'us-east-1');
+      // 1000 uncached * $0.06/M + 10000 cached * $0.015/M
+      expect(cost).toBeCloseTo((1000 * 0.06 + 10_000 * 0.015) / 1e6, 12);
+    });
+
+    it('treats Nova cache writes as free', () => {
+      const withWrites = calculateBedrockCost(
+        'amazon.nova-pro-v1:0',
+        1000,
+        0,
+        0,
+        50_000,
+        'us-east-1',
+      );
+      const withoutWrites = calculateBedrockCost(
+        'amazon.nova-pro-v1:0',
+        1000,
+        0,
+        0,
+        0,
+        'us-east-1',
+      );
+      expect(withWrites).toBeCloseTo(withoutWrites as number, 12);
+    });
+
+    it('does not apply the Nova ratio to non-Nova, non-Claude models', () => {
+      // No published cache meter: cache tokens stay out of the estimate.
+      const cost = calculateBedrockCost('meta.llama3-3-70b-instruct-v1:0', 1000, 0, 9999, 0);
+      expect(cost).toBeCloseTo((1000 * 0.72) / 1e6, 12);
+    });
+  });
+
+  it.each([
+    // Z.AI GLM — distinct per variant; -flash must not be priced as -4.7.
+    { id: 'zai.glm-5', input: 1.0, output: 3.2 },
+    { id: 'us.zai.glm-5', input: 1.0, output: 3.2 },
+    { id: 'zai.glm-4.7', input: 0.6, output: 2.2 },
+    { id: 'zai.glm-4.7-flash', input: 0.07, output: 0.4 },
+    // MiniMax — M2 / M2.1 / M2.5 share base rates.
+    { id: 'minimax.minimax-m2', input: 0.3, output: 1.2 },
+    { id: 'minimax.minimax-m2.5', input: 0.3, output: 1.2 },
+    // Moonshot Kimi — K2.5 and K2 Thinking differ on output rate.
+    { id: 'moonshotai.kimi-k2.5', input: 0.6, output: 3.0 },
+    { id: 'moonshot.kimi-k2-thinking', input: 0.6, output: 2.5 },
+    // NVIDIA Nemotron — nano variants and super differ.
+    { id: 'nvidia.nemotron-nano-9b-v2', input: 0.06, output: 0.23 },
+    { id: 'nvidia.nemotron-nano-12b-v2', input: 0.2, output: 0.6 },
+    { id: 'nvidia.nemotron-nano-3-30b', input: 0.06, output: 0.24 },
+    { id: 'nvidia.nemotron-super-3-120b', input: 0.15, output: 0.65 },
+    // Google Gemma 3 — per size.
+    { id: 'google.gemma-3-4b-it', input: 0.04, output: 0.08 },
+    { id: 'google.gemma-3-12b-it', input: 0.09, output: 0.29 },
+    { id: 'google.gemma-3-27b-it', input: 0.23, output: 0.38 },
+    // Reconciled against the AWS Price List API (us-east-1 plain on-demand meters) on
+    // 2026-09-01. Each of these carried a stale rate before that sweep, so they are pinned
+    // here to catch the next drift.
+    { id: 'amazon.nova-premier-v1:0', input: 2.5, output: 12.5 },
+    { id: 'amazon.nova-2-lite-v1:0', input: 0.33, output: 2.75 },
+    { id: 'amazon.titan-text-express-v1', input: 0.2, output: 0.6 },
+    { id: 'meta.llama3-1-70b-instruct-v1:0', input: 0.72, output: 0.72 },
+    { id: 'meta.llama3-2-11b-instruct-v1:0', input: 0.16, output: 0.16 },
+    { id: 'meta.llama3-2-90b-instruct-v1:0', input: 0.72, output: 0.72 },
+    { id: 'meta.llama3-3-70b-instruct-v1:0', input: 0.72, output: 0.72 },
+    { id: 'meta.llama4-scout-17b-instruct-v1:0', input: 0.17, output: 0.66 },
+    { id: 'meta.llama4-maverick-17b-instruct-v1:0', input: 0.24, output: 0.97 },
+    { id: 'qwen.qwen3-32b-v1:0', input: 0.15, output: 0.6 },
+    { id: 'qwen.qwen3-coder-30b-a3b-v1:0', input: 0.15, output: 0.6 },
+    { id: 'writer.palmyra-vision-7b', input: 0.15, output: 0.6 },
+    { id: 'us.writer.palmyra-x5-v1:0', input: 0.6, output: 6 },
+  ])('uses the base rate for $id', ({ id, input, output }) => {
+    expect(calculateBedrockCost(id, INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1')).toBeCloseTo(
+      costAtRates(input, output),
+      6,
+    );
+  });
+
+  it.each([
+    // Reconciled against the AWS Price List API per region on 2026-09-01. These five had
+    // been derived from the US rate via a regional uplift rather than read from the real
+    // meters, so they drifted from AWS's published values.
+    { id: 'zai.glm-4.7', region: 'ap-southeast-2', input: 0.62, output: 2.27 },
+    { id: 'zai.glm-4.7-flash', region: 'ap-southeast-2', input: 0.07, output: 0.41 },
+    { id: 'minimax.minimax-m2.1', region: 'ap-southeast-2', input: 0.31, output: 1.24 },
+    { id: 'moonshotai.kimi-k2.5', region: 'ap-southeast-2', input: 0.62, output: 3.09 },
+    { id: 'nvidia.nemotron-nano-12b-v2', region: 'eu-west-1', input: 0.23, output: 0.7 },
+    { id: 'nvidia.nemotron-nano-12b-v2', region: 'eu-south-1', input: 0.23, output: 0.7 },
+    { id: 'google.gemma-3-12b-it', region: 'eu-west-2', input: 0.14, output: 0.45 },
+    { id: 'minimax.minimax-m2.1', region: 'eu-west-1', input: 0.36, output: 1.44 },
+    { id: 'minimax.minimax-m2.5', region: 'eu-south-1', input: 0.36, output: 1.44 },
+    { id: 'minimax.minimax-m2', region: 'eu-central-1', input: 0.36, output: 1.44 },
+    { id: 'google.gemma-3-12b-it', region: 'eu-central-1', input: 0.108, output: 0.348 },
+    { id: 'openai.gpt-oss-120b-1:0', region: 'eu-west-2', input: 0.23, output: 0.93 },
+    {
+      id: 'nvidia.nemotron-super-3-120b',
+      region: 'us-gov-west-1',
+      input: 0.18,
+      output: 0.78,
+    },
+    {
+      id: 'us-gov.anthropic.claude-opus-4-8',
+      region: 'us-gov-west-1',
+      input: 6,
+      output: 30,
+    },
+  ])('uses the published regional rate for $id in $region', ({ id, region, input, output }) => {
+    expect(calculateBedrockCost(id, INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, region)).toBeCloseTo(
+      costAtRates(input, output),
+      6,
+    );
+  });
+
+  it('infers GovCloud pricing from the Claude inference profile ID', () => {
+    expect(
+      calculateBedrockCost('us-gov.anthropic.claude-opus-4-8', INPUT_TOKENS, OUTPUT_TOKENS),
+    ).toBeCloseTo(costAtRates(6, 30), 6);
+  });
+
+  it('applies service tier pricing multipliers', () => {
+    expect(
+      calculateBedrockCost('minimax.minimax-m2', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1', {
+        type: 'priority',
+      }),
+    ).toBeCloseTo(costAtRates(0.3, 1.2) * 1.75, 6);
+  });
+
+  it('does not report on-demand token cost for reserved throughput', () => {
+    expect(
+      calculateBedrockCost('minimax.minimax-m2', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1', {
+        type: 'reserved',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('uses newly published London pricing for GLM 4.7', () => {
+    expect(
+      calculateBedrockCost('zai.glm-4.7', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'eu-west-2'),
+    ).toBeCloseTo(costAtRates(0.93, 3.41), 6);
+  });
+
+  it('does not invent GPT-OSS pricing in an unlisted region', () => {
+    expect(
+      calculateBedrockCost('openai.gpt-oss-120b-1:0', 1e6, 1e6, 0, 0, 'ca-central-1'),
+    ).toBeUndefined();
+  });
+
+  it('matches Command R+ before the broader Command R key', () => {
+    expect(calculateBedrockCost('cohere.command-r-plus-v1:0', 1e6, 1e6)).toBeCloseTo(18, 6);
+  });
+
+  it('bills Claude Sonnet 4.6 at standard rates above 200k effective input tokens', () => {
+    // The full 1M context bills at the flat $3/$15 — no surcharge above 200K tokens.
+    expect(calculateBedrockCost('global.anthropic.claude-sonnet-4-6', 200_001, 1_000)).toBeCloseTo(
+      (200_001 / 1e6) * 3 + (1_000 / 1e6) * 15,
+      6,
+    );
+  });
+
+  describe('Claude Sonnet 4 long-context tier', () => {
+    // AWS publishes `-long-context-` meters for Claude Sonnet 4 only, at 2x input / 1.5x output
+    // (verified 2026-09-01 across us-east-1, us-east-2, us-west-2, eu-west-1, ap-northeast-1).
+    const ID = 'global.anthropic.claude-sonnet-4-20250514-v1:0';
+
+    it('bills below the threshold at the standard rate', () => {
+      expect(calculateBedrockCost(ID, 199_999, 1_000)).toBeCloseTo(
+        (199_999 / 1e6) * 3 + (1_000 / 1e6) * 15,
+        6,
+      );
+    });
+
+    it('switches to $6/$22.50 at and above 200k input tokens', () => {
+      expect(calculateBedrockCost(ID, 200_000, 1_000)).toBeCloseTo(
+        (200_000 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
+        6,
+      );
+    });
+
+    it('counts cache tokens toward the threshold and prices cache off the tier rate', () => {
+      // 150k uncached + 60k cache reads crosses 200k, so the whole request bills at the tier:
+      // AWS's long-context cache-read meter is 10% of the $6 tier input rate.
+      expect(calculateBedrockCost(ID, 150_000, 1_000, 60_000, 0)).toBeCloseTo(
+        (150_000 / 1e6) * 6 + (60_000 / 1e6) * 6 * 0.1 + (1_000 / 1e6) * 22.5,
+        6,
+      );
+    });
+
+    it('does not leak the tier onto the 4.5 or 4.6 point releases', () => {
+      for (const id of [
+        'global.anthropic.claude-sonnet-4-5-20250929-v1:0',
+        'global.anthropic.claude-sonnet-4-6',
+      ]) {
+        expect(calculateBedrockCost(id, 500_000, 1_000)).toBeCloseTo(
+          (500_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
+          6,
+        );
+      }
+    });
+  });
+
+  it('prices Claude Opus 5 at $5/$25 on the global endpoint (base rate)', () => {
+    expect(calculateBedrockCost('global.anthropic.claude-opus-5', 100_000, 1_000)).toBeCloseTo(
+      (100_000 / 1e6) * 5 + (1_000 / 1e6) * 25,
+      6,
+    );
+  });
+
+  it('bills Claude Opus 5 at the standard rate above 200k tokens (no long-context tier)', () => {
+    expect(calculateBedrockCost('global.anthropic.claude-opus-5', 300_000, 20_000)).toBeCloseTo(
+      (300_000 / 1e6) * 5 + (20_000 / 1e6) * 25,
+      6,
+    );
+  });
+
+  it('does not price Claude Opus 5 at the Opus 4.x rate (prefix-collision guard)', () => {
+    // BEDROCK_PRICING is matched with `includes()` in insertion order, so a new
+    // `anthropic.claude-opus-5` key must not fall through to `anthropic.claude-opus-4`
+    // ($15/$75) and must not steal Opus 4.5's lookup either.
+    expect(calculateBedrockCost('global.anthropic.claude-opus-5', 1_000_000, 0)).toBeCloseTo(5, 6);
+    expect(
+      calculateBedrockCost('global.anthropic.claude-opus-4-5-20251101-v1:0', 1_000_000, 0),
+    ).toBeCloseTo(5, 6);
+    expect(
+      calculateBedrockCost('global.anthropic.claude-opus-4-1-20250805-v1:0', 1_000_000, 0),
+    ).toBeCloseTo(15, 6);
+  });
+
+  it.each([
+    'global.anthropic.claude-opus-5-5',
+    'us.anthropic.claude-opus-5-5',
+    'eu.anthropic.claude-opus-5-5',
+    'jp.anthropic.claude-opus-5-5',
+    'au.anthropic.claude-opus-5-5',
+  ])('prices Opus 5.5 cache reads at 0.05x input for %s', (model) => {
+    // AWS price list (us-east-1): global $4 in / $20 out / $0.20 cache read / $5 cache write;
+    // geo profiles are 1.1x. Also guards the first-match `includes()` lookup: Opus 5's $5/$25
+    // row must not win for `anthropic.claude-opus-5-5`.
+    // 1000*4 + 200*0.2 + 100*5 + 500*20 = 14,540 per 1e6
+    const expected = 0.01454 * (model.startsWith('global.') ? 1 : 1.1);
+    expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+    // The default `bedrock:` InvokeModel path must report cost too, not fail closed.
+    expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+  });
+
+  it.each(['global.anthropic.claude-sonnet-5-5', 'anthropic.claude-sonnet-5-5'])(
+    'prices Sonnet 5.5 at $2/$10 for %s, with the regional premium off global',
+    (model) => {
+      // AWS price list (us-east-1, 2026-10-08): global $2 in / $10 out / $0.10 cache read /
+      // $2.50 cache write; regional 1.1x. Also guards the first-match `includes()` lookup:
+      // Sonnet 5's row must not win for `anthropic.claude-sonnet-5-5`.
+      // 1000*2 + 200*0.1 + 100*2.5 + 500*10 = 7,270 per 1e6
+      const expected = 0.00727 * (model.startsWith('global.') ? 1 : 1.1);
+      expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+      expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+    },
+  );
+
+  it.each([
+    'anthropic.claude-fable-5-2',
+    'global.anthropic.claude-fable-5-2',
+    'us.anthropic.claude-fable-5-2',
+    'global.anthropic.claude-mythos-5-2',
+    'us.anthropic.claude-mythos-5-2',
+  ])('prices 5.2 at $8/$40 with 0.025x cache reads for %s', (model) => {
+    // Fable 5's `anthropic.claude-fable-5` row must not win for the 5.2 point release.
+    // 1000*8 + 200*0.2 + 100*10 + 500*40 = 29,040 per 1e6
+    const expected = 0.02904 * (model.startsWith('global.') ? 1 : 1.1);
+    expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+    expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+  });
+
+  it.each([
+    'global.anthropic.claude-fable-5-1',
+    'us.anthropic.claude-fable-5-1',
+    'global.anthropic.claude-mythos-5-1',
+    'us.anthropic.claude-mythos-5-1',
+  ])('prices 5.1 cache reads for %s', (model) => {
+    const expected = 0.0363 * (model.startsWith('global.') ? 1 : 1.1);
+    expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+    expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+  });
+
+  it('prices Claude Sonnet 5 at $2/$10 on the global endpoint (base rate)', () => {
+    // The global endpoint bills at the base rate; regional profiles add a premium (below).
+    expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
+      (100_000 / 1e6) * 2 + (1_000 / 1e6) * 10,
+      6,
+    );
+  });
+
+  it('bills one-hour Claude cache writes at 2x the input rate', () => {
+    const expectedCost =
+      (100 / 1e6) * 2 + (500 / 1e6) * 0.2 + (60 / 1e6) * 2.5 + (40 / 1e6) * 4 + (50 / 1e6) * 10;
+
+    expect(
+      calculateBedrockCost(
+        'global.anthropic.claude-sonnet-5',
+        100,
+        50,
+        500,
+        100,
+        'us-east-1',
+        undefined,
+        40,
+      ),
+    ).toBeCloseTo(expectedCost, 10);
+    expect(
+      calculateBedrockInvokeModelCost(
+        'global.anthropic.claude-sonnet-5',
+        100,
+        50,
+        500,
+        100,
+        'us-east-1',
+        40,
+      ),
+    ).toBeCloseTo(expectedCost, 10);
+  });
+
+  it('bills Claude Sonnet 5 at the AWS base rate above 200k tokens', () => {
+    // Sonnet 5 bills its full 1M context at the same rate. Use the global endpoint to
+    // isolate this from the regional premium.
+    expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 300_000, 20_000)).toBeCloseTo(
+      (300_000 / 1e6) * 2 + (20_000 / 1e6) * 10,
+      6,
+    );
+  });
+
+  it('applies the 10% regional premium to non-global Claude 4.5+ profiles (Sonnet 5, Opus 4.8, Sonnet 4.6)', () => {
+    // Per Anthropic pricing, Claude 4.5+ models carry a 10% premium on regional/geo endpoints;
+    // only the `global.` endpoint bills at the base rate.
+    const sonnet5Base = (100_000 / 1e6) * 2 + (1_000 / 1e6) * 10;
+    expect(calculateBedrockCost('us.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
+      sonnet5Base * 1.1,
+      6,
+    );
+    expect(calculateBedrockCost('eu.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
+      sonnet5Base * 1.1,
+      6,
+    );
+    expect(calculateBedrockCost('au.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
+      sonnet5Base * 1.1,
+      6,
+    );
+    expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
+      sonnet5Base,
+      6,
+    );
+    // The premium also applies to the other Claude 4.5+ models (previously Fable/Mythos only).
+    const opus48Base = (100 / 1e6) * 5 + (50 / 1e6) * 25;
+    expect(calculateBedrockCost('us.anthropic.claude-opus-4-8', 100, 50)).toBeCloseTo(
+      opus48Base * 1.1,
+      8,
+    );
+    const sonnet46Base = (100 / 1e6) * 3 + (50 / 1e6) * 15;
+    expect(calculateBedrockCost('eu.anthropic.claude-sonnet-4-6', 100, 50)).toBeCloseTo(
+      sonnet46Base * 1.1,
+      8,
+    );
+  });
+
+  it.each([
+    'mistral.mistral-large-3-675b-instruct',
+    'qwen.qwen3-coder-480b-a35b-v1:0',
+    'cohere.command-r-plus-v1:0',
+    'anthropic.claude-sonnet-4-6',
+  ])('does not apply unverified Converse pricing to InvokeModel model %s', (modelId) => {
+    expect(calculateBedrockInvokeModelCost(modelId, 1e6, 1e6, 0, 0, 'us-east-1')).toBeUndefined();
+  });
+
+  it('retains verified InvokeModel pricing for the new Runtime families', () => {
+    expect(
+      calculateBedrockInvokeModelCost('zai.glm-5', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1'),
+    ).toBeCloseTo(costAtRates(1, 3.2), 6);
+  });
+
+  it('reports InvokeModel cost for Claude Opus 5 but not legacy Opus 4.x', () => {
+    // Opus 5 is a Claude 5 model with a verified Runtime rate, so the default `bedrock:`
+    // (InvokeModel) path reports cost instead of `cost: 0`. Opus 4.8 stays fail-closed.
+    const base = (100 / 1e6) * 5 + (200 / 1e6) * 25;
+    expect(
+      calculateBedrockInvokeModelCost(
+        'global.anthropic.claude-opus-5',
+        100,
+        200,
+        0,
+        0,
+        'us-east-2',
+      ),
+    ).toBeCloseTo(base, 10);
+    expect(
+      calculateBedrockInvokeModelCost('us.anthropic.claude-opus-5', 100, 200, 0, 0, 'us-east-2'),
+    ).toBeCloseTo(base * 1.1, 10);
+    expect(
+      calculateBedrockInvokeModelCost('anthropic.claude-opus-4-8', 100, 200, 0, 0, 'us-east-2'),
+    ).toBeUndefined();
+  });
+
+  it('reports InvokeModel cost for Claude Sonnet 5 (a Claude 5 model) but not legacy Sonnet 4.x', () => {
+    // Live QA found the default `bedrock:` (InvokeModel) path reported `cost: 0` for Sonnet 5
+    // because the allowlist only covered Fable/Mythos. Sonnet 5 is a Claude 5 model with a
+    // verified rate, so it reports cost — the global endpoint at base and regional/geo profiles
+    // with the 10% premium. Sonnet 4.6 (legacy Claude 4.x) stays fail-closed.
+    const base = (100 / 1e6) * 2 + (200 / 1e6) * 10;
+    expect(
+      calculateBedrockInvokeModelCost(
+        'global.anthropic.claude-sonnet-5',
+        100,
+        200,
+        0,
+        0,
+        'us-east-2',
+      ),
+    ).toBeCloseTo(base, 10);
+    expect(
+      calculateBedrockInvokeModelCost('us.anthropic.claude-sonnet-5', 100, 200, 0, 0, 'us-east-2'),
+    ).toBeCloseTo(base * 1.1, 10);
+    expect(
+      calculateBedrockInvokeModelCost('anthropic.claude-sonnet-4-6', 100, 200, 0, 0, 'us-east-2'),
+    ).toBeUndefined();
+  });
+});

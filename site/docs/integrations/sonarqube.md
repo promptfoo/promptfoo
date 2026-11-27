@@ -55,7 +55,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
       - name: Install Promptfoo
         run: npm install -g promptfoo
@@ -80,7 +80,7 @@ jobs:
 
 ### 2. Advanced Pipeline Configuration
 
-For enterprise environments, here's a more comprehensive setup with caching, conditional execution, and detailed reporting:
+This configuration adds caching, conditional execution, and reporting:
 
 ```yaml
 name: Advanced SonarQube Integration
@@ -105,7 +105,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
       - name: Cache promptfoo
         uses: actions/cache@v4

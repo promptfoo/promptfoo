@@ -1,7 +1,11 @@
 import logger from '../logger';
-import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
-
-import type { TokenUsage } from '../types/shared';
+import { BaseTokenUsageSchema, type TokenUsage } from '../types/shared';
+import { sanitizeProviderIdForLog } from './provider';
+import {
+  accumulateResponseTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from './tokenUsageUtils';
 
 /**
  * A utility class for tracking token usage across an evaluation.
@@ -11,11 +15,9 @@ import type { TokenUsage } from '../types/shared';
  *
  * For new implementations, use the OTEL-based tracing infrastructure:
  * - Enable tracing with `PROMPTFOO_OTEL_ENABLED=true`
- * - Use `getTokenUsageFromTrace()` from `src/util/tokenUsageCompat.ts` for per-trace usage
  * - Token usage is automatically captured as GenAI semantic convention span attributes
  *
  * @see src/tracing/genaiTracer.ts for the new tracing implementation
- * @see src/util/tokenUsageCompat.ts for the compatibility layer
  */
 export class TokenUsageTracker {
   private static instance: TokenUsageTracker;
@@ -45,17 +47,55 @@ export class TokenUsageTracker {
     accumulateTokenUsage(updated, usage);
     this.providersMap.set(providerId, updated);
     logger.debug(
-      `Tracked token usage for ${providerId}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
+      `Tracked token usage for ${sanitizeProviderIdForLog(providerId)}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
+    );
+  }
+
+  /**
+   * Track token usage from one provider response while preserving the shared
+   * response-aware request-counting contract.
+   */
+  public trackResponseUsage(
+    providerId: string,
+    response: { cached?: boolean; tokenUsage?: TokenUsage } | undefined,
+  ): void {
+    if (!response) {
+      return;
+    }
+
+    let tokenUsage: TokenUsage | undefined;
+    try {
+      const rawTokenUsage = response.tokenUsage;
+      if (rawTokenUsage) {
+        const parsedTokenUsage = BaseTokenUsageSchema.safeParse(rawTokenUsage);
+        if (parsedTokenUsage.success) {
+          tokenUsage = parsedTokenUsage.data;
+        }
+      }
+    } catch {
+      tokenUsage = undefined;
+    }
+    const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
+    const updated = { ...current };
+    const accounting = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(accounting, { cached: response.cached, tokenUsage });
+    accumulateTokenUsage(updated, {
+      ...(accounting.incurredTokenUsage ?? accounting),
+      cached: accounting.cached,
+    });
+    this.providersMap.set(providerId, updated);
+    logger.debug(
+      `Tracked response usage for ${sanitizeProviderIdForLog(providerId)}: total=${tokenUsage?.total ?? 0}, cached=${tokenUsage?.cached ?? 0}`,
     );
   }
 
   /**
    * Get the cumulative token usage for a specific provider
    * @param providerId The ID of the provider to get usage for
-   * @returns The token usage for the provider
+   * @returns A detached snapshot of the token usage for the provider
    */
   public getProviderUsage(providerId: string): TokenUsage | undefined {
-    return this.providersMap.get(providerId);
+    return structuredClone(this.providersMap.get(providerId));
   }
 
   /**

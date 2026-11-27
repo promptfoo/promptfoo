@@ -24,7 +24,7 @@ Traditional monitoring captures production incidents after they occur. Red teami
 
 ## Establishing a Baseline
 
-Start by running a comprehensive red team scan to establish your security baseline:
+Run a red team scan to establish a baseline:
 
 ```yaml title="promptfooconfig.yaml"
 targets:
@@ -55,7 +55,7 @@ redteam:
   strategies:
     - jailbreak:meta
     - jailbreak:composite
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Run the initial scan:
@@ -87,7 +87,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
       - name: Run red team scan
         env:
@@ -100,7 +100,7 @@ jobs:
       - name: Check for regressions
         run: |
           # Extract attack success rate
-          ASR=$(jq '.results.stats.failures / (.results.stats.successes + .results.stats.failures) * 100' results.json)
+          ASR=$(jq 'if (.results.stats.successes + .results.stats.failures) == 0 then 0 else .results.stats.failures / (.results.stats.successes + .results.stats.failures) * 100 end' results.json)
           echo "Attack Success Rate: ${ASR}%"
 
           # Fail if ASR exceeds threshold
@@ -210,7 +210,7 @@ Custom tests provide deterministic pass/fail results that are easy to track:
 
 ```bash
 # Extract pass rate
-PASS_RATE=$(jq '.results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100' results.json)
+PASS_RATE=$(jq 'if (.results.stats.successes + .results.stats.failures) == 0 then 0 else .results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100 end' results.json)
 echo "Pass rate: ${PASS_RATE}%"
 
 # Fail CI if pass rate drops below threshold
@@ -222,7 +222,7 @@ fi
 
 ### Combining Red Team and Custom Tests
 
-For comprehensive drift detection, run both:
+To detect changes in known behavior and security findings, run both:
 
 1. **Custom tests** for specific, known behaviors you need to preserve
 2. **Red team tests** for broad coverage of potential vulnerabilities
@@ -252,7 +252,7 @@ jobs:
 
 ```bash
 # Extract ASR from results
-jq '.results.stats.failures / (.results.stats.successes + .results.stats.failures) * 100' results.json
+jq 'if (.results.stats.successes + .results.stats.failures) == 0 then 0 else .results.stats.failures / (.results.stats.successes + .results.stats.failures) * 100 end' results.json
 ```
 
 **Category-level changes**: Track ASR per vulnerability category to identify which defenses are drifting:
@@ -279,7 +279,7 @@ Define acceptable drift thresholds in your CI scripts:
 
 ```bash
 # Example threshold check in CI
-ASR=$(jq '.results.stats.failures / (.results.stats.successes + .results.stats.failures) * 100' results.json)
+ASR=$(jq 'if (.results.stats.successes + .results.stats.failures) == 0 then 0 else .results.stats.failures / (.results.stats.successes + .results.stats.failures) * 100 end' results.json)
 
 # Block deployment if ASR exceeds 15%
 if (( $(echo "$ASR > 15" | bc -l) )); then
@@ -355,7 +355,7 @@ targets:
     label: gpt-4.1-baseline
   - id: openai:gpt-4.1-mini
     label: gpt-4.1-mini-comparison
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-5
     label: claude-sonnet-comparison
 
 redteam:
@@ -369,7 +369,7 @@ This reveals which models are more resistant to specific attack types and helps 
 
 ## Best Practices
 
-1. **Start with a baseline**: Run a comprehensive scan before deploying, then track changes from that point
+1. **Start with a baseline**: Run a baseline scan before deploying, then track changes
 2. **Use consistent test cases**: Re-run existing tests for accurate drift detection; regenerate periodically for coverage
 3. **Automate with CI/CD**: Manual drift detection doesn't scale; schedule regular scans
 4. **Set actionable thresholds**: Define clear pass/fail criteria tied to your risk tolerance

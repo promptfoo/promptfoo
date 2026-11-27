@@ -23,5 +23,5 @@
       "extensions": ["esbenp.prettier-vscode", "dbaeumer.vscode-eslint", "GitHub.copilot"]
     }
   },
-  "postCreateCommand": "npm ci && npm run build && npm link"
+  "postCreateCommand": "npm ci --ignore-scripts && npm rebuild better-sqlite3 && npm run build && npm link"
 }

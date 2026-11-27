@@ -18,22 +18,6 @@ export class JsonlFileWriter {
     this.flags = append ? 'a' : 'w';
   }
 
-  private getStream(): WriteStream {
-    if (!this.writeStream) {
-      const stream = createWriteStream(this.filePath, { flags: this.flags });
-      // Keep a persistent listener for the stream's lifetime so an error emitted while no
-      // write is in flight (or a late fd-close error after 'finish') is recorded rather than
-      // thrown. write()/close() surface it as a rejected promise with the output path.
-      stream.on('error', (error: Error) => {
-        if (!this.streamError) {
-          this.streamError = error;
-        }
-      });
-      this.writeStream = stream;
-    }
-    return this.writeStream;
-  }
-
   // Attach the output path to a stream error so callers (e.g. the evaluator aggregating
   // writer failures) can attribute it to a specific file. Shared by write() and close() so
   // both rejection paths report the path consistently; the original error is kept as `cause`.
@@ -48,7 +32,21 @@ export class JsonlFileWriter {
       throw this.wrapStreamError('write', this.streamError);
     }
     const jsonLine = JSON.stringify(data) + '\n';
-    const stream = this.getStream();
+
+    if (!this.writeStream) {
+      const stream = createWriteStream(this.filePath, { flags: this.flags });
+      // Keep a persistent listener for the stream's lifetime so an error emitted while no
+      // write is in flight is recorded rather than thrown. write()/close() surface it as a
+      // rejected promise with the output path. The listener also stays attached after
+      // close() settles so a stray late error is absorbed instead of crashing the process.
+      stream.on('error', (error: Error) => {
+        if (!this.streamError) {
+          this.streamError = error;
+        }
+      });
+      this.writeStream = stream;
+    }
+    const stream = this.writeStream;
 
     return new Promise<void>((resolve, reject) => {
       stream.write(jsonLine, (error) => {
@@ -67,34 +65,38 @@ export class JsonlFileWriter {
       // Nothing was ever written, so no stream was opened and the destination is untouched.
       return;
     }
+    // Settle on 'close' (the fd is actually released), not on end()'s flush callback, so
+    // callers can immediately rename/reopen/delete the file — on Windows the handle is
+    // still held between 'finish' and 'close'. Relies on createWriteStream's default
+    // emitClose: true, so 'close' always fires once the stream ends, errors, or is
+    // destroyed. closeError is seeded from any error recorded before close() was called.
     return new Promise<void>((resolve, reject) => {
-      let settled = false;
-      const finish = (error?: Error) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        if (error) {
-          reject(this.wrapStreamError('close', error));
+      let closeError = this.streamError;
+      const onError = (error: Error) => {
+        closeError ??= error;
+      };
+      const settle = () => {
+        stream.off('error', onError);
+        stream.off('close', settle);
+        if (closeError) {
+          reject(this.wrapStreamError('close', closeError));
         } else {
           resolve();
         }
       };
-
-      // An error already surfaced before close() (recorded by the persistent listener).
-      if (this.streamError) {
-        finish(this.streamError);
-        return;
-      }
-
-      const onError = (error: Error) => finish(error);
       stream.once('error', onError);
-      stream.end(() => {
-        // The stream finished flushing; the bytes are on disk. Drop the rejecting listener
-        // (the persistent listener stays and swallows any late fd-close error) and resolve.
-        stream.off('error', onError);
-        finish();
-      });
+      stream.once('close', settle);
+
+      if (stream.closed) {
+        settle();
+      } else if (!stream.destroyed) {
+        try {
+          stream.end();
+        } catch (error) {
+          onError(error instanceof Error ? error : new Error(String(error)));
+          stream.destroy();
+        }
+      }
     });
   }
 }

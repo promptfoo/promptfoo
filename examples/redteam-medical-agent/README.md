@@ -21,7 +21,7 @@ cd redteam-medical-agent
 
 ## Prerequisites
 
-- Node.js 20+
+- A [supported Node.js version](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support)
 - npm or yarn
 - OpenAI API key for the agent
 

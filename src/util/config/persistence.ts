@@ -21,14 +21,7 @@ type ProviderFunctionWithMetadata = ((...args: unknown[]) => unknown) & Provider
 type ConfigWithProviders = { providers?: unknown };
 
 const PERSISTED_PROVIDER_KEYS = ['label', 'transform', 'delay', 'inputs', 'config'] as const;
-
-const LEGACY_PROVIDER_SUMMARY_KEYS = new Set<string>([
-  'label',
-  'transform',
-  'delay',
-  'inputs',
-  'config',
-]);
+const LEGACY_PROVIDER_SUMMARY_KEYS = new Set<string>(PERSISTED_PROVIDER_KEYS);
 
 function getProviderMetadata(provider: Partial<ProviderMetadata>): ProviderMetadata {
   const metadata: ProviderMetadata = {};

@@ -1,6 +1,6 @@
-import yaml from 'js-yaml';
 import invariant from '../util/invariant';
 import { extractJsonObjects, getAjv } from '../util/json';
+import { loadYaml } from '../util/yamlLoad';
 import type { ValidateFunction } from 'ajv';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -30,7 +30,7 @@ export function handleIsJson({
         invariant(schema, 'is-json references a file that does not export a JSON schema');
         validate = getAjv().compile(schema as object);
       } else {
-        const scheme = yaml.load(renderedValue) as object;
+        const scheme = loadYaml(renderedValue) as object;
         validate = getAjv().compile(scheme);
       }
     } else if (typeof renderedValue === 'object') {
@@ -57,7 +57,7 @@ export function handleIsJson({
   return {
     pass,
     score: pass ? 1 : 0,
-    reason: pass ? 'Assertion passed' : 'Expected output to be valid JSON',
+    reason: pass ? 'Assertion passed' : `Expected output to ${inverse ? 'not ' : ''}be valid JSON`,
     assertion,
   };
 }
@@ -69,7 +69,7 @@ export function handleContainsJson({
   inverse,
   valueFromScript,
 }: AssertionParams): GradingResult {
-  let errorMessage = 'Expected output to contain valid JSON';
+  let errorMessage = `Expected output to ${inverse ? 'not ' : ''}contain valid JSON`;
   const jsonObjects = extractJsonObjects(outputString);
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
   for (const jsonObject of jsonObjects) {
@@ -82,7 +82,7 @@ export function handleContainsJson({
           invariant(schema, 'contains-json references a file that does not export a JSON schema');
           validate = getAjv().compile(schema as object);
         } else {
-          const scheme = yaml.load(renderedValue) as object;
+          const scheme = loadYaml(renderedValue) as object;
           validate = getAjv().compile(scheme);
         }
       } else if (typeof renderedValue === 'object') {

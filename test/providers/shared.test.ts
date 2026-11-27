@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvInt } from '../../src/envars';
 import {
   calculateCost,
+  clampCachedTokens,
   getRequestTimeoutMs,
   isOpenAIToolArray,
   isOpenAIToolChoice,
   isPromptfooSampleTarget,
+  modelNameFromProviderPath,
   openaiToolChoiceToAnthropic,
   openaiToolChoiceToBedrock,
   openaiToolChoiceToGoogle,
@@ -19,17 +21,57 @@ import {
 } from '../../src/providers/shared';
 import { createMockProvider } from '../factories/provider';
 
+const createLongContextModel = () => ({
+  id: 'model1',
+  cost: {
+    input: 0.001,
+    output: 0.002,
+    longContext: {
+      threshold: 1_000,
+      input: 0.003,
+      output: 0.004,
+    },
+  },
+});
+
 vi.mock('../../src/envars');
 
 describe('Shared Provider Functions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(getEnvBool).mockReturnValue(false);
     vi.mocked(getEnvInt).mockImplementation(function (_key, defaultValue) {
       return defaultValue ?? 0;
+    });
+  });
+
+  describe('modelNameFromProviderPath', () => {
+    it('keeps colons that belong to the model id', () => {
+      expect(
+        modelNameFromProviderPath(
+          'anthropic:messages:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          2,
+        ),
+      ).toBe('anthropic.claude-3-5-sonnet-20241022-v2:0');
+    });
+
+    it('reads a two segment path', () => {
+      expect(modelNameFromProviderPath('voyage:voyage-3-large', 1)).toBe('voyage-3-large');
+    });
+
+    it('keeps colons in a two segment path', () => {
+      expect(modelNameFromProviderPath('voyage:some:model:v2', 1)).toBe('some:model:v2');
+    });
+
+    it('returns an empty string when there is no model name', () => {
+      expect(modelNameFromProviderPath('anthropic:messages', 2)).toBe('');
+      expect(modelNameFromProviderPath('voyage', 1)).toBe('');
+      expect(modelNameFromProviderPath('anthropic:messages:', 2)).toBe('');
+    });
+
+    it('keeps an empty trailing segment rather than dropping it', () => {
+      expect(modelNameFromProviderPath('anthropic:messages:model:', 2)).toBe('model:');
     });
   });
 
@@ -84,9 +126,7 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when PROMPTFOO_REQUIRE_JSON_PROMPTS is true', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(getEnvBool).mockReturnValue(true);
 
       const invalidJson = '"role": "user", "content": "Hello" }';
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
@@ -96,9 +136,7 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when prompt looks like JSON object', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(getEnvBool).mockReturnValue(false);
 
       const invalidJson = '{ "invalid: "json" }';
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
@@ -108,9 +146,7 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when prompt looks like JSON array', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(getEnvBool).mockReturnValue(false);
 
       const invalidJson = '[{ "invalid": }]';
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
@@ -120,9 +156,7 @@ describe('Shared Provider Functions', () => {
 
     it('should return default value for plain text that starts/ends with brackets', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(getEnvBool).mockReturnValue(false);
 
       const defaultValue = [{ role: 'user', content: 'Default' }];
       // This is a common pattern in LLM prompts (e.g., Llama chat format)
@@ -197,55 +231,18 @@ describe('Shared Provider Functions', () => {
     });
 
     it('should use long-context rates when prompt tokens exceed the model threshold', () => {
-      const cost = calculateCost('model1', {}, 1_001, 500, [
-        {
-          id: 'model1',
-          cost: {
-            input: 0.001,
-            output: 0.002,
-            longContext: {
-              threshold: 1_000,
-              input: 0.003,
-              output: 0.004,
-            },
-          },
-        },
-      ]);
+      const cost = calculateCost('model1', {}, 1_001, 500, [createLongContextModel()]);
       expect(cost).toBeCloseTo(5.003);
     });
 
     it('should prefer config cost over model long-context rates', () => {
-      const cost = calculateCost('model1', { cost: 0.005 }, 1_001, 500, [
-        {
-          id: 'model1',
-          cost: {
-            input: 0.001,
-            output: 0.002,
-            longContext: {
-              threshold: 1_000,
-              input: 0.003,
-              output: 0.004,
-            },
-          },
-        },
-      ]);
+      const cost = calculateCost('model1', { cost: 0.005 }, 1_001, 500, [createLongContextModel()]);
       expect(cost).toBeCloseTo(7.505);
     });
 
     it('should prefer separate config costs over model long-context rates', () => {
       const cost = calculateCost('model1', { inputCost: 0.005, outputCost: 0.006 }, 1_001, 500, [
-        {
-          id: 'model1',
-          cost: {
-            input: 0.001,
-            output: 0.002,
-            longContext: {
-              threshold: 1_000,
-              input: 0.003,
-              output: 0.004,
-            },
-          },
-        },
+        createLongContextModel(),
       ]);
       expect(cost).toBeCloseTo(8.005);
     });
@@ -263,6 +260,28 @@ describe('Shared Provider Functions', () => {
     it('should return undefined if tokens are undefined', () => {
       expect(calculateCost('model1', {}, undefined, 500, models)).toBeUndefined();
       expect(calculateCost('model1', {}, 1000, undefined, models)).toBeUndefined();
+    });
+  });
+
+  describe('clampCachedTokens', () => {
+    it('should pass through cached tokens within [0, promptTokens]', () => {
+      expect(clampCachedTokens(300, 1000)).toBe(300);
+      expect(clampCachedTokens(0, 1000)).toBe(0);
+      expect(clampCachedTokens(1000, 1000)).toBe(1000);
+    });
+
+    it('should clamp cached tokens that exceed prompt tokens', () => {
+      expect(clampCachedTokens(1500, 1000)).toBe(1000);
+    });
+
+    it('should clamp negative cached tokens to zero', () => {
+      expect(clampCachedTokens(-500, 1000)).toBe(0);
+    });
+
+    it('should treat undefined and non-finite cached tokens as zero', () => {
+      expect(clampCachedTokens(undefined, 1000)).toBe(0);
+      expect(clampCachedTokens(Number.NaN, 1000)).toBe(0);
+      expect(clampCachedTokens(Number.POSITIVE_INFINITY, 1000)).toBe(0);
     });
   });
 
