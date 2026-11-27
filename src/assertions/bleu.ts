@@ -9,8 +9,8 @@
  * {@link https://doi.org/10.3115/1073083.1073135}
  */
 
-import invariant from '../util/invariant';
 import { countNGrams, getNGrams } from './ngrams';
+import { getTextReferences } from './textReferences';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -181,14 +181,12 @@ export function handleBleuScore({
   AssertionParams,
   'assertion' | 'renderedValue' | 'outputString' | 'inverse'
 >): GradingResult {
-  invariant(
-    typeof renderedValue === 'string' ||
-      (Array.isArray(renderedValue) && renderedValue.every((v) => typeof v === 'string')),
-    '"bleu" assertion type must have a string or array of strings value',
+  const references = getTextReferences(
+    renderedValue,
+    '"bleu" assertion type must have a string, number, or array of strings or numbers value',
   );
 
   const threshold: number = (assertion.threshold as number) ?? 0.5;
-  const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
   const score = calculateBleuScore(outputString, references);
   const pass = score >= threshold !== inverse;
 

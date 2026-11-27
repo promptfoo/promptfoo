@@ -1334,6 +1334,8 @@ You may also return a numeric `score` from `0` to `1`, inclusive. An invalid sco
 
 The `rouge-n` assertion checks if the Rouge-N score between the LLM output and expected value is above a given threshold.
 
+The expected `value` can be a string or a finite number. Numbers are compared as text, so `value: 2024` matches the output `2024`. The same applies to `rouge-l` and `rouge-s`.
+
 ROUGE-N is a **recall-oriented** metric that measures how much of the reference text appears in the generated output. It counts overlapping n-grams (word sequences) between the two texts.
 
 **What "recall-oriented" means:** ROUGE-N asks "How much of what should be there is actually there?" - perfect for summarization tasks where you want to ensure key information isn't missed.
@@ -1430,6 +1432,8 @@ tests:
 
 BLEU (Bilingual Evaluation Understudy) is a **precision-oriented** metric originally designed for evaluating machine translation. Unlike ROUGE-N which asks "is everything included?", BLEU asks "is everything correct?"
 
+The expected `value` can be a string, a finite number, or an array of them. Numbers are compared as text.
+
 **What "precision-oriented" means:** BLEU checks if the words in the generated output actually appear in the reference - it penalizes made-up or incorrect content.
 
 **When to use BLEU:**
@@ -1475,6 +1479,8 @@ tests:
 ### GLEU
 
 GLEU (Google-BLEU) is designed specifically for evaluating **individual sentences**, fixing a major limitation of BLEU which was designed for large documents.
+
+The expected `value` can be a string, a finite number, or an array of them. Numbers are compared as text.
 
 **Why GLEU instead of BLEU for sentences:**
 
@@ -1536,6 +1542,8 @@ assert:
 METEOR (Metric for Evaluation of Translation with Explicit ORdering) scores an output against reference text using exact word matches, Porter stemming, and WordNet synonyms. It combines precision and recall with a penalty for fragmented word order.
 
 Use it for translation or other tasks where a reference answer exists and some wording variation is acceptable. METEOR measures lexical overlap, not factual accuracy or general semantic understanding.
+
+The expected `value` can be a string, a finite number, or an array of them. Numbers are compared as text.
 
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 

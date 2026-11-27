@@ -1,4 +1,5 @@
 import invariant from '../util/invariant';
+import { getTextReferences } from './textReferences';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -244,13 +245,10 @@ export async function handleMeteorAssertion({
   renderedValue,
 }: AssertionParams): Promise<GradingResult> {
   // Validate inputs
-  invariant(
-    typeof renderedValue === 'string' ||
-      (Array.isArray(renderedValue) && renderedValue.every((v) => typeof v === 'string')),
-    '"meteor" assertion must have a string or array of strings value',
+  const references = getTextReferences(
+    renderedValue,
+    '"meteor" assertion must have a string, number, or array of strings or numbers value',
   );
-
-  const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
 
   // Get parameters from assertion or use defaults
   const meteorAssertion = assertion as unknown as MeteorAssertion;
