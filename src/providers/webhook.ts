@@ -36,9 +36,11 @@ export class WebhookProvider implements ApiProvider {
 
     let data,
       cached = false,
+      status: number | undefined,
+      statusText: string | undefined,
       latencyMs: number | undefined;
     try {
-      ({ data, cached, latencyMs } = await fetchWithCache<WebhookResponse>(
+      ({ data, cached, status, statusText, latencyMs } = await fetchWithCache<WebhookResponse>(
         this.webhookUrl,
         {
           method: 'POST',
@@ -53,6 +55,14 @@ export class WebhookProvider implements ApiProvider {
     } catch (err) {
       return {
         error: `Webhook call error: ${String(err)}`,
+      };
+    }
+
+    if (status !== undefined && (status < 200 || status >= 300)) {
+      return {
+        error: `Webhook response error: HTTP ${status}${statusText ? ` ${statusText}` : ''}`,
+        cached,
+        latencyMs,
       };
     }
 

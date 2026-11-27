@@ -42,6 +42,37 @@ describe('WebhookProvider', () => {
   });
 
   describe('callApi', () => {
+    it.each([200, 201, 202])('accepts output from HTTP %i', async (status) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...createMockFetchResponse({ output: 'successful result' }),
+        status,
+      });
+      const result = await new WebhookProvider('http://test.com').callApi('hello');
+      expect(result.output).toBe('successful result');
+      expect(result.error).toBeUndefined();
+    });
+
+    it.each([400, 401, 403, 429, 500, 503])(
+      'rejects HTTP %i even when the body contains output',
+      async (status) => {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          ...createMockFetchResponse({ output: 'misleading success' }),
+          status,
+          statusText: 'Request failed',
+          latencyMs: 42,
+        });
+
+        const result = await new WebhookProvider('http://test.com').callApi('hello');
+
+        expect(result).toEqual({
+          error: `Webhook response error: HTTP ${status} Request failed`,
+          cached: false,
+          latencyMs: 42,
+        });
+        expect(result.output).toBeUndefined();
+      },
+    );
+
     it('should call webhook and return output', async () => {
       const mockFetchResponse = createMockFetchResponse({
         output: 'test response',
