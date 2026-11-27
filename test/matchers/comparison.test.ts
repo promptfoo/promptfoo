@@ -90,6 +90,58 @@ describe('matchesSelectBest', () => {
     }
   });
 
+  // The prompt asks for a single integer, but graders explain the choice first, and the
+  // first integer in that explanation is reasoning, not the verdict (#12242).
+  it.each([
+    {
+      label: 'reasoning that names other texts before the verdict',
+      output: 'Text 0 is too long and text 1 is vague, so the best fit is 2.',
+      expected: 2,
+    },
+    {
+      label: 'verdict after a colon at the end of the reply',
+      output: 'Text 1 repeats the question; text 2 answers it. Best: 2',
+      expected: 2,
+    },
+    {
+      label: 'a count mentioned mid-sentence before the verdict',
+      output: 'Comparing all 3 texts, I choose 1.',
+      expected: 1,
+    },
+    {
+      label: 'a labelled verdict at the end of the reply',
+      output: 'Text 1 repeats the question; text 2 answers it. Best: 2',
+      expected: 2,
+    },
+    {
+      label: 'an Answer label with no space',
+      output: 'Comparing all 3 texts, I choose Answer:1',
+      expected: 1,
+    },
+  ])(
+    'selects the verdict, not the first integer, when the reply explains first ($label)',
+    async ({ output, expected }) => {
+      const provider = createSelectBestProvider(output);
+      const outputs = ['A', 'B', 'C'];
+
+      const result = await matchesSelectBest('choose the best output', outputs, { provider });
+
+      expect(result[expected]).toMatchObject({ pass: true, score: 1 });
+      expect(result.filter((item) => item.pass)).toHaveLength(1);
+    },
+  );
+
+  it('fails loudly instead of guessing when the reply keeps enumerating after the verdict', async () => {
+    // "Best: 2 (0 and 1 were weaker)" names the winner but does not end in an integer, so no
+    // verdict is read: an ambiguous reply must not silently select the wrong output.
+    const provider = createSelectBestProvider('Best: 2 (0 and 1 were weaker)');
+
+    const result = await matchesSelectBest('choose the best output', ['A', 'B', 'C'], { provider });
+
+    expect(result[0]).toMatchObject({ pass: false, reason: 'Invalid select-best verdict: NaN' });
+    expect(result.filter((item) => item.pass)).toHaveLength(0);
+  });
+
   it.each([
     { label: 'valid verdict', response: { output: '0' } },
     { label: 'invalid verdict', response: { output: 'not a verdict' } },
