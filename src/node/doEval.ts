@@ -541,6 +541,13 @@ async function doEvalWithEnv(
         commandLineOptions,
         testSources,
       } = await resolveConfigs(cmdObj, defaultConfig));
+      if (isCliInvocation && cmdObj.write === undefined) {
+        const write = commandLineOptions?.write ?? true;
+        cmdObj = { ...cmdObj, write };
+        if (write) {
+          await runDbMigrations();
+        }
+      }
     }
 
     // Clean up the providers this run loaded once no evaluation is using them.
