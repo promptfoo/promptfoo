@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Nodecode Cyber v1 security questions
+
+prompts:
+  - 'Answer in one short sentence: {{question}}'
+
+providers:
+  - id: openai:chat:nodecode-cyber-v1
+    label: 'Cyber v1'
+    config:
+      apiBaseUrl: https://api.nodecode.ai/v1
+      apiKeyEnvar: NODECODE_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      omitDefaults: true
+      temperature: 0
+      max_tokens: 300
+      showThinking: false
+      passthrough:
+        reasoning_effort: low
+
+tests:
+  - vars:
+      question: Which TCP port does SSH listen on by default?
+    assert:
+      - type: icontains
+        value: '22'
+  - vars:
+      question: What does the nmap -sV flag do?
+    assert:
+      - type: icontains-any
+        value: [version, service]
