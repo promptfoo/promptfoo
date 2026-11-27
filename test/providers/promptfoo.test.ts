@@ -229,6 +229,14 @@ describe('PromptfooChatCompletionProvider', () => {
     expect(provider.toString()).toBe('[Promptfoo Chat Completion Provider]');
   });
 
+  it.each([true, false])('forwards an explicit remote judge cache flag (%s)', async (cached) => {
+    const judge = new PromptfooChatCompletionProvider({ ...options, task: 'judge' });
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ result: 'Blue', cached, tokenUsage: { numRequests: 0 } })),
+    );
+    expect(await judge.callApi('Color?')).toMatchObject({ output: 'Blue', cached });
+  });
+
   it('should handle successful API call', async () => {
     const tokenUsage = {
       total: 100,
