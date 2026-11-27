@@ -115,7 +115,8 @@ describe('METEOR matching with the real handler', () => {
   it.each([{ value: 42 }, { value: ['cat', 42] }])(
     'compares numeric reference values as text: $value',
     async ({ value }) => {
-      const result = await score('42', value as string);
+      // Numbers come from YAML/CSV test files; the helper's type only allows strings.
+      const result = await score('42', value as unknown as string);
       expect(result.pass).toBe(true);
     },
   );

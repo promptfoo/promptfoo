@@ -1,7 +1,5 @@
 import invariant from '../util/invariant';
 
-import type { AssertionValue } from '../types/index';
-
 function toReferenceText(value: unknown): string | undefined {
   if (typeof value === 'string') {
     return value;
@@ -19,7 +17,7 @@ function toReferenceText(value: unknown): string | undefined {
  * METEOR) to a list of reference strings. Accepts a string, a finite number, or
  * an array of them.
  */
-export function getTextReferences(value: AssertionValue | undefined, message: string): string[] {
+export function getTextReferences(value: unknown, message: string): string[] {
   const items = Array.isArray(value) ? value : [value];
   const references = items.map(toReferenceText);
   invariant(
@@ -30,7 +28,7 @@ export function getTextReferences(value: AssertionValue | undefined, message: st
 }
 
 /** Single-reference variant, for assertions such as ROUGE that take one string. */
-export function getTextReference(value: AssertionValue | undefined, message: string): string {
+export function getTextReference(value: unknown, message: string): string {
   const reference = toReferenceText(value);
   invariant(reference !== undefined, message);
   return reference;
