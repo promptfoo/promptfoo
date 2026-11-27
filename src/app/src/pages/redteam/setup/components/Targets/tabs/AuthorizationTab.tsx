@@ -910,7 +910,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                     onChange={(value) => {
                       updateCustomTarget('signatureAuth', {
                         ...selectedTarget.config?.signatureAuth,
-                        pfxPassword: value,
+                        pfxPassword: value || undefined,
                       });
                     }}
                     placeholder="Enter PFX password"
