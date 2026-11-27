@@ -4,14 +4,35 @@
 
 export type TraceSpanAttributeFilter = Record<string, string | number | boolean>;
 
-export function withTraceAttributeFilterContext(
+export function traceVerdict<T extends { type: string }>(
+  assertion: T,
+  inverse: boolean,
+  matches: boolean,
   reason: string,
   attributes?: TraceSpanAttributeFilter,
-): string {
+) {
+  const pass = inverse ? !matches : matches;
   const keys = Object.keys(attributes ?? {});
-  return keys.length > 0
+  const detail = keys.length
     ? `${reason}. Attribute filters applied to keys: ${JSON.stringify(keys)}.`
     : reason;
+  return {
+    assertion,
+    pass,
+    score: pass ? 1 : 0,
+    reason: inverse ? `${assertion.type} ${pass ? 'passed' : 'failed'}: ${detail}` : detail,
+  };
+}
+
+export function validateTraceLimit(value: number | undefined, name: string, upper?: number): void {
+  if (
+    value !== undefined &&
+    (!Number.isFinite(value) || value < 0 || (upper !== undefined && value > upper))
+  ) {
+    throw new Error(
+      `${name} must be ${upper === undefined ? 'a finite non-negative number' : `a number between 0 and ${upper}`}`,
+    );
+  }
 }
 
 export function filterTraceSpans<T extends { name: string; attributes?: Record<string, unknown> }>(
