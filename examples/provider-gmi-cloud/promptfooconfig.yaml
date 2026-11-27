@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare GMI Cloud models on ticket routing
+
+prompts:
+  - label: Route support tickets
+    raw: |
+      Classify the support ticket. Return only a JSON object with two keys: queue and priority.
+
+      Queue rules:
+      - billing: charges, invoices, or refunds
+      - account: sign-in or account access
+      - engineering: product defects or service outages
+
+      Set priority to high only if a core feature is unavailable to multiple users. Use normal otherwise.
+
+      Ticket: {{ticket}}
+
+providers:
+  - id: openai:chat:Qwen/Qwen3.8-Flash
+    label: Qwen3.8 Flash
+    config: &gmi
+      apiBaseUrl: https://api.gmi-serving.com/v1
+      apiKeyEnvar: GMI_API_KEY
+      max_tokens: 512
+      showThinking: false
+      response_format:
+        type: json_schema
+        json_schema:
+          name: ticket_route
+          strict: true
+          schema: &ticket-schema
+            type: object
+            required: [queue, priority]
+            additionalProperties: false
+            properties:
+              queue:
+                type: string
+                enum: [billing, account, engineering]
+              priority:
+                type: string
+                enum: [normal, high]
+  - id: openai:chat:deepseek-ai/DeepSeek-V4-Flash
+    label: DeepSeek V4 Flash
+    config: *gmi
+
+defaultTest:
+  assert:
+    - type: is-json
+      value: *ticket-schema
+    - type: javascript
+      metric: Correct queue
+      value: output.queue === context.vars.expectedQueue
+    - type: javascript
+      metric: Correct priority
+      value: output.priority === context.vars.expectedPriority
+
+tests:
+  - description: Duplicate charge
+    vars:
+      ticket: My card was charged twice for the same monthly invoice. Can you refund one of the charges?
+      expectedQueue: billing
+      expectedPriority: normal
+  - description: Lost access to an account
+    vars:
+      ticket: I got a new phone and can no longer sign in because my authenticator codes are on the old device.
+      expectedQueue: account
+      expectedPriority: normal
+  - description: Export defect with a workaround
+    vars:
+      ticket: The CSV export changes the displayed dates for one report. I can still download the PDF version.
+      expectedQueue: engineering
+      expectedPriority: normal
+  - description: Service outage
+    vars:
+      ticket: Everyone on our team gets a 503 when opening the dashboard. The whole team is blocked.
+      expectedQueue: engineering
+      expectedPriority: high
