@@ -59,6 +59,10 @@ import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
+import { LegalConfidentialDisclosurePlugin } from './legal/legalConfidentialDisclosure';
+import { LegalHallucinationPlugin } from './legal/legalHallucination';
+import { LegalJurisdictionConfusionPlugin } from './legal/legalJurisdictionConfusion';
+import { LegalUnauthorizedPracticePlugin } from './legal/legalUnauthorizedPractice';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
@@ -545,6 +549,10 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ToxicChatPlugin, 'toxic-chat'),
   createPluginFactory(AegisPlugin, 'aegis'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
+  createPluginFactory(LegalHallucinationPlugin, 'legal:hallucination'),
+  createPluginFactory(LegalUnauthorizedPracticePlugin, 'legal:unauthorized-practice'),
+  createPluginFactory(LegalConfidentialDisclosurePlugin, 'legal:confidential-disclosure'),
+  createPluginFactory(LegalJurisdictionConfusionPlugin, 'legal:jurisdiction-confusion'),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),

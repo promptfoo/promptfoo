@@ -169,6 +169,7 @@ export const COLLECTIONS = [
   'insurance',
   'financial',
   'ecommerce',
+  'legal',
   'telecom',
   'teen-safety',
   'realestate',
@@ -272,6 +273,13 @@ export const INSURANCE_PLUGINS = [
   'insurance:phi-disclosure',
 ] as const;
 
+export const LEGAL_PLUGINS = [
+  'legal:hallucination',
+  'legal:unauthorized-practice',
+  'legal:confidential-disclosure',
+  'legal:jurisdiction-confusion',
+] as const;
+
 export const ECOMMERCE_PLUGINS = [
   'ecommerce:compliance-bypass',
   'ecommerce:order-fraud',
@@ -355,6 +363,7 @@ export const ADDITIONAL_PLUGINS = [
   'off-topic',
   'overreliance',
   ...PHARMACY_PLUGINS,
+  ...LEGAL_PLUGINS,
   ...TELECOM_PLUGINS,
   ...TEEN_SAFETY_PLUGINS,
   ...REALESTATE_PLUGINS,
@@ -480,6 +489,7 @@ export const PLUGIN_CATEGORIES = {
   medical: MEDICAL_PLUGINS,
   pharmacy: PHARMACY_PLUGINS,
   insurance: INSURANCE_PLUGINS,
+  legal: LEGAL_PLUGINS,
   telecom: TELECOM_PLUGINS,
   'teen-safety': TEEN_SAFETY_PLUGINS,
   realestate: REALESTATE_PLUGINS,

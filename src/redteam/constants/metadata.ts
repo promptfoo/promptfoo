@@ -97,6 +97,13 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'insurance:network-misinformation': 'Tests for inaccurate provider network information',
   'insurance:phi-disclosure':
     'Tests for unauthorized disclosure of Protected Health Information in violation of HIPAA privacy regulations',
+  'legal:hallucination':
+    'Tests for fabricated case citations, non-existent statutes, or invented legal authority',
+  'legal:unauthorized-practice':
+    'Tests for case-specific legal advice that crosses into the unauthorized practice of law',
+  'legal:confidential-disclosure':
+    'Tests for disclosure of privileged communications or confidential client and matter information',
+  'legal:jurisdiction-confusion': 'Tests for applying or mixing law from the wrong jurisdiction',
   'ecommerce:pci-dss':
     'Tests for exposure of payment card data including credit card numbers, CVVs, and bank account details in violation of PCI DSS requirements',
   'ecommerce:compliance-bypass':
@@ -221,6 +228,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   financial: 'Financial AI safety testing across financial services vulnerabilities',
   ecommerce:
     'E-commerce AI safety testing across payment security and transaction integrity vulnerabilities',
+  legal:
+    'Legal AI safety testing across hallucinated legal authority, unauthorized practice of law, confidentiality, and jurisdictional accuracy',
   telecom:
     'Telecommunications AI safety testing across CPNI protection, account security, and regulatory compliance vulnerabilities',
   'telecom:cpni-disclosure':
@@ -343,6 +352,11 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   insurance: 'Insurance Safety Suite',
   financial: 'Financial Safety Suite',
   ecommerce: 'E-commerce Safety Suite',
+  legal: 'Legal Safety Suite',
+  'legal:hallucination': 'Legal Hallucination',
+  'legal:unauthorized-practice': 'Unauthorized Practice of Law',
+  'legal:confidential-disclosure': 'Confidential Disclosure',
+  'legal:jurisdiction-confusion': 'Jurisdiction Confusion',
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'IP Violations',
@@ -569,6 +583,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   insurance: Severity.High,
   financial: Severity.High,
   ecommerce: Severity.High,
+  legal: Severity.High,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
@@ -602,6 +617,10 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'insurance:data-disclosure': Severity.Critical,
   'insurance:network-misinformation': Severity.High,
   'insurance:phi-disclosure': Severity.Critical,
+  'legal:hallucination': Severity.Medium,
+  'legal:unauthorized-practice': Severity.High,
+  'legal:confidential-disclosure': Severity.High,
+  'legal:jurisdiction-confusion': Severity.Medium,
   'ecommerce:pci-dss': Severity.Critical,
   'ecommerce:compliance-bypass': Severity.High,
   'ecommerce:order-fraud': Severity.High,
@@ -788,6 +807,10 @@ export const riskCategories: Record<string, Plugin[]> = {
     'financial:misconduct',
     'financial:sox-compliance',
     'financial:sycophancy',
+    'legal:hallucination',
+    'legal:unauthorized-practice',
+    'legal:confidential-disclosure',
+    'legal:jurisdiction-confusion',
     'medical:hallucination',
     'medical:anchoring-bias',
     'medical:fda:ai-disclosure',
@@ -932,6 +955,11 @@ export const categoryAliases: Record<Plugin, string> = {
   insurance: 'Insurance Safety',
   financial: 'Financial Safety',
   ecommerce: 'E-commerce Safety',
+  legal: 'Legal Safety',
+  'legal:hallucination': 'LegalHallucination',
+  'legal:unauthorized-practice': 'LegalUnauthorizedPractice',
+  'legal:confidential-disclosure': 'LegalConfidentialDisclosure',
+  'legal:jurisdiction-confusion': 'LegalJurisdictionConfusion',
   telecom: 'Telecommunications Safety',
   'telecom:cpni-disclosure': 'TelecomCpniDisclosure',
   'telecom:location-disclosure': 'TelecomLocationDisclosure',
@@ -1172,6 +1200,16 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for inaccurate provider or vendor network information including wrong network status, terminated contracts, ghost networks, and outdated provider data that could expose policyholders to unexpected costs, voided warranties, or inadequate service',
   'insurance:phi-disclosure':
     'Tests for unauthorized disclosure of Protected Health Information in violation of HIPAA privacy regulations including cross-member PHI leakage, inadequate authentication, and disclosure to unauthorized third parties',
+  legal:
+    'Comprehensive legal AI safety testing across hallucinated legal authority, unauthorized practice of law, attorney-client confidentiality, and jurisdictional accuracy',
+  'legal:hallucination':
+    'Tests for fabricated legal authority including invented case citations, non-existent statutes or regulations, fake docket numbers, and misquoted holdings',
+  'legal:unauthorized-practice':
+    'Tests for case-specific legal advice, binding document preparation, outcome guarantees, and other conduct that crosses into the unauthorized practice of law',
+  'legal:confidential-disclosure':
+    'Tests for disclosure of client identities, privileged attorney-client communications, matter details, settlement positions, and other confidential or work-product information',
+  'legal:jurisdiction-confusion':
+    'Tests for applying or mixing law from the wrong jurisdiction, accepting false jurisdictional premises, or giving unqualified answers where the law varies by location',
   'ecommerce:pci-dss':
     'Tests for exposure of payment card data including credit card numbers, CVVs, expiration dates, cardholder names, bank account details, and payment tokens in violation of PCI DSS requirements for secure payment processing',
   'ecommerce:compliance-bypass':

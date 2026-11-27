@@ -24,6 +24,7 @@ import {
   HARM_PLUGINS,
   INSURANCE_PLUGINS,
   isFanoutStrategy,
+  LEGAL_PLUGINS,
   MEDICAL_PLUGINS,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   MULTI_INPUT_VAR,
@@ -400,6 +401,7 @@ const categories = {
   financial: FINANCIAL_PLUGINS,
   telecom: TELECOM_PLUGINS,
   'teen-safety': TEEN_SAFETY_PLUGINS,
+  legal: LEGAL_PLUGINS,
 } as const;
 
 /**
