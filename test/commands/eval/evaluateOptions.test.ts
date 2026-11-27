@@ -2,8 +2,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { Command } from 'commander';
 import * as yaml from 'js-yaml';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { evalCommand } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
@@ -11,7 +13,6 @@ import { doEval } from '../../../src/node/doEval';
 import * as retryModule from '../../../src/node/retry';
 import { isSafeMode } from '../../../src/util/safeMode';
 import { mockProcessEnv } from '../../util/utils';
-import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
 
@@ -394,6 +395,33 @@ describe('evaluateOptions behavior', () => {
   });
 
   describe('commandLineOptions behavior', () => {
+    it.each([
+      { configured: 'configured-grader', flag: undefined, expected: 'configured-grader' },
+      { configured: 'configured-grader', flag: 'flag-grader', expected: 'flag-grader' },
+      { configured: undefined, flag: undefined, expected: 'test-grader' },
+    ])(
+      'selects the grader from the active eval config (%j)',
+      async ({ configured, flag, expected }) => {
+        const config = writeTempConfig(tmpDir, 'selected-grader.yaml', {
+          prompts: ['Hello'],
+          providers: ['echo'],
+          defaultTest: { options: { provider: 'test-grader' } },
+          commandLineOptions: { grader: configured },
+        });
+        const program = new Command();
+        evalCommand(program, {}, undefined);
+        const args = flag ? ['--grader', flag] : [];
+        await program.parseAsync(['eval', '-c', config, '--no-write', '--no-table', ...args], {
+          from: 'user',
+        });
+
+        expect(evaluateMock).toHaveBeenCalledOnce();
+        expect(evaluateMock.mock.calls[0][0].defaultTest).toMatchObject({
+          options: { provider: expected },
+        });
+      },
+    );
+
     it('should respect commandLineOptions.maxConcurrency from config', async () => {
       const tempConfig = writeOptionsConfig(tmpDir, 'test-commandline-maxconcurrency.yaml', {
         commandLineOptions: {
