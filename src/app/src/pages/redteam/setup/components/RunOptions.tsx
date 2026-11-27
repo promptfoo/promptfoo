@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 
+import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import { Switch } from '@app/components/ui/switch';
@@ -8,6 +9,42 @@ import { COMMON_LANGUAGE_NAMES, normalizeLanguage } from '@app/constants/languag
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { Config } from '../types';
 import type { RedteamRunOptions } from '@promptfoo/types';
+
+const GRADER_LANGUAGE_DEFAULT = 'English';
+const GRADER_LANGUAGE_PRESETS = [
+  'English',
+  'Japanese',
+  'French',
+  'Chinese',
+  'Korean',
+  'Spanish',
+  'German',
+];
+
+interface GraderLanguageInputProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function GraderLanguageInput({ value, onChange }: GraderLanguageInputProps) {
+  const listId = useId();
+  return (
+    <>
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={GRADER_LANGUAGE_DEFAULT}
+        aria-label="Grader output language"
+        list={listId}
+      />
+      <datalist id={listId}>
+        {GRADER_LANGUAGE_PRESETS.map((language) => (
+          <option key={language} value={language} />
+        ))}
+      </datalist>
+    </>
+  );
+}
 
 // Shared helper and error text constants for RunOptions inputs
 export const RUNOPTIONS_TEXT = {
@@ -35,6 +72,11 @@ export const RUNOPTIONS_TEXT = {
     label: 'Test Languages',
     placeholder: "Type language name or ISO code (e.g., 'French' or 'fr')",
   },
+  graderLanguage: {
+    label: 'Grader Output Language',
+    helper:
+      'Language used for judgment reason explanations in grading results. Leave blank to use the grader’s existing behavior.',
+  },
 } as const;
 
 interface RunOptionsProps {
@@ -48,6 +90,7 @@ interface RunOptionsProps {
   ) => void;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   language?: string | string[];
+  graderLanguage?: string;
 }
 
 export interface NumberOfTestCasesInputProps {
@@ -312,6 +355,7 @@ export const RunOptionsContent = ({
   updateConfig,
   updateRunOption,
   language,
+  graderLanguage,
 }: RunOptionsProps) => {
   // These two settings are mutually exclusive
   const canSetDelay = !runOptions?.maxConcurrency || runOptions?.maxConcurrency === 1;
@@ -401,6 +445,17 @@ export const RunOptionsContent = ({
           aria-label={RUNOPTIONS_TEXT.languages.label}
         />
         <span className="text-sm text-muted-foreground">{RUNOPTIONS_TEXT.languages.helper}</span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>{RUNOPTIONS_TEXT.graderLanguage.label}</Label>
+        <GraderLanguageInput
+          value={graderLanguage ?? ''}
+          onChange={(val) => updateConfig('graderLanguage', val || undefined)}
+        />
+        <span className="text-sm text-muted-foreground">
+          {RUNOPTIONS_TEXT.graderLanguage.helper}
+        </span>
       </div>
     </div>
   );
