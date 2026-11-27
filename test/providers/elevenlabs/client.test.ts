@@ -43,6 +43,50 @@ describe('ElevenLabsClient', () => {
     expect(await (form.get('file') as File).text()).toBe('fixture audio');
   });
 
+  it.each([
+    { method: 'post', status: 200, contentType: 'application/json' },
+    { method: 'post', status: 200, contentType: 'audio/mpeg' },
+    { method: 'post', status: 400, contentType: 'application/json' },
+    { method: 'get', status: 200, contentType: 'application/json' },
+    { method: 'get', status: 400, contentType: 'application/json' },
+    { method: 'delete', status: 400, contentType: 'application/json' },
+    { method: 'upload', status: 200, contentType: 'application/json' },
+    { method: 'upload', status: 200, contentType: 'audio/mpeg' },
+    { method: 'upload', status: 400, contentType: 'application/json' },
+  ])(
+    'times out a stalled $method body ($status, $contentType)',
+    async ({ method, status, contentType }) => {
+      mockFetch.mockImplementation(async (_url, options) => {
+        const response = new Response(null, { status, headers: { 'content-type': contentType } });
+        const stalledBody = () =>
+          new Promise<never>((_resolve, reject) => {
+            options!.signal!.addEventListener('abort', () => reject(options!.signal!.reason), {
+              once: true,
+            });
+          });
+        response.json = stalledBody;
+        response.text = stalledBody;
+        response.arrayBuffer = stalledBody;
+        return response;
+      });
+      const pending =
+        method === 'post'
+          ? client.post('/test', {})
+          : method === 'get'
+            ? client.get('/test')
+            : method === 'delete'
+              ? client.delete('/test')
+              : client.upload('/test', Buffer.from('audio'), 'test.mp3');
+      const outcome = pending.then(
+        () => 'resolved',
+        (error: Error) => error.name,
+      );
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await Promise.race([outcome, Promise.resolve('still pending')])).toBe('AbortError');
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
   describe('constructor', () => {
     it('should initialize with correct defaults', () => {
       const defaultClient = new ElevenLabsClient({ apiKey: 'test-key' });
