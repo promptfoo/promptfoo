@@ -46,20 +46,17 @@ export function createTransformResponse(
     return async (result, content, context) => {
       try {
         const trimmedParser = parser.trim();
-        const isFunctionExpression = /^(async\s+)?(\(.*?\)\s*=>|function\b[\w$\s]*\(.*?\))/s.test(
-          trimmedParser,
-        );
         const transformFn = new Function(
           'result',
           'content',
           'context',
           'process',
-          isFunctionExpression
-            ? `return (${trimmedParser})(result, content, context);`
-            : `return (${trimmedParser});`,
+          `return (${trimmedParser});`,
         );
         const response = await transformFn(result, content, context, getProcessShim());
-        return normalizeResponseTransformResult(response);
+        return normalizeResponseTransformResult(
+          typeof response === 'function' ? await response(result, content, context) : response,
+        );
       } catch (error) {
         logger.error('[MCP Provider] Error in response transform', {
           error: String(error),

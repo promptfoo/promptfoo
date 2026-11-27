@@ -50,21 +50,17 @@ export function createTransformResponse(
     return async (json, text, context) => {
       try {
         const trimmedParser = parser.trim();
-        const isFunctionExpression = /^(async\s+)?(\(.*?\)\s*=>|function\b[\w$\s]*\(.*?\))/s.test(
-          trimmedParser,
-        );
         const transformFn = new Function(
           'json',
           'text',
           'context',
           'process',
           'result',
-          isFunctionExpression
-            ? `return (${trimmedParser})(json, text, context);`
-            : `return (${trimmedParser});`,
+          `return (${trimmedParser});`,
         );
+        const value = await transformFn(json, text, context, getProcessShim(), json);
         return normalizeResponseTransformResult(
-          await transformFn(json, text, context, getProcessShim(), json),
+          typeof value === 'function' ? await value(json, text, context) : value,
         );
       } catch (error) {
         logger.error(

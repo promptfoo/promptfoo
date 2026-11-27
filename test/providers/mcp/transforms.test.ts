@@ -95,6 +95,15 @@ describe('MCP createTransformResponse', () => {
     ).resolves.toEqual({ output: 'Ada:fallback text:lookup_user' });
   });
 
+  it('does not invoke a multiline object expression containing an arrow callback', async () => {
+    const transform = createTransformResponse(`({
+      output: result.content.map((part) => part.text).join(' ')
+    })`);
+    await expect(
+      transform({ content: [{ type: 'text', text: 'hello' }] }, 'fallback', context),
+    ).resolves.toEqual({ output: 'hello' });
+  });
+
   it('should throw if file transforms are not pre-loaded', () => {
     expect(() => createTransformResponse('file://parser.js')).toThrow(
       /should be pre-loaded before calling createTransformResponse/,

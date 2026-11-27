@@ -97,6 +97,15 @@ describe('A2A createTransformResponse', () => {
     });
   });
 
+  it('does not invoke a multiline object expression containing an arrow callback', async () => {
+    const transform = createTransformResponse(`({
+      output: json.message.parts.map((part) => part.text).join(' ')
+    })`);
+    await expect(transform(finalResponse, 'fallback', context)).resolves.toEqual({
+      output: 'hello from message',
+    });
+  });
+
   it('throws if file transforms are not pre-loaded', () => {
     expect(() => createTransformResponse('file://parser.js')).toThrow(
       /should be pre-loaded before calling createTransformResponse/,
