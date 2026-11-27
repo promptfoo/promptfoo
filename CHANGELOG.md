@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.127.0](https://github.com/promptfoo/promptfoo/compare/0.126.0...0.127.0) (2026-11-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** Promptfoo requires Node.js ^22.22.2, ^24.15.0 or >=26.
+
+### Features
+
+* **providers:** expose LiteLLM config schemas ([#12613](https://github.com/promptfoo/promptfoo/issues/12613)) ([018fc35](https://github.com/promptfoo/promptfoo/commit/018fc35538aed22d3cc04debea3ca42719a846da))
+* **providers:** support OpenAI on Google Cloud ([#11905](https://github.com/promptfoo/promptfoo/issues/11905)) ([a6c2dff](https://github.com/promptfoo/promptfoo/commit/a6c2dff2c2ef8d2c4bbc1560e3bfdff074ae6b70))
+* **redteam:** add AIUC-1 framework preset ([#12484](https://github.com/promptfoo/promptfoo/issues/12484)) ([7648777](https://github.com/promptfoo/promptfoo/commit/76487778a5036ab70a8a4569e2e960329c520d11))
+* **redteam:** configure Vertex OpenAI Responses in the UI ([#12583](https://github.com/promptfoo/promptfoo/issues/12583)) ([8304fbf](https://github.com/promptfoo/promptfoo/commit/8304fbf1967a46b337b571c325abb10cc17565cd))
+
+
+### Bug Fixes
+
+* **deps:** require patched glob for the CLI and Storybook ([#12449](https://github.com/promptfoo/promptfoo/issues/12449)) ([04ab49c](https://github.com/promptfoo/promptfoo/commit/04ab49ccca3242b0309a60919c5c9180dc5b6703))
+* **deps:** require patched parse5 ([#12473](https://github.com/promptfoo/promptfoo/issues/12473)) ([ee3713d](https://github.com/promptfoo/promptfoo/commit/ee3713d7efdbb44f95d30db84cb8fdee538f8c00))
+* **deps:** update anthropic packages ([#12498](https://github.com/promptfoo/promptfoo/issues/12498)) ([eb0f11f](https://github.com/promptfoo/promptfoo/commit/eb0f11f41fbe906a8f939179c0ccd7566769e56d))
+* **deps:** update dependency @anthropic-ai/sdk to v1.8.0 ([#12532](https://github.com/promptfoo/promptfoo/issues/12532)) ([3c2c86d](https://github.com/promptfoo/promptfoo/commit/3c2c86d3a173df1242b698f0c40fe4112a77288d))
+* **deps:** update dependency @hono/node-server to v2.1.7 ([#12551](https://github.com/promptfoo/promptfoo/issues/12551)) ([8f42ad9](https://github.com/promptfoo/promptfoo/commit/8f42ad9f74d6fe8ce507bf799dfb479e853e858a))
+* **deps:** update dependency @hono/node-server to v2.1.8 ([#12571](https://github.com/promptfoo/promptfoo/issues/12571)) ([6fe0e19](https://github.com/promptfoo/promptfoo/commit/6fe0e193a0e76ad452ca1b2b4f49f90aa799c1bd))
+* **deps:** update Inquirer and supported Node.js releases ([#12531](https://github.com/promptfoo/promptfoo/issues/12531)) ([d3d91a8](https://github.com/promptfoo/promptfoo/commit/d3d91a8e877e0f0dbcc946b6d0fceaeea44fc7de))
+* **deps:** update opentelemetry ([#12499](https://github.com/promptfoo/promptfoo/issues/12499)) ([60424a1](https://github.com/promptfoo/promptfoo/commit/60424a1e7532d24eafc9b0fb0d103d43a841501f))
+* **eval:** preserve custom filters in JSON prompts ([#12486](https://github.com/promptfoo/promptfoo/issues/12486)) ([1b7e4e5](https://github.com/promptfoo/promptfoo/commit/1b7e4e54ae5a35587babf705000c2a034eb5091f))
+
 ## [0.126.0](https://github.com/promptfoo/promptfoo/compare/0.125.1...0.126.0) (2026-11-18)
 
 ### ⚠ BREAKING CHANGES
