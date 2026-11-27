@@ -78,6 +78,13 @@ describe('maybeFilePath', () => {
     expect(maybeFilePath('filename.txt')).toBe(true);
   });
 
+  it('should limit case-insensitive inference to dispatcher-supported executable formats', () => {
+    expect(maybeFilePath('İ.py:create_prompt')).toBe(true);
+    expect(maybeFilePath('script.CJS:functionName')).toBe(true);
+    expect(maybeFilePath('Return a .JSON')).toBe(false);
+    expect(maybeFilePath('Return a .YAML')).toBe(false);
+  });
+
   it('should recognize function references when the path is not the first colon-delimited token', () => {
     expect(maybeFilePath('label:path/to/filename.py:functionName')).toBe(true);
     expect(maybeFilePath('label:path/to/filename.js:functionName')).toBe(true);

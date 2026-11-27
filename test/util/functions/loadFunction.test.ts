@@ -1,3 +1,5 @@
+import fs from 'fs';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../../src/esm';
 import { runPython } from '../../../src/python/pythonUtils';
@@ -221,6 +223,35 @@ describe('loadFunction', () => {
       expect(runPython).toHaveBeenCalledWith(TEST_PY_PATH, 'custom_function', ['test input']);
     });
 
+    it('should load a mixed-case Python file extension', async () => {
+      const mixedCasePath = '/test/resolved/function.PY';
+      mockResolve.mockReturnValueOnce(mixedCasePath);
+
+      const result = await loadFunction({
+        filePath: 'function.PY',
+        functionName: 'custom_function',
+      });
+
+      await result('test input');
+      expect(runPython).toHaveBeenCalledWith(mixedCasePath, 'custom_function', ['test input']);
+    });
+
+    it.each([
+      '/test/resolved/file?handler=score.PY',
+      '/test/resolved/file#score.PY',
+      '/test/resolved/grader#1.py',
+    ])(
+      'should preserve legal filename characters in a direct Python path: %s',
+      async (filePath) => {
+        mockResolve.mockReturnValueOnce(filePath);
+
+        const result = await loadFunction({ filePath, functionName: 'score' });
+        await result('test input');
+
+        expect(runPython).toHaveBeenCalledWith(filePath, 'score', ['test input']);
+      },
+    );
+
     it('should use default function name for Python when none specified', async () => {
       const mockPythonResult = vi.fn();
       vi.mocked(runPython).mockImplementation((...args) => mockPythonResult(...args));
@@ -367,6 +398,65 @@ describe('parseFileUrl', () => {
       filePath: './path/to/file.py',
       functionName: 'function_name',
     });
+    expect(parseFileUrl('file://config.rb:backup.py:get_config')).toEqual({
+      filePath: 'config.rb:backup.py',
+      functionName: 'get_config',
+    });
+  });
+
+  it.each(['file://./path/to/file.PY:function_name', 'file://C:/path/to/file.Py:function_name'])(
+    'should parse mixed-case Python file URLs with function names: %s',
+    (fileUrl) => {
+      expect(parseFileUrl(fileUrl)).toEqual({
+        filePath: fileUrl.slice('file://'.length, -':function_name'.length),
+        functionName: 'function_name',
+      });
+    },
+  );
+
+  it.each([
+    ['file://./path/to/file.PY:评分', '评分'],
+    ['file://./path/to/file.PY:检查.评分', '检查.评分'],
+    ['file://./path/to/file.PY:Class.py', 'Class.py'],
+  ])('should preserve compatible Python selectors: %s', (fileUrl, functionName) => {
+    expect(parseFileUrl(fileUrl)).toEqual({
+      filePath: './path/to/file.PY',
+      functionName,
+    });
+  });
+
+  it('should preserve a Python path with a colon after a .py directory component', () => {
+    expect(parseFileUrl('file://dir.py:segment/script.PY')).toEqual({
+      filePath: 'dir.py:segment/script.PY',
+    });
+  });
+
+  it.each([
+    'file://note.txt?handler=script.PY:fn',
+    'file://note.txt?handler=script.PY',
+    'file://note.txt#handler.PY',
+    'file://dir.PY:segment/readme.txt',
+    'file://script.PY:fn:extra',
+  ])('should not parse invalid Python function references: %s', (fileUrl) => {
+    expect(parseFileUrl(fileUrl)).toEqual({
+      filePath: fileUrl.slice('file://'.length),
+    });
+  });
+
+  it('should preserve non-executable Ruby-looking paths', () => {
+    expect(parseFileUrl('file://fixtures.rb:old/readme.txt')).toEqual({
+      filePath: 'fixtures.rb:old/readme.txt',
+    });
+    expect(parseFileUrl('file://config.rb:backup.json')).toEqual({
+      filePath: 'config.rb:backup.json',
+    });
+  });
+
+  it('should preserve a JavaScript selector whose export ends in .py', () => {
+    expect(parseFileUrl('file://script.js:Class.py')).toEqual({
+      filePath: 'script.js',
+      functionName: 'Class.py',
+    });
   });
 
   it('should preserve colons in default-export file paths', () => {
@@ -390,5 +480,96 @@ describe('parseFileUrl', () => {
       filePath: 'path:with:colons/hooks.js',
       functionName: 'functionName',
     });
+  });
+
+  it.each([
+    ['file://grader.cjs:check:detail', 'grader.cjs', 'check:detail'],
+    ['file://C:/graders/grader.cjs:check:detail', 'C:/graders/grader.cjs', 'check:detail'],
+    [
+      'file://path:with:colons/grader.cjs:check:detail',
+      'path:with:colons/grader.cjs',
+      'check:detail',
+    ],
+    ['file://grader.cjs:ns:a:b', 'grader.cjs', 'ns:a:b'],
+    ['file://grader.cjs:other.js', 'grader.cjs', 'other.js'],
+    ['file://grader.cjs:score.js', 'grader.cjs', 'score.js'],
+    ['file://grader.cjs:validators/score', 'grader.cjs', 'validators/score'],
+    ['file://grader.cjs:check.py:detail', 'grader.cjs', 'check.py:detail'],
+    ['file://grader.cjs:check.rb:detail', 'grader.cjs', 'check.rb:detail'],
+    ['file://grader.cjs:copy.cjs:grade', 'grader.cjs:copy.cjs', 'grade'],
+    ['file://grader.cjs:copy.cjs:check:detail', 'grader.cjs:copy.cjs', 'check:detail'],
+  ])('should preserve JavaScript file and export boundaries: %s', (fileUrl, filePath, fn) => {
+    expect(parseFileUrl(fileUrl)).toEqual({ filePath, functionName: fn });
+  });
+
+  it('should use the existing JavaScript file to disambiguate an export-looking filename', () => {
+    mockResolve.mockImplementation((_basePath, filePath) => filePath);
+    const existsSpy = vi
+      .spyOn(fs, 'existsSync')
+      .mockImplementation((filePath) => filePath === 'grader.cjs');
+    try {
+      expect(parseFileUrl('file://grader.cjs:check.js:detail', { basePath: '/configs' })).toEqual({
+        filePath: 'grader.cjs',
+        functionName: 'check.js:detail',
+      });
+    } finally {
+      existsSpy.mockRestore();
+    }
+  });
+
+  it('should prefer an existing Python filename containing a JavaScript marker', () => {
+    mockResolve.mockImplementation((_basePath, filePath) => filePath);
+    const existsSpy = vi
+      .spyOn(fs, 'existsSync')
+      .mockImplementation((filePath) => filePath === 'config.cjs:backup.py');
+    try {
+      expect(
+        parseFileUrl('file://config.cjs:backup.py:get_config', { basePath: '/configs' }),
+      ).toEqual({
+        filePath: 'config.cjs:backup.py',
+        functionName: 'get_config',
+      });
+    } finally {
+      existsSpy.mockRestore();
+    }
+  });
+
+  it('should preserve a complete existing data-file path before the JavaScript fallback', () => {
+    mockResolve.mockImplementation((_basePath, filePath) => filePath);
+    const existsSpy = vi
+      .spyOn(fs, 'existsSync')
+      .mockImplementation((filePath) => filePath === 'config.cjs:backup:settings.json');
+    try {
+      expect(
+        parseFileUrl('file://config.cjs:backup:settings.json', { basePath: '/configs' }),
+      ).toEqual({ filePath: 'config.cjs:backup:settings.json' });
+    } finally {
+      existsSpy.mockRestore();
+    }
+  });
+
+  it('should apply file-aware parsing when the base path is empty', () => {
+    mockResolve.mockImplementation((_basePath, filePath) => filePath);
+    const existsSpy = vi
+      .spyOn(fs, 'existsSync')
+      .mockImplementation((filePath) => filePath === 'config.cjs:backup.py');
+    try {
+      expect(parseFileUrl('file://config.cjs:backup.py:get_config', { basePath: '' })).toEqual({
+        filePath: 'config.cjs:backup.py',
+        functionName: 'get_config',
+      });
+    } finally {
+      existsSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    'file://callbacks/2026-05-27T12:00:00.js',
+    'file://./path/to/file:default.js',
+    'file://C:',
+    'file://grader.cjs:',
+    String.raw`file://grader.cjs:ns\fn`,
+  ])('should still treat a path-shaped or empty suffix as part of the path: %s', (fileUrl) => {
+    expect(parseFileUrl(fileUrl)).toEqual({ filePath: fileUrl.slice('file://'.length) });
   });
 });

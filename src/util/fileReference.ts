@@ -4,7 +4,7 @@ import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { isJavascriptFile } from './fileExtensions';
+import { isJavascriptFile, isPythonFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { loadYaml } from './yamlLoad';
 
@@ -16,7 +16,7 @@ import { loadYaml } from './yamlLoad';
  */
 export async function loadFileReference(fileRef: string, basePath: string = ''): Promise<any> {
   // Parse file:// URL with Windows-aware path handling
-  const { filePath, functionName } = parseFileUrl(fileRef);
+  const { filePath, functionName } = parseFileUrl(fileRef, { basePath });
 
   // Resolve the absolute path
   const resolvedPath = path.resolve(basePath, filePath);
@@ -39,7 +39,7 @@ export async function loadFileReference(fileRef: string, basePath: string = ''):
       logger.debug(`Loading JavaScript file: ${resolvedPath}`);
       const mod = await importModule(resolvedPath, functionName);
       return typeof mod === 'function' ? await mod() : mod;
-    } else if (extension === '.py') {
+    } else if (isPythonFile(filePath, { reference: true })) {
       logger.debug(
         `Loading Python file: ${resolvedPath}, function: ${functionName || 'get_config'}`,
       );

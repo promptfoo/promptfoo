@@ -5,7 +5,7 @@ import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { cn } from '@app/lib/utils';
-import { isJavascriptFile } from '@promptfoo/util/fileExtensions';
+import { isJavascriptFile, isPythonFile } from '@promptfoo/util/fileExtensions';
 import { SetupSection } from '../SetupSection';
 
 interface ValidationError {
@@ -41,7 +41,7 @@ const validatePath = (value: string, isTyping: boolean): ValidationError | undef
   }
 
   // During typing, don't show file type error until they've finished typing the file extension
-  if (!isTyping && !isJavascriptFile(filePath) && !filePath.endsWith('.py')) {
+  if (!isTyping && !isJavascriptFile(filePath) && !isPythonFile(filePath)) {
     return { message: 'Must be a JavaScript/TypeScript or Python file' };
   }
 

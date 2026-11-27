@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -37,7 +38,12 @@ import {
   type TraceData,
   type VarValue,
 } from '../types/index';
-import { isJavascriptFile } from '../util/fileExtensions';
+import {
+  isJavascriptFile,
+  isPythonFile,
+  normalizeWindowsFileUrlPath,
+  parseExecutableFileReference,
+} from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
@@ -381,6 +387,12 @@ function applyAssertionWeight(result: GradingResult, weight: number | undefined)
   return weight === 0 ? { ...result, pass: true } : result;
 }
 
+function asRubyExecutableReference(
+  reference: ReturnType<typeof parseExecutableFileReference>,
+): ReturnType<typeof parseExecutableFileReference> | undefined {
+  return reference.filePath.endsWith('.rb') ? reference : undefined;
+}
+
 /**
  * Execute a single assertion against provider output.
  *
@@ -497,17 +509,22 @@ async function runAssertionInternal({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const colonIndex = fileRef.indexOf(':');
-        filePath = fileRef.slice(0, colonIndex);
-        functionName = fileRef.slice(colonIndex + 1);
-      }
-
-      filePath = path.resolve(basePath, filePath);
+      const fileReference = renderedValue.slice('file://'.length);
+      const executableReference = parseExecutableFileReference(fileReference, {
+        fileExists: (candidate) =>
+          existsSync(
+            path.resolve(basePath, normalizeWindowsFileUrlPath(candidate, process.platform)),
+          ),
+      });
+      const pythonReference = isPythonFile(executableReference.filePath, { reference: true })
+        ? executableReference
+        : undefined;
+      const rubyReference = asRubyExecutableReference(executableReference);
+      const { filePath: referencedPath, functionName } = rubyReference ?? executableReference;
+      const filePath = path.resolve(
+        basePath,
+        normalizeWindowsFileUrlPath(referencedPath, process.platform),
+      );
 
       if (isJavascriptFile(filePath)) {
         // Load errors (missing file or export) are config mistakes and still throw.
@@ -520,11 +537,17 @@ async function runAssertionInternal({
           );
         }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
-      } else if (filePath.endsWith('.py') || filePath.endsWith('.rb')) {
+      } else if (
+        pythonReference ||
+        rubyReference ||
+        filePath.endsWith('.py') ||
+        filePath.endsWith('.rb')
+      ) {
         try {
-          const runScript = filePath.endsWith('.py')
-            ? runPython
-            : (await import('../ruby/rubyUtils.js')).runRuby;
+          const runScript =
+            pythonReference || filePath.endsWith('.py')
+              ? runPython
+              : (await import('../ruby/rubyUtils.js')).runRuby;
           valueFromScript = await runScript<ValueFromScriptType>(
             filePath,
             functionName || 'get_assert',

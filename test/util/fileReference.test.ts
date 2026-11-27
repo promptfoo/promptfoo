@@ -33,7 +33,15 @@ vi.mock('../../src/esm', () => ({
 vi.mock('../../src/python/pythonUtils', () => ({
   runPython: vi.fn(),
 }));
-vi.mock('../../src/util/fileExtensions');
+vi.mock('../../src/util/fileExtensions', async () => {
+  const actual = await vi.importActual<typeof import('../../src/util/fileExtensions')>(
+    '../../src/util/fileExtensions',
+  );
+  return {
+    ...actual,
+    isJavascriptFile: vi.fn(),
+  };
+});
 vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -109,6 +117,15 @@ describe('fileReference utility functions', () => {
       expect(result).toEqual(parsedContent);
     });
 
+    it('should load a JSON filename containing a Ruby-looking segment', async () => {
+      readFileMock.mockResolvedValue('{"preserved":true}');
+
+      expect(await loadFileReference('file:///path/to/config.rb:backup.json')).toEqual({
+        preserved: true,
+      });
+      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.rb:backup.json', 'utf8');
+    });
+
     it('should load YAML files correctly', async () => {
       const fileRef = 'file:///path/to/config.yaml';
       const fileContent = 'name: test\nvalue: 42';
@@ -122,6 +139,35 @@ describe('fileReference utility functions', () => {
       expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.yaml', 'utf8');
       expect(loadYaml).toHaveBeenCalledWith(fileContent);
       expect(result).toEqual(parsedContent);
+    });
+
+    it.each([
+      ['file://grader.cjs:score.js', '/configs/grader.cjs', 'score.js'],
+      ['file://grader.cjs:check.py:detail', '/configs/grader.cjs', 'check.py:detail'],
+      ['file://grader.cjs:check.rb:detail', '/configs/grader.cjs', 'check.rb:detail'],
+      ['file://grader.cjs:copy.cjs:grade', '/configs/grader.cjs:copy.cjs', 'grade'],
+      ['file://grader.cjs:check:detail', '/configs/grader.cjs', 'check:detail'],
+      ['file://grader.cjs:validators/score', '/configs/grader.cjs', 'validators/score'],
+    ])('should load the selected JavaScript export: %s', async (fileRef, filePath, exportName) => {
+      importModule.mockResolvedValue(() => 'selected export');
+
+      expect(await loadFileReference(fileRef, '/configs')).toBe('selected export');
+      expect(importModule).toHaveBeenCalledWith(filePath, exportName);
+    });
+
+    it('should disambiguate a JavaScript-looking export using the existing module', async () => {
+      const existsSpy = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((filePath) => filePath === '/configs/grader.cjs');
+      importModule.mockResolvedValue(() => 'selected export');
+      try {
+        expect(await loadFileReference('file://grader.cjs:check.js:detail', '/configs')).toBe(
+          'selected export',
+        );
+        expect(importModule).toHaveBeenCalledWith('/configs/grader.cjs', 'check.js:detail');
+      } finally {
+        existsSpy.mockRestore();
+      }
     });
 
     it('should load JavaScript files correctly', async () => {
@@ -173,6 +219,74 @@ describe('fileReference utility functions', () => {
       expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'custom_func', []);
       expect(result).toEqual(pythonOutput);
     });
+
+    it('should load a Python config filename containing a Ruby-looking segment', async () => {
+      runPython.mockResolvedValue({ preserved: true });
+
+      expect(await loadFileReference('file://config.rb:backup.py:get_config', '/configs')).toEqual({
+        preserved: true,
+      });
+      expect(runPython).toHaveBeenCalledWith('/configs/config.rb:backup.py', 'get_config', []);
+    });
+
+    it('should load an existing Python filename containing a JavaScript marker', async () => {
+      const existsSpy = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((filePath) => filePath === '/configs/config.cjs:backup.py');
+      runPython.mockResolvedValue({ preserved: true });
+      try {
+        expect(
+          await loadFileReference('file://config.cjs:backup.py:get_config', '/configs'),
+        ).toEqual({ preserved: true });
+        expect(runPython).toHaveBeenCalledWith('/configs/config.cjs:backup.py', 'get_config', []);
+      } finally {
+        existsSpy.mockRestore();
+      }
+    });
+
+    it('should load a complete JSON filename containing JavaScript markers', async () => {
+      const filePath = '/configs/config.cjs:backup:settings.json';
+      const existsSpy = vi.spyOn(fs, 'existsSync').mockImplementation((candidate) => {
+        return candidate === filePath;
+      });
+      readFileMock.mockResolvedValue('"json-data-marker"');
+      try {
+        expect(await loadFileReference('file://config.cjs:backup:settings.json', '/configs')).toBe(
+          'json-data-marker',
+        );
+        expect(readFileMock).toHaveBeenCalledWith(filePath, 'utf8');
+        expect(importModule).not.toHaveBeenCalled();
+      } finally {
+        existsSpy.mockRestore();
+      }
+    });
+
+    it('should use file-aware parsing with the default empty base path', async () => {
+      const existsSpy = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((filePath) => filePath === 'config.cjs:backup.py');
+      runPython.mockResolvedValue('empty-base-marker');
+      try {
+        expect(await loadFileReference('file://config.cjs:backup.py:get_config')).toBe(
+          'empty-base-marker',
+        );
+        expect(runPython).toHaveBeenCalledWith('config.cjs:backup.py', 'get_config', []);
+      } finally {
+        existsSpy.mockRestore();
+      }
+    });
+
+    it.each(['file:///path/to/config?handler=loader.PY', 'file:///path/to/config#loader.PY'])(
+      'should reject query-like Python file references: %s',
+      async (fileRef) => {
+        const resolvedPath = fileRef.slice('file://'.length);
+        vi.mocked(path.resolve).mockReturnValue(resolvedPath);
+        vi.mocked(path.extname).mockReturnValue('.PY');
+
+        await expect(loadFileReference(fileRef)).rejects.toThrow('Unsupported file extension: .py');
+        expect(runPython).not.toHaveBeenCalled();
+      },
+    );
 
     it('should load text files correctly', async () => {
       const fileRef = 'file:///path/to/config.txt';

@@ -15,7 +15,7 @@ import {
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { isJavascriptFile } from './fileExtensions';
+import { isJavascriptFile, isPythonFile, parseExecutableFileReference } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
@@ -88,6 +88,25 @@ export async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
+/** Checks a path against the active configuration directory. */
+function fileExistsAtBasePath(filePath: string): boolean {
+  return fs.existsSync(path.resolve(cliState.basePath || process.cwd(), filePath));
+}
+
+/** Matches a provider script extension after resolving its optional selector. */
+export function matchesScriptFileExtension(reference: string, fileExtension: string): boolean {
+  const { filePath } = parseExecutableFileReference(reference, {
+    fileExists: fileExistsAtBasePath,
+  });
+  if (fileExtension === 'py') {
+    return isPythonFile(filePath, { reference: true });
+  }
+  return (
+    filePath.endsWith(`.${fileExtension}`) ||
+    (fileExtension === 'go' && /\.go:[^:/\\]+$/.test(filePath))
+  );
+}
+
 /**
  * Simple Nunjucks engine specifically for file paths
  * This function is separate from the main getNunjucksEngine to avoid circular dependencies
@@ -148,11 +167,13 @@ export function maybeLoadFromExternalFile(
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
   const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
+  const isExecutableFile =
+    isPythonFile(cleanPath, { reference: true }) || isJavascriptFile(cleanPath);
 
   // In assertion contexts, always preserve Python/JS file references
   // This prevents premature dereferencing of assertion files that should be
   // handled by the assertion system, not the generic config loader
-  if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
+  if (context === 'assertion' && isExecutableFile) {
     logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
     return renderedFilePath;
   }
@@ -169,15 +190,16 @@ export function maybeLoadFromExternalFile(
   // For Python/JS files with function names, return the original string unchanged
   // to allow the assertion system to handle function loading at execution time.
   // This prevents premature file existence checks that would fail for function references.
-  if (functionName && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
+  if (functionName && isExecutableFile) {
     return renderedFilePath;
   }
 
-  // For non-Python/JS files, use the original path (ignore potential function name)
-  const pathToUse =
-    functionName && !(cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))
-      ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
-      : cleanPath;
+  // For non-Python/JS files, use the original path (ignore potential function name).
+  // Reaching here with a function name implies the file is not executable: the guard
+  // above already returned for executable files.
+  const pathToUse = functionName
+    ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
+    : cleanPath;
 
   const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
@@ -333,7 +355,7 @@ export function maybeLoadConfigFromExternalFile(
         key === 'value' &&
         'type' in config &&
         typeof config.type === 'string' &&
-        (config.type === 'python' || config.type === 'javascript');
+        ['python', 'not-python', 'javascript', 'not-javascript'].includes(config.type);
 
       // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
       // This preserves file:// glob patterns for test case expansion
@@ -384,19 +406,38 @@ export function parsePathOrGlob(
   let functionName: string | undefined;
 
   if (filename.includes(':')) {
-    // Windows-aware path parsing: check if colon is part of drive letter
-    const lastColonIndex = filename.lastIndexOf(':');
-    if (lastColonIndex > 1) {
-      const pathWithoutFunction = filename.slice(0, lastColonIndex);
-      if (
-        isJavascriptFile(pathWithoutFunction) ||
-        pathWithoutFunction.endsWith('.py') ||
-        pathWithoutFunction.endsWith('.go') ||
-        pathWithoutFunction.endsWith('.rb')
-      ) {
-        functionName = filename.slice(lastColonIndex + 1);
-        filename = pathWithoutFunction;
+    const parsed = parseExecutableFileReference(filename, {
+      fileExists: (candidate) => fs.existsSync(path.resolve(basePath, candidate)),
+    });
+    filename = parsed.filePath;
+    functionName = parsed.functionName;
+    if (!functionName) {
+      // Keep Go's selector spelling and legacy path-shaped suffixes. JavaScript,
+      // Python and Ruby have already been resolved by the shared parser above.
+      const lastColonIndex = filename.lastIndexOf(':');
+      if (lastColonIndex > 1) {
+        const pathWithoutFunction = filename.slice(0, lastColonIndex);
+        if (
+          isJavascriptFile(pathWithoutFunction) ||
+          isPythonFile(pathWithoutFunction, { reference: true }) ||
+          pathWithoutFunction.endsWith('.go') ||
+          pathWithoutFunction.endsWith('.rb')
+        ) {
+          functionName = filename.slice(lastColonIndex + 1);
+          filename = pathWithoutFunction;
+        }
       }
+    }
+  }
+
+  if (isPythonFile(filename) && path.extname(filename) !== '.py') {
+    const extension = path.extname(filename);
+    const lowercaseFilename = `${filename.slice(0, -extension.length)}.py`;
+    if (
+      !fs.lstatSync(path.join(basePath, filename), { throwIfNoEntry: false }) &&
+      fs.existsSync(path.join(basePath, lowercaseFilename))
+    ) {
+      filename = lowercaseFilename;
     }
   }
 
@@ -558,7 +599,9 @@ export async function maybeLoadToolsFromExternalFile(
   // Check if this is a Python/JS file reference with function name
   // These need special handling to execute the function and get the result
   if (typeof rendered === 'string' && rendered.startsWith('file://')) {
-    const { filePath, functionName } = parseFileUrl(rendered);
+    const { filePath, functionName } = parseFileUrl(rendered, {
+      basePath: cliState.basePath || process.cwd(),
+    });
 
     if (functionName && (filePath.endsWith('.py') || isJavascriptFile(filePath))) {
       // Execute the function to get tool definitions

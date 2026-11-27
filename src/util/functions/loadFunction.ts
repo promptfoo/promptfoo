@@ -5,7 +5,13 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { runPython } from '../../python/pythonUtils';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
+import {
+  isJavascriptFile,
+  isPythonFile,
+  JAVASCRIPT_EXTENSIONS,
+  normalizeWindowsFileUrlPath,
+  parseExecutableFileReference,
+} from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
 
@@ -38,7 +44,7 @@ export async function loadFunction<T extends Function>({
     return functionCache[cacheKey] as T;
   }
 
-  if (!isJavascriptFile(resolvedPath) && !resolvedPath.endsWith('.py')) {
+  if (!isJavascriptFile(resolvedPath) && !isPythonFile(resolvedPath)) {
     throw new Error(
       `File must be a JavaScript (${JAVASCRIPT_EXTENSIONS.join(', ')}) or Python (.py) file`,
     );
@@ -87,27 +93,14 @@ export async function loadFunction<T extends Function>({
   }
 }
 
-// Matches the leading slash + Windows drive prefix from canonical `file:///C:/...`
-// URLs (e.g. `/C:/` or `/C:\`). Only stripped on Windows so POSIX paths that
-// legitimately start with `/X:` (a directory literally named `X:`) are preserved.
-const WIN32_DRIVE_PREFIX = /^\/[A-Za-z]:[\\/]/;
-
-function normalizeFilePath(filePath: string): string {
-  if (process.platform === 'win32' && WIN32_DRIVE_PREFIX.test(filePath)) {
-    return filePath.slice(1);
-  }
-  return filePath;
-}
-
 /**
  * Extracts the file path and optional function name from a `file://` URL.
  *
- * Splits at the **last** `:` rather than the first so Windows drive-letter
- * prefixes (`C:`, `D:`, ...) are preserved in `filePath`. The `lastColonIndex
- * > 1` guard prevents splitting at a leading drive-letter colon (`file://C:`
- * with no function name) or at the empty-path edge case (`file://:fn`). Only
- * JavaScript and Python callback files support the named-export suffix, so
- * colons in other valid POSIX paths remain part of the path.
+ * Uses the shared script-reference parser to preserve Windows drive letters
+ * and colons in filenames. For JavaScript, the rightmost supported file boundary
+ * separates the path from the export key, whose remaining colons are preserved.
+ * Only JavaScript and Python callback files support the named-export suffix,
+ * so colons in other valid POSIX paths remain part of the path.
  *
  * Examples:
  *   `file://callbacks.js`             → `{ filePath: 'callbacks.js' }`
@@ -120,33 +113,25 @@ function normalizeFilePath(filePath: string): string {
  * @returns The file path and optional function name.
  * @throws If `fileUrl` does not start with `file://`.
  */
-export function parseFileUrl(fileUrl: string): { filePath: string; functionName?: string } {
+export function parseFileUrl(
+  fileUrl: string,
+  options: { basePath?: string } = {},
+): { filePath: string; functionName?: string } {
   if (!fileUrl.startsWith('file://')) {
     throw new Error('URL must start with file://');
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
-  const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
-
-  if (lastColonIndex > 1) {
-    const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
-
-    // Only executable function files support a :functionName suffix. This preserves
-    // colons that are part of a valid file or directory name on POSIX systems.
-    if (!isJavascriptFile(candidateFilePath) && !candidateFilePath.endsWith('.py')) {
-      return {
-        filePath: normalizeFilePath(urlWithoutProtocol),
-      };
-    }
-
-    return {
-      filePath: normalizeFilePath(candidateFilePath),
-      functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
-    };
-  }
-
+  const parsedReference = parseExecutableFileReference(urlWithoutProtocol, {
+    includeRuby: false,
+    fileExists:
+      options.basePath === undefined
+        ? undefined
+        : (candidate) => fs.existsSync(path.resolve(options.basePath!, candidate)),
+  });
   return {
-    filePath: normalizeFilePath(urlWithoutProtocol),
+    ...parsedReference,
+    filePath: normalizeWindowsFileUrlPath(parsedReference.filePath, process.platform),
   };
 }
 

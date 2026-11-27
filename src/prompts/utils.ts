@@ -3,6 +3,18 @@ import { generateIdFromPrompt } from './id';
 
 import type { Prompt } from '../types/index';
 
+// processPromptFile dispatches only JavaScript/TypeScript and Python extensions
+// case-insensitively. Other formats retain the existing literal fallback.
+const CASE_INSENSITIVE_EXECUTABLE_EXTENSIONS = [
+  '.cjs',
+  '.cts',
+  '.js',
+  '.mjs',
+  '.mts',
+  '.py',
+  '.ts',
+];
+
 /**
  * Determines if a string is a valid file path.
  * @param str - The string to check.
@@ -20,9 +32,14 @@ export function maybeFilePath(str: string): boolean {
 
   // An extension can end the string or precede the last colon in a reference like prompts.py:generate.
   const lastColon = str.lastIndexOf(':');
+  const lowerStr = str.toLowerCase();
+  const lowerLastColon = lowerStr.lastIndexOf(':');
   return (
     str.startsWith('file://') ||
     VALID_FILE_EXTENSIONS.some((ext) => str.endsWith(ext) || str.endsWith(ext, lastColon)) ||
+    CASE_INSENSITIVE_EXECUTABLE_EXTENSIONS.some(
+      (ext) => lowerStr.endsWith(ext) || lowerStr.endsWith(ext, lowerLastColon),
+    ) ||
     str.charAt(str.length - 3) === '.' ||
     str.charAt(str.length - 4) === '.' ||
     str.includes('*') ||

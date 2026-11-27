@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import os
+import py_compile
 import sys
 import tempfile
 import unittest
@@ -88,6 +89,48 @@ class TestLoadUserModule(unittest.TestCase):
             with self.assertRaises(ImportError) as context:
                 persistent_wrapper.load_user_module("/some/path.py")
             self.assertIn("Cannot load module", str(context.exception))
+
+    def test_loads_actual_mixed_case_file(self) -> None:
+        """An actual mixed-case source file is loaded with SourceFileLoader."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script_path = os.path.join(temp_dir, "provider.PY")
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write("def test_func(x):\n    return x * 3\n")
+
+            module = persistent_wrapper.load_user_module(script_path)
+            self.assertEqual(module.test_func(4), 12)
+
+    def test_loads_compiled_python_provider(self) -> None:
+        """Compiled providers retain importlib's SourcelessFileLoader path."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = os.path.join(temp_dir, "provider.py")
+            compiled_path = os.path.join(temp_dir, "provider.pyc")
+            with open(source_path, "w", encoding="utf-8") as f:
+                f.write("def test_func(x):\n    return x * 4\n")
+            py_compile.compile(source_path, cfile=compiled_path, doraise=True)
+
+            module = persistent_wrapper.load_user_module(compiled_path)
+            self.assertEqual(module.test_func(3), 12)
+
+    def test_normalizes_mixed_case_reference(self) -> None:
+        """A mixed-case reference can resolve an existing lowercase source file."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lowercase_path = os.path.join(temp_dir, "provider.py")
+            with open(lowercase_path, "w", encoding="utf-8") as f:
+                f.write("def test_func(x):\n    return x + 1\n")
+
+            module = persistent_wrapper.load_user_module(lowercase_path[:-3] + ".PY")
+            self.assertEqual(module.test_func(1), 2)
+
+    def test_rejects_non_python_source(self) -> None:
+        """Only Python source extensions may be loaded as executable modules."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            text_path = os.path.join(temp_dir, "provider.txt")
+            with open(text_path, "w", encoding="utf-8") as f:
+                f.write("def test_func(x):\n    return x\n")
+
+            with self.assertRaises(ImportError):
+                persistent_wrapper.load_user_module(text_path)
 
     def test_adds_script_dir_to_path(self) -> None:
         """Tests that script directory is added to sys.path."""

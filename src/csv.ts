@@ -1,13 +1,20 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 import logger from './logger';
 import { BaseAssertionTypesSchema } from './types/index';
-import { isJavascriptFile } from './util/fileExtensions';
+import { isJavascriptFile, parsePythonFileReference } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { parseCommaSeparatedValues } from './validation/parseCommaSeparatedValues';
 
 import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types/index';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
+
+function isPythonFileReference(value: string): boolean {
+  if (!value.startsWith('file://')) {
+    return false;
+  }
+  return parsePythonFileReference(value.slice('file://'.length)) !== undefined;
+}
 
 let _assertionRegex: RegExp | null = null;
 function getAssertionRegex(): RegExp {
@@ -41,6 +48,9 @@ function parseFiniteNumber(value: string | undefined): number | undefined {
 }
 
 export function assertionFromString(expected: string): Assertion {
+  if (isPythonFileReference(expected)) {
+    return { type: 'python', value: expected };
+  }
   // Legacy options
   if (
     expected.startsWith('javascript:') ||
@@ -72,15 +82,10 @@ export function assertionFromString(expected: string): Assertion {
       value: expected.slice(expected.startsWith('grade:') ? 6 : 11),
     };
   }
-  if (
-    expected.startsWith('python:') ||
-    (expected.startsWith('file://') && (expected.endsWith('.py') || expected.includes('.py:')))
-  ) {
-    const sliceLength = expected.startsWith('python:') ? 'python:'.length : 'file://'.length;
-    const functionBody = expected.slice(sliceLength).trim();
+  if (expected.startsWith('python:')) {
     return {
       type: 'python',
-      value: functionBody,
+      value: expected.slice('python:'.length).trim(),
     };
   }
 

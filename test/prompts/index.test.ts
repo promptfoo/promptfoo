@@ -114,6 +114,16 @@ describe('readPrompts', () => {
     ]);
   });
 
+  it.each(['Return a .JSON', 'Return a .YAML'])(
+    'should preserve an inline prompt with an uppercase structured-data extension: %s',
+    async (prompt) => {
+      vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+
+      await expect(readPrompts(prompt)).resolves.toEqual([{ raw: prompt, label: prompt }]);
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    },
+  );
+
   it('should read a list of prompts', async () => {
     const prompts = ['Sample prompt A', 'Sample prompt B'];
     await expect(readPrompts(prompts)).resolves.toEqual([
@@ -402,6 +412,47 @@ describe('readPrompts', () => {
     ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['prompt.PY', 'prompt.Py'])(
+    'should read a Python file whose extension is not lowercase: %s',
+    async (promptPath) => {
+      const code = `print('dummy prompt')`;
+      vi.mocked(fs.readFileSync).mockReturnValue(code);
+      await expect(readPrompts(promptPath)).resolves.toEqual([
+        {
+          function: expect.any(Function),
+          label: `${promptPath}: ${code}`,
+          raw: code,
+        },
+      ]);
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(['prompt.PY:create_prompt', 'İ.py:create_prompt'])(
+    'should read a named function from a Python file: %s',
+    async (promptPath) => {
+      const code = 'def create_prompt(context):\n    return "generated"';
+      vi.mocked(fs.readFileSync).mockReturnValue(code);
+      vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+
+      const result = await readPrompts(promptPath);
+
+      expect(maybeFilePath(promptPath)).toBe(true);
+      expect(result).toEqual([
+        {
+          raw: code,
+          label: promptPath,
+          function: expect.any(Function),
+          config: undefined,
+        },
+      ]);
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        promptPath.slice(0, promptPath.lastIndexOf(':')),
+        'utf-8',
+      );
+    },
+  );
 
   it('should read a .js file without named function', async () => {
     const promptPath = 'prompt.js';

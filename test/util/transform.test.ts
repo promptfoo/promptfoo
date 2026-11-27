@@ -199,12 +199,12 @@ describe('util', () => {
     it('transforms output using a named function from a Python file', async () => {
       const output = 'hello';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-      const pythonFilePath = 'file://transform.py:custom_transform';
+      const pythonFilePath = 'file://transform.PY:custom_transform';
 
       const transformedOutput = await transform(pythonFilePath, output, context);
       expect(transformedOutput).toBe('HELLO FROM PYTHON');
       expect(runPython).toHaveBeenCalledWith(
-        expect.stringContaining('transform.py'),
+        expect.stringContaining('transform.PY'),
         'custom_transform',
         [output, expect.any(Object)],
       );

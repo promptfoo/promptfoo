@@ -2,7 +2,7 @@ import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { isJavascriptFile } from './fileExtensions';
+import { isJavascriptFile, isPythonFile } from './fileExtensions';
 import { safeJoin } from './pathUtils';
 import { getProcessShim } from './processShim';
 import { isSafeMode, SafeModeError } from './safeMode';
@@ -122,7 +122,7 @@ async function getFileTransformFunction(filePath: string): Promise<Function> {
 
   if (isJavascriptFile(fullPath)) {
     return getJavascriptTransformFunction(fullPath, functionName);
-  } else if (fullPath.endsWith('.py')) {
+  } else if (isPythonFile(fullPath)) {
     return getPythonTransformFunction(fullPath, functionName);
   }
   throw new Error(`Unsupported transform file format: file://${actualFilePath}`);

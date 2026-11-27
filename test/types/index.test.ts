@@ -1526,6 +1526,18 @@ describe('TestSuiteSchema', () => {
       });
     });
 
+    it('should accept mixed-case Python extension paths', () => {
+      const mixedCaseExtensions = [
+        'file://path/to/hooks.PY:beforeAll',
+        'file://path/to/hooks.Py:beforeAll',
+      ];
+
+      mixedCaseExtensions.forEach((extension) => {
+        const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
+        expect(result.success).toBe(true);
+      });
+    });
+
     it('should accept valid JavaScript extension paths', () => {
       const validExtensions = [
         'file://path/to/file.js:function_name',

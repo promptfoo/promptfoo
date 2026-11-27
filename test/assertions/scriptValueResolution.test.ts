@@ -264,6 +264,19 @@ describe('Script value resolution', () => {
 
       expect(result.pass).toBe(false);
     });
+
+    it('should resolve a JavaScript export whose name contains a colon', async () => {
+      const result = await runAssertion({
+        assertion: createStringAssertion('equals', 'file://rubric-generator.cjs:check:detail'),
+        test: { vars: {} },
+        providerResponse: {
+          output: 'COLON_EXPORT_54321',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
   });
 
   describe('regex with file:// script', () => {
@@ -564,6 +577,30 @@ describe('Script value resolution', () => {
       );
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('Ruby execution error');
+    });
+
+    it('should preserve a Ruby selector whose method is named py', async () => {
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockResolvedValue(true);
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'ruby',
+          value: 'file://some_ruby_file.rb:Validator.py',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'namespaced result',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(mockRunRuby).toHaveBeenCalledWith(
+        expect.stringContaining('some_ruby_file.rb'),
+        'Validator.py',
+        expect.any(Array),
+      );
+      expect(result.pass).toBe(true);
     });
   });
 });
