@@ -1,7 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useResultsViewSettingsStore } from '../store';
+import { useResultsViewSettingsStore, useTableStore } from '../store';
 import TableSettingsModal from './TableSettingsModal';
 
 vi.mock('./components/SettingsPanel', () => ({
@@ -23,6 +23,7 @@ describe('TableSettingsModal', () => {
   });
 
   afterEach(() => {
+    useTableStore.setState({ viewerTableDefaults: undefined });
     useResultsViewSettingsStore.setState(useResultsViewSettingsStore.getInitialState(), true);
   });
 
@@ -90,6 +91,19 @@ describe('TableSettingsModal', () => {
       showPrompts: false,
       renderMarkdown: true,
       prettifyJson: true,
+    });
+  });
+
+  it('restores configured table defaults when reset', async () => {
+    const user = userEvent.setup();
+    useTableStore.setState({ viewerTableDefaults: { prettifyJson: false, showPassFail: false } });
+    render(<TableSettingsModal {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Reset settings to defaults' }));
+
+    expect(useResultsViewSettingsStore.getState()).toMatchObject({
+      prettifyJson: false,
+      showPassFail: false,
     });
   });
 

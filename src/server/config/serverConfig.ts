@@ -3,7 +3,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 
 import * as yaml from 'js-yaml';
-import { getEnvString } from '../../envars';
+import { getEnvString, parseEnvBool } from '../../envars';
 import logger from '../../logger';
 import { loadYaml } from '../../util/yamlLoad';
 import { ProviderOptionsSchema } from '../../validators/providers';
@@ -15,6 +15,18 @@ interface ServerConfig {
 }
 
 let cachedConfig: ServerConfig | null = null;
+
+export function getViewerTableDefaults() {
+  const prettifyJson = getEnvString('PROMPTFOO_WEB_VIEWER_TABLE_SETTING_PRETTIFY_JSON');
+  const showPassFail = getEnvString('PROMPTFOO_WEB_VIEWER_TABLE_SETTING_SHOW_PASS_FAIL');
+  if (!prettifyJson && !showPassFail) {
+    return undefined;
+  }
+  return {
+    prettifyJson: prettifyJson ? parseEnvBool(prettifyJson) : undefined,
+    showPassFail: showPassFail ? parseEnvBool(showPassFail) : undefined,
+  };
+}
 
 /**
  * Get the path to the UI providers config file

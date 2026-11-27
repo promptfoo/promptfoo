@@ -1137,6 +1137,19 @@ describe('useTableStore', () => {
   });
 
   describe('fetchEvalData', () => {
+    it('replaces deployment defaults with each table, including responses from older APIs', async () => {
+      const table = { head: { prompts: [], vars: [] }, body: [] };
+      const viewerTableDefaults = { prettifyJson: true, showPassFail: false };
+      vi.mocked(callApi).mockResolvedValueOnce(
+        Response.json({ table, viewerTableDefaults, filteredCount: 0, totalCount: 0 }),
+      );
+      await useTableStore.getState().fetchEvalData('fixture');
+      expect(useTableStore.getState().viewerTableDefaults).toEqual(viewerTableDefaults);
+
+      await loadTable(table);
+      expect(useTableStore.getState().viewerTableDefaults).toBeUndefined();
+    });
+
     it('commits a foreground page before refreshing it and keeps that page if the refresh fails', async () => {
       let finishPage!: (response: Response) => void;
       vi.mocked(callApi)

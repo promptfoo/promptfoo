@@ -10,7 +10,7 @@ import {
 } from '@app/components/ui/dialog';
 import { Separator } from '@app/components/ui/separator';
 import { RotateCcw, Settings } from 'lucide-react';
-import { useResultsViewSettingsStore } from '../store';
+import { useResultsViewSettingsStore, useTableStore } from '../store';
 import SettingsPanel from './components/SettingsPanel';
 
 interface SettingsModalProps {
@@ -32,12 +32,13 @@ const TableSettingsModal = ({
 
   const handleResetToDefaults = () => {
     const settings = useResultsViewSettingsStore.getState();
+    const { viewerTableDefaults } = useTableStore.getState();
     settings.setStickyHeader(true);
     settings.setWordBreak('break-word');
     settings.setRenderMarkdown(true);
-    settings.setPrettifyJson(true);
+    settings.setPrettifyJson(viewerTableDefaults?.prettifyJson ?? true);
     settings.setShowPrompts(false);
-    settings.setShowPassFail(true);
+    settings.setShowPassFail(viewerTableDefaults?.showPassFail ?? true);
     settings.setShowPassReasons(false);
     settings.setShowMetricPills(true);
     settings.setShowInferenceDetails(true);

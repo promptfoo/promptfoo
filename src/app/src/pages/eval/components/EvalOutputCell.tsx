@@ -1297,18 +1297,19 @@ function EvalOutputCell({
   searchText?: string;
 }) {
   const outputCellId = useId();
+  const { viewerTableDefaults, shouldHighlightSearchText, addFilter, resetFilters } =
+    useTableStore();
   const {
     renderMarkdown,
-    prettifyJson,
+    prettifyJson = viewerTableDefaults?.prettifyJson ?? false,
     showPrompts,
-    showPassFail,
+    showPassFail = viewerTableDefaults?.showPassFail ?? true,
     showMetricPills,
     showPassReasons,
     maxImageWidth,
     maxImageHeight,
   } = useResultsViewSettingsStore();
 
-  const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
 
   const [openPrompt, setOpen] = React.useState(false);

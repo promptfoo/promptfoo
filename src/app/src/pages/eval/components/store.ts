@@ -266,6 +266,7 @@ export type ResultsFilter = {
 };
 
 interface TableState {
+  viewerTableDefaults?: EvalTableDTO['viewerTableDefaults'];
   evalId: string | null;
   setEvalId: (evalId: string) => void;
 
@@ -409,11 +410,11 @@ interface SettingsState {
   setShowInferenceDetails: (showInferenceDetails: boolean) => void;
   renderMarkdown: boolean;
   setRenderMarkdown: (renderMarkdown: boolean) => void;
-  prettifyJson: boolean;
+  prettifyJson?: boolean;
   setPrettifyJson: (prettifyJson: boolean) => void;
   showPrompts: boolean;
   setShowPrompts: (showPrompts: boolean) => void;
-  showPassFail: boolean;
+  showPassFail?: boolean;
   setShowPassFail: (showPassFail: boolean) => void;
   showPassReasons: boolean;
   setShowPassReasons: (showPassReasons: boolean) => void;
@@ -456,11 +457,12 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
         set(() => ({ showInferenceDetails })),
       renderMarkdown: false,
       setRenderMarkdown: (renderMarkdown: boolean) => set(() => ({ renderMarkdown })),
-      prettifyJson: false,
+      // Persist a personal choice only after the visitor sets it.
+      prettifyJson: undefined,
       setPrettifyJson: (prettifyJson: boolean) => set(() => ({ prettifyJson })),
       showPrompts: false,
       setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
-      showPassFail: true,
+      showPassFail: undefined,
       setShowPassFail: (showPassFail: boolean) => set(() => ({ showPassFail })),
       showPassReasons: false,
       setShowPassReasons: (showPassReasons: boolean) => set(() => ({ showPassReasons })),
@@ -708,6 +710,7 @@ export const useTableStore = create<TableState>()(
 
           set((prevState) => ({
             table: data.table,
+            viewerTableDefaults: data.viewerTableDefaults,
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),

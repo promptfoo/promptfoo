@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@app/components/ui/select';
-import { useResultsViewSettingsStore } from '../../store';
+import { useResultsViewSettingsStore, useTableStore } from '../../store';
 import CompactSlider from './CompactSlider';
 import CompactToggle from './CompactToggle';
 
@@ -45,12 +45,13 @@ const SectionHeader = ({ children }: { children: React.ReactNode }) => {
 };
 
 const SettingsPanel = ({ resultsTableZoom, onResultsTableZoomChange }: SettingsPanelProps) => {
+  const viewerTableDefaults = useTableStore((state) => state.viewerTableDefaults);
   const {
     stickyHeader,
     setStickyHeader,
     showPrompts,
     setShowPrompts,
-    showPassFail,
+    showPassFail = viewerTableDefaults?.showPassFail ?? true,
     setShowPassFail,
     showPassReasons,
     setShowPassReasons,
@@ -62,7 +63,7 @@ const SettingsPanel = ({ resultsTableZoom, onResultsTableZoomChange }: SettingsP
     setMaxTextLength,
     renderMarkdown,
     setRenderMarkdown,
-    prettifyJson,
+    prettifyJson = viewerTableDefaults?.prettifyJson ?? false,
     setPrettifyJson,
     maxImageWidth,
     setMaxImageWidth,
