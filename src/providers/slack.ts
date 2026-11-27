@@ -1,4 +1,5 @@
 import { WebAPIPlatformError, WebAPIRateLimitedError, WebClient } from '@slack/web-api';
+import { z } from 'zod';
 import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { fetchWithProviderProxy } from './fetch';
@@ -45,6 +46,11 @@ interface SlackMessage {
   bot_id?: string;
 }
 
+const postMessageResponse = z.object({
+  ok: z.boolean(),
+  response_metadata: z.object({}).optional(),
+});
+
 export class SlackProvider implements ApiProvider {
   private client: WebClient;
   private options: SlackProviderOptions;
@@ -66,11 +72,21 @@ export class SlackProvider implements ApiProvider {
     }
 
     this.client = new WebClient(token, {
-      fetch: (url, options) => {
+      fetch: async (url, options) => {
         const headers = new Headers(options?.headers);
         headers.set('x-promptfoo-silent', 'true');
 
-        return fetchWithProviderProxy(url.toString(), { ...options, headers });
+        const response = await fetchWithProviderProxy(url.toString(), { ...options, headers });
+        if (response.status === 200 && url.toString().endsWith('/chat.postMessage')) {
+          // The SDK retries body-read and response-processing errors, even after Slack accepted the post.
+          // A Web API error envelope ends the call without sending the same message again.
+          try {
+            postMessageResponse.parse(await response.clone().json());
+          } catch {
+            return Response.json({ ok: false, error: 'promptfoo_unconfirmed_message_delivery' });
+          }
+        }
+        return response;
       },
     });
   }
@@ -170,6 +186,11 @@ export class SlackProvider implements ApiProvider {
       if (error instanceof WebAPIPlatformError) {
         const slackError = error.data.error;
         switch (slackError) {
+          case 'promptfoo_unconfirmed_message_delivery':
+            return {
+              error: 'Slack may have posted the message. Check the channel before retrying.',
+              metadata: { rateLimitRetryable: false },
+            };
           case 'channel_not_found':
             return { error: `Channel ${responseChannel} not found. Please check the channel ID.` };
           case 'not_in_channel':
