@@ -1057,6 +1057,11 @@ async function resolveLoadedConfig(
         }
       : authoredTracing;
 
+  const outputPath = fileConfig.outputPath || defaultConfig.outputPath;
+  const configuredOutput = outputPath?.length
+    ? outputPath
+    : (commandLineOptions?.output ?? outputPath);
+
   const config: Omit<UnifiedConfig, 'commandLineOptions'> = {
     basePath,
     tags: fileConfig.tags || defaultConfig.tags,
@@ -1070,7 +1075,7 @@ async function resolveLoadedConfig(
       ? false
       : (fileConfig.sharing ?? defaultConfig.sharing),
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
-    outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
+    outputPath: cmdObj.output ?? configuredOutput,
     extensions: [
       ...(cmdObj.extension || []),
       ...(fileConfig.extensions || defaultConfig.extensions || []),

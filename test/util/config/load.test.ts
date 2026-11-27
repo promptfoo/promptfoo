@@ -1569,6 +1569,30 @@ describe('resolveConfigs', () => {
     expect(cliState.basePath).toBe(path.resolve(path.dirname('config.json')));
   });
 
+  it.each([
+    { outputPath: undefined, output: undefined, expected: ['configured.json'] },
+    { outputPath: 'top-level.json', output: undefined, expected: ['top-level.json'] },
+    { outputPath: 'top-level.json', output: ['cli.json'], expected: ['cli.json'] },
+  ])(
+    'resolves configured output paths with CLI precedence (%j)',
+    async ({ outputPath, output, expected }) => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          prompts: ['Hello'],
+          providers: ['echo'],
+          outputPath,
+          commandLineOptions: { output: ['configured.json'] },
+        }),
+      );
+      vi.mocked(globSync).mockReturnValue(['config.json']);
+
+      const { config } = await resolveConfigs({ config: ['config.json'], output }, {});
+
+      expect(config.outputPath).toEqual(expected);
+    },
+  );
+
   it('should include YAML location when an inline test references a missing prompt', async () => {
     const configText = [
       'providers:',

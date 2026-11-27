@@ -169,6 +169,8 @@ An assertion set groups multiple assertions and can define its own threshold, me
 
 Set default values for command-line options. These defaults will be used unless overridden by command-line arguments.
 
+For output files, `-o` takes precedence, followed by a nonempty top-level `outputPath` and then `commandLineOptions.output`.
+
 | Property                 | Type               | Description                                                                                                                                                                                         |
 | ------------------------ | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Basic Configuration**  |                    |                                                                                                                                                                                                     |
