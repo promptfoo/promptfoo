@@ -1,6 +1,29 @@
 import type { EnvOverrides } from './types/env';
 
-export type EnvOverridesProvider = () => EnvOverrides | undefined;
+type ProviderEnv = Readonly<Record<string, string | undefined>>;
+
+// Keep the loader's explicit overrides separate without adding registered secrets
+// to the environment used by templates or subprocesses.
+const explicitProviderEnvs = new WeakMap<ProviderEnv, ProviderEnv | undefined>();
+
+export function setExplicitProviderEnv(
+  env: ProviderEnv | undefined,
+  explicit: ProviderEnv | undefined,
+): void {
+  if (env) {
+    explicitProviderEnvs.set(env, explicit);
+  }
+}
+
+export function getExplicitProviderEnv(env: ProviderEnv | undefined): ProviderEnv | undefined {
+  return env && explicitProviderEnvs.has(env) ? explicitProviderEnvs.get(env) : env;
+}
+
+export type EnvOverridesProvider = (layer: 'suite' | 'file') => EnvOverrides | undefined;
+
+type ProviderLayerOverridesProvider = (
+  layer: 'suite' | 'file' | 'provider',
+) => EnvOverrides | undefined;
 
 /**
  * Module-level singleton; last-writer-wins. Scoped to the current process —
@@ -12,24 +35,31 @@ export type EnvOverridesProvider = () => EnvOverrides | undefined;
  * cycles with logger / cliState.
  */
 let envOverridesProvider: EnvOverridesProvider | undefined;
-
-export function setEnvOverridesProvider(provider: EnvOverridesProvider | undefined): void {
-  envOverridesProvider = provider;
-}
+let providerLayerOverridesProvider: ProviderLayerOverridesProvider | undefined;
 
 /**
- * Returns the current env overrides snapshot, or `undefined` if no provider is
- * registered. Swallows provider exceptions to preserve the invariant that
- * `getEnvString` (and its delegates `getEnvBool` / `getEnvInt` / etc.) never
- * throw on environment access — relied on by ~148 call sites.
+ * Opt in to provider-layer reads by Promptfoo's environment helpers, not native SDK discovery.
+ * Pass the option again whenever re-registering a provider-layer callback.
  */
-export function getEnvOverrides(): EnvOverrides | undefined {
-  if (!envOverridesProvider) {
-    return undefined;
-  }
-  try {
-    return envOverridesProvider();
-  } catch {
-    return undefined;
-  }
+export function setEnvOverridesProvider(provider: EnvOverridesProvider | undefined): void;
+export function setEnvOverridesProvider(
+  provider: ProviderLayerOverridesProvider | undefined,
+  options: { providerLayer: true },
+): void;
+export function setEnvOverridesProvider(
+  provider: EnvOverridesProvider | undefined,
+  options?: { providerLayer: true },
+): void {
+  envOverridesProvider = provider;
+  providerLayerOverridesProvider = options?.providerLayer
+    ? (provider as ProviderLayerOverridesProvider | undefined)
+    : undefined;
+}
+
+export function getEnvOverridesProvider(): EnvOverridesProvider | undefined {
+  return envOverridesProvider;
+}
+
+export function getProviderEnvOverrides(): EnvOverrides | undefined {
+  return providerLayerOverridesProvider?.('provider');
 }

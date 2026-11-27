@@ -5,10 +5,11 @@ prompts:
   - '{{text}}'
 
 providers:
-  - id: hyperbolic:audio:Melo-TTS
+  - id: hyperbolic:audio
     label: Melo TTS
     config:
-      voice: 'alloy'
+      language: 'EN'
+      speaker: 'EN-US'
       speed: 1.0
 
 tests:

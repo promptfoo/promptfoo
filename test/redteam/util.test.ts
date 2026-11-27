@@ -81,14 +81,14 @@ describe('isEmptyResponse', () => {
     expect(isEmptyResponse('   ')).toBe(true);
     expect(isEmptyResponse('{}')).toBe(true);
     expect(isEmptyResponse('  {}  ')).toBe(true);
-    expect(isEmptyResponse('undefined')).toBe(true);
-    expect(isEmptyResponse('  undefined  ')).toBe(true);
-    expect(isEmptyResponse('UNDEFINED')).toBe(true);
-    expect(isEmptyResponse('null')).toBe(true);
-    expect(isEmptyResponse('  NULL  ')).toBe(true);
   });
 
   it('should return false for non-empty responses', () => {
+    expect(isEmptyResponse('undefined')).toBe(false);
+    expect(isEmptyResponse('  undefined  ')).toBe(false);
+    expect(isEmptyResponse('UNDEFINED')).toBe(false);
+    expect(isEmptyResponse('null')).toBe(false);
+    expect(isEmptyResponse('  NULL  ')).toBe(false);
     expect(isEmptyResponse('Hello')).toBe(false);
     expect(isEmptyResponse('{"key": "value"}')).toBe(false);
     expect(isEmptyResponse('undefined behavior')).toBe(false);
@@ -195,7 +195,7 @@ describe('extractGoalFromPrompt', () => {
     expect(usage).toMatchObject({ total: 17, prompt: 10, completion: 7, numRequests: 1 });
   });
 
-  it('does not count cached goal extraction responses', async () => {
+  it('preserves cached goal extraction usage without incurring it again', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: true,
       status: 200,
@@ -219,7 +219,12 @@ describe('extractGoalFromPrompt', () => {
       provider,
     );
 
-    expect(usage).toEqual({});
+    expect(usage).toMatchObject({
+      total: 17,
+      cached: 17,
+      numRequests: 1,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
   });
 
   it('records a coalesced goal extraction request only once', async () => {

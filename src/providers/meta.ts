@@ -1,8 +1,9 @@
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import { getAnthropicEnvHeaderSuppressions } from './anthropic/generic';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { serializeProvider } from './serialization';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { EnvVarKey } from '../envars';
@@ -66,29 +67,30 @@ type MetaMessagesProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: MetaMessagesConfig;
 };
 
-// Published Meta Model API pricing in USD per token (the pricing page lists
-// $1.25 / $0.15 (cached) / $4.25 per 1M tokens for muse-spark-1.1; reasoning
-// tokens bill at the output rate). Models missing from this table fall back to
-// user-supplied `cost` / `inputCost` / `outputCost` overrides.
-// https://dev.meta.ai/docs/getting-started/pricing-rate-limits
+// Published Meta Model API pricing in USD per token. Reasoning tokens bill at
+// the output rate. Contributor models permit training on prompts and completions
+// and must be selected explicitly. Unknown models use caller pricing overrides.
+// https://dev.meta.ai/docs/pricing-rate-limits
 export const META_MODEL_PRICES: Record<
   string,
   { input: number; cachedInput: number; output: number }
 > = {
+  'muse-spark-1.3': {
+    input: 1.25 / 1e6,
+    cachedInput: 0.15 / 1e6,
+    output: 4.25 / 1e6,
+  },
+  'muse-spark-1.3-contributor': {
+    input: 0.1 / 1e6,
+    cachedInput: 0.002 / 1e6,
+    output: 0.2 / 1e6,
+  },
   'muse-spark-1.1': {
     input: 1.25 / 1e6,
     cachedInput: 0.15 / 1e6,
     output: 4.25 / 1e6,
   },
 };
-
-function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
-  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
-    const value = env[key as keyof EnvOverrides];
-    return value === undefined ? undefined : String(value);
-  }
-  return undefined;
-}
 
 // Resolve the key from Meta-specific sources only — unlike the OpenAI base
 // provider we do NOT fall back to OPENAI_API_KEY, which would send an OpenAI
@@ -136,14 +138,7 @@ function resolveMetaOpenAiUrl(config: MetaConfig): string {
 }
 
 function metaToJSON(provider: string, modelName: string, config: MetaKeyConfig) {
-  return {
-    provider,
-    model: modelName,
-    config: {
-      ...config,
-      ...(config.apiKey && { apiKey: undefined }),
-    },
-  };
+  return serializeProvider({ modelName, config }, provider);
 }
 
 function assertSupportedReasoningEffort(effort: unknown): void {
@@ -162,35 +157,42 @@ function assertSupportedReasoningEffort(effort: unknown): void {
 // configured — strip a leaked OPENAI_MAX_COMPLETION_TOKENS / OPENAI_MAX_TOKENS
 // env default so reasoning keeps the full output budget. A passthrough
 // max_tokens alias is mapped to the canonical field.
-function applyMetaOutputCap(
+function applyMetaChatOutputCap(
   body: Record<string, unknown>,
   passthrough: Record<string, unknown>,
-  field: 'max_completion_tokens' | 'max_output_tokens',
   value: number | undefined,
 ): void {
-  if (field in passthrough) {
-    if (field === 'max_output_tokens') {
-      delete body.max_completion_tokens;
-    }
+  if ('max_completion_tokens' in passthrough) {
     return;
   }
-  const outputCap =
-    (field === 'max_output_tokens' ? passthrough.max_completion_tokens : undefined) ??
-    passthrough.max_tokens ??
-    value;
-  if (field === 'max_output_tokens') {
-    delete body.max_completion_tokens;
-  }
+  const outputCap = passthrough.max_tokens ?? value;
   if (outputCap === undefined) {
-    delete body[field];
+    delete body.max_completion_tokens;
   } else {
-    body[field] = outputCap;
+    body.max_completion_tokens = outputCap;
+  }
+}
+
+function applyMetaResponsesOutputCap(
+  body: Record<string, unknown>,
+  passthrough: Record<string, unknown>,
+  value: number | undefined,
+): void {
+  delete body.max_completion_tokens;
+  if ('max_output_tokens' in passthrough) {
+    return;
+  }
+  const outputCap = passthrough.max_completion_tokens ?? passthrough.max_tokens ?? value;
+  if (outputCap === undefined) {
+    delete body.max_output_tokens;
+  } else {
+    body.max_output_tokens = outputCap;
   }
 }
 
 function assertSupportedMetaRequest(
   body: Record<string, unknown>,
-  config: OpenAiCompletionOptions,
+  config: { stop?: unknown; stream?: unknown; logit_bias?: unknown },
 ): void {
   if (config.stop !== undefined || 'stop' in body) {
     throw new Error(
@@ -234,7 +236,9 @@ function assertSupportedMetaRequest(
 // is kept, sourced from config alone.
 function applyMetaSamplingHygiene(
   body: Record<string, unknown>,
-  config: OpenAiCompletionOptions,
+  config: Partial<
+    Record<'temperature' | 'top_p' | 'presence_penalty' | 'frequency_penalty', unknown>
+  > & { omitDefaults?: boolean },
   passthrough: Record<string, unknown>,
   samplingKeys: Array<'top_p' | 'presence_penalty' | 'frequency_penalty'>,
 ): void {
@@ -326,6 +330,11 @@ function applyMetaCost(
   return response;
 }
 
+function resolveMetaProviderOptions(providerOptions: MetaProviderOptions) {
+  const resolvedConfig = resolveMetaOpenAiConfig(providerOptions.config);
+  return { resolvedConfig, options: { ...providerOptions, config: resolvedConfig } };
+}
+
 // The Meta Model API (dev.meta.ai) serves the Muse Spark models through an
 // OpenAI-compatible chat completions endpoint, so the standard chat provider
 // handles requests once the base URL and key resolution point at it.
@@ -334,13 +343,8 @@ class MetaProvider extends OpenAiChatCompletionProvider {
   config: MetaConfig;
 
   constructor(modelName: string, providerOptions: MetaProviderOptions) {
-    const resolvedConfig = resolveMetaOpenAiConfig(providerOptions.config);
-
-    super(modelName, {
-      ...providerOptions,
-      config: resolvedConfig,
-    });
-
+    const { resolvedConfig, options } = resolveMetaProviderOptions(providerOptions);
+    super(modelName, options);
     this.config = resolvedConfig;
   }
 
@@ -371,9 +375,17 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     return true;
   }
 
+  protected override isReasoningCapabilityModel(_modelName: string): boolean {
+    return true;
+  }
+
   // Unlike OpenAI's o-series, Muse Spark accepts temperature (0-2), so keep
   // promptfoo's deterministic default instead of suppressing the parameter.
   protected override supportsTemperature(): boolean {
+    return true;
+  }
+
+  protected override supportsTemperatureForCapabilityModel(_modelName: string): boolean {
     return true;
   }
 
@@ -408,12 +420,7 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     // The Meta API caps generation with max_completion_tokens (max_tokens is
     // only a deprecated alias); honor an explicit max_tokens as the canonical
     // field rather than silently dropping it.
-    applyMetaOutputCap(
-      body,
-      passthrough,
-      'max_completion_tokens',
-      config.max_completion_tokens ?? config.max_tokens,
-    );
+    applyMetaChatOutputCap(body, passthrough, config.max_completion_tokens ?? config.max_tokens);
     applyMetaSamplingHygiene(body, config, passthrough, [
       'top_p',
       'presence_penalty',
@@ -429,10 +436,17 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const response = await super.callApi(prompt, context, callApiOptions);
-    if (!response || response.error) {
+    if (
+      !response ||
+      (response.error && (response.metadata?.errorOrigin !== 'tool' || !response.tokenUsage))
+    ) {
       return response;
     }
-    return applyMetaCost(response, this.modelName, this.config, context);
+    const modelName = this.getBillingModelName({
+      ...this.config,
+      ...context?.prompt?.config,
+    });
+    return applyMetaCost(response, modelName, this.config, context);
   }
 }
 
@@ -444,13 +458,8 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
   config: MetaConfig;
 
   constructor(modelName: string, providerOptions: MetaProviderOptions) {
-    const resolvedConfig = resolveMetaOpenAiConfig(providerOptions.config);
-
-    super(modelName, {
-      ...providerOptions,
-      config: resolvedConfig,
-    });
-
+    const { resolvedConfig, options } = resolveMetaProviderOptions(providerOptions);
+    super(modelName, options);
     this.config = resolvedConfig;
   }
 
@@ -474,7 +483,15 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     return true;
   }
 
+  protected override isReasoningCapabilityModel(_modelName: string): boolean {
+    return true;
+  }
+
   protected override supportsTemperature(): boolean {
+    return true;
+  }
+
+  protected override supportsTemperatureForCapabilityModel(_modelName: string): boolean {
     return true;
   }
 
@@ -508,10 +525,9 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
 
     // The Responses API caps generation with max_output_tokens; map the
     // chat-style caps across so a config shared with meta:<model> keeps its cap.
-    applyMetaOutputCap(
+    applyMetaResponsesOutputCap(
       body,
       passthrough,
-      'max_output_tokens',
       config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens,
     );
     applyMetaSamplingHygiene(body, config, passthrough, ['top_p']);
@@ -531,7 +547,7 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     }
     const usage = data?.usage;
     const cost = calculateMetaCost(
-      this.modelName,
+      this.getBillingModelName(config),
       config as MetaConfig,
       usage?.input_tokens,
       usage?.output_tokens,
@@ -653,9 +669,8 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
 
     const response = await super.callApi(prompt, context);
 
-    // Unlike the chat provider, do NOT skip error responses: the base class
-    // deliberately bills errors that carry tokenUsage (e.g. an MCP loop that
-    // exceeded max_tool_calls) so spent tokens don't vanish from cost totals.
+    // The base class bills usage-bearing errors (e.g. an MCP loop that
+    // exceeded max_tool_calls), so preserve that completed work's cost.
     return applyMetaCost(response, this.modelName, this.config as MetaMessagesConfig, context);
   }
 }

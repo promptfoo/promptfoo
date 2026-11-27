@@ -25,7 +25,7 @@ on:
     paths:
       - 'release-please-config.json'
 
-permissions:
+permissions: &read-only-permissions
   contents: read
 
 concurrency:
@@ -36,11 +36,10 @@ jobs:
   check-drift:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
     steps:
       - name: Checkout (full history)
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           # Need full history to measure the distance from last-release-sha to HEAD.
           fetch-depth: 0

@@ -55,9 +55,7 @@ describe('fetchRemoteGeneration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
-      return 'https://api.promptfoo.app/api/v1/task';
-    });
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/api/v1/task');
   });
 
   it('should fetch remote generation for purpose task', async () => {
@@ -142,7 +140,7 @@ describe('fetchRemoteGeneration', () => {
     expect(generationUsage).toMatchObject({ ...tokenUsage, numRequests: 1 });
   });
 
-  it('does not count cached remote extraction responses', async () => {
+  it('preserves cached remote extraction usage without incurring it again', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: {
         task: 'entities',
@@ -158,7 +156,12 @@ describe('fetchRemoteGeneration', () => {
 
     await fetchRemoteGeneration('entities', ['prompt'], undefined, provider);
 
-    expect(generationUsage).toEqual({});
+    expect(generationUsage).toMatchObject({
+      total: 18,
+      cached: 18,
+      numRequests: 1,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
   });
 
   it('records a coalesced extraction request only once', async () => {

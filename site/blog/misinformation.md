@@ -76,7 +76,7 @@ Although more difficult to quantify, reputational damage to a company can cause 
 
 ### Risks in Foundation Models
 
-All LLMs are at risk for misinformation or hallucination, though more advanced or more recent models may produce lower hallucination rates. Independent research suggests that GPT-4.5 and Claude 3.7, for instance, had significantly lower hallucination rates than GPT-4.0 and Claude 3.5 Sonnet.
+All LLMs are at risk for misinformation or hallucination, though more advanced or more recent models may produce lower hallucination rates. The gap shows up in every generation: independent research published in 2025, for instance, found that GPT-4.5 and Claude 3.7 hallucinated significantly less than GPT-4.0 and Claude 3.5 Sonnet. Whichever generation is current when you read this, benchmark the specific model you plan to ship rather than assuming the newest one is safe.
 
 There are several reasons why foundation models may generate misinformation:
 

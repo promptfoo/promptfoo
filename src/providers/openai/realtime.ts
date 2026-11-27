@@ -1,14 +1,21 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import WebSocket from 'ws';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sanitizeUrlForLogging } from '../../util/sanitizer';
 import { hasHeaderOverride, OpenAiGenericProvider } from '.';
+import { convertPcm16ToWav } from './audio';
 import { calculateOpenAIUsageCost } from './billing';
 import {
   appendOpenAiApiPath,
+  assertOpenAiApiModel,
+  isOpenAiFirstPartyApiUrl,
   NON_CONVERSATIONAL_REALTIME_MODELS,
   OPENAI_REALTIME_MODELS,
+  resolveMaxToolIterations,
 } from './util';
+import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -19,10 +26,45 @@ import type {
 } from '../../types/index';
 import type { OpenAiCompletionOptions } from './types';
 
+function getRealtimeResponseError(response?: OpenAI.Realtime.RealtimeResponse) {
+  if (
+    response?.status === 'failed' ||
+    response?.status === 'cancelled' ||
+    response?.status === 'incomplete'
+  ) {
+    const error = response.status_details?.error;
+    const detail =
+      error && 'message' in error && typeof error.message === 'string'
+        ? error.message
+        : error?.code || error?.type || response.status_details?.reason;
+    return `Realtime response ${response.status}${detail ? `: ${detail}` : ''}`;
+  }
+  return '';
+}
+
+function logRealtimeClose(code: number, reason: Buffer, timeout: NodeJS.Timeout) {
+  logger.debug(`WebSocket closed with code ${code}: ${reason}`);
+  clearTimeout(timeout);
+
+  // Provide more detailed error messages for common WebSocket close codes
+  if (code === 1006) {
+    logger.error(
+      'WebSocket connection closed abnormally - this often indicates a network or firewall issue',
+    );
+  } else if (code === 1008) {
+    logger.error(
+      'WebSocket connection rejected due to policy violation (possibly wrong API key or permissions)',
+    );
+  } else if (code === 403 || reason.includes('403')) {
+    logger.error(
+      'WebSocket connection received 403 Forbidden - verify API key permissions and rate limits',
+    );
+  }
+}
+
 const MAX_RESPONSE_OUTPUT_TOKENS_MAX = 4096;
 
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 30_000;
-const DEFAULT_MAX_TOOL_ITERATIONS = 8;
 // Generic, redacted error string sent back to the model when functionCallHandler
 // throws. We do NOT use String(err) — Node Error objects often contain absolute
 // paths, connection strings, and stack snippets that would otherwise be fed back
@@ -37,67 +79,11 @@ function formatCloseMessage(prefix: string, code: number, reason: Buffer | undef
   return `${prefix} (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`;
 }
 
-/**
- * Convert PCM16 audio data to WAV format for browser playback
- * @param pcmData Raw PCM16 audio data buffer
- * @param sampleRate Sample rate (default 24000 for gpt-realtime)
- * @returns WAV format buffer
- */
-function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24000): Buffer {
-  const numChannels = 1; // Mono
-  const bitsPerSample = 16;
-  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
-  const blockAlign = (numChannels * bitsPerSample) / 8;
-  const dataSize = pcmData.length;
-  const fileSize = 36 + dataSize;
-
-  const wavHeader = Buffer.alloc(44);
-  let offset = 0;
-
-  // RIFF header
-  wavHeader.write('RIFF', offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(fileSize, offset);
-  offset += 4;
-  wavHeader.write('WAVE', offset);
-  offset += 4;
-
-  // fmt chunk
-  wavHeader.write('fmt ', offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(16, offset);
-  offset += 4; // chunk size
-  wavHeader.writeUInt16LE(1, offset);
-  offset += 2; // audio format (PCM)
-  wavHeader.writeUInt16LE(numChannels, offset);
-  offset += 2;
-  wavHeader.writeUInt32LE(sampleRate, offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(byteRate, offset);
-  offset += 4;
-  wavHeader.writeUInt16LE(blockAlign, offset);
-  offset += 2;
-  wavHeader.writeUInt16LE(bitsPerSample, offset);
-  offset += 2;
-
-  // data chunk
-  wavHeader.write('data', offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(dataSize, offset);
-
-  return Buffer.concat([wavHeader, pcmData]);
-}
-
 export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
   modalities?: string[];
   instructions?: string;
   input_audio_format?: 'pcm16' | 'g711_ulaw' | 'g711_alaw';
-  input_audio_transcription?: {
-    model?: string;
-    language?: string;
-    prompt?: string;
-    delay?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-  } | null;
+  input_audio_transcription?: OpenAI.Realtime.AudioTranscription | null;
   output_audio_format?: 'pcm16' | 'g711_ulaw' | 'g711_alaw';
   turn_detection?:
     | {
@@ -116,17 +102,7 @@ export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
         interrupt_response?: boolean;
       }
     | null;
-  voice?:
-    | 'alloy'
-    | 'ash'
-    | 'ballad'
-    | 'coral'
-    | 'echo'
-    | 'sage'
-    | 'shimmer'
-    | 'verse'
-    | 'cedar'
-    | 'marin';
+  voice?: OpenAI.Realtime.RealtimeAudioConfigOutput['voice'];
   max_response_output_tokens?: number | 'inf';
   parallel_tool_calls?: boolean;
   reasoning?: {
@@ -156,6 +132,7 @@ interface WebSocketMessage {
 }
 
 interface RealtimeResponse {
+  error?: string;
   output: string;
   tokenUsage: TokenUsage;
   cached: boolean;
@@ -208,6 +185,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // callers wait on this promise rather than racing each other to send on a
   // socket whose state is still CONNECTING.
   private connectionReady: Promise<void> | null = null;
+  private connectionConfig: { url: string; headers: Record<string, string> } | undefined;
   private persistentConnectionLifecycleCleanup: (() => void) | null = null;
   // Per-provider serialization queue. Concurrent calls on the same provider
   // instance share one socket; the OpenAI Realtime wire shape is not designed
@@ -218,7 +196,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // Add audio state management
   private lastAudioItemId: string | null = null;
   private currentAudioBuffer: Buffer[] = [];
-  private currentAudioFormat: string = 'wav';
   private isProcessingAudio: boolean = false;
   private audioTimeout: NodeJS.Timeout | null = null;
 
@@ -504,7 +481,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     modelName: string,
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (NON_CONVERSATIONAL_REALTIME_MODELS.has(modelName)) {
+    super(modelName, options);
+    this.config = options.config || {};
+    const apiUrl = this.getApiUrl();
+    if (isOpenAiFirstPartyApiUrl(apiUrl) && NON_CONVERSATIONAL_REALTIME_MODELS.has(modelName)) {
       throw new Error(
         `OpenAI ${modelName} is not a conversational Realtime model and cannot be used as ` +
           `openai:realtime:${modelName}. ` +
@@ -516,8 +496,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     if (!OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelName)) {
       logger.debug(`Using unknown OpenAI realtime model: ${modelName}`);
     }
-    super(modelName, options);
-    this.config = options.config || {};
+    assertOpenAiApiModel(modelName, apiUrl);
 
     // Enable maintainContext by default
     if (this.config.maintainContext === undefined) {
@@ -527,11 +506,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
   // Resolve a tool-iteration cap with a sane default and clamp on absurd values.
   private getMaxToolIterations(): number {
-    const value = this.config.maxToolIterations;
-    if (typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 64) {
-      return Math.floor(value);
-    }
-    return DEFAULT_MAX_TOOL_ITERATIONS;
+    return resolveMaxToolIterations(this.config.maxToolIterations);
   }
 
   // Resolve per-call tool timeout. Falls back to websocketTimeout, then a hard default.
@@ -595,7 +570,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
    */
   private async runToolCallRound(
     pendingFunctionCalls: ReadonlyArray<{ id: string; name: string; arguments: string }>,
-    sendEvent: (event: Record<string, unknown>) => string,
+    sendEvent: (event: Record<string, unknown>) => void,
   ): Promise<string[]> {
     const results: string[] = [];
     for (const call of pendingFunctionCalls) {
@@ -668,14 +643,21 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     return wsBase.replace(/\/+$/, '');
   }
 
+  private encodeAudioOutput(data: Buffer): { data: string; format: string } {
+    const format = this.config.output_audio_format || 'pcm16';
+    return format === 'pcm16'
+      ? { data: convertPcm16ToWav(data).toString('base64'), format: 'wav' }
+      : { data: data.toString('base64'), format };
+  }
+
   // Build WebSocket URL for realtime model endpoint
   private getWebSocketUrl(modelName: string): string {
     const wsBase = this.getWebSocketBase();
     return appendOpenAiApiPath(wsBase, 'realtime', `model=${encodeURIComponent(modelName)}`);
   }
 
-  private shouldOmitBearerAuth(wsUrl: string): boolean {
-    if (!hasHeaderOverride(this.config.headers, 'api-key')) {
+  private shouldOmitBearerAuth(wsUrl: string, headers: Record<string, string>): boolean {
+    if (!hasHeaderOverride(headers, 'api-key')) {
       return false;
     }
     return (
@@ -684,12 +666,32 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     );
   }
 
+  private getRealtimeRequestHeaders(overrides?: OpenAiRealtimeOptions): Record<string, string> {
+    const config = { ...this.config, ...overrides };
+    const headers = { ...config.headers };
+    for (const [name, value] of Object.entries(this.config.headers ?? {})) {
+      if (!hasHeaderOverride(headers, name)) {
+        headers[name] = value;
+      }
+    }
+    if (
+      config.safety_identifier !== undefined &&
+      !hasHeaderOverride(headers, 'OpenAI-Safety-Identifier')
+    ) {
+      headers['OpenAI-Safety-Identifier'] = config.safety_identifier;
+    }
+    return this.getOpenAiRequestHeaders(headers);
+  }
+
   // Build the WebSocket handshake headers. When bearer auth is suppressed (Azure
   // api-key auth), also drop any Authorization header a user supplied via
   // config.headers so it can't re-introduce bearer credentials alongside api-key.
-  private buildRealtimeWsHeaders(wsUrl: string): Record<string, string> {
-    const omitBearer = this.shouldOmitBearerAuth(wsUrl);
-    const requestHeaders = { ...this.getOpenAiRequestHeaders() };
+  private buildRealtimeWsHeaders(
+    wsUrl: string,
+    headers: Record<string, string>,
+  ): Record<string, string> {
+    const omitBearer = this.shouldOmitBearerAuth(wsUrl, headers);
+    const requestHeaders = { ...headers };
     if (omitBearer) {
       for (const key of Object.keys(requestHeaders)) {
         if (key.toLowerCase() === 'authorization') {
@@ -726,12 +728,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   private resetAudioState(): void {
     this.lastAudioItemId = null;
     this.currentAudioBuffer = [];
-    this.currentAudioFormat = 'wav';
     this.isProcessingAudio = false;
-    if (this.audioTimeout) {
-      clearTimeout(this.audioTimeout);
-      this.audioTimeout = null;
-    }
   }
 
   async getRealtimeSessionBody() {
@@ -739,514 +736,21 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   }
 
   generateEventId(): string {
-    return `event_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    return `event_${crypto.randomUUID()}`;
   }
 
   async webSocketRequest(
     clientSecret: string,
     prompt: string | RealtimeUserContent[],
   ): Promise<RealtimeResponse> {
-    return new Promise((resolve, reject) => {
-      const promptContent = this.normalizeRealtimePromptContent(prompt);
-      const getCachedToolConfig = this.makeRequestToolConfigCache();
-      logger.debug(
-        `Attempting to connect to OpenAI WebSocket with client secret: ${clientSecret.slice(0, 5)}...`,
-      );
-
-      // The WebSocket URL needs to include the client secret
-      const wsUrl = this.getClientSecretSocketUrl(clientSecret);
-      logger.debug(`Connecting to WebSocket URL: ${sanitizeUrlForLogging(wsUrl)}`);
-
-      // Add WebSocket options to bypass potential network issues
-      const wsOptions = {
-        headers: {
-          'User-Agent': 'promptfoo Realtime API Client',
-          Origin: this.getWebSocketOrigin(),
-          ...this.getOpenAiRequestHeaders(),
-        },
-        handshakeTimeout: 10000,
-        perMessageDeflate: false,
-      };
-
-      const ws = new WebSocket(wsUrl, wsOptions);
-
-      // Inactivity-based request timeout. Held in a closure variable so the
-      // tool-round site can pause it (clearTimeout) before awaiting user code
-      // and restart it afterwards — without that, a slow functionCallHandler
-      // can be killed by the outer timeout before we get to send the redacted
-      // function_call_output and request the follow-up response.
-      const startRequestTimeout = () =>
-        setTimeout(() => {
-          logger.error('WebSocket connection timed out');
-          ws.close();
-          reject(new Error('WebSocket connection timed out'));
-        }, this.config.websocketTimeout || 30000);
-      let timeout = startRequestTimeout();
-
-      // Accumulators for response text and errors
-      let responseText = '';
-      let responseError = '';
-      let responseDone = false;
-      let usage = null;
-      const usageEvents: any[] = [];
-
-      // Audio content accumulators
-      const audioContent: Buffer[] = [];
-      let audioFormat = 'wav';
-      let hasAudioContent = false;
-
-      // Track message IDs and function call state
-      let messageId = '';
-      let responseId = '';
-      let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
-      let functionCallOccurred = false;
-      const functionCallResults: string[] = [];
-      let toolIterations = 0;
-      const maxToolIterations = this.getMaxToolIterations();
-
-      const sendEvent = (event: any) => {
-        if (!event.event_id) {
-          event.event_id = this.generateEventId();
-        }
-        logger.debug(`Sending event: ${JSON.stringify(event)}`);
-        ws.send(JSON.stringify(event));
-        return event.event_id;
-      };
-
-      ws.on('open', async () => {
-        logger.debug('WebSocket connection established successfully');
-
-        // Create a conversation item with the user's prompt - immediately after connection
-        // Don't send ping event as it's not supported
-        sendEvent({
-          type: 'conversation.item.create',
-          previous_item_id: null,
-          item: {
-            type: 'message',
-            role: 'user',
-            content: promptContent,
-          },
-        });
-      });
-
-      ws.on('message', async (data: Buffer) => {
-        try {
-          const message = JSON.parse(data.toString()) as WebSocketMessage;
-          logger.debug(`Received WebSocket message: ${message.type}`);
-
-          // For better debugging, log the full message structure (without potentially large audio data)
-          const debugMessage = { ...message };
-          if (debugMessage.audio) {
-            debugMessage.audio = '[AUDIO_DATA]';
-          }
-          logger.debug(`Message data: ${JSON.stringify(debugMessage, null, 2)}`);
-
-          // Handle different event types
-          switch (message.type) {
-            case 'session.ready':
-              logger.debug('Session ready on WebSocket');
-
-              // Create a conversation item with the user's prompt
-              sendEvent({
-                type: 'conversation.item.create',
-                previous_item_id: null,
-                item: {
-                  type: 'message',
-                  role: 'user',
-                  content: promptContent,
-                },
-              });
-              break;
-
-            case 'session.created':
-              logger.debug('Session created on WebSocket');
-              // No need to do anything here as we'll wait for session.ready
-              break;
-
-            case 'conversation.item.created':
-            case 'conversation.item.added':
-            case 'conversation.item.done':
-              if (message.item.role === 'user' && message.item.id !== messageId) {
-                // User message was created, now create a response
-                messageId = message.item.id;
-
-                // Prepare response creation event with appropriate settings
-                const responseEvent: any = {
-                  type: 'response.create',
-                  response: await this.getRealtimeResponseConfig(await getCachedToolConfig()),
-                };
-
-                sendEvent(responseEvent);
-              }
-              break;
-
-            case 'response.created':
-              responseId = message.response.id;
-              break;
-
-            case 'response.text.delta':
-            case 'response.output_text.delta':
-              // Accumulate text deltas
-              responseText += message.delta;
-              logger.debug(
-                `Added text delta: "${message.delta}", current length: ${responseText.length}`,
-              );
-              break;
-
-            case 'response.text.done':
-            case 'response.output_text.done':
-              // Final text content
-              if (message.text && message.text.length > 0) {
-                logger.debug(
-                  `Setting final text content from response.text.done: "${message.text}" (length: ${message.text.length})`,
-                );
-                responseText = message.text;
-              } else {
-                logger.debug('Received empty text in response.text.done');
-              }
-              break;
-
-            // Handle content part events
-            case 'response.content_part.added':
-              // Log that we received a content part
-              logger.debug(`Received content part: ${JSON.stringify(message.content_part)}`);
-
-              // Track content part ID if needed for later reference
-              if (message.content_part && message.content_part.id) {
-                logger.debug(`Content part added with ID: ${message.content_part.id}`);
-              }
-              break;
-
-            case 'response.content_part.done':
-              logger.debug('Content part completed');
-              break;
-
-            // Handle audio transcript events
-            case 'response.audio_transcript.delta':
-            case 'response.output_audio_transcript.delta':
-              // Accumulate audio transcript deltas - this is the text content
-              responseText += message.delta;
-              logger.debug(
-                `Added audio transcript delta: "${message.delta}", current length: ${responseText.length}`,
-              );
-              break;
-
-            case 'response.audio_transcript.done':
-            case 'response.output_audio_transcript.done':
-              // Final audio transcript content
-              if (message.text && message.text.length > 0) {
-                logger.debug(
-                  `Setting final audio transcript text: "${message.text}" (length: ${message.text.length})`,
-                );
-                responseText = message.text;
-              } else {
-                logger.debug('Received empty text in response.audio_transcript.done');
-              }
-              break;
-
-            // Handle audio data events - store in metadata if needed
-            case 'response.audio.delta':
-            case 'response.output_audio.delta':
-              // Handle audio data (could store in metadata for playback if needed)
-              // For gpt-realtime, audio data is in the 'delta' field, not 'audio' field
-              const audioData = message.audio || message.delta;
-              logger.debug(
-                `Received audio data chunk: delta field exists=${!!message.delta}, length=${message.delta ? message.delta.length : 0}`,
-              );
-
-              if (audioData && audioData.length > 0) {
-                // Store the audio data for later use
-                try {
-                  const audioBuffer = Buffer.from(audioData, 'base64');
-                  audioContent.push(audioBuffer);
-                  hasAudioContent = true;
-                  logger.debug(
-                    `Successfully processed audio chunk: ${audioBuffer.length} bytes, total chunks: ${audioContent.length}`,
-                  );
-                } catch (error) {
-                  logger.error(`Error processing audio data: ${error}`);
-                }
-              } else {
-                logger.debug(
-                  `Audio delta received but no audio data present. Message fields: ${Object.keys(message).join(', ')}`,
-                );
-              }
-              break;
-
-            case 'response.audio.done':
-            case 'response.output_audio.done':
-              logger.debug('Audio data complete');
-              // If audio format is specified in the message, capture it
-              if (message.format) {
-                audioFormat = message.format;
-              }
-              break;
-
-            // Handle output items (including function calls)
-            case 'response.output_item.added':
-              if (message.item.type === 'function_call') {
-                functionCallOccurred = true;
-
-                // Store the function call details for later handling
-                pendingFunctionCalls.push({
-                  id: message.item.call_id,
-                  name: message.item.name,
-                  arguments: message.item.arguments || '{}',
-                });
-              } else if (message.item.type === 'text') {
-                // Handle text output item - also add to responseText
-                if (message.item.text) {
-                  responseText += message.item.text;
-                  logger.debug(
-                    `Added text output item: "${message.item.text}", current length: ${responseText.length}`,
-                  );
-                } else {
-                  logger.debug('Received text output item with empty text');
-                }
-              } else {
-                // Log other output item types
-                logger.debug(`Received output item of type: ${message.item.type}`);
-              }
-              break;
-
-            case 'response.output_item.done':
-              logger.debug('Output item complete');
-              break;
-
-            case 'response.function_call_arguments.done':
-              // Find the function call in our pending list and update its arguments
-              const callIndex = pendingFunctionCalls.findIndex(
-                (call) => call.id === message.call_id,
-              );
-              if (callIndex !== -1) {
-                pendingFunctionCalls[callIndex].arguments = message.arguments;
-              }
-              break;
-
-            case 'response.done':
-              responseDone = true;
-              usage = message.response?.usage ?? message.usage;
-              if (usage) {
-                usageEvents.push(usage);
-              }
-
-              // If there are pending function calls, process them
-              if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
-                if (toolIterations >= maxToolIterations) {
-                  clearTimeout(timeout);
-                  ws.close();
-                  reject(
-                    this.toolIterationCapError(maxToolIterations, {
-                      functionCallOccurred,
-                      functionCallResults: [...functionCallResults],
-                    }),
-                  );
-                  return;
-                }
-                toolIterations++;
-                // Pause the inactivity timeout while user code runs — handler
-                // execution time is not WebSocket inactivity, and a slow
-                // handler must not be killed by the outer timeout before the
-                // redacted function_call_output reaches the model.
-                clearTimeout(timeout);
-                const roundResults = await this.runToolCallRound(pendingFunctionCalls, sendEvent);
-                functionCallResults.push(...roundResults);
-
-                // Request a new response from the model using the function results
-                sendEvent({
-                  type: 'response.create',
-                });
-                timeout = startRequestTimeout();
-
-                // Start a fresh turn for the model's follow-up response.
-                responseText = '';
-                responseError = '';
-                audioContent.length = 0;
-                audioFormat = 'wav';
-                hasAudioContent = false;
-                pendingFunctionCalls = [];
-                responseDone = false;
-
-                // Don't resolve the promise yet - wait for the final response
-                return;
-              }
-
-              // If no function calls or we've processed them all, close the connection
-              clearTimeout(timeout);
-
-              // Check if we have an empty response and try to diagnose the issue
-              if (responseText.length === 0) {
-                // Only log at debug level to prevent user-visible warnings
-                logger.debug(
-                  'Empty response detected before resolving. Checking response message details',
-                );
-                logger.debug('Response message details: ' + JSON.stringify(message, null, 2));
-
-                // Try to extract any text content from the message as a fallback
-                if (
-                  message.response &&
-                  message.response.content &&
-                  Array.isArray(message.response.content)
-                ) {
-                  const textContent = message.response.content.find(
-                    (item: any) => item.type === 'text' && item.text && item.text.length > 0,
-                  );
-
-                  if (textContent) {
-                    logger.debug(
-                      `Found text in response content, using as fallback: "${textContent.text}"`,
-                    );
-                    responseText = textContent.text;
-                  } else {
-                    logger.debug('No fallback text content found in response message');
-                  }
-                }
-
-                // Leave responseText empty — callApi() converts an empty
-                // response (with no audio or function-call results) into an
-                // error so the caller's assertion fails with diagnostic text
-                // rather than a placeholder masquerading as success.
-              }
-
-              ws.close();
-
-              // Check if audio was generated based on usage tokens (for gpt-realtime)
-              if (
-                usage?.output_token_details?.audio_tokens &&
-                usage.output_token_details.audio_tokens > 0
-              ) {
-                if (!hasAudioContent) {
-                  hasAudioContent = true;
-                }
-                // For gpt-realtime model, audio data is PCM16 but we need to convert to WAV for browser playback
-                audioFormat = 'wav';
-                logger.debug(
-                  `Audio detected from usage tokens: ${usage.output_token_details.audio_tokens} audio tokens, converting PCM16 to WAV format`,
-                );
-              }
-
-              // Prepare audio data if available
-              let finalAudioData = null;
-              if (hasAudioContent && audioContent.length > 0) {
-                try {
-                  const rawPcmData = Buffer.concat(audioContent);
-                  // Convert PCM16 to WAV for browser compatibility
-                  const wavData = convertPcm16ToWav(rawPcmData);
-                  finalAudioData = wavData.toString('base64');
-                  logger.debug(
-                    `Audio conversion: PCM16 ${rawPcmData.length} bytes -> WAV ${wavData.length} bytes`,
-                  );
-                } catch (error) {
-                  logger.error(`Error converting audio data to WAV format: ${error}`);
-                  // Still set hasAudioContent to false if conversion fails
-                  hasAudioContent = false;
-                }
-              }
-
-              logger.debug(
-                `AUDIO TRACE: Before resolve - hasAudioContent=${hasAudioContent}, audioContent.length=${audioContent.length}, finalAudioData.length=${finalAudioData?.length || 0}`,
-              );
-              logger.debug(
-                `AUDIO TRACE: audioFormat=${audioFormat}, responseText.length=${responseText.length}`,
-              );
-
-              resolve({
-                output: responseText,
-                tokenUsage: {
-                  total: usage?.total_tokens || 0,
-                  prompt: usage?.input_tokens || 0,
-                  completion: usage?.output_tokens || 0,
-                  cached: 0,
-                  numRequests: 1,
-                },
-                cached: false,
-                metadata: {
-                  responseId,
-                  messageId,
-                  usage,
-                  usageEvents,
-                  // Include audio data in metadata if available
-                  ...(hasAudioContent && {
-                    audio: {
-                      data: finalAudioData,
-                      format: audioFormat,
-                      transcript: responseText, // Use the text as transcript since we have it
-                    },
-                  }),
-                },
-                functionCallOccurred,
-                functionCallResults:
-                  functionCallResults.length > 0 ? functionCallResults : undefined,
-                // When the model emitted function_calls but no handler ran
-                // (no functionCallHandler configured), surface the names so
-                // the empty-response error in callApi() tells the user *which*
-                // tools the model tried to invoke.
-                attemptedFunctionCalls:
-                  functionCallOccurred && functionCallResults.length === 0
-                    ? pendingFunctionCalls.map((c) => ({ name: c.name }))
-                    : undefined,
-              });
-              break;
-
-            case 'rate_limits.updated':
-              // Store rate limits in metadata if needed
-              logger.debug(`Rate limits updated: ${JSON.stringify(message.rate_limits)}`);
-              break;
-
-            case 'error':
-              responseError = `Error: ${message.error.message}`;
-              logger.error(`WebSocket error: ${responseError} (${message.error.type})`);
-
-              // Always close on errors to prevent hanging connections
-              clearTimeout(timeout);
-              ws.close();
-              reject(new Error(responseError));
-              break;
-          }
-        } catch (err) {
-          logger.error(`Error parsing WebSocket message: ${err}`);
-          clearTimeout(timeout);
-          ws.close();
-          reject(err);
-        }
-      });
-
-      ws.on('error', (err) => {
-        logger.error(`WebSocket error: ${err.message}`);
-        clearTimeout(timeout);
-        reject(err);
-      });
-
-      ws.on('close', (code, reason) => {
-        logger.debug(`WebSocket closed with code ${code}: ${reason}`);
-        clearTimeout(timeout);
-
-        // Provide more detailed error messages for common WebSocket close codes
-        if (code === 1006) {
-          logger.error(
-            'WebSocket connection closed abnormally - this often indicates a network or firewall issue',
-          );
-        } else if (code === 1008) {
-          logger.error(
-            'WebSocket connection rejected due to policy violation (possibly wrong API key or permissions)',
-          );
-        } else if (code === 403 || reason.includes('403')) {
-          logger.error(
-            'WebSocket connection received 403 Forbidden - verify API key permissions and rate limits',
-          );
-        }
-
-        // Only reject if we haven't received a completed response or error
-        const connectionClosedPrematurely = responseDone === false && responseError.length === 0;
-        if (connectionClosedPrematurely) {
-          reject(
-            new Error(
-              `WebSocket closed unexpectedly with code ${code}: ${reason}. This may indicate a networking issue, firewall restriction, or API access limitation.`,
-            ),
-          );
-        }
-      });
-    });
+    const promptContent = this.normalizeRealtimePromptContent(prompt);
+    const wsUrl = this.getClientSecretSocketUrl(clientSecret);
+    const headers = {
+      'User-Agent': 'promptfoo Realtime API Client',
+      Origin: this.getWebSocketOrigin(),
+      ...this.getRealtimeRequestHeaders(),
+    };
+    return this.requestSingleTurn(promptContent, wsUrl, headers, 'client-secret');
   }
 
   async callApi(
@@ -1281,15 +785,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
     try {
       const promptContent = this.getRealtimeUserContent(prompt);
+      const requestHeaders = this.getRealtimeRequestHeaders(context?.prompt?.config);
 
       // Use a persistent connection if we should maintain conversation context
       let result;
       if (this.config.maintainContext === true) {
-        result = await this.persistentWebSocketRequest(promptContent);
+        result = await this.persistentWebSocketRequest(promptContent, requestHeaders);
       } else {
         // Connect directly to the WebSocket API using API key
         logger.debug(`Connecting directly to OpenAI Realtime API WebSocket with API key`);
-        result = await this.directWebSocketRequest(promptContent);
+        result = await this.directWebSocketRequest(promptContent, requestHeaders);
       }
 
       let finalOutput = result.output;
@@ -1306,7 +811,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       // failure (wire-shape regression, unhandled tool call, etc.) — surface it
       // as a ProviderResponse error so assertions fail with a useful message
       // instead of silently passing/failing against a placeholder string.
-      if (finalOutput.length === 0 && !hasAudio && !hasFunctionResults) {
+      if (!result.error && finalOutput.length === 0 && !hasAudio && !hasFunctionResults) {
         const attemptedNames = result.attemptedFunctionCalls
           ?.map((c) => c.name)
           .filter((name): name is string => Boolean(name));
@@ -1421,6 +926,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           ? total + usageCost
           : undefined;
       }, 0);
+      if (result.error) {
+        return { error: result.error, tokenUsage, cached: result.cached, cost, metadata };
+      }
       return {
         output: finalOutput,
         tokenUsage,
@@ -1470,24 +978,30 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
   }
 
-  async directWebSocketRequest(prompt: string | RealtimeUserContent[]): Promise<RealtimeResponse> {
+  async directWebSocketRequest(
+    prompt: string | RealtimeUserContent[],
+    requestHeaders = this.getRealtimeRequestHeaders(),
+  ): Promise<RealtimeResponse> {
+    const promptContent = this.normalizeRealtimePromptContent(prompt);
+    const wsUrl = this.getWebSocketUrl(this.modelName);
+    const headers = this.buildRealtimeWsHeaders(wsUrl, requestHeaders);
+    return this.requestSingleTurn(promptContent, wsUrl, headers, 'direct');
+  }
+
+  private requestSingleTurn(
+    promptContent: RealtimeUserContent[],
+    wsUrl: string,
+    headers: Record<string, string>,
+    mode: 'direct' | 'client-secret',
+  ): Promise<RealtimeResponse> {
     return new Promise((resolve, reject) => {
       const getCachedToolConfig = this.makeRequestToolConfigCache();
-      const promptContent = this.normalizeRealtimePromptContent(prompt);
-      logger.debug(`Establishing direct WebSocket connection to OpenAI Realtime API`);
-
-      // Construct URL with model parameter
-      const wsUrl = this.getWebSocketUrl(this.modelName);
       logger.debug(`Connecting to WebSocket URL: ${sanitizeUrlForLogging(wsUrl)}`);
-
-      // Add WebSocket options with required headers
-      const wsOptions = {
-        headers: this.buildRealtimeWsHeaders(wsUrl),
+      const ws = new WebSocket(wsUrl, {
+        headers,
         handshakeTimeout: 10000,
         perMessageDeflate: false,
-      };
-
-      const ws = new WebSocket(wsUrl, wsOptions);
+      });
 
       // Inactivity-based request timeout. Held in a closure variable so the
       // tool-round site can pause it (clearTimeout) before awaiting user code
@@ -1522,35 +1036,42 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       const functionCallResults: string[] = [];
       let toolIterations = 0;
       const maxToolIterations = this.getMaxToolIterations();
-      const sendEvent = (event: any) => {
+      const sendEvent = (event: Record<string, unknown>) => {
         if (!event.event_id) {
           event.event_id = this.generateEventId();
         }
         logger.debug(`Sending event: ${JSON.stringify(event)}`);
         ws.send(JSON.stringify(event));
-        return event.event_id;
+      };
+
+      let initialPromptSent = false;
+      const sendInitialPrompt = () => {
+        if (initialPromptSent) {
+          return;
+        }
+        initialPromptSent = true;
+        sendEvent({
+          type: 'conversation.item.create',
+          previous_item_id: null,
+          item: {
+            type: 'message',
+            role: 'user',
+            content: promptContent,
+          },
+        });
       };
 
       ws.on('open', async () => {
         try {
           logger.debug('WebSocket connection established successfully');
-
-          // First, update the session with our configuration
-          sendEvent({
-            type: 'session.update',
-            session: await this.getRealtimeSessionConfig(await getCachedToolConfig()),
-          });
-
-          // Then create a conversation item with the user's prompt
-          sendEvent({
-            type: 'conversation.item.create',
-            previous_item_id: null,
-            item: {
-              type: 'message',
-              role: 'user',
-              content: promptContent,
-            },
-          });
+          // Client-secret sessions are already configured. Wait for the server's readiness event.
+          if (mode === 'direct') {
+            sendEvent({
+              type: 'session.update',
+              session: await this.getRealtimeSessionConfig(await getCachedToolConfig()),
+            });
+            sendInitialPrompt();
+          }
         } catch (error) {
           clearTimeout(timeout);
           ws.close();
@@ -1572,12 +1093,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
           // Handle different event types
           switch (message.type) {
+            case 'session.ready':
             case 'session.created':
-              logger.debug('Session created on WebSocket');
-              break;
-
-            case 'session.updated':
-              logger.debug('Session updated on WebSocket');
+              if (mode === 'client-secret') {
+                sendInitialPrompt();
+              }
               break;
 
             case 'conversation.item.created':
@@ -1675,8 +1195,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // Store the audio data for later use
                 try {
                   const audioBuffer = Buffer.from(audioData, 'base64');
-                  audioContent.push(audioBuffer);
-                  hasAudioContent = true;
+                  if (audioBuffer.length > 0) {
+                    audioContent.push(audioBuffer);
+                    hasAudioContent = true;
+                  }
                   logger.debug(
                     `Successfully processed audio chunk: ${audioBuffer.length} bytes, total chunks: ${audioContent.length}`,
                   );
@@ -1742,13 +1264,18 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
             case 'response.done':
               responseDone = true;
+              responseError = getRealtimeResponseError(message.response);
               usage = message.response?.usage ?? message.usage;
               if (usage) {
                 usageEvents.push(usage);
               }
 
               // If there are pending function calls, process them
-              if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
+              if (
+                !responseError &&
+                pendingFunctionCalls.length > 0 &&
+                this.config.functionCallHandler
+              ) {
                 if (toolIterations >= maxToolIterations) {
                   clearTimeout(timeout);
                   ws.close();
@@ -1827,18 +1354,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
               ws.close();
 
-              // Check if audio was generated based on usage tokens (for gpt-realtime)
+              // Usage may report audio tokens even when no audio delta arrived.
               if (
                 usage?.output_token_details?.audio_tokens &&
                 usage.output_token_details.audio_tokens > 0
               ) {
-                if (!hasAudioContent) {
-                  hasAudioContent = true;
-                }
-                // For gpt-realtime model, audio data is PCM16 but we need to convert to WAV for browser playback
-                audioFormat = 'wav';
                 logger.debug(
-                  `Audio detected from usage tokens: ${usage.output_token_details.audio_tokens} audio tokens, converting PCM16 to WAV format`,
+                  `Audio tokens reported in usage: ${usage.output_token_details.audio_tokens}`,
                 );
               }
 
@@ -1846,15 +1368,15 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               let finalAudioData = null;
               if (hasAudioContent && audioContent.length > 0) {
                 try {
-                  const rawPcmData = Buffer.concat(audioContent);
-                  // Convert PCM16 to WAV for browser compatibility
-                  const wavData = convertPcm16ToWav(rawPcmData);
-                  finalAudioData = wavData.toString('base64');
+                  const rawAudioData = Buffer.concat(audioContent);
+                  const encodedAudio = this.encodeAudioOutput(rawAudioData);
+                  finalAudioData = encodedAudio.data;
+                  audioFormat = encodedAudio.format;
                   logger.debug(
-                    `Audio conversion: PCM16 ${rawPcmData.length} bytes -> WAV ${wavData.length} bytes`,
+                    `Audio output: ${rawAudioData.length} bytes encoded as ${audioFormat}`,
                   );
                 } catch (error) {
-                  logger.error(`Error converting audio data to WAV format: ${error}`);
+                  logger.error(`Error encoding audio output: ${error}`);
                   // Still set hasAudioContent to false if conversion fails
                   hasAudioContent = false;
                 }
@@ -1868,6 +1390,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               );
 
               resolve({
+                ...(responseError && { error: responseError }),
                 output: responseText,
                 tokenUsage: {
                   total: usage?.total_tokens || 0,
@@ -1883,7 +1406,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   usage,
                   usageEvents,
                   // Include audio data in metadata if available
-                  ...(hasAudioContent && {
+                  ...(finalAudioData !== null && {
                     audio: {
                       data: finalAudioData,
                       format: audioFormat,
@@ -1935,23 +1458,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       });
 
       ws.on('close', (code, reason) => {
-        logger.debug(`WebSocket closed with code ${code}: ${reason}`);
-        clearTimeout(timeout);
-
-        // Provide more detailed error messages for common WebSocket close codes
-        if (code === 1006) {
-          logger.error(
-            'WebSocket connection closed abnormally - this often indicates a network or firewall issue',
-          );
-        } else if (code === 1008) {
-          logger.error(
-            'WebSocket connection rejected due to policy violation (possibly wrong API key or permissions)',
-          );
-        } else if (code === 403 || reason.includes('403')) {
-          logger.error(
-            'WebSocket connection received 403 Forbidden - verify API key permissions and rate limits',
-          );
-        }
+        logRealtimeClose(code, reason, timeout);
 
         // Only reject if we haven't received a completed response or error
         const connectionClosedPrematurely = responseDone === false && responseError.length === 0;
@@ -1990,6 +1497,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     this.persistentConnectionLifecycleCleanup = null;
     this.persistentConnection = null;
     this.connectionReady = null;
+    this.connectionConfig = undefined;
     // Realtime item IDs are scoped to the socket session. Reusing them after a
     // reconnect makes conversation.item.create point at a missing item.
     this.previousItemId = null;
@@ -2050,7 +1558,20 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
    * On error/close before OPEN, both the socket and the cached promise are torn
    * down so the next request creates a fresh connection.
    */
-  private openPersistentConnection(): Promise<void> {
+  private openPersistentConnection(
+    requestHeaders = this.getRealtimeRequestHeaders(),
+  ): Promise<void> {
+    const wsUrl = this.getWebSocketUrl(this.modelName);
+    const headers = this.buildRealtimeWsHeaders(wsUrl, requestHeaders);
+    const connectionConfig = {
+      url: wsUrl,
+      headers: Object.fromEntries(
+        Object.entries(headers).map(([name, value]) => [name.toLowerCase(), value]),
+      ),
+    };
+    if (this.connectionConfig && !isDeepStrictEqual(this.connectionConfig, connectionConfig)) {
+      this.cleanup();
+    }
     // Reuse the cached promise only if the underlying socket is still live.
     // After a disconnect, connectionReady can remain resolved while the
     // socket has been nulled — returning it would skip reconnection and the
@@ -2072,17 +1593,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       return this.connectionReady;
     }
 
-    const wsUrl = this.getWebSocketUrl(this.modelName);
     logger.debug(`Opening persistent WebSocket: ${sanitizeUrlForLogging(wsUrl)}`);
 
     const wsOptions = {
-      headers: this.buildRealtimeWsHeaders(wsUrl),
+      headers,
       handshakeTimeout: 10000,
       perMessageDeflate: false,
     };
 
     const ws = new WebSocket(wsUrl, wsOptions);
     this.persistentConnection = ws;
+    this.connectionConfig = connectionConfig;
 
     this.connectionReady = new Promise<void>((resolve, reject) => {
       const removeBeforeOpenListeners = () => {
@@ -2138,6 +1659,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
    */
   async persistentWebSocketRequest(
     prompt: string | RealtimeUserContent[],
+    requestHeaders = this.getRealtimeRequestHeaders(),
   ): Promise<RealtimeResponse> {
     const promptContent = this.normalizeRealtimePromptContent(prompt);
     const previous = this.inflightTurn;
@@ -2147,7 +1669,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       } catch {
         // Prior turn errors don't poison the queue.
       }
-      await this.openPersistentConnection();
+      await this.openPersistentConnection(requestHeaders);
       return new Promise<RealtimeResponse>((resolve, reject) => {
         void this.setupMessageHandlers(promptContent, resolve, reject).catch(reject);
       });
@@ -2252,8 +1774,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         );
       }
       connection.send(JSON.stringify(event));
-
-      return event.event_id;
     };
 
     // Store cleanup function for message handler
@@ -2275,17 +1795,15 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       }
 
       // Prepare final response with audio if available
-      const finalAudioData =
+      const encodedAudio =
         this.currentAudioBuffer.length > 0
-          ? Buffer.concat(this.currentAudioBuffer).toString('base64')
+          ? this.encodeAudioOutput(Buffer.concat(this.currentAudioBuffer))
           : null;
-
-      const hadAudio = this.currentAudioBuffer.length > 0;
-      const finalAudioFormat = this.currentAudioFormat;
 
       this.resetAudioState();
 
       resolve({
+        ...(responseError && { error: responseError }),
         output: responseText,
         tokenUsage: {
           total: _usage?.total_tokens || 0,
@@ -2300,17 +1818,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           messageId: _messageId,
           usage: _usage,
           usageEvents,
-          ...(hadAudio && {
-            audio: {
-              data: finalAudioData,
-              format: finalAudioFormat,
-            },
-          }),
+          ...(encodedAudio && { audio: encodedAudio }),
         },
-        ...(hadAudio && {
+        ...(encodedAudio && {
           audio: {
-            data: finalAudioData,
-            format: finalAudioFormat,
+            ...encodedAudio,
             transcript: responseText,
           },
         }),
@@ -2409,9 +1921,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
           case 'response.audio.done':
           case 'response.output_audio.done':
-            if (message.format) {
-              this.currentAudioFormat = message.format;
-            }
             this.isProcessingAudio = false;
             audioDone = true;
             checkAndResolve();
@@ -2438,9 +1947,19 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
           case 'response.done':
             responseDone = true;
+            responseError = getRealtimeResponseError(message.response);
             if (message.response?.usage || message.usage) {
               _usage = message.response?.usage ?? message.usage;
               usageEvents.push(_usage);
+            }
+
+            if (responseError) {
+              resolveResponse();
+              if (pendingFunctionCalls.length > 0) {
+                // The session still contains an unanswered, interrupted function call.
+                this.cleanup();
+              }
+              return;
             }
 
             if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
@@ -2600,10 +2119,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   cleanup(): void {
     if (this.persistentConnection) {
       logger.info('Cleaning up persistent WebSocket connection');
-      // Clear all timeouts
-      this.activeTimeouts.forEach((t) => clearTimeout(t));
-      this.activeTimeouts.clear();
-
       // Reset audio state
       this.resetAudioState();
 

@@ -104,8 +104,8 @@ export class PromptfooModelProvider implements ApiProvider {
       const baseUrl = cloudConfig.getApiHost();
       const url = `${baseUrl}/api/v1/task`; // Use the standard task endpoint (auth is handled conditionally on the server)
 
-      const token = cloudConfig.getApiKey();
-      if (!token) {
+      const authHeaders = cloudConfig.getAuthHeaders();
+      if (!authHeaders) {
         throw new Error(
           'No Promptfoo auth token available. Please log in with `promptfoo auth login`',
         );
@@ -117,14 +117,14 @@ export class PromptfooModelProvider implements ApiProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          ...authHeaders,
         },
         body,
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`PromptfooModel task API error: ${response.status} ${errorText}`);
+        throw new Error(`PromptfooModel task API error: HTTP ${response.status} ${errorText}`);
       }
 
       const data = await response.json();

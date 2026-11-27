@@ -3,6 +3,7 @@ import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
 import {
   formatRateLimitErrorMessage,
+  getAbortError,
   HttpRateLimitError,
   isAbortError,
 } from '../../util/fetch/errors';
@@ -10,6 +11,7 @@ import { fetchWithRetries } from '../../util/fetch/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
+import { convertPcm16ToWav } from './audio';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -71,16 +73,6 @@ function canonicalizeCacheValue(value: unknown): unknown {
   return value;
 }
 
-function getAbortError(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    return reason;
-  }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-  error.name = 'AbortError';
-  return error;
-}
-
 export type OpenAiTtsOptions = OpenAiSharedOptions & {
   model?: string;
   voice?: string | { id: string };
@@ -88,6 +80,7 @@ export type OpenAiTtsOptions = OpenAiSharedOptions & {
   language?: string;
   format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
   response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+  stream_format?: 'audio' | 'sse';
   speed?: number;
   passthrough?: object;
 };
@@ -105,6 +98,9 @@ function getValidationError(
   }
   if (config.response_format && !VALID_RESPONSE_FORMATS.has(config.response_format)) {
     return `Invalid response_format: ${config.response_format}.`;
+  }
+  if (config.stream_format === 'sse') {
+    return 'The OpenAI TTS provider requires binary speech output. Use stream_format: audio.';
   }
   if (
     config.speed !== undefined &&
@@ -145,24 +141,6 @@ async function cacheResponse(cacheKey: string, response: ProviderResponse): Prom
   } catch (error) {
     logger.debug('[OpenAI TTS] Failed to cache response', { error });
   }
-}
-
-function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24_000): Buffer {
-  const header = Buffer.alloc(44);
-  header.write('RIFF', 0);
-  header.writeUInt32LE(36 + pcmData.length, 4);
-  header.write('WAVE', 8);
-  header.write('fmt ', 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(1, 22);
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(sampleRate * 2, 28);
-  header.writeUInt16LE(2, 32);
-  header.writeUInt16LE(16, 34);
-  header.write('data', 36);
-  header.writeUInt32LE(pcmData.length, 40);
-  return Buffer.concat([header, pcmData]);
 }
 
 async function coalesceRequest(
@@ -247,6 +225,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       ...(config.instructions ? { instructions: config.instructions } : {}),
       ...(config.language ? { language: config.language } : {}),
       ...(responseFormat ? { response_format: responseFormat } : {}),
+      ...(config.stream_format ? { stream_format: config.stream_format } : {}),
       ...(config.speed === undefined ? {} : { speed: config.speed }),
       ...(config.passthrough || {}),
     };

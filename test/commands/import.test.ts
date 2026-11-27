@@ -4,21 +4,32 @@ import path from 'path';
 import { createClient } from '@libsql/client/node';
 import { Command } from 'commander';
 import { sql } from 'drizzle-orm';
+import express from 'express';
+import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getBlobByHash, resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
+import {
+  getBlobByHash,
+  getShareAuthorizedBlob,
+  resetBlobStorageProvider,
+  setBlobStorageProvider,
+  storeBlob,
+} from '../../src/blobs';
 import * as blobRefs from '../../src/blobs/blobRefs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { importCommand } from '../../src/commands/import';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
 import { evalsTable, evalsToPromptsTable } from '../../src/database/tables';
+import { parseImportFile } from '../../src/importers/parse';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { blobsRouter } from '../../src/server/routes/blobs';
 import { TraceStore } from '../../src/tracing/store';
 import { ResultFailureReason } from '../../src/types/index';
 import { sha256 } from '../../src/util/createHash';
+import { createOutputData } from '../../src/util/output';
 import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -421,16 +432,230 @@ describe('importCommand', () => {
       }
     });
 
-    it('should downgrade active embedded blob MIME types during import', async () => {
+    it('imports a reference-only v3 result without adopting a file from a failed store', async () => {
+      const blobDir = createTempDir('promptfoo-import-unregistered-blob-');
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'false' });
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+
+      try {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+        const data = Buffer.from(
+          'unregistered file retained after failed import-store transaction',
+        );
+        const hash = sha256(data);
+        const uri = `promptfoo://blob/${hash}`;
+        const db = await getDb();
+
+        await expect(
+          storeBlob(data, 'image/png', { evalId: 'missing-blob-import-eval' }),
+        ).rejects.toThrow();
+        const blobPath = path.join(blobDir, hash.slice(0, 2), hash.slice(2, 4), hash);
+        const metadata = fs.readFileSync(`${blobPath}.meta.json`, 'utf8');
+        expect(fs.readFileSync(blobPath)).toEqual(data);
+        expect(await db.all(sql`SELECT hash FROM blob_assets WHERE hash = ${hash}`)).toEqual([]);
+        expect(await db.all(sql`SELECT id FROM blob_references WHERE blob_hash = ${hash}`)).toEqual(
+          [],
+        );
+
+        expect(sampleData.results.version).toBe(3);
+        sampleData.results.results = [sampleData.results.results[0]];
+        sampleData.results.results[0].response = { output: uri };
+        delete sampleData.blobAssets;
+        const filePath = path.join(blobDir, 'reference-only.json');
+        fs.writeFileSync(filePath, JSON.stringify(sampleData));
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', filePath]);
+
+        expect(process.exitCode).toBeUndefined();
+        expect(logger.error).not.toHaveBeenCalled();
+        const imported = await EvalResult.findManyByEvalId(sampleData.evalId);
+        expect(imported).toHaveLength(1);
+        expect(imported[0].toEvaluateResult().response?.output).toBe(uri);
+        expect(await db.all(sql`SELECT hash FROM blob_assets WHERE hash = ${hash}`)).toEqual([]);
+        expect(await db.all(sql`SELECT id FROM blob_references WHERE blob_hash = ${hash}`)).toEqual(
+          [],
+        );
+        expect(fs.readFileSync(blobPath)).toEqual(data);
+        expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
+        await expect(getShareAuthorizedBlob(hash, sampleData.evalId)).resolves.toBeNull();
+        const evalRecord = await Eval.findById(sampleData.evalId);
+        const exported = await createOutputData(evalRecord!, null, { includeMedia: true });
+        expect(exported.blobAssets).toBeUndefined();
+      } finally {
+        resetBlobStorageProvider();
+        restoreEnv();
+        removeTempDir(blobDir);
+      }
+    });
+
+    it.each([
+      {
+        storedMimeType: 'text/html',
+        importedMimeType: 'text/html',
+        expectedMimeType: 'application/octet-stream',
+        redirect: false,
+        contents: Buffer.from('<!doctype html><title>retained fixture</title>'),
+      },
+      {
+        storedMimeType: 'image/svg+xml',
+        importedMimeType: 'image/svg+xml',
+        expectedMimeType: 'application/octet-stream',
+        redirect: false,
+        contents: Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg"><title>retained fixture</title></svg>',
+        ),
+      },
+      {
+        storedMimeType: 'text/html',
+        importedMimeType: 'image/png',
+        expectedMimeType: 'image/png',
+        redirect: false,
+        contents: Buffer.from('<!doctype html><title>cross-label fixture</title>'),
+      },
+      {
+        storedMimeType: 'image/svg+xml',
+        importedMimeType: 'audio/wav',
+        expectedMimeType: 'audio/wav',
+        redirect: false,
+        contents: Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg"><title>cross-label fixture</title></svg>',
+        ),
+      },
+      {
+        storedMimeType: 'image/png',
+        importedMimeType: 'image/png',
+        expectedMimeType: 'image/png',
+        redirect: true,
+        contents: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5K0AAAAASUVORK5CYII=',
+          'base64',
+        ),
+      },
+    ])(
+      'serves retained $storedMimeType imported as $importedMimeType with registered MIME',
+      async ({ storedMimeType, importedMimeType, expectedMimeType, redirect, contents }) => {
+        const blobDir = createTempDir('promptfoo-import-retained-mime-');
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'false' });
+        const provider = new FilesystemBlobStorageProvider({ basePath: blobDir });
+        setBlobStorageProvider(provider);
+        const destination = express().get('/asset', (_req, res) => {
+          res.setHeader('Content-Type', storedMimeType);
+          res.send(Buffer.from(contents));
+        });
+        const destinationServer = destination.listen(0, '127.0.0.1');
+        await new Promise<void>((resolve, reject) => {
+          destinationServer.once('listening', resolve);
+          destinationServer.once('error', reject);
+        });
+        const address = destinationServer.address();
+        if (!address || typeof address === 'string') {
+          throw new Error('Expected local destination address');
+        }
+        const getUrl = vi
+          .spyOn(provider, 'getUrl')
+          .mockResolvedValue(`http://127.0.0.1:${address.port}/asset`);
+        const app = express().use('/api/blobs', blobsRouter);
+
+        try {
+          const data = Buffer.from(contents);
+          const hash = sha256(data);
+          const uri = `promptfoo://blob/${hash}`;
+          const db = await getDb();
+          const failure = await storeBlob(data, storedMimeType, {
+            evalId: 'missing-orphan-mime-eval',
+          }).catch((error: Error) => error);
+          expect(failure).toBeInstanceOf(Error);
+          expect(String((failure as Error).cause)).toMatch(/FOREIGN KEY constraint failed/);
+          const blobPath = path.join(blobDir, hash.slice(0, 2), hash.slice(2, 4), hash);
+          const metadata = fs.readFileSync(`${blobPath}.meta.json`, 'utf8');
+          expect(JSON.parse(metadata).mimeType).toBe(storedMimeType);
+          expect(await db.all(sql`SELECT hash FROM blob_assets WHERE hash = ${hash}`)).toEqual([]);
+          expect((await request(app).get(`/api/blobs/${hash}`)).status).toBe(404);
+
+          const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+          const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+          expect(sampleData.results.version).toBe(3);
+          sampleData.results.results = [sampleData.results.results[0]];
+          sampleData.results.results[0].response = { output: uri };
+          sampleData.blobAssets = [
+            {
+              hash,
+              mimeType: importedMimeType,
+              sizeBytes: data.length,
+              data: data.toString('base64'),
+            },
+          ];
+          const filePath = path.join(blobDir, 'retained-mime.json');
+          fs.writeFileSync(filePath, JSON.stringify(sampleData));
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', filePath]);
+
+          expect(process.exitCode).toBeUndefined();
+          expect(logger.error).not.toHaveBeenCalled();
+          expect(await db.all(sql`SELECT mime_type FROM blob_assets WHERE hash = ${hash}`)).toEqual(
+            [{ mime_type: expectedMimeType }],
+          );
+          expect(
+            await db.all(
+              sql`SELECT eval_id, location FROM blob_references WHERE blob_hash = ${hash}`,
+            ),
+          ).toEqual([{ eval_id: sampleData.evalId, location: 'import' }]);
+          const response = await request(app)
+            .get(`/api/blobs/${hash}`)
+            .redirects(1)
+            .buffer(true)
+            .parse((res, callback) => {
+              const chunks: Buffer[] = [];
+              res.on('data', (chunk: Buffer) => chunks.push(chunk));
+              res.on('end', () => callback(null, Buffer.concat(chunks)));
+            });
+          expect(response.status).toBe(200);
+          expect(response.body).toEqual(data);
+          expect(response.headers['content-type']).toBe(expectedMimeType);
+          if (redirect) {
+            expect(getUrl).toHaveBeenCalledOnce();
+            expect(getUrl.mock.calls[0][0]).toBe(hash);
+          } else {
+            expect(getUrl).not.toHaveBeenCalled();
+            expect(response.headers['x-content-type-options']).toBe('nosniff');
+          }
+          expect(response.headers['content-disposition']).toBe(
+            expectedMimeType === 'application/octet-stream' ? 'attachment' : undefined,
+          );
+          expect(fs.readFileSync(blobPath)).toEqual(data);
+          expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
+          await expect(getShareAuthorizedBlob(hash, 'unrelated-eval')).resolves.toBeNull();
+          await db.run(sql`DELETE FROM blob_references WHERE blob_hash = ${hash}`);
+          expect((await request(app).get(`/api/blobs/${hash}`)).status).toBe(403);
+          expect(fs.readFileSync(blobPath)).toEqual(data);
+        } finally {
+          getUrl.mockRestore();
+          await new Promise<void>((resolve, reject) => {
+            destinationServer.close((error) => (error ? reject(error) : resolve()));
+          });
+          resetBlobStorageProvider();
+          restoreEnv();
+          removeTempDir(blobDir);
+        }
+      },
+    );
+
+    it.each([false, true])('downgrades active imported MIME types (orphan=%s)', async (orphan) => {
       const blobDir = createTempDir('promptfoo-import-active-mime-blobs-');
       setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
 
       try {
         const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
         const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
-        const htmlData = Buffer.from('<script>alert(document.domain)</script>');
+        const htmlData = Buffer.from(
+          `<script>alert(document.domain) /* orphan=${orphan} */</script>`,
+        );
         const htmlHash = sha256(htmlData);
-        const svgData = Buffer.from('<svg onload="alert(document.domain)" />');
+        const svgData = Buffer.from(
+          `<svg data-orphan="${orphan}" onload="alert(document.domain)" />`,
+        );
         const svgHash = sha256(svgData);
         sampleData.results.results[0].response = {
           output: `promptfoo://blob/${htmlHash} promptfoo://blob/${svgHash}`,
@@ -450,6 +675,20 @@ describe('importCommand', () => {
           },
         ];
 
+        if (orphan) {
+          for (const asset of sampleData.blobAssets) {
+            await expect(
+              storeBlob(Buffer.from(asset.data, 'base64'), asset.mimeType, {
+                evalId: 'missing-active-mime-eval',
+              }),
+            ).rejects.toThrow();
+          }
+          const db = await getDb();
+          expect(
+            await db.all(sql`SELECT hash FROM blob_assets WHERE hash IN (${htmlHash}, ${svgHash})`),
+          ).toEqual([]);
+        }
+
         const filePath = path.join(__dirname, `temp-active-mime-blob-${Date.now()}.json`);
         fs.writeFileSync(filePath, JSON.stringify(sampleData));
         tempFilePath = filePath;
@@ -459,6 +698,25 @@ describe('importCommand', () => {
 
         expect((await getBlobByHash(htmlHash)).metadata.mimeType).toBe('application/octet-stream');
         expect((await getBlobByHash(svgHash)).metadata.mimeType).toBe('application/octet-stream');
+        const db = await getDb();
+        const assets = await db.all(
+          sql`SELECT mime_type FROM blob_assets WHERE hash IN (${htmlHash}, ${svgHash})`,
+        );
+        expect(assets).toHaveLength(2);
+        expect(assets).toEqual([
+          { mime_type: 'application/octet-stream' },
+          { mime_type: 'application/octet-stream' },
+        ]);
+        expect((await getShareAuthorizedBlob(htmlHash, sampleData.evalId))?.metadata.mimeType).toBe(
+          'application/octet-stream',
+        );
+        const evalRecord = await Eval.findById(sampleData.evalId);
+        const exported = await createOutputData(evalRecord!, null, { includeMedia: true });
+        expect(exported.blobAssets).toHaveLength(2);
+        expect(exported.blobAssets?.map((asset) => asset.mimeType)).toEqual([
+          'application/octet-stream',
+          'application/octet-stream',
+        ]);
       } finally {
         resetBlobStorageProvider();
         removeTempDir(blobDir);
@@ -750,6 +1008,16 @@ describe('importCommand', () => {
   });
 
   describe('with OpenAI eval items JSONL export', () => {
+    it.each(['[]', '[null]', 'null', '42', '{"other":true}'])(
+      'preserves non-OpenAI JSON as promptfoo input: %s',
+      (text) => {
+        expect(parseImportFile(text)).toStrictEqual({
+          source: 'promptfoo-json',
+          evalData: JSON.parse(text),
+        });
+      },
+    );
+
     it('should import grader outcomes and preserve OpenAI metadata', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/openai-evals-items.jsonl');
 
@@ -773,6 +1041,8 @@ describe('importCommand', () => {
       expect(importedEval!.prompts[0].metrics?.testFailCount).toBe(1);
       expect(importedEval!.prompts[0].metrics?.assertPassCount).toBe(5);
       expect(importedEval!.prompts[0].metrics?.assertFailCount).toBe(1);
+      expect(importedEval!.prompts[0].metrics).not.toHaveProperty('testCacheHitCount');
+      expect(importedEval!.prompts[0].metrics?.namedScoreWeights).toEqual({});
 
       const results = (await EvalResult.findManyByEvalId(importedEval!.id)).sort(
         (a, b) => a.testIdx - b.testIdx,
@@ -886,60 +1156,82 @@ describe('importCommand', () => {
       });
     });
 
-    it('should keep non-equivalent multi-run items on separate test rows', async () => {
-      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
-      fs.writeFileSync(
-        filePath,
-        [
+    for (const { name, sources, grader, testCount, testIndices } of [
+      {
+        name: 'should keep non-equivalent items separate in interleaved runs',
+        sources: [
           {
-            run_id: 'evalrun_first_dataset',
-            data_source_idx: 0,
+            runId: 'evalrun_first_dataset',
             item: { input: 'First dataset item' },
-            grades: { Match: 1 },
-            passes: { Match: true },
           },
           {
-            run_id: 'evalrun_second_dataset',
-            data_source_idx: 0,
+            runId: 'evalrun_second_dataset',
             item: { input: 'Different dataset item' },
-            grades: { Match: 1 },
-            passes: { Match: true },
           },
-        ]
-          .map((row) => JSON.stringify(row))
-          .join('\n'),
-      );
-      tempFilePath = filePath;
-
-      importCommand(program);
-      await program.parseAsync(['node', 'test', 'import', filePath]);
-
-      expect(process.exitCode).toBeUndefined();
-
-      const importedEvals = await Eval.getMany(10);
-      const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
-
-      expect(importedEvals[0].config.tests).toHaveLength(2);
-      expect(results).toHaveLength(2);
-      expect(results.map((result) => result.testIdx)).toEqual([0, 1]);
-      expect(results.map((result) => result.testCase.vars?.item)).toEqual([
-        { input: 'First dataset item' },
-        { input: 'Different dataset item' },
-      ]);
-    });
-
-    it('should import dashboard rows that omit optional pass results as score-only data', async () => {
-      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
-      fs.writeFileSync(
-        filePath,
-        JSON.stringify({
-          run_id: 'evalrun_without_passes',
+          { runId: 'evalrun_first_dataset', item: { input: 17 } },
+        ],
+        grader: 'Match',
+        testCount: 3,
+        testIndices: [0, 1, 2],
+      },
+      {
+        name: 'should align rows whose items have identical content but different key orderings',
+        sources: [
+          {
+            runId: 'evalrun_canonical_a',
+            item: { a: 1, b: 2, nested: { x: 10, y: 20 } },
+          },
+          {
+            runId: 'evalrun_canonical_b',
+            item: { nested: { y: 20, x: 10 }, b: 2, a: 1 },
+          },
+        ],
+        grader: 'Quality',
+        testCount: 1,
+        testIndices: [0, 0],
+      },
+    ]) {
+      it(name, async () => {
+        const rows = sources.map(({ runId, item }) => ({
+          run_id: runId,
           data_source_idx: 0,
-          item: { input: 'Grade this later' },
-          grades: { Quality: 0.5 },
-          eval_id: 'eval_future_shape',
-        }),
-      );
+          item,
+          grades: { [grader]: 1 },
+          passes: { [grader]: true },
+        }));
+        const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+        fs.writeFileSync(filePath, rows.map((row) => JSON.stringify(row)).join('\n'));
+        tempFilePath = filePath;
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', filePath]);
+
+        expect(process.exitCode).toBeUndefined();
+
+        const importedEvals = await Eval.getMany(10);
+        const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
+
+        expect(importedEvals[0].config.tests).toHaveLength(testCount);
+        expect(importedEvals[0].prompts[0].raw).toBe('Imported OpenAI eval item');
+        expect(results).toHaveLength(sources.length);
+        expect(results.map((result) => result.testIdx)).toEqual(testIndices);
+        expect(results.map((result) => result.testCase.vars?.item)).toEqual(
+          sources.map(({ item }) => item),
+        );
+        expect(new Set(results.map((result) => result.promptIdx)).size).toBe(2);
+      });
+    }
+
+    it.each([false, true])('imports score-only dashboard rows with array=%s', async (asArray) => {
+      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      const row = {
+        run_id: 'evalrun_without_passes',
+        data_source_idx: 0,
+        item: { input: 'Grade this later' },
+        grades: { Quality: 0.5 },
+        eval_id: 'eval_future_shape',
+      };
+      fs.writeFileSync(filePath, JSON.stringify(asArray ? [row] : row));
       tempFilePath = filePath;
 
       importCommand(program);
@@ -963,45 +1255,6 @@ describe('importCommand', () => {
       });
       expect(results[0].metadata?.openai?.passes).toEqual({});
       expect(results[0].metadata?.openai?.outputItem?.eval_id).toBe('eval_future_shape');
-    });
-
-    it('should align rows whose items have identical content but different key orderings', async () => {
-      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
-      fs.writeFileSync(
-        filePath,
-        [
-          {
-            run_id: 'evalrun_canonical_a',
-            data_source_idx: 0,
-            item: { a: 1, b: 2, nested: { x: 10, y: 20 } },
-            grades: { Quality: 1 },
-            passes: { Quality: true },
-          },
-          {
-            run_id: 'evalrun_canonical_b',
-            data_source_idx: 0,
-            item: { nested: { y: 20, x: 10 }, b: 2, a: 1 },
-            grades: { Quality: 1 },
-            passes: { Quality: true },
-          },
-        ]
-          .map((row) => JSON.stringify(row))
-          .join('\n'),
-      );
-      tempFilePath = filePath;
-
-      importCommand(program);
-      await program.parseAsync(['node', 'test', 'import', filePath]);
-
-      expect(process.exitCode).toBeUndefined();
-
-      const importedEvals = await Eval.getMany(10);
-      const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
-
-      expect(importedEvals[0].config.tests).toHaveLength(1);
-      expect(results).toHaveLength(2);
-      expect(results.map((result) => result.testIdx)).toEqual([0, 0]);
-      expect(new Set(results.map((result) => result.promptIdx)).size).toBe(2);
     });
 
     it('should surface JSON error when a JSONL file mixes valid and invalid lines', async () => {

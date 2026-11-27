@@ -7,6 +7,20 @@ describe('loadYaml', () => {
     expect(loadYaml('a: 1\nb: hello')).toEqual({ a: 1, b: 'hello' });
   });
 
+  it('ends whitespace-only block scalars before the next configuration key', () => {
+    expect(loadYaml('prompt: |+\n   \nprovider: echo\n')).toEqual({
+      prompt: '\n',
+      provider: 'echo',
+    });
+    expect(loadYaml('vars:\n  context: |+\n      \n  name: World\n')).toEqual({
+      vars: { context: '\n', name: 'World' },
+    });
+  });
+
+  it('rejects block scalar content indented less than its leading empty lines', () => {
+    expect(() => loadYaml('prompt: |\n   \n hello\n')).toThrow(/bad indentation/);
+  });
+
   it('applies YAML merge keys like js-yaml v4', () => {
     const content = [
       'defaults: &defaults',
@@ -33,6 +47,21 @@ describe('loadYaml', () => {
     ].join('\n');
 
     expect(() => loadYaml(content)).toThrow(/cannot merge mappings/);
+  });
+
+  it('counts empty merge sources toward the total merge work limit', () => {
+    const content = 'merged:\n  <<: [{}, {}, {}]';
+
+    expect(() => loadYaml(content, { maxTotalMergeKeys: 2 })).toThrow(/maxTotalMergeKeys/);
+    expect(loadYaml(content, { maxTotalMergeKeys: 3 })).toEqual({ merged: {} });
+  });
+
+  it('rejects oversized merge sequences even when the work limit is disabled', () => {
+    const content = `merged:\n  <<: [${Array(101).fill('{}').join(', ')}]`;
+
+    expect(() => loadYaml(content, { maxTotalMergeKeys: -1 })).toThrow(
+      /abnormal merge sequence size/,
+    );
   });
 
   it('keeps merge tokens outside mapping keys as plain strings', () => {

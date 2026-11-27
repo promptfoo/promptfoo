@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockFetchResponse } from './mockProviderResponses';
 
 // `nscale.test.ts` mocks `src/providers/openai` wholesale, so it can only assert
 // the shape of the config object handed to the OpenAI provider — never what is
@@ -12,18 +13,21 @@ vi.mock('../../src/cache', async (importOriginal) => ({
 }));
 
 import { fetchWithCache } from '../../src/cache';
+import { loadApiProvider } from '../../src/providers';
 import { createNscaleProvider } from '../../src/providers/nscale';
+import { NscaleImageProvider } from '../../src/providers/nscale/image';
+import { OpenAiGenericProvider } from '../../src/providers/openai';
+import { mockProcessEnv } from '../util/utils';
+
+import type { ApiProvider } from '../../src/types/providers';
 
 function mockResponse() {
-  vi.mocked(fetchWithCache).mockResolvedValue({
-    data: {
+  vi.mocked(fetchWithCache).mockResolvedValue(
+    createMockFetchResponse({
       choices: [{ message: { role: 'assistant', content: 'hi' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-    },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  } as any);
+    }) as any,
+  );
 }
 
 async function callWithConfig(config: Record<string, unknown>) {
@@ -52,6 +56,21 @@ describe('Nscale request construction', () => {
     expect(headers.Authorization).toBe('Bearer SERVICE-TOKEN-SECRET');
   });
 
+  it('keeps scoped image credentials out of config and sends them as request authentication', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createMockFetchResponse({ data: [{ url: 'https://example.invalid/image.png' }] }),
+    );
+    const provider = createNscaleProvider('nscale:image:flux/flux.1-schnell', {
+      env: { NSCALE_SERVICE_TOKEN: 'scoped-nscale-secret' },
+    });
+    expect(JSON.stringify(provider.config)).not.toContain('scoped-nscale-secret');
+    expect((provider as NscaleImageProvider).getApiKey()).toBe('scoped-nscale-secret');
+    await provider.callApi('a garden');
+    expect(vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: 'Bearer scoped-nscale-secret',
+    });
+  });
+
   it('applies configured headers as HTTP headers rather than body fields', async () => {
     // Regression: `headers` landed in `passthrough`, so custom headers were
     // serialized into the JSON body and silently never sent as headers.
@@ -74,6 +93,19 @@ describe('Nscale request construction', () => {
 
     expect(url).toBe('https://private.nscale.example/v1/chat/completions');
     expect(body).not.toHaveProperty('apiBaseUrl');
+  });
+
+  it('does not send promptfoo bookkeeping in the request body', async () => {
+    // Regression: `loadApiProvider` merges the loaded config file's directory into
+    // every provider config as `basePath`, and the allowlist of local options did
+    // not cover it, so the local filesystem path was shipped to the model.
+    const { body } = await callWithConfig({
+      apiKey: 'tok',
+      basePath: '/Users/someone/secret-project',
+    });
+
+    expect(body).not.toHaveProperty('basePath');
+    expect(JSON.stringify(body)).not.toContain('secret-project');
   });
 
   it('defaults to the public Nscale endpoint', async () => {
@@ -113,6 +145,11 @@ describe('Nscale request construction', () => {
       cost: 0.000001,
       inputCost: 0.0000005,
       outputCost: 0.0000015,
+      basePath: '/fixture/local-config',
+      linkedTargetId: 'promptfoo://provider/fixture',
+      mcp: { enabled: false },
+      showThinking: true,
+      omitDefaults: true,
     });
 
     for (const key of [
@@ -126,9 +163,28 @@ describe('Nscale request construction', () => {
       'cost',
       'inputCost',
       'outputCost',
+      'basePath',
+      'linkedTargetId',
+      'mcp',
+      'showThinking',
+      'omitDefaults',
     ]) {
       expect(body).not.toHaveProperty(key);
     }
+  });
+
+  it('does not send the config directory injected by the provider loader', async () => {
+    mockResponse();
+    const provider = await loadApiProvider('nscale:chat:fixture-model', {
+      basePath: '/fixture/private-project',
+      options: { config: { apiKey: 'fixture-token', temperature: 0.3 } },
+    });
+    await provider.callApi('hello');
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse(request?.body as string);
+    expect(body).not.toHaveProperty('basePath');
+    expect(body.temperature).toBe(0.3);
   });
 
   it('merges an explicit passthrough block without nesting it', async () => {
@@ -140,4 +196,116 @@ describe('Nscale request construction', () => {
     expect(body).not.toHaveProperty('passthrough');
     expect(body.chat_template_kwargs).toEqual({ thinking: true });
   });
+});
+
+describe.each([
+  { mode: 'chat', endpoint: 'chat/completions' },
+  { mode: 'completion', endpoint: 'completions' },
+  { mode: 'embedding', endpoint: 'embeddings' },
+])('Nscale $mode credential fallback control', ({ mode, endpoint }) => {
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    restoreEnv = mockProcessEnv({
+      OPENAI_API_KEY: 'unrelated-openai-key',
+      NSCALE_SERVICE_TOKEN: undefined,
+      NSCALE_API_KEY: undefined,
+      SELECTED_NSCALE_KEY: 'selected-nscale-key',
+      MISSING_NSCALE_KEY: undefined,
+    });
+    vi.mocked(fetchWithCache).mockReset();
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createMockFetchResponse(
+        mode === 'embedding'
+          ? { data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 2 } }
+          : {
+              choices: [
+                {
+                  text: 'hi',
+                  message: { role: 'assistant', content: 'hi' },
+                  finish_reason: 'stop',
+                },
+              ],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            },
+      ),
+    );
+  });
+
+  afterEach(() => {
+    restoreEnv();
+    vi.mocked(fetchWithCache).mockReset();
+  });
+
+  const createProvider = (config: Record<string, unknown> = {}, serviceToken?: string) =>
+    createNscaleProvider(`nscale:${mode}:private/served-model:Q4`, {
+      config: {
+        config: {
+          useDefaultApiKey: false,
+          apiBaseUrl: 'https://private.nscale.example/v1',
+          ...config,
+        },
+      },
+      env: { OPENAI_API_KEY: 'unrelated-scoped-openai-key', NSCALE_SERVICE_TOKEN: serviceToken },
+    });
+
+  const callProvider = (provider: ApiProvider) =>
+    provider.callEmbeddingApi ? provider.callEmbeddingApi('hello') : provider.callApi('hello');
+
+  async function expectRequest(provider: ApiProvider, expectedKey?: string) {
+    expect(provider).toBeInstanceOf(OpenAiGenericProvider);
+    expect((provider as OpenAiGenericProvider).getApiKey()).toBe(expectedKey);
+    const response = await callProvider(provider);
+    expect(response).not.toHaveProperty('error');
+    expect(response).toMatchObject(
+      mode === 'embedding' ? { embedding: [0.1, 0.2] } : { output: 'hi' },
+    );
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toBe(`https://private.nscale.example/v1/${endpoint}`);
+    const headers = new Headers(request?.headers);
+    expect(headers.get('Authorization')).toBe(expectedKey ? `Bearer ${expectedKey}` : null);
+    const body = JSON.parse(request?.body as string);
+    expect(body.model).toBe('private/served-model:Q4');
+    expect(body).not.toHaveProperty('useDefaultApiKey');
+    expect(JSON.stringify(body)).not.toContain('unrelated-');
+  }
+
+  it('does not use a hosted key when authentication is optional and the selected key is missing', async () => {
+    await expectRequest(
+      createProvider({ apiKeyRequired: false, apiKeyEnvar: 'MISSING_NSCALE_KEY' }),
+    );
+  });
+
+  it('reports a missing required key before sending a request', async () => {
+    const provider = createProvider({ apiKeyEnvar: 'MISSING_NSCALE_KEY' });
+    const expectedError =
+      'API key is not set. Set the MISSING_NSCALE_KEY environment variable or add `apiKey` to the provider config.';
+    if (mode === 'embedding') {
+      expect(await callProvider(provider)).toEqual({ error: expectedError });
+    } else {
+      await expect(callProvider(provider)).rejects.toThrow(expectedError);
+    }
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { name: 'explicit key', config: { apiKey: 'inline-nscale-key' }, key: 'inline-nscale-key' },
+    {
+      name: 'selected environment variable',
+      config: { apiKeyEnvar: 'SELECTED_NSCALE_KEY' },
+      key: 'selected-nscale-key',
+    },
+    {
+      name: 'Nscale service token',
+      config: {},
+      key: 'service-token',
+      serviceToken: 'service-token',
+    },
+  ])(
+    'preserves the $name when default fallback is disabled',
+    async ({ config, key, serviceToken }) => {
+      await expectRequest(createProvider(config, serviceToken), key);
+    },
+  );
 });

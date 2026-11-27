@@ -425,7 +425,7 @@ redteam:
 
 ## Comprehensive OWASP API Security Testing
 
-For complete OWASP API Security Top 10 coverage:
+To run the OWASP API Security Top 10 preset:
 
 ```yaml
 redteam:
@@ -436,7 +436,7 @@ redteam:
     - jailbreak-templates
 ```
 
-This configuration tests your LLM application against all OWASP API Security Top 10 risks.
+This runs the checks mapped to the OWASP API Security Top 10 preset.
 
 ## Integration with OWASP LLM Top 10
 
@@ -494,12 +494,12 @@ When securing LLM applications against API vulnerabilities:
 
 ## What's Next
 
-API security for LLM applications is an evolving field as new attack patterns emerge. Regular testing with Promptfoo helps ensure your LLM applications maintain strong API security posture.
+Rerun the relevant API tests after changes to endpoints, authorization, or tool access.
 
-To learn more about setting up comprehensive AI red teaming, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
+To learn more about setting up AI red teaming, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
 
 ## Additional Resources
 
-- [OWASP API Security Project](https://owasp.org/www-project-api-security/)
-- [OWASP API Security Top 10 2023](https://owasp.org/API-Security/editions/2023/en/0x00-header/)
+- [OWASP API Security Project](https://api-security.owasp.org/)
+- [OWASP API Security Top 10 2023](https://api-security.owasp.org/editions/2023/en/0x00-header/)
 - [API Security Best Practices](https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html)

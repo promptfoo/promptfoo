@@ -1,3 +1,4 @@
+import { addCompletionDetails } from '../contracts/completionDetails';
 import {
   BaseTokenUsageSchema,
   type CompletionTokenDetails,
@@ -9,12 +10,18 @@ import {
  * Safely extract token usage carried by a thrown value.
  */
 export function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
-  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+  try {
+    if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+      return undefined;
+    }
+
+    const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
+    return parsedTokenUsage.success && Object.keys(parsedTokenUsage.data).length > 0
+      ? parsedTokenUsage.data
+      : undefined;
+  } catch {
     return undefined;
   }
-
-  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
-  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
 }
 
 /**
@@ -66,6 +73,43 @@ function addNumbers(a: number | undefined, b: number | undefined): number {
   return (a ?? 0) + (b ?? 0);
 }
 
+/** Copy a usage breakdown without allowing the incurred view to recurse. */
+export function cloneTokenUsageBreakdown(
+  usage: Partial<TokenUsage>,
+): NonNullable<TokenUsage['incurredTokenUsage']> {
+  const { incurredTokenUsage: _incurredTokenUsage, ...breakdown } = usage;
+  return {
+    ...breakdown,
+    ...(breakdown.completionDetails && {
+      completionDetails: { ...breakdown.completionDetails },
+    }),
+    ...(breakdown.attacker && {
+      attacker: {
+        ...breakdown.attacker,
+        ...(breakdown.attacker.completionDetails && {
+          completionDetails: { ...breakdown.attacker.completionDetails },
+        }),
+      },
+    }),
+    ...(breakdown.assertions && {
+      assertions: {
+        ...breakdown.assertions,
+        ...(breakdown.assertions.completionDetails && {
+          completionDetails: { ...breakdown.assertions.completionDetails },
+        }),
+      },
+    }),
+    ...(breakdown.generation && {
+      generation: {
+        ...breakdown.generation,
+        ...(breakdown.generation.completionDetails && {
+          completionDetails: { ...breakdown.generation.completionDetails },
+        }),
+      },
+    }),
+  };
+}
+
 /** Derive omitted totals without turning a response-cache replay into fresh usage. */
 function getAccumulatedTokenTotal(usage: Partial<TokenUsage>): number {
   if (usage.total !== undefined) {
@@ -81,9 +125,6 @@ function getAccumulatedTokenTotal(usage: Partial<TokenUsage>): number {
   return componentTotal;
 }
 
-/**
- * Helper to accumulate completion details
- */
 function accumulateCompletionDetails(
   target: CompletionTokenDetails | undefined,
   update: CompletionTokenDetails | undefined,
@@ -92,16 +133,7 @@ function accumulateCompletionDetails(
     return target;
   }
 
-  return {
-    reasoning: addNumbers(target?.reasoning, update.reasoning),
-    acceptedPrediction: addNumbers(target?.acceptedPrediction, update.acceptedPrediction),
-    rejectedPrediction: addNumbers(target?.rejectedPrediction, update.rejectedPrediction),
-    cacheReadInputTokens: addNumbers(target?.cacheReadInputTokens, update.cacheReadInputTokens),
-    cacheCreationInputTokens: addNumbers(
-      target?.cacheCreationInputTokens,
-      update.cacheCreationInputTokens,
-    ),
-  };
+  return addCompletionDetails(target, update);
 }
 
 /**
@@ -117,6 +149,13 @@ export function accumulateTokenUsage(
 ): void {
   if (!update) {
     return;
+  }
+
+  // Existing legacy usage predates dual accounting. When the first response with
+  // provenance arrives, retain that earlier work as incurred rather than losing it.
+  const trackIncurredUsage = Boolean(target.incurredTokenUsage || update.incurredTokenUsage);
+  if (trackIncurredUsage && !target.incurredTokenUsage) {
+    target.incurredTokenUsage = cloneTokenUsageBreakdown(target);
   }
 
   // Accumulate basic fields
@@ -184,6 +223,14 @@ export function accumulateTokenUsage(
     target.generation ??= createEmptyAssertions();
     accumulateTokenUsage(target.generation, update.generation);
   }
+
+  if (trackIncurredUsage && target.incurredTokenUsage) {
+    accumulateTokenUsage(
+      target.incurredTokenUsage,
+      update.incurredTokenUsage ?? cloneTokenUsageBreakdown(update),
+      incrementRequests,
+    );
+  }
 }
 
 /** Record attacker-model usage separately without inflating target tokens or probes. */
@@ -191,21 +238,53 @@ export function accumulateAttackerTokenUsage(
   target: TokenUsage,
   response: { cached?: boolean; tokenUsage?: Partial<TokenUsage> } | undefined,
 ): void {
-  if (!response || response.cached) {
-    return;
-  }
-  target.attacker ??= createEmptyAssertions();
-  if (!response.tokenUsage) {
-    accumulateResponseTokenUsage(target.attacker, response);
+  if (!response) {
     return;
   }
 
-  const { assertions, ...attackerUsage } = response.tokenUsage;
-  accumulateResponseTokenUsage(target.attacker, { tokenUsage: attackerUsage });
-  if (assertions) {
-    target.assertions ??= createEmptyAssertions();
-    accumulateAssertionTokenUsage(target.assertions, assertions);
-  }
+  const {
+    assertions,
+    incurredTokenUsage: reportedIncurredTokenUsage,
+    ...attackerUsage
+  } = response.tokenUsage ?? {};
+  const incurredTokenUsage = response.cached ? undefined : reportedIncurredTokenUsage;
+  const attackerAccounting = createEmptyTokenUsage();
+  accumulateResponseTokenUsage(attackerAccounting, {
+    cached: response.cached,
+    tokenUsage: {
+      ...attackerUsage,
+      ...(incurredTokenUsage && {
+        incurredTokenUsage: {
+          ...incurredTokenUsage,
+          assertions: undefined,
+        },
+      }),
+    },
+  });
+
+  const {
+    assertions: _unusedAssertions,
+    incurredTokenUsage: incurredAttacker,
+    ...logicalAttacker
+  } = attackerAccounting;
+  const actualAttacker = cloneTokenUsageBreakdown(incurredAttacker ?? logicalAttacker);
+  delete actualAttacker.assertions;
+  const actualAssertions =
+    incurredTokenUsage?.assertions ?? (response.cached ? undefined : assertions);
+  const trackIncurredUsage = Boolean(
+    target.incurredTokenUsage || incurredTokenUsage || response.cached,
+  );
+
+  accumulateTokenUsage(target, {
+    attacker: logicalAttacker,
+    ...(assertions && { assertions }),
+    ...(trackIncurredUsage && {
+      incurredTokenUsage: {
+        attacker: actualAttacker,
+        ...(actualAssertions && { assertions: actualAssertions }),
+      },
+    }),
+  });
 }
 
 /** Record one strategy grading task while retaining all model usage reported for that task. */
@@ -225,21 +304,70 @@ export function accumulateGradingResponseTokenUsage(
     response.cached === true ||
     (response.tokenUsage?.numRequests === 0 && reportedTotal <= cachedTokens);
 
-  target.assertions ??= createEmptyAssertions();
-  if (cachedResponse) {
-    accumulateAssertionTokenUsage(target.assertions, {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: cachedTokens || reportedTotal,
-      numRequests: 0,
-    });
-    return;
+  const logicalUsage = {
+    ...response.tokenUsage,
+    ...(cachedResponse && reportedTotal === 0 && cachedTokens > 0 && { total: cachedTokens }),
+    ...(cachedResponse && { cached: Math.max(cachedTokens, reportedTotal) }),
+    numRequests: 1,
+  };
+  const incurredUsage = cachedResponse
+    ? createEmptyAssertions()
+    : {
+        ...(response.tokenUsage?.incurredTokenUsage ?? response.tokenUsage),
+        numRequests: 1,
+      };
+
+  accumulateTokenUsage(target, {
+    assertions: logicalUsage,
+    ...((target.incurredTokenUsage ||
+      response.tokenUsage?.incurredTokenUsage ||
+      cachedResponse) && {
+      incurredTokenUsage: { assertions: incurredUsage },
+    }),
+  });
+}
+
+/** Record logical grading alongside the subset of grading work executed during this run. */
+export function accumulateGradingTokenUsage(
+  target: TokenUsage,
+  tokensUsed: Partial<TokenUsage> | undefined,
+  options?: { cached?: boolean; fresh?: boolean },
+): void {
+  const reportedTotal =
+    tokensUsed?.total ?? (tokensUsed?.prompt ?? 0) + (tokensUsed?.completion ?? 0);
+  const cachedTokens = tokensUsed?.cached ?? 0;
+  const cachedResponse =
+    options?.cached === true ||
+    (options?.cached === undefined &&
+      tokensUsed?.numRequests === 0 &&
+      cachedTokens > 0 &&
+      reportedTotal <= cachedTokens);
+
+  const logicalAssertions = createEmptyAssertions();
+  const logicalTokensUsed =
+    cachedResponse && reportedTotal === 0 && cachedTokens > 0
+      ? { ...tokensUsed, total: cachedTokens }
+      : tokensUsed;
+  accumulateGradingRequest(logicalAssertions, logicalTokensUsed, {
+    ...options,
+    cached: cachedResponse ? false : options?.cached,
+    fresh: cachedResponse || options?.fresh,
+  });
+
+  const incurredAssertions = createEmptyAssertions();
+  if (!cachedResponse) {
+    accumulateGradingRequest(
+      incurredAssertions,
+      tokensUsed?.incurredTokenUsage ?? tokensUsed,
+      options,
+    );
   }
 
-  accumulateAssertionTokenUsage(target.assertions, {
-    ...response.tokenUsage,
-    numRequests: 1,
+  accumulateTokenUsage(target, {
+    assertions: logicalAssertions,
+    ...((target.incurredTokenUsage || tokensUsed?.incurredTokenUsage || cachedResponse) && {
+      incurredTokenUsage: { assertions: incurredAssertions },
+    }),
   });
 }
 
@@ -327,30 +455,55 @@ export function accumulateGradingRequest(
  */
 export function accumulateResponseTokenUsage(
   target: TokenUsage,
-  response: { tokenUsage?: Partial<TokenUsage> } | undefined,
-  options?: { countAsRequest?: boolean },
+  response: { cached?: boolean; tokenUsage?: Partial<TokenUsage> } | undefined,
+  options?: { countAsRequest?: boolean; countCachedAsRequest?: boolean },
 ): void {
-  const countAsRequest = options?.countAsRequest ?? true;
-
-  if (response?.tokenUsage) {
-    if (countAsRequest) {
-      accumulateTokenUsage(target, response.tokenUsage);
-      // Increment numRequests if not already present in tokenUsage
-      if (response.tokenUsage.numRequests === undefined) {
-        target.numRequests = (target.numRequests ?? 0) + 1;
-      }
-    } else {
-      // Preserve token totals while explicitly excluding request counting.
-      const tokenUsageWithoutRequests: Partial<TokenUsage> = {
-        ...response.tokenUsage,
-        numRequests: undefined,
-      };
-      accumulateTokenUsage(target, tokenUsageWithoutRequests);
-    }
-  } else if (response && countAsRequest) {
-    // Only increment numRequests if we got a response but no token usage
-    target.numRequests = (target.numRequests ?? 0) + 1;
+  if (!response) {
+    return;
   }
+
+  const countAsRequest = options?.countAsRequest ?? true;
+  const reportedUsage = response.tokenUsage ?? {};
+  const reportedTotal =
+    reportedUsage.total ?? (reportedUsage.prompt ?? 0) + (reportedUsage.completion ?? 0);
+  const logicalRequests = countAsRequest
+    ? response.cached
+      ? Math.max(reportedUsage.numRequests ?? 0, 1)
+      : (reportedUsage.numRequests ?? 1)
+    : 0;
+
+  const logicalUsage: Partial<TokenUsage> = {
+    ...reportedUsage,
+    ...(response.cached &&
+      reportedTotal === 0 &&
+      (reportedUsage.cached ?? 0) > 0 && {
+        total: reportedUsage.cached,
+      }),
+    ...(response.cached && { cached: Math.max(reportedUsage.cached ?? 0, reportedTotal) }),
+    numRequests: logicalRequests,
+  };
+
+  const incurredUsage = reportedUsage.incurredTokenUsage
+    ? cloneTokenUsageBreakdown(reportedUsage.incurredTokenUsage)
+    : response.cached
+      ? {
+          ...(reportedUsage.attacker && { attacker: reportedUsage.attacker }),
+          ...(reportedUsage.assertions && { assertions: reportedUsage.assertions }),
+          ...(reportedUsage.generation && { generation: reportedUsage.generation }),
+          numRequests: 0,
+        }
+      : cloneTokenUsageBreakdown(logicalUsage);
+
+  if (!countAsRequest) {
+    incurredUsage.numRequests = 0;
+  }
+
+  accumulateTokenUsage(target, {
+    ...logicalUsage,
+    ...((target.incurredTokenUsage || reportedUsage.incurredTokenUsage || response.cached) && {
+      incurredTokenUsage: incurredUsage,
+    }),
+  });
 }
 
 /**
@@ -367,16 +520,23 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
     attacker: _attacker,
     assertions: _assertions,
     generation: _generation,
+    incurredTokenUsage,
     ...generationUsage
   } = parsed.data;
   const hasUsage =
     Object.values(generationUsage).some((value) => typeof value === 'number' && value !== 0) ||
-    Object.values(generationUsage.completionDetails ?? {}).some((value) => value !== 0);
+    Object.values(generationUsage.completionDetails ?? {}).some(
+      (value) => typeof value === 'number' && value !== 0,
+    );
   if (!hasUsage) {
     return false;
   }
-  target.generation ??= createEmptyAssertions();
-  accumulateTokenUsage(target.generation, generationUsage);
+  accumulateTokenUsage(target, {
+    generation: generationUsage,
+    ...((target.incurredTokenUsage || incurredTokenUsage) && {
+      incurredTokenUsage: { generation: incurredTokenUsage ?? generationUsage },
+    }),
+  });
   return true;
 }
 
@@ -399,5 +559,8 @@ export function normalizeTokenUsage(
     assertions: tokenUsage?.assertions || createEmptyAssertions(),
     ...(tokenUsage?.attacker ? { attacker: tokenUsage.attacker } : {}),
     ...(tokenUsage?.generation ? { generation: tokenUsage.generation } : {}),
+    ...(tokenUsage?.incurredTokenUsage
+      ? { incurredTokenUsage: tokenUsage.incurredTokenUsage }
+      : {}),
   };
 }

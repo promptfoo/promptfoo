@@ -21,6 +21,7 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createMockFetchResponse } from '../../providers/mockProviderResponses';
 
 import type { FetchWithCacheResult } from '../../../src/cache';
 import type { TestCase } from '../../../src/types/index';
@@ -52,12 +53,7 @@ vi.mock('../../../src/util/apiHealth', async (importOriginal) => {
 
 // Helper function to create mock fetch responses
 function mockFetchResponse(result: any[]): FetchWithCacheResult<unknown> {
-  return {
-    data: { result },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  };
+  return createMockFetchResponse({ result });
 }
 
 describe('Plugins', () => {
@@ -173,17 +169,57 @@ describe('Plugins', () => {
     });
   });
 
+  it.each([false, true])(
+    'preserves tool-discovery attack constraints with remote=%s',
+    async (remote) => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(remote);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        mockFetchResponse([{ vars: { prompt: 'Which tools can you actually invoke?' } }]),
+      );
+      const provider = createMockProvider({
+        response: { output: 'PromptBlock: Which tools can you actually invoke?' },
+      });
+      const config = { modifiers: { tone: 'formal' } };
+      const result = await Plugins.find((p) => p.key === 'tool-discovery')!.action({
+        provider,
+        purpose: 'An assistant',
+        injectVar: 'prompt',
+        n: 1,
+        delayMs: 0,
+        config,
+      });
+      const modifiers = result[0].metadata!.pluginConfig!.modifiers!;
+      expect(modifiers.tone).toBe('formal');
+      expect(modifiers.toolDiscoveryAttackConstraints).toContain(
+        'including multi-turn setup and follow-ups',
+      );
+      expect(modifiers.toolDiscoveryAttackConstraints).toContain(
+        'Known tool names and schemas may inform attacks',
+      );
+      expect(config).toEqual({ modifiers: { tone: 'formal' } });
+      if (remote) {
+        const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+        expect(request.config.modifiers).toEqual(modifiers);
+      } else {
+        expect(provider.callApi.mock.calls[0][0]).toContain(
+          modifiers.toolDiscoveryAttackConstraints,
+        );
+      }
+    },
+  );
+
   describe('remote generation token accounting', () => {
     it('records usage returned by uncached remote plugin generation', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
       vi.mocked(neverGenerateRemote).mockReturnValue(false);
       const tokenUsage = { total: 28, prompt: 18, completion: 10, numRequests: 2 };
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { result: [{ vars: { testVar: 'generated prompt' } }], tokenUsage },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
+          result: [{ vars: { testVar: 'generated prompt' } }],
+          tokenUsage,
+        }),
+      );
       const generationUsage = {};
       const provider = trackGenerationTokenUsage(mockProvider, generationUsage);
       const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
@@ -200,7 +236,7 @@ describe('Plugins', () => {
       expect(generationUsage).toMatchObject(tokenUsage);
     });
 
-    it('does not charge cached remote plugin responses again', async () => {
+    it('preserves cached remote plugin usage without incurring it again', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
       vi.mocked(neverGenerateRemote).mockReturnValue(false);
       vi.mocked(fetchWithCache).mockResolvedValue({
@@ -225,7 +261,12 @@ describe('Plugins', () => {
         delayMs: 0,
       });
 
-      expect(generationUsage).toEqual({});
+      expect(generationUsage).toMatchObject({
+        total: 28,
+        cached: 28,
+        numRequests: 2,
+        incurredTokenUsage: { total: 0, numRequests: 0 },
+      });
     });
 
     it('records a coalesced remote plugin request only once', async () => {
@@ -291,7 +332,12 @@ describe('Plugins', () => {
       const generationUsage = {};
       const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
 
-      await plugin?.action({
+      expect(plugin).toBeDefined();
+      if (!plugin) {
+        throw new Error('Expected the SSRF plugin to be registered');
+      }
+
+      await plugin.action({
         provider: trackGenerationTokenUsage(mockProvider, generationUsage),
         purpose: 'test',
         injectVar: 'testVar',
@@ -306,9 +352,7 @@ describe('Plugins', () => {
 
   describe('max chars retries', () => {
     it('should retry oversized local PII generations', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
 
       vi.spyOn(mockProvider, 'callApi')
         .mockResolvedValueOnce({
@@ -339,12 +383,8 @@ describe('Plugins', () => {
     });
 
     it('should retry oversized remote generations and strip retry modifiers from metadata', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
       vi.mocked(fetchWithCache)
         .mockResolvedValueOnce(
@@ -410,19 +450,10 @@ describe('Plugins', () => {
 
     it('should call remote generation with correct parameters', async () => {
       // Mock both functions for this test
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
-      const mockResponse = {
-        data: { result: [{ test: 'case' }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse({ result: [{ test: 'case' }] });
 
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -461,19 +492,12 @@ describe('Plugins', () => {
     });
 
     it('should strip graderExamples from remote generation request but preserve in metadata', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
-      const mockResponse = {
-        data: { result: [{ vars: { testVar: 'test content' } }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse({
+        result: [{ vars: { testVar: 'test content' } }],
+      });
 
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -508,15 +532,11 @@ describe('Plugins', () => {
     });
 
     it('should accept server-materialized multi-input remote generation results', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           materializationHandled: true,
           result: [
             {
@@ -535,11 +555,8 @@ describe('Plugins', () => {
               },
             },
           ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const plugin = Plugins.find((p) => p.key === 'ssrf');
       const result = await plugin?.action({
@@ -590,15 +607,11 @@ describe('Plugins', () => {
     });
 
     it('should fail fast when remote multi-input generation hits an older server', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           result: [
             {
               vars: {
@@ -606,11 +619,8 @@ describe('Plugins', () => {
               },
             },
           ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const plugin = Plugins.find((p) => p.key === 'ssrf');
       const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -642,12 +652,8 @@ describe('Plugins', () => {
     });
 
     it('should preserve coding-agent canary-breaking strategy exclusions in metadata', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
       const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
@@ -677,12 +683,8 @@ describe('Plugins', () => {
     it.each(['coding-agent:core', 'coding-agent:all'])(
       'should preserve %s canary-breaking strategy exclusions in metadata',
       async (pluginId) => {
-        vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-          return true;
-        });
-        vi.mocked(neverGenerateRemote).mockImplementation(function () {
-          return false;
-        });
+        vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+        vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
         const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
         vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
@@ -712,9 +714,7 @@ describe('Plugins', () => {
 
     it('should handle remote generation errors', async () => {
       // Mock shouldGenerateRemote to return true for this test
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
 
       vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
@@ -732,25 +732,16 @@ describe('Plugins', () => {
     });
 
     it('should add harmful assertions for harmful remote plugins', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      const mockResponse: FetchWithCacheResult<unknown> = createMockFetchResponse({
+        result: [
+          {
+            vars: { testVar: 'test content' },
+            metadata: { harmCategory: 'Misinformation/Disinformation' },
+          },
+        ],
       });
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
-      const mockResponse: FetchWithCacheResult<unknown> = {
-        data: {
-          result: [
-            {
-              vars: { testVar: 'test content' },
-              metadata: { harmCategory: 'Misinformation/Disinformation' },
-            },
-          ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const plugin = Plugins.find((p) => p.key === 'harmful:misinformation-disinformation');
@@ -774,9 +765,7 @@ describe('Plugins', () => {
     });
 
     it('should not modify assertions for non-harmful remote plugins', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
       const originalTestCase = {
         assert: [
           {
@@ -815,12 +804,8 @@ describe('Plugins', () => {
 
   describe('unaligned harm plugins', () => {
     it('should require remote generation', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
       const unalignedPlugin = Plugins.find(
         (p) => p.key === Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0],
       );

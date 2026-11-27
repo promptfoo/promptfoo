@@ -2,15 +2,15 @@ import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
 import { formatDataGridDate } from '@app/utils/date';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useNavigate } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportIndex from './ReportIndex';
 import type { EvalSummary } from '@promptfoo/types';
 
 vi.mock('@app/utils/api');
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: vi.fn(),

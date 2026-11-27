@@ -1,6 +1,11 @@
 import logger from '../logger';
 import { MCPProvider } from '../providers/mcp';
-import { accumulateAttackerTokenUsage, getErrorTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../util/tokenUsageUtils';
 import { materializeMcpToolCallRemote } from './extraction/util';
 import { materializeMcpValue } from './mcpMaterialization';
 import { redteamProviderManager } from './providers/shared';
@@ -17,6 +22,10 @@ import type {
 
 const WRAPPED_MCP_PROVIDER = Symbol('wrappedMcpProvider');
 type ProviderTokenUsage = NonNullable<ProviderResponse['tokenUsage']>;
+type MaterializationUsage = {
+  cached?: boolean;
+  tokenUsage?: Partial<ProviderTokenUsage>;
+};
 
 type McpProviderWithTools = ApiProvider & {
   getAvailableTools: () => Promise<MCPTool[]>;
@@ -25,14 +34,16 @@ type McpProviderWithTools = ApiProvider & {
 
 function mergeMaterializationTokenUsage(
   response: ProviderResponse,
-  materializationTokenUsage: Partial<ProviderTokenUsage> | undefined,
+  materializationUsage: MaterializationUsage | undefined,
+  targetWasCalled: boolean,
 ): ProviderResponse {
-  if (!materializationTokenUsage) {
+  if (!materializationUsage?.tokenUsage) {
     return response;
   }
 
-  const tokenUsage = { ...(response.tokenUsage ?? {}) };
-  accumulateAttackerTokenUsage(tokenUsage, { tokenUsage: materializationTokenUsage });
+  const tokenUsage = createEmptyTokenUsage();
+  accumulateResponseTokenUsage(tokenUsage, response, { countAsRequest: targetWasCalled });
+  accumulateAttackerTokenUsage(tokenUsage, materializationUsage);
 
   return {
     ...response,
@@ -84,13 +95,17 @@ class RedteamMcpTargetProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const tools = await this.getTools();
+    const signal = options?.abortSignal;
+    signal?.throwIfAborted();
+    const tools = await (this.toolsPromise ??= this.target.getAvailableTools());
+    signal?.throwIfAborted();
 
     if (tools.length === 0) {
       return this.target.callApi(prompt, context, options);
     }
 
-    let materializationTokenUsage: Partial<ProviderTokenUsage> | undefined;
+    let materializationUsage: MaterializationUsage | undefined;
+    let targetWasCalled = false;
 
     try {
       const intentValue =
@@ -105,6 +120,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
           value: prompt,
         });
       } catch (error) {
+        signal?.throwIfAborted();
         logger.debug(
           `MCP target prompt requires inference materialization: ${
             error instanceof Error ? error.message : String(error)
@@ -121,32 +137,30 @@ class RedteamMcpTargetProvider implements ApiProvider {
           },
           options,
         );
+        signal?.throwIfAborted();
 
         if (remoteMaterializedPrompt) {
           materializedPrompt = remoteMaterializedPrompt.prompt;
-          materializationTokenUsage = remoteMaterializedPrompt.tokenUsage;
+          materializationUsage = {
+            cached: remoteMaterializedPrompt.cached,
+            tokenUsage: remoteMaterializedPrompt.tokenUsage,
+          };
         } else {
           const materializerProvider = await redteamProviderManager.getProvider({
             jsonOnly: true,
           });
+          signal?.throwIfAborted();
           const trackedMaterializerProvider = Object.create(materializerProvider) as ApiProvider;
           trackedMaterializerProvider.callApi = async (...args) => {
             try {
               const response = await materializerProvider.callApi(...args);
-              if (response.cached && response.tokenUsage) {
-                materializationTokenUsage = {
-                  total: 0,
-                  prompt: 0,
-                  completion: 0,
-                  cached: response.tokenUsage.cached ?? response.tokenUsage.total ?? 0,
-                  numRequests: 0,
-                };
-              } else {
-                materializationTokenUsage = response.tokenUsage;
-              }
+              materializationUsage = {
+                cached: response.cached,
+                tokenUsage: response.tokenUsage,
+              };
               return response;
             } catch (error) {
-              materializationTokenUsage = getErrorTokenUsage(error);
+              materializationUsage = { tokenUsage: getErrorTokenUsage(error) };
               throw error;
             }
           };
@@ -159,6 +173,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
           });
         }
       }
+      signal?.throwIfAborted();
 
       const materializedContext: CallApiContextParams | undefined = context
         ? {
@@ -170,25 +185,23 @@ class RedteamMcpTargetProvider implements ApiProvider {
           }
         : undefined;
 
+      targetWasCalled = true;
       const response = await this.target.callApi(materializedPrompt, materializedContext, options);
-      return mergeMaterializationTokenUsage(response, materializationTokenUsage);
+      signal?.throwIfAborted();
+      return mergeMaterializationTokenUsage(response, materializationUsage, targetWasCalled);
     } catch (error) {
+      signal?.throwIfAborted();
       const errorResponse: ProviderResponse = {
         error: `Failed to materialize MCP target prompt: ${
           error instanceof Error ? error.message : String(error)
         }`,
       };
-      return mergeMaterializationTokenUsage(errorResponse, materializationTokenUsage);
+      return mergeMaterializationTokenUsage(errorResponse, materializationUsage, targetWasCalled);
     }
   }
 
   async cleanup(): Promise<void> {
     await this.target.cleanup?.();
-  }
-
-  private getTools(): Promise<MCPTool[]> {
-    this.toolsPromise ??= this.target.getAvailableTools();
-    return this.toolsPromise;
   }
 }
 

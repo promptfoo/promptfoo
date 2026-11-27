@@ -13,7 +13,6 @@ import {
 import {
   type InputMaterializationContext,
   type MaterializedInputVariablesResult,
-  materializeInputVariables,
   materializeInputVariablesWithMetadata,
 } from './inputVariables';
 import {
@@ -52,14 +51,7 @@ export function extractPromptFromTags(text: string): string | null {
  * @returns Array of extracted prompt contents (trimmed)
  */
 export function extractAllPromptsFromTags(text: string): string[] {
-  const results: string[] = [];
-  let match;
-
-  while ((match = PROMPT_TAG_REGEX_GLOBAL.exec(text)) !== null) {
-    results.push(match[1].trim());
-  }
-
-  return results;
+  return Array.from(text.matchAll(PROMPT_TAG_REGEX_GLOBAL), (match) => match[1].trim());
 }
 
 /**
@@ -83,13 +75,6 @@ export function extractVariablesFromJson(
     }
   }
   return extractedVars;
-}
-
-export function extractMaterializedVariablesFromJson(
-  parsed: Record<string, unknown>,
-  inputs: Inputs,
-): Record<string, string> {
-  return materializeInputVariables(extractVariablesFromJson(parsed, inputs), inputs);
 }
 
 export async function extractMaterializedVariablesFromJsonWithMetadata(
@@ -295,13 +280,7 @@ const REFUSAL_SUBSTRING_PATTERNS = [
 ].map((s) => new RegExp(`\\b${escapeRegExp(s.toLowerCase())}\\b`));
 
 export function isEmptyResponse(response: string): boolean {
-  return (
-    !response ||
-    response.trim() === '' ||
-    response.trim() === '{}' ||
-    response.trim().toLowerCase() === 'undefined' ||
-    response.trim().toLowerCase() === 'null'
-  );
+  return !response || response.trim() === '' || response.trim() === '{}';
 }
 
 export function isBasicRefusal(response: string): boolean {

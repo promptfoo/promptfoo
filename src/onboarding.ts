@@ -390,7 +390,8 @@ export async function createDummyFiles(
   }
 
   const prompts: string[] = [];
-  const providers: (string | object)[] = [];
+  const defaultProviders = ['openai:gpt-6-luna', 'openai:gpt-6-sol'];
+  let providers: (string | ProviderOptions)[];
   let action: string;
   let language: string;
 
@@ -467,61 +468,80 @@ export async function createDummyFiles(
       });
     }
 
+    const weatherFunction = {
+      name: 'get_current_weather',
+      description: 'Get the current weather in a given location',
+      parameters: {
+        type: 'object',
+        properties: {
+          location: {
+            type: 'string',
+            description: 'The city and state, e.g. San Francisco, CA',
+          },
+        },
+        required: ['location'],
+      },
+    };
+    const gpt62Models = ['openai:gpt-6.2-sol', 'openai:gpt-6.2-astra'];
     const choices: { name: string; value: (string | ProviderOptions)[] }[] = [
-      { name: `I'll choose later`, value: ['openai:gpt-5-mini', 'openai:gpt-5'] },
+      { name: `I'll choose later`, value: defaultProviders },
       {
-        name: '[OpenAI] GPT 5, GPT 4.1, ...',
+        name: '[OpenAI] GPT-6.2 Sol and Astra',
+        value:
+          action === 'agent'
+            ? gpt62Models.map((id) => ({
+                id,
+                config: { tools: [{ type: 'function', ...weatherFunction }] },
+              }))
+            : gpt62Models,
+      },
+      {
+        name: action === 'agent' ? '[OpenAI] GPT-6 Sol' : '[OpenAI] GPT-6 Luna and Sol',
         value:
           action === 'agent'
             ? [
                 {
-                  id: 'openai:gpt-5',
+                  id: 'openai:chat:gpt-6-sol',
                   config: {
+                    reasoning_effort: 'none',
                     tools: [
                       {
                         type: 'function',
-                        function: {
-                          name: 'get_current_weather',
-                          description: 'Get the current weather in a given location',
-                          parameters: {
-                            type: 'object',
-                            properties: {
-                              location: {
-                                type: 'string',
-                                description: 'The city and state, e.g. San Francisco, CA',
-                              },
-                            },
-                            required: ['location'],
-                          },
-                        },
+                        function: weatherFunction,
                       },
                     ],
                   },
                 },
               ]
-            : ['openai:gpt-5-mini', 'openai:gpt-5'],
+            : defaultProviders,
       },
       {
         name: '[Anthropic] Claude Fable, Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-fable-5',
-          'anthropic:messages:claude-opus-5',
+          'anthropic:messages:claude-fable-5-2',
+          'anthropic:messages:claude-opus-5-5',
           'anthropic:messages:claude-opus-4-8',
-          'anthropic:messages:claude-sonnet-5',
+          'anthropic:messages:claude-sonnet-5-5',
           'anthropic:messages:claude-sonnet-4-6',
           'anthropic:messages:claude-opus-4-6',
           'anthropic:messages:claude-haiku-4-5',
         ],
       },
       {
-        name: '[Google] Gemini 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
+        name: '[Google] Gemini 4 Argon, 4 Hydrogen, 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
         value: [
-          ...['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'].map((id) => ({
+          ...[
+            'gemini-4-argon',
+            'gemini-4-hydrogen',
+            'gemini-3.8-flash',
+            'gemini-3.7-flash',
+            'gemini-3.6-flash',
+            'gemini-3.5-flash-lite',
+            'gemini-3.1-pro-preview',
+          ].map((id) => ({
             id: `vertex:${id}`,
             config: { region: 'global' },
           })),
-          'vertex:gemini-3.1-pro-preview',
-          'vertex:gemini-2.5-pro',
         ],
       },
       {
@@ -561,15 +581,15 @@ export async function createDummyFiles(
       },
       {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-        value: ['bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0'],
+        value: ['bedrock:us.anthropic.claude-sonnet-5'],
       },
       {
-        name: '[Cohere] Command R, Command R+, ...',
-        value: ['cohere:command-r', 'cohere:command-r-plus'],
+        name: '[Cohere] Command A+, Command A, ...',
+        value: ['cohere:command-a-plus-05-2026', 'cohere:command-a-03-2025'],
       },
       {
         name: '[Ollama] Llama, Qwen, Phi, ...',
-        value: ['ollama:chat:llama3.3', 'ollama:chat:phi4'],
+        value: ['ollama:chat:llama3.2:3b', 'ollama:chat:phi4'],
       },
       {
         name: '[WatsonX] Llama, IBM Granite, ...',
@@ -580,80 +600,48 @@ export async function createDummyFiles(
       },
     ];
 
-    /**
-     * The potential of the object type here is given by the agent action conditional
-     * for openai as a value choice
-     */
-    const providerChoice = await select({
+    providers = await select({
       message: 'Which model provider would you like to use?',
       choices,
       loop: false,
       pageSize: process.stdout.rows - 6,
     });
-    const providerChoices: (string | ProviderOptions)[] = Array.isArray(providerChoice)
-      ? providerChoice
-      : [providerChoice];
-
     recordOnboardingStep('choose providers', {
-      value: providerChoices.map((choice) =>
+      value: providers.map((choice) =>
         typeof choice === 'string' ? choice : JSON.stringify(choice),
       ),
     });
 
     // Tell the user if they have providers selected without relevant API keys set in env.
-    reportProviderAPIKeyWarnings(providerChoices).forEach((warningText) =>
-      logger.warn(warningText),
-    );
+    reportProviderAPIKeyWarnings(providers).forEach((warningText) => logger.warn(warningText));
 
-    if (providerChoices.length > 0) {
-      if (providerChoices.length > 3) {
-        providers.push(
-          ...providerChoices.map((choice) => (Array.isArray(choice) ? choice[0] : choice)),
-        );
-      } else {
-        providers.push(...providerChoices);
-      }
-
-      if (
-        providerChoices.some(
-          (choice) =>
-            typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
-        )
-      ) {
-        await writeFile({
-          file: 'provider.js',
-          contents: JAVASCRIPT_PROVIDER,
-          required: true,
-        });
-      }
-      if (
-        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
-      ) {
-        // Generate platform-appropriate executable provider script
-        const isWindows = process.platform === 'win32';
-        await writeFile({
-          file: isWindows ? 'provider.bat' : 'provider.sh',
-          contents: isWindows ? WINDOWS_PROVIDER : BASH_PROVIDER,
-          required: true,
-        });
-      }
-      if (
-        providerChoices.some(
-          (choice) =>
-            typeof choice === 'string' &&
-            (choice.startsWith('python:') ||
-              (choice.startsWith('file://') && choice.endsWith('.py'))),
-        )
-      ) {
-        await writeFile({
-          file: 'provider.py',
-          contents: PYTHON_PROVIDER,
-          required: true,
-        });
-      }
-    } else {
-      providers.push('openai:gpt-5-mini');
-      providers.push('openai:gpt-5');
+    const providerIds = providers.filter((choice) => typeof choice === 'string');
+    if (providerIds.some((id) => id.startsWith('file://') && id.endsWith('.js'))) {
+      await writeFile({
+        file: 'provider.js',
+        contents: JAVASCRIPT_PROVIDER,
+        required: true,
+      });
+    }
+    if (providerIds.some((id) => id.startsWith('exec:'))) {
+      // Generate platform-appropriate executable provider script
+      const isWindows = process.platform === 'win32';
+      await writeFile({
+        file: isWindows ? 'provider.bat' : 'provider.sh',
+        contents: isWindows ? WINDOWS_PROVIDER : BASH_PROVIDER,
+        required: true,
+      });
+    }
+    if (
+      providerIds.some(
+        (id) => id.startsWith('python:') || (id.startsWith('file://') && id.endsWith('.py')),
+      )
+    ) {
+      await writeFile({
+        file: 'provider.py',
+        contents: PYTHON_PROVIDER,
+        required: true,
+      });
     }
 
     if (action === 'compare') {
@@ -691,8 +679,7 @@ export async function createDummyFiles(
     language = 'not_sure';
     prompts.push(`Write a tweet about {{topic}}`);
     prompts.push(`Write a concise, funny tweet about {{topic}}`);
-    providers.push('openai:gpt-5-mini');
-    providers.push('openai:gpt-5');
+    providers = defaultProviders;
   }
 
   const nunjucks = getNunjucksEngine();
@@ -717,7 +704,10 @@ export async function createDummyFiles(
 
   return {
     numPrompts: prompts.length,
-    providerPrefixes: providers.map((p) => (typeof p === 'string' ? p.split(':')[0] : 'unknown')),
+    providerPrefixes: providers.map((provider) => {
+      const providerId = typeof provider === 'string' ? provider : provider.id;
+      return providerId?.split(':')[0] ?? 'unknown';
+    }),
     action,
     language,
     outDirectory,

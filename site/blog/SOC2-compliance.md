@@ -48,7 +48,7 @@ If you're building or deploying generative AI in production, you can trust that:
 
 These milestones are part of our broader mission: to make LLMs safer and more reliable for enterprises. We’ll continue to invest in our security practices, from encryption and access controls to red teaming and compliance, as we support the growing ecosystem of developers and organizations building with generative AI.
 
-To learn more about our security practices or request our audit reports, visit our [Trust Center](https://trust.promptfoo.dev/) or contact us at security@promptfoo.com.
+To learn more about our security practices or request our audit reports, visit our [Trust Center](https://trust.openai.com/) or contact us at security@promptfoo.com.
 
 ## Join Us and Get Involved
 
@@ -58,7 +58,7 @@ We're committed to being the best open-source LLM red teaming and eval tool avai
 - [**Follow us on GitHub**](https://github.com/promptfoo/promptfoo) to stay updated and contribute
 - Reach out with your ideas, feedback, or collaborations—we'd love to hear from you!
 - Spread the word and help grow our community even further
-- [Join our Discord](https://discord.gg/promptfoo) for real-time discussions and support
+- [Join our Discord](https://discord.gg/gHPS9jjfbs) for real-time discussions and support
 
 ## Thank You
 

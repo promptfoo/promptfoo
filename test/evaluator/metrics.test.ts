@@ -1,13 +1,28 @@
+import { createTokenOutput } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
+import { createDeferred } from '../util/utils';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
+
+const createErrorMetricTest = (errorValue: number) => ({
+  vars: { errorValue },
+  assert: [
+    {
+      type: 'javascript' as const,
+      value: 'context.vars.errorValue',
+      metric: 'APE',
+    },
+  ],
+});
 
 describeEvaluator('evaluator metrics and scoring', () => {
   it('evaluator should count named score assertions per metric', async () => {
@@ -193,38 +208,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt for derived metrics')],
-      tests: [
-        {
-          vars: { errorValue: 0.1 },
-          assert: [
-            {
-              type: 'javascript',
-              value: 'context.vars.errorValue',
-              metric: 'APE',
-            },
-          ],
-        },
-        {
-          vars: { errorValue: 0.2 },
-          assert: [
-            {
-              type: 'javascript',
-              value: 'context.vars.errorValue',
-              metric: 'APE',
-            },
-          ],
-        },
-        {
-          vars: { errorValue: 0.3 },
-          assert: [
-            {
-              type: 'javascript',
-              value: 'context.vars.errorValue',
-              metric: 'APE',
-            },
-          ],
-        },
-      ],
+      tests: [createErrorMetricTest(0.1), createErrorMetricTest(0.2), createErrorMetricTest(0.3)],
       derivedMetrics: [
         {
           name: 'APE_sum',
@@ -293,20 +277,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('First prompt'), toPrompt('Second prompt')],
-      tests: [
-        {
-          vars: { errorValue: 0.1 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-        {
-          vars: { errorValue: 0.2 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-        {
-          vars: { errorValue: 0.3 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-      ],
+      tests: [createErrorMetricTest(0.1), createErrorMetricTest(0.2), createErrorMetricTest(0.3)],
       derivedMetrics: [
         {
           name: 'MAPE',
@@ -342,16 +313,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const testSuite: TestSuite = {
       providers: [mockProvider1, mockProvider2],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          vars: { errorValue: 0.1 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-        {
-          vars: { errorValue: 0.2 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-      ],
+      tests: [createErrorMetricTest(0.1), createErrorMetricTest(0.2)],
       derivedMetrics: [
         {
           name: 'MAPE',
@@ -378,13 +340,124 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(metrics1!.namedScores.MAPE).toBeCloseTo(0.15, 10);
   });
 
+  it('rejects an unsupported formula before calling the provider, even in an unused branch', async () => {
+    const provider = { id: () => 'echo', callApi: vi.fn(async () => ({ output: 'ok' })) };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('test')],
+      tests: [{}],
+      derivedMetrics: [{ name: 'score', value: '1 ? 42 : sqrt(9)' }],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await expect(evaluate(suite, record, {})).rejects.toThrow(
+      'Invalid formula for derived metric "score"',
+    );
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should keep derived scores and __count consistent across concurrent rows', async () => {
+    const provider: ApiProvider = {
+      id: () => 'concurrent-metrics-provider',
+      callApi: async () => ({ output: 'ok' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Concurrent derived metrics prompt')],
+      tests: Array.from({ length: 20 }, (_, index) => ({
+        vars: { index },
+        assert: [{ type: 'javascript' as const, value: '1', metric: 'Score' }],
+      })),
+      derivedMetrics: [
+        {
+          name: 'PeakAverage',
+          value: (scores) => Math.max(scores.PeakAverage || 0, scores.Score / scores.__count),
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 10 });
+
+    // Remember intermediate averages so an inflated value cannot self-correct.
+    expect(evalRecord.prompts[0]?.metrics?.namedScores).toEqual({ Score: 20, PeakAverage: 1 });
+  });
+
+  it.each(['afterEach', 'persistence'])(
+    'should count rows in metric update order when %s finishes out of order',
+    async (delayAt) => {
+      const firstRowPaused = createDeferred<void>();
+      const resumeFirstRow = createDeferred<void>();
+      const completedRows: number[] = [];
+      const pauseFirstRow = async (testIdx: number) => {
+        if (testIdx === 0) {
+          firstRowPaused.resolve();
+          await resumeFirstRow.promise;
+        }
+      };
+      const provider: ApiProvider = {
+        id: () => 'out-of-order-metrics-provider',
+        callApi: async (_prompt, context) => {
+          if (context?.vars?.index === 1) {
+            await firstRowPaused.promise;
+          }
+          return { output: 'ok' };
+        },
+      };
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Out-of-order derived metrics prompt')],
+        tests: [0, 1].map((index) => ({
+          vars: { index },
+          assert: [{ type: 'javascript' as const, value: '1', metric: 'Score' }],
+        })),
+        extensions: delayAt === 'afterEach' ? ['file://delayed-hook.js'] : undefined,
+        derivedMetrics: [
+          { name: 'Average', value: 'Score / __count' },
+          {
+            name: 'PeakAverage',
+            value: (scores) => Math.max(scores.PeakAverage || 0, scores.Average),
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      if (delayAt === 'afterEach') {
+        vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+          if (hookName === 'afterEach' && 'result' in context) {
+            await pauseFirstRow(context.result.testIdx);
+          }
+          return context;
+        });
+      } else {
+        const addResult = evalRecord.addResult.bind(evalRecord);
+        vi.spyOn(evalRecord, 'addResult').mockImplementation(async (result) => {
+          await pauseFirstRow(result.testIdx);
+          return addResult(result);
+        });
+      }
+
+      await evaluate(testSuite, evalRecord, {
+        maxConcurrency: 2,
+        progressCallback: (_complete, _total, index) => {
+          completedRows.push(index);
+          if (index === 1) {
+            resumeFirstRow.resolve();
+          }
+        },
+      });
+
+      expect(completedRows).toEqual([1, 0]);
+      expect(evalRecord.prompts[0]?.metrics?.namedScores).toEqual({
+        Score: 2,
+        Average: 1,
+        PeakAverage: 1,
+      });
+    },
+  );
+
   it('should apply max-score to overall pass/fail and stats', async () => {
     const maxScoreProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('max-score-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'hello world',
-        tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('hello world', 1, 1, 0)),
     };
 
     const testSuite: TestSuite = {
@@ -424,10 +497,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
     try {
       const selectBestProvider: ApiProvider = {
         id: vi.fn().mockReturnValue('select-best-provider'),
-        callApi: vi.fn().mockResolvedValue({
-          output: 'hello world',
-          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
-        }),
+        callApi: vi.fn().mockResolvedValue(createTokenOutput('hello world', 1, 1, 0)),
       };
 
       const testSuite: TestSuite = {
@@ -508,8 +578,12 @@ describeEvaluator('evaluator metrics and scoring', () => {
       for (const result of summary.results) {
         expect(result.gradingResult?.metadata?.cachedResponse).toBeUndefined();
         expect(result.tokenUsage?.assertions).toMatchObject({
-          total: 13,
+          total: 110,
           cached: 97,
+          numRequests: 2,
+        });
+        expect(result.tokenUsage?.incurredTokenUsage?.assertions).toMatchObject({
+          total: 13,
           numRequests: 1,
         });
       }

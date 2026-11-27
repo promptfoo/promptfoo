@@ -1,7 +1,5 @@
-import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
-import logger from '../../logger';
-import { getRequestTimeoutMs } from '../shared';
+import { getEnvString, getProviderEnvString } from '../../envars';
+import { requestHyperbolicJson } from './transport';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -17,17 +15,15 @@ export type HyperbolicAudioOptions = {
   apiBaseUrl?: string;
   model?: string;
   voice?: string;
+  speaker?: string;
   speed?: number;
   language?: string;
+  sdp_ratio?: number;
+  noise_scale?: number;
+  noise_scale_w?: number;
 };
 
-const HYPERBOLIC_AUDIO_MODELS = [
-  {
-    id: 'Melo-TTS',
-    aliases: ['melo-tts', 'melo'],
-    cost: 0.001, // $0.001 per 1000 characters
-  },
-];
+const HYPERBOLIC_API_BASE_URL = 'https://api.hyperbolic.xyz/v1';
 
 export class HyperbolicAudioProvider implements ApiProvider {
   modelName: string;
@@ -47,11 +43,13 @@ export class HyperbolicAudioProvider implements ApiProvider {
     if (this.config?.apiKey) {
       return this.config.apiKey;
     }
-    return this.env?.HYPERBOLIC_API_KEY || getEnvString('HYPERBOLIC_API_KEY');
+    return (
+      getProviderEnvString(this.env, 'HYPERBOLIC_API_KEY') || getEnvString('HYPERBOLIC_API_KEY')
+    );
   }
 
   getApiUrl(): string {
-    return this.config?.apiBaseUrl || 'https://api.hyperbolic.xyz/v1';
+    return this.config?.apiBaseUrl || HYPERBOLIC_API_BASE_URL;
   }
 
   id(): string {
@@ -62,26 +60,32 @@ export class HyperbolicAudioProvider implements ApiProvider {
     return `[Hyperbolic Audio Provider ${this.modelName}]`;
   }
 
-  private getApiModelName(): string {
-    const model = HYPERBOLIC_AUDIO_MODELS.find(
-      (m) => m.id === this.modelName || (m.aliases && m.aliases.includes(this.modelName)),
-    );
-    return model?.id || this.modelName;
+  private isHyperbolicApi(): boolean {
+    try {
+      const url = new URL(this.getApiUrl());
+      return (
+        url.origin === 'https://api.hyperbolic.xyz' && url.pathname.replace(/\/+$/, '') === '/v1'
+      );
+    } catch {
+      return false;
+    }
   }
 
   private calculateAudioCost(textLength: number): number {
-    const model = HYPERBOLIC_AUDIO_MODELS.find(
-      (m) => m.id === this.modelName || (m.aliases && m.aliases.includes(this.modelName)),
-    );
-    const costPer1000Chars = model?.cost || 0.001;
-    return (textLength / 1000) * costPer1000Chars;
+    // Hyperbolic documents $5 per million characters. Preserve the legacy estimate
+    // for custom endpoints, whose pricing is independent of Hyperbolic's service.
+    if (this.isHyperbolicApi()) {
+      return (textLength / 1000) * 0.005;
+    }
+    return (textLength / 1000) * 0.001;
   }
 
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    callApiOptions?.abortSignal?.throwIfAborted();
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error(
@@ -96,16 +100,19 @@ export class HyperbolicAudioProvider implements ApiProvider {
 
     const endpoint = '/audio/generation';
 
-    const body: Record<string, any> = {
+    const body: Record<string, unknown> = {
       text: prompt,
     };
 
-    // Add optional parameters
-    if (config.model) {
-      body.model = config.model;
-    }
-    if (config.voice) {
-      body.voice = config.voice;
+    // The native endpoint uses Melo TTS without a model selector. Keep explicit
+    // model/voice passthrough for compatibility with existing custom endpoints.
+    if (!this.isHyperbolicApi()) {
+      if (config.model) {
+        body.model = config.model;
+      }
+      if (config.voice) {
+        body.voice = config.voice;
+      }
     }
     if (config.speed !== undefined) {
       body.speed = config.speed;
@@ -113,42 +120,26 @@ export class HyperbolicAudioProvider implements ApiProvider {
     if (config.language) {
       body.language = config.language;
     }
-
-    const headers = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    } as Record<string, string>;
-
-    let data: any, status: number, statusText: string, latencyMs: number | undefined;
-    let cached = false;
-    try {
-      ({ data, cached, status, statusText, latencyMs } = await fetchWithCache(
-        `${this.getApiUrl()}${endpoint}`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        },
-        getRequestTimeoutMs(),
-      ));
-
-      if (status < 200 || status >= 300) {
-        return {
-          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
-        };
+    if (config.speaker) {
+      body.speaker = config.speaker;
+    }
+    for (const parameter of ['sdp_ratio', 'noise_scale', 'noise_scale_w'] as const) {
+      if (config[parameter] !== undefined) {
+        body[parameter] = config[parameter];
       }
-    } catch (err) {
-      logger.error(`API call error: ${String(err)}`);
-      return {
-        error: `API call error: ${String(err)}`,
-      };
     }
 
-    if (data.error) {
-      return {
-        error: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
-      };
+    const result = await requestHyperbolicJson<{ audio?: string }>(
+      `${this.getApiUrl()}${endpoint}`,
+      apiKey,
+      body,
+      context,
+      callApiOptions?.abortSignal,
+    );
+    if (!result.ok) {
+      return { error: result.error };
     }
+    const { data, cached, latencyMs } = result;
 
     try {
       if (!data.audio) {
@@ -164,15 +155,11 @@ export class HyperbolicAudioProvider implements ApiProvider {
         cached,
         latencyMs,
         cost,
-        ...(data.audio
-          ? {
-              isBase64: true,
-              audio: {
-                data: data.audio,
-                format: 'wav',
-              },
-            }
-          : {}),
+        isBase64: true,
+        audio: {
+          data: data.audio,
+          format: this.isHyperbolicApi() ? 'mp3' : 'wav',
+        },
       };
     } catch (err) {
       return {

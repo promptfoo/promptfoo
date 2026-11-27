@@ -10,7 +10,7 @@ vi.mock('fs', async () => {
   };
 });
 
-vi.mock('glob', () => ({
+vi.mock('glob/raw', () => ({
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
@@ -81,6 +81,8 @@ describe('maybeFilePath', () => {
   it('should recognize function references when the path is not the first colon-delimited token', () => {
     expect(maybeFilePath('label:path/to/filename.py:functionName')).toBe(true);
     expect(maybeFilePath('label:path/to/filename.js:functionName')).toBe(true);
+    expect(maybeFilePath('label:filename.jsonl:functionName')).toBe(true);
+    expect(maybeFilePath('filename.jsonl:label:functionName')).toBe(false);
   });
 
   // Additional tests

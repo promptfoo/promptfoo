@@ -1,8 +1,10 @@
 import React from 'react';
 
+import { createTargetOverwriteSetItem } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import ProviderConfigEditor from './ProviderConfigEditor';
@@ -13,8 +15,23 @@ const mockA2AConfigState = vi.hoisted(() => ({
   advancedConfigError: null as string | null,
 }));
 
+const providerEdit = vi.hoisted(() => ({ field: 'inputs', value: undefined as unknown }));
+
 vi.mock('./HttpEndpointConfiguration', () => ({
-  default: () => <div data-testid="http-config" />,
+  default: ({
+    updateCustomTarget,
+    bodyError,
+  }: {
+    updateCustomTarget: (field: string, value: unknown) => void;
+    bodyError: React.ReactNode;
+  }) => (
+    <div data-testid="http-config">
+      <div data-testid="http-body-error">{bodyError}</div>
+      <button onClick={() => updateCustomTarget(providerEdit.field, providerEdit.value)}>
+        Edit HTTP config
+      </button>
+    </div>
+  ),
 }));
 vi.mock('./WebSocketEndpointConfiguration', () => ({
   default: () => <div data-testid="ws-config" />,
@@ -90,10 +107,10 @@ vi.mock('./FoundationModelConfiguration', () => ({
     <div data-testid="fm-config">
       {providerType === 'bedrock' && (
         <button
-          data-testid="switch-bedrock-invoke"
+          data-testid="update-bedrock-id"
           onClick={() => updateCustomTarget('id', 'bedrock:anthropic.claude-3-5-sonnet')}
         >
-          Switch Bedrock InvokeModel
+          Update Bedrock ID
         </button>
       )}
     </div>
@@ -103,21 +120,116 @@ vi.mock('./AgentFrameworkConfiguration', () => ({
   default: () => <div data-testid="agent-config" />,
 }));
 vi.mock('./CommonConfigurationOptions', () => ({
-  default: ({ onValidationChange }: { onValidationChange?: (hasErrors: boolean) => void }) => {
+  default: ({
+    onValidationChange,
+    updateCustomTarget,
+  }: {
+    onValidationChange?: (hasErrors: boolean) => void;
+    updateCustomTarget: (field: string, value: unknown) => void;
+  }) => {
     React.useEffect(() => {
       if (onValidationChange) {
         onValidationChange(false);
       }
     }, [onValidationChange]);
-    return <div data-testid="common-config" />;
+    return (
+      <div data-testid="common-config">
+        <button onClick={() => updateCustomTarget('inputs', providerEdit.value)}>
+          Edit inputs
+        </button>
+      </div>
+    );
   },
 }));
 
+function StatefulCodexSecurityEditor({
+  initialConfig = {},
+  initialId = 'openai:codex-security:gpt-5.6-luna',
+  allowRename = false,
+  alternateTarget,
+}: {
+  initialConfig?: ProviderOptions['config'];
+  initialId?: string;
+  allowRename?: boolean;
+  alternateTarget?: ProviderOptions;
+}) {
+  const [provider, setProvider] = React.useState<ProviderOptions>({
+    id: initialId,
+    config: {
+      operation: 'security-scan',
+      repository: '/repos/service',
+      auth: 'chatgpt',
+      model_reasoning_effort: 'high',
+      max_cost_usd: 1,
+      ...initialConfig,
+    },
+  });
+
+  return (
+    <>
+      {allowRename && (
+        <input
+          aria-label="Target name"
+          value={provider.label ?? ''}
+          onChange={(event) => setProvider({ ...provider, label: event.target.value })}
+        />
+      )}
+      {alternateTarget && (
+        <button onClick={() => setProvider(alternateTarget)}>Switch target</button>
+      )}
+      <ProviderConfigEditor
+        provider={provider}
+        setProvider={setProvider}
+        providerType="codex-security"
+      />
+      <output data-testid="codex-security-config">{JSON.stringify(provider.config)}</output>
+    </>
+  );
+}
+
 describe('ProviderConfigEditor', () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(() => {
     mockA2AConfigState.advancedConfigError = null;
     useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
+
+  it.each([
+    ['bedrock-agent', 'bedrock-agent:your-agent-id'],
+    ['claude-agent-sdk', 'file:///path/to/claude_agent.py'],
+  ])('provides an editable target configuration for %s', (providerType, id) => {
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id, config: { retained: 'value' } }}
+        setProvider={vi.fn()}
+        providerType={providerType}
+      />,
+    );
+    expect(screen.getByTestId('custom-config')).toBeVisible();
+    expect(screen.getByTestId('custom-raw-config')).toHaveTextContent('retained');
+    expect(screen.getByTestId('common-config')).toBeVisible();
+  });
+
+  it.each(['bedrock-agent', 'claude-agent-sdk'])(
+    'rejects an empty ID for the editable %s target',
+    (providerType) => {
+      let validate: (() => boolean) | undefined;
+      const setError = vi.fn();
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: '', config: {} }}
+          setProvider={vi.fn()}
+          setError={setError}
+          providerType={providerType}
+          onValidationRequest={(validator) => {
+            validate = validator;
+          }}
+        />,
+      );
+      expect(validate?.()).toBe(false);
+      expect(setError).toHaveBeenCalledWith(expect.stringContaining('Provider ID is required'));
+    },
+  );
 
   describe('validate method', () => {
     it('should return true from validate() for a valid http provider', () => {
@@ -555,6 +667,569 @@ describe('ProviderConfigEditor', () => {
       expect(mockSetError).toHaveBeenCalledWith(null);
       expect(mockOnValidate).toHaveBeenCalledWith(true);
     });
+
+    it.each([
+      {
+        config: { operation: 'fix-finding', repository: '/repos/service' },
+        expectedError: 'Unsupported Codex Security operation',
+      },
+      {
+        config: { operation: 'security-scan', repository: '/repos/service', auth: 'oauth' },
+        expectedError: 'Unsupported Codex Security authentication method',
+      },
+      {
+        config: {
+          operation: 'security-scan',
+          repository: '/repos/service',
+          model_reasoning_effort: 'extreme',
+        },
+        expectedError: 'Unsupported Codex Security reasoning effort',
+      },
+      {
+        config: {
+          operation: 'security-scan',
+          repository: '/repos/service',
+          reasoning_effort: 'extreme',
+        },
+        expectedError: 'Unsupported Codex Security reasoning effort',
+      },
+      {
+        config: { operation: 'security-scan', repository: '' },
+        expectedError: 'Repository path is required',
+      },
+      {
+        config: {
+          operation: 'security-scan',
+          repository: '',
+          working_dir: '/repos/legacy-service',
+        },
+        expectedError: 'Repository path is required',
+      },
+      {
+        config: { operation: 'security-diff-scan', repository: '/repos/service' },
+        expectedError: 'A base Git reference or working tree target is required for diff scans',
+      },
+      {
+        config: { operation: 'security-scan', repository: '/repos/service', max_cost_usd: 0 },
+        expectedError: 'Maximum scan cost must be greater than 0',
+      },
+      {
+        config: {
+          operation: 'security-diff-scan',
+          repository: '/repos/service',
+          working_tree: true,
+          head_ref: 'feature/auth',
+        },
+        expectedError: 'Working-tree scans cannot specify a head Git reference',
+      },
+      {
+        config: {
+          operation: 'security-scan',
+          repository: '/repos/service',
+          base_ref: 'origin/main',
+        },
+        expectedError: 'Git diff target options require the diff scan operation',
+      },
+      {
+        config: {
+          operation: 'security-diff-scan',
+          repository: '/repos/service',
+          base_ref: 'origin/main',
+          paths: ['src/auth'],
+        },
+        expectedError: 'Scoped repository paths cannot be combined with diff scans',
+      },
+      {
+        config: {
+          operation: 'security-scan',
+          repository: '/repos/service',
+          model_reasoning_effort: 'high',
+          reasoning_effort: 'low',
+        },
+        expectedError: 'Reasoning effort settings must match',
+      },
+    ])('validates Codex Security configuration: $expectedError', ({ config, expectedError }) => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'openai:codex-security:gpt-5.6-luna', config }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="codex-security"
+        />,
+      );
+
+      expect(validateFn!()).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith(expectedError);
+    });
+
+    it('accepts native Codex Security provider IDs without requiring a Python adapter', () => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'openai:codex-security:gpt-5.6-luna',
+            config: { operation: 'security-scan', repository: '/repos/service' },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="codex-security"
+        />,
+      );
+
+      expect(validateFn!()).toBe(true);
+      expect(mockSetError).toHaveBeenCalledWith(null);
+    });
+
+    it('accepts the documented working_dir repository alias', () => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'openai:codex-security',
+            config: { operation: 'security-scan', working_dir: '/repos/legacy-service' },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="codex-security"
+        />,
+      );
+
+      expect(screen.getByLabelText('Repository path *')).toHaveValue('/repos/legacy-service');
+      expect(validateFn!()).toBe(true);
+      expect(mockSetError).toHaveBeenCalledWith(null);
+    });
+
+    it('validates missing repository paths immediately in the provider dialog', async () => {
+      const mockSetError = vi.fn();
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'openai:codex-security',
+            config: { operation: 'security-scan', repository: '' },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          validateAll
+          providerType="codex-security"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(mockSetError).toHaveBeenCalledWith('Repository path is required');
+      });
+    });
+  });
+
+  it('configures native scan operations, models, reasoning, authentication, and cost', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<StatefulCodexSecurityEditor />);
+
+    expect(screen.getByLabelText('Model')).toHaveValue('gpt-5.6-luna');
+    expect(screen.getByLabelText('Repository path *')).toHaveValue('/repos/service');
+
+    await user.selectOptions(screen.getByLabelText('Security operation'), 'deep-security-scan');
+
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      operation: 'deep-security-scan',
+    });
+
+    const modelInput = screen.getByLabelText('Model');
+    await user.clear(modelInput);
+    await user.type(modelInput, 'gpt-5.6-terra');
+
+    expect(screen.getByText('openai:codex-security:gpt-5.6-terra')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Reasoning effort'), 'max');
+    await user.selectOptions(screen.getByLabelText('Authentication'), 'api-key');
+    await user.clear(screen.getByLabelText('Maximum cost (USD)'));
+    await user.type(screen.getByLabelText('Maximum cost (USD)'), '2');
+
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      model_reasoning_effort: 'max',
+      auth: 'api-key',
+      max_cost_usd: 2,
+    });
+
+    await user.selectOptions(screen.getByLabelText('Security operation'), 'security-scan');
+    expect(screen.getByLabelText('Security operation')).toHaveValue('security-scan');
+  });
+
+  it('requires unsupported imported security operations to be replaced with a native operation', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <StatefulCodexSecurityEditor initialConfig={{ operation: 'fix-finding' }} />,
+    );
+
+    const operation = screen.getByLabelText('Security operation');
+    expect(operation).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'Unsupported security operation' })).toBeDisabled();
+
+    await user.selectOptions(operation, 'security-scan');
+
+    expect(operation).toHaveValue('security-scan');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      operation: 'security-scan',
+    });
+  });
+
+  it('requires unsupported imported authentication and reasoning settings to be corrected', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <StatefulCodexSecurityEditor
+        initialConfig={{ auth: 'oauth', model_reasoning_effort: 'extreme' }}
+      />,
+    );
+
+    const reasoning = screen.getByLabelText('Reasoning effort');
+    const auth = screen.getByLabelText('Authentication');
+    expect(reasoning).toHaveValue('');
+    expect(auth).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'Unsupported reasoning effort' })).toBeDisabled();
+    expect(
+      screen.getByRole('option', { name: 'Unsupported authentication method' }),
+    ).toBeDisabled();
+
+    await user.selectOptions(reasoning, 'high');
+    await user.selectOptions(auth, 'chatgpt');
+
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      auth: 'chatgpt',
+      model_reasoning_effort: 'high',
+    });
+  });
+
+  it('clears legacy config.model when the inline model is edited or removed', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StatefulCodexSecurityEditor
+        initialId="openai:codex-security"
+        initialConfig={{ model: 'gpt-5.6-sol' }}
+      />,
+    );
+
+    const modelInput = screen.getByLabelText('Model');
+    expect(modelInput).toHaveValue('gpt-5.6-sol');
+
+    await user.clear(modelInput);
+
+    expect(modelInput).toHaveValue('');
+    expect(screen.getByText('openai:codex-security')).toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'model',
+    );
+  });
+
+  it('normalizes the legacy working directory when editing or clearing repository paths', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StatefulCodexSecurityEditor
+        initialConfig={{ repository: undefined, working_dir: '/repos/legacy-service' }}
+      />,
+    );
+
+    const repositoryInput = screen.getByLabelText('Repository path *');
+    expect(repositoryInput).toHaveValue('/repos/legacy-service');
+
+    await user.clear(repositoryInput);
+
+    let config = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+    expect(config.repository).toBe('');
+    expect(config).not.toHaveProperty('working_dir');
+
+    await user.type(repositoryInput, '/repos/new-service');
+
+    config = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+    expect(config.repository).toBe('/repos/new-service');
+    expect(config).not.toHaveProperty('working_dir');
+  });
+
+  it('displays and normalizes the legacy reasoning-effort alias', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StatefulCodexSecurityEditor
+        initialConfig={{ model_reasoning_effort: undefined, reasoning_effort: 'low' }}
+      />,
+    );
+
+    const reasoning = screen.getByLabelText('Reasoning effort');
+    expect(reasoning).toHaveValue('low');
+
+    await user.selectOptions(reasoning, 'high');
+
+    const config = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+    expect(config.model_reasoning_effort).toBe('high');
+    expect(config).not.toHaveProperty('reasoning_effort');
+  });
+
+  it('trims pasted model names and treats whitespace-only input as an unset model', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<StatefulCodexSecurityEditor />);
+
+    const modelInput = screen.getByLabelText('Model');
+    await user.clear(modelInput);
+    await user.click(modelInput);
+    await user.paste('  gpt-5.6-terra  ');
+
+    expect(modelInput).toHaveValue('gpt-5.6-terra');
+    expect(screen.getByText('openai:codex-security:gpt-5.6-terra')).toBeInTheDocument();
+
+    await user.clear(modelInput);
+    await user.type(modelInput, '   ');
+
+    expect(modelInput).toHaveValue('');
+    expect(screen.getByText('openai:codex-security')).toBeInTheDocument();
+  });
+
+  it('configures scoped repository paths and mutually exclusive working-tree diff targets', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<StatefulCodexSecurityEditor />);
+
+    await user.type(screen.getByLabelText('Scoped paths'), 'src/auth, src/api');
+
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      paths: ['src/auth', 'src/api'],
+    });
+
+    await user.selectOptions(screen.getByLabelText('Security operation'), 'security-diff-scan');
+
+    expect(screen.queryByLabelText('Scoped paths')).not.toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'paths',
+    );
+
+    await user.type(screen.getByLabelText('Base Git reference'), 'origin/main');
+    await user.type(screen.getByLabelText('Head Git reference'), 'feature/auth');
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Scan uncommitted working-tree changes.' }),
+    );
+
+    expect(screen.queryByLabelText('Head Git reference')).not.toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      operation: 'security-diff-scan',
+      base_ref: 'origin/main',
+      working_tree: true,
+    });
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'head_ref',
+    );
+
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Scan uncommitted working-tree changes.' }),
+    );
+    expect(screen.getByLabelText('Head Git reference')).toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'working_tree',
+    );
+  });
+
+  it.each(['src/second', 'src/first'])(
+    'refreshes scoped paths when switching targets with the same model and paths %s',
+    async (nextPath) => {
+      const user = userEvent.setup();
+      const setProvider = vi.fn();
+      const firstTarget: ProviderOptions = {
+        id: 'openai:codex-security:gpt-5.6-luna',
+        config: { repository: '/repos/first', paths: ['src/first'] },
+      };
+      const secondTarget: ProviderOptions = {
+        id: firstTarget.id,
+        config: { repository: '/repos/second', paths: [nextPath], auth: 'chatgpt' },
+      };
+      const { rerender } = renderWithProviders(
+        <ProviderConfigEditor
+          provider={firstTarget}
+          setProvider={setProvider}
+          providerType="codex-security"
+        />,
+      );
+
+      expect(screen.getByLabelText('Scoped paths')).toHaveValue('src/first');
+      await user.type(screen.getByLabelText('Scoped paths'), ', ');
+      expect(screen.getByLabelText('Scoped paths')).toHaveValue('src/first, ');
+      rerender(
+        <ProviderConfigEditor
+          provider={secondTarget}
+          setProvider={setProvider}
+          providerType="codex-security"
+        />,
+      );
+
+      expect(screen.getByLabelText('Scoped paths')).toHaveValue(nextPath);
+      await user.type(screen.getByLabelText('Scoped paths'), ', tests');
+
+      expect(setProvider).toHaveBeenLastCalledWith({
+        ...secondTarget,
+        config: { ...secondTarget.config, paths: [nextPath, 'tests'] },
+      });
+      expect(firstTarget.config.paths).toEqual(['src/first']);
+      expect(secondTarget.config.paths).toEqual([nextPath]);
+    },
+  );
+
+  it('refreshes scoped paths when the current target configuration is replaced or cleared', () => {
+    const setProvider = vi.fn();
+    const provider: ProviderOptions = {
+      id: 'openai:codex-security:gpt-5.6-luna',
+      config: { repository: '/repos/service', paths: ['src/auth'] },
+    };
+    const { rerender } = renderWithProviders(
+      <ProviderConfigEditor
+        provider={provider}
+        setProvider={setProvider}
+        providerType="codex-security"
+      />,
+    );
+
+    rerender(
+      <ProviderConfigEditor
+        provider={{ ...provider, config: { ...provider.config, paths: ['src/api', 'test'] } }}
+        setProvider={setProvider}
+        providerType="codex-security"
+      />,
+    );
+    expect(screen.getByLabelText('Scoped paths')).toHaveValue('src/api, test');
+
+    rerender(
+      <ProviderConfigEditor
+        provider={{ ...provider, config: { repository: '/repos/service' } }}
+        setProvider={setProvider}
+        providerType="codex-security"
+      />,
+    );
+    expect(screen.getByLabelText('Scoped paths')).toHaveValue('');
+    expect(setProvider).not.toHaveBeenCalled();
+  });
+
+  it('preserves scoped path separators and whitespace through parent configuration updates', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<StatefulCodexSecurityEditor />);
+    const pathsInput = screen.getByLabelText('Scoped paths');
+
+    await user.click(pathsInput);
+    await user.paste('  src/auth, ');
+    expect(pathsInput).toHaveValue('  src/auth, ');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      paths: ['src/auth'],
+    });
+
+    await user.selectOptions(screen.getByLabelText('Reasoning effort'), 'max');
+    expect(pathsInput).toHaveValue('  src/auth, ');
+    await user.type(pathsInput, 'src/api  ');
+
+    expect(pathsInput).toHaveValue('  src/auth, src/api  ');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      paths: ['src/auth', 'src/api'],
+      model_reasoning_effort: 'max',
+    });
+  });
+
+  it.each([
+    { field: 'Repository path', value: '/repos/renamed' },
+    { field: 'Model', value: 'gpt-5.6-sol' },
+    { field: 'Target name', value: 'Renamed target' },
+  ])('preserves scoped path drafts while editing $field', async ({ field, value }) => {
+    const user = userEvent.setup();
+    renderWithProviders(<StatefulCodexSecurityEditor allowRename />);
+    const pathsInput = screen.getByLabelText('Scoped paths');
+
+    await user.type(pathsInput, 'src/auth, ');
+    const otherInput = screen.getByRole('textbox', { name: new RegExp(field) });
+    await user.clear(otherInput);
+    await user.type(otherInput, value);
+    await user.type(pathsInput, 'src/api');
+
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      paths: ['src/auth', 'src/api'],
+    });
+    expect(pathsInput).toHaveValue('src/auth, src/api');
+    expect(otherInput).toHaveValue(value);
+  });
+
+  it.each(['   ', ',,,', ' , , '])(
+    'keeps empty scoped paths blank after clearing and switching targets with draft %j',
+    async (draft) => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StatefulCodexSecurityEditor
+          initialConfig={{ paths: ['src/auth'] }}
+          alternateTarget={{
+            id: 'openai:codex-security:gpt-5.6-luna',
+            label: 'Other target',
+            config: { repository: '/repos/other' },
+          }}
+        />,
+      );
+      const pathsInput = screen.getByLabelText('Scoped paths');
+
+      await user.clear(pathsInput);
+      await user.type(pathsInput, draft);
+      expect(
+        JSON.parse(screen.getByTestId('codex-security-config').textContent!),
+      ).not.toHaveProperty('paths');
+      await user.click(screen.getByRole('button', { name: 'Switch target' }));
+      expect(pathsInput).toHaveValue('');
+
+      await user.type(pathsInput, draft);
+      expect(pathsInput).toHaveValue('');
+      await user.type(pathsInput, 'src/api, ');
+      expect(pathsInput).toHaveValue('src/api, ');
+      expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+        repository: '/repos/other',
+        paths: ['src/api'],
+      });
+    },
+  );
+
+  it('removes cleared optional paths, scan cost, and finding files', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<StatefulCodexSecurityEditor />);
+
+    const scopedPaths = screen.getByLabelText('Scoped paths');
+    await user.type(scopedPaths, 'src/auth');
+    await user.clear(scopedPaths);
+
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'paths',
+    );
+
+    await user.clear(screen.getByLabelText('Maximum cost (USD)'));
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'max_cost_usd',
+    );
+
+    await user.selectOptions(screen.getByLabelText('Security operation'), 'validation');
+    expect(screen.queryByLabelText('Maximum cost (USD)')).not.toBeInTheDocument();
+
+    const findingFile = screen.getByLabelText('Finding file');
+    await user.type(findingFile, '/tmp/finding.json');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      finding_file: '/tmp/finding.json',
+    });
+
+    await user.clear(findingFile);
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
+      'finding_file',
+    );
   });
 
   it('should render without crashing when provider is an empty object', () => {
@@ -908,6 +1583,19 @@ describe('ProviderConfigEditor', () => {
     expect(screen.queryByTestId('custom-config')).not.toBeInTheDocument();
   });
 
+  it('should explain the retirement instead of editing a saved GitHub Models target', () => {
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'github:openai/gpt-5', config: {} }}
+        setProvider={vi.fn()}
+        providerType="github"
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('GitHub retired GitHub Models');
+    expect(screen.queryByTestId('custom-config')).not.toBeInTheDocument();
+  });
+
   it('should render the raw provider editor for Open Interpreter targets', () => {
     renderWithProviders(
       <ProviderConfigEditor
@@ -935,7 +1623,7 @@ describe('ProviderConfigEditor', () => {
       />,
     );
 
-    expect(setError).toHaveBeenCalledWith('Provider ID is required');
+    expect(setError).toHaveBeenCalledWith(expect.stringContaining('Provider ID is required'));
     expect(onValidate).toHaveBeenCalledWith(false);
   });
 
@@ -1081,21 +1769,10 @@ describe('ProviderConfigEditor', () => {
       screen.getByTestId('invalidate-custom-config').click();
     });
     const originalSetItem = Storage.prototype.setItem;
-    let raced = false;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      const result = originalSetItem.call(this, key, value);
-      if (!raced && this === window.localStorage && key === 'redTeamConfig') {
-        raced = true;
-        const overwrittenConfig = JSON.parse(value);
-        overwrittenConfig.state.config.target = staleTarget;
-        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
-      }
-      return result;
-    });
+    const overwrite = createTargetOverwriteSetItem(originalSetItem, staleTarget);
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(overwrite.implementation);
     try {
       act(() => {
         screen.getByTestId('correct-custom-config').click();
@@ -1104,7 +1781,7 @@ describe('ProviderConfigEditor', () => {
       setItem.mockRestore();
     }
 
-    expect(raced).toBe(true);
+    expect(overwrite.state.raced).toBe(true);
     expect(
       JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
     ).toEqual({ sandbox_mode: 'danger-full-access' });
@@ -1145,21 +1822,10 @@ describe('ProviderConfigEditor', () => {
       screen.getByTestId('invalidate-custom-config').click();
     });
     const originalSetItem = Storage.prototype.setItem;
-    let raced = false;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      const result = originalSetItem.call(this, key, value);
-      if (!raced && this === window.localStorage && key === 'redTeamConfig') {
-        raced = true;
-        const overwrittenConfig = JSON.parse(value);
-        overwrittenConfig.state.config.target = staleTarget;
-        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
-      }
-      return result;
-    });
+    const overwrite = createTargetOverwriteSetItem(originalSetItem, staleTarget);
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(overwrite.implementation);
     try {
       act(() => {
         useRedTeamConfig.getState().updateConfig('target', correctedTarget);
@@ -1176,7 +1842,7 @@ describe('ProviderConfigEditor', () => {
       setItem.mockRestore();
     }
 
-    expect(raced).toBe(true);
+    expect(overwrite.state.raced).toBe(true);
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
       'Invalid JSON configuration',
     );
@@ -1309,38 +1975,15 @@ describe('ProviderConfigEditor', () => {
     },
   );
 
-  it('should remove Bedrock MCP config when switching back to InvokeModel ids', () => {
-    const mockSetProvider = vi.fn();
-
-    renderWithProviders(
-      <ProviderConfigEditor
-        provider={{
-          id: 'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
-          config: {
-            mcp: {
-              enabled: true,
-              servers: [{ name: 'server-1', command: 'npx', args: ['mcp-server'] }],
-            },
-          },
-        }}
-        setProvider={mockSetProvider}
-        providerType="bedrock"
-      />,
-    );
-
-    act(() => {
-      screen.getByTestId('switch-bedrock-invoke').click();
-    });
-
-    expect(mockSetProvider).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'bedrock:anthropic.claude-3-5-sonnet',
-        config: {},
-      }),
-    );
-  });
-
-  it('should preserve Bedrock MCP config when provider is already using InvokeModel id format', () => {
+  it.each([
+    'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+    'bedrock:runtime:chat:qwen.qwen3-coder-next',
+    'bedrock:mantle:openai.gpt-oss-120b',
+    'bedrock:messages:us.anthropic.claude-fable-5-2',
+    'bedrock:anthropic.claude-3-5-sonnet',
+    // This legacy Converse-shaped ID resolves to Responses, which has no client MCP.
+    'bedrock:converse:openai.gpt-5.5',
+  ])('preserves MCP during an ID edit from %s; the API selector owns cleanup', (id) => {
     const mockSetProvider = vi.fn();
     const mcpConfig = {
       enabled: true,
@@ -1350,7 +1993,7 @@ describe('ProviderConfigEditor', () => {
     renderWithProviders(
       <ProviderConfigEditor
         provider={{
-          id: 'bedrock:anthropic.claude-3-5-sonnet',
+          id,
           config: {
             mcp: mcpConfig,
           },
@@ -1361,7 +2004,7 @@ describe('ProviderConfigEditor', () => {
     );
 
     act(() => {
-      screen.getByTestId('switch-bedrock-invoke').click();
+      screen.getByTestId('update-bedrock-id').click();
     });
 
     expect(mockSetProvider).toHaveBeenCalledWith(
@@ -1398,95 +2041,94 @@ describe('ProviderConfigEditor', () => {
       expect(screen.getByTestId('common-config')).toBeInTheDocument();
     });
 
-    it('should handle inputs field correctly when set to undefined (deletion)', () => {
-      // This tests the logic in updateCustomTarget for the inputs field
-      // We test the conditional logic directly since we can't easily test through mocks
+    it.each([undefined, { user_id: 'A user ID', role: 'A role' }])(
+      'saves top-level input changes %j through the actual editor',
+      async (inputs) => {
+        const user = userEvent.setup();
+        const setProvider = vi.fn();
+        const provider = {
+          id: 'http',
+          inputs: { old: 'Original input' },
+          config: { url: 'https://api.example.com' },
+        };
+        renderWithProviders(
+          <ProviderConfigEditor
+            provider={provider}
+            setProvider={setProvider}
+            providerType="http"
+          />,
+        );
+        providerEdit.value = inputs;
+        await user.click(screen.getByRole('button', { name: 'Edit inputs' }));
+        expect(setProvider).toHaveBeenCalledExactlyOnceWith({
+          id: 'http',
+          config: provider.config,
+          ...(inputs === undefined ? {} : { inputs }),
+        });
+      },
+    );
 
-      // Test case 1: value is undefined -> should delete inputs field
-      const updatedTarget: any = { id: 'test', config: {}, inputs: { old: 'value' } };
+    it.each(['body', 'request'] as const)(
+      'validates %s edits against configured inputs',
+      async (field) => {
+        const user = userEvent.setup();
+        let validate!: () => boolean;
+        const setError = vi.fn();
+        function Editor() {
+          const [provider, setProvider] = React.useState<ProviderOptions>({
+            id: 'http',
+            config: { url: 'https://api.example.com' },
+          });
+          return (
+            <ProviderConfigEditor
+              provider={provider}
+              setProvider={setProvider}
+              providerType="http"
+              setError={setError}
+              onValidationRequest={(callback) => {
+                validate = callback;
+              }}
+            />
+          );
+        }
+        renderWithProviders(<Editor />);
+        providerEdit.field = field;
+        providerEdit.value =
+          field === 'body' ? { userId: '{{user_id}}' } : 'POST /api HTTP/1.1\nUser-ID: {{user_id}}';
+        await user.click(screen.getByRole('button', { name: 'Edit HTTP config' }));
+        act(() => expect(validate()).toBe(false));
+        expect(screen.getByTestId('http-body-error')).toHaveTextContent('{{prompt}}');
 
-      delete updatedTarget.inputs;
+        providerEdit.value = {};
+        await user.click(screen.getByRole('button', { name: 'Edit inputs' }));
+        act(() => expect(validate()).toBe(false));
+        expect(screen.getByTestId('http-body-error')).toHaveTextContent('{{prompt}}');
 
-      expect(updatedTarget.inputs).toBeUndefined();
-      expect('inputs' in updatedTarget).toBe(false);
-    });
+        providerEdit.value = { user_id: 'User ID' };
+        await user.click(screen.getByRole('button', { name: 'Edit inputs' }));
+        expect(screen.getByTestId('http-body-error')).toBeEmptyDOMElement();
+        providerEdit.value =
+          field === 'body' ? { userId: '{{user_id}}' } : 'POST /api HTTP/1.1\nUser-ID: {{user_id}}';
+        await user.click(screen.getByRole('button', { name: 'Edit HTTP config' }));
+        act(() => expect(validate()).toBe(true));
+        expect(setError).toHaveBeenLastCalledWith(null);
+      },
+    );
+  });
 
-    it('should handle inputs field correctly when set to an object', () => {
-      // Test case 2: value is an object -> should set inputs field
-      const updatedTarget = { id: 'test', config: {} } as any;
-      const value = { user_id: 'A user ID', role: 'A role' };
-
-      updatedTarget.inputs = value;
-
-      expect(updatedTarget.inputs).toEqual({ user_id: 'A user ID', role: 'A role' });
-    });
-
-    it('should clear body error when inputs with keys are provided', () => {
-      // Test the conditional logic: if Object.keys(value).length > 0, setBodyError(null)
-      const inputsValue = { user_id: 'A user ID', role: 'A role' };
-      const shouldClearError = Object.keys(inputsValue).length > 0;
-
-      expect(shouldClearError).toBe(true);
-      // When true, the code calls: setBodyError(null)
-    });
-
-    it('should not clear body error when inputs object is empty', () => {
-      // Test the conditional logic with empty object
-      const inputsValue = {};
-      const shouldClearError = Object.keys(inputsValue).length > 0;
-
-      expect(shouldClearError).toBe(false);
-      // When false, setBodyError(null) is not called
-    });
-
-    it('should validate body allowing multi-input mode without {{prompt}}', () => {
-      // Test the validation logic for body field when inputs are present
-      const updatedTarget = {
-        config: { body: { userId: '{{user_id}}' } },
-        inputs: { user_id: 'User ID' },
-      };
-
-      const bodyStr = JSON.stringify(updatedTarget.config.body);
-      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-
-      // Body validation: if (bodyStr.includes('{{prompt}}') || hasInputs)
-      const shouldClearBodyError = bodyStr.includes('{{prompt}}') || hasInputs;
-
-      expect(shouldClearBodyError).toBe(true);
-      // When true, setBodyError(null) is called
-    });
-
-    it('should validate raw request allowing multi-input mode without {{prompt}}', () => {
-      // Test the validation logic for request field when inputs are present
-      const updatedTarget = {
-        config: { request: 'POST /api\nUser-ID: {{user_id}}' },
-        inputs: { user_id: 'User ID' },
-      };
-
-      const request = updatedTarget.config.request;
-      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-
-      // Request validation: if (value && !value.includes('{{prompt}}') && !hasInputs)
-      const shouldSetError = request && !request.includes('{{prompt}}') && !hasInputs;
-
-      expect(shouldSetError).toBe(false);
-      // When false, no error is set (body error is cleared or remains null)
-    });
-
-    it('should require {{prompt}} in body when no inputs are present', () => {
-      // Test validation when inputs are NOT present
-      const updatedTarget = {
-        config: { body: { message: 'hello' } },
-        inputs: undefined,
-      };
-
-      const bodyStr = JSON.stringify(updatedTarget.config.body);
-      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-
-      const shouldClearBodyError = bodyStr.includes('{{prompt}}') || !!hasInputs;
-
-      expect(shouldClearBodyError).toBe(false);
-      // When false, body error should be set requiring {{prompt}}
+  it('replaces the whole custom configuration without nesting or preserving removed keys', async () => {
+    const setProvider = vi.fn();
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'custom', config: { temperature: 0.5, removed: true } }}
+        setProvider={setProvider}
+        providerType="custom"
+      />,
+    );
+    await userEvent.setup().click(screen.getByTestId('correct-custom-config'));
+    expect(setProvider).toHaveBeenCalledWith({
+      id: 'custom',
+      config: { sandbox_mode: 'read-only' },
     });
   });
 });

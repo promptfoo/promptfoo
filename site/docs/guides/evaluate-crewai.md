@@ -1,17 +1,11 @@
 ---
 sidebar_label: Red Teaming a CrewAI Agent
-description: Evaluate CrewAI agent security and performance with automated red team testing. Compare agent responses across 100+ test cases to identify vulnerabilities.
+description: Connect a CrewAI agent to Promptfoo, configure YAML test cases, compare responses against assertions, run red team tests, and review results in the web viewer.
 ---
 
 # Red Teaming a CrewAI Agent
 
-[CrewAI](https://github.com/joaomdmoura/crewai) is a cutting-edge multi-agent platform designed to help teams streamline complex workflows by connecting multiple automated agents. Whether you’re building recruiting bots, research agents, or task automation pipelines, CrewAI gives you a flexible way to run and manage them on any cloud or local setup.
-
-With **promptfoo**, you can set up structured evaluations to test how well your CrewAI agents perform across different tasks. You’ll define test prompts, check outputs, run automated comparisons, and even carry out red team testing to catch unexpected failures or weaknesses.
-
-By the end of this guide, you’ll have a **hands-on project setup** that connects CrewAI agents to promptfoo, runs tests across hundreds of cases, and gives you clear pass/fail insights — all reproducible and shareable with your team.
-
----
+[CrewAI](https://github.com/joaomdmoura/crewai) runs workflows with multiple agents. Connect a CrewAI agent to Promptfoo to test its responses against YAML assertions and run adversarial tests.
 
 ## Highlights
 
@@ -20,7 +14,7 @@ By the end of this guide, you’ll have a **hands-on project setup** that connec
 - Writing provider and agent files
 - Configuring test cases in YAML
 - Running evaluations and viewing reports
-- (Optional) Running advanced red team scans for robustness
+- (Optional) Running red team scans
 
 To scaffold the CrewAI + Promptfoo example, you can run:
 
@@ -28,11 +22,7 @@ To scaffold the CrewAI + Promptfoo example, you can run:
 npx promptfoo@latest init --example integration-crewai
 ```
 
-This will:
-
-- Initialize a ready-to-go project
-- Set up promptfooconfig.yaml, agent scripts, test cases
-- Let you immediately run:
+The example includes `promptfooconfig.yaml`, agent scripts, and test cases. Run it with:
 
 ```
 promptfoo eval
@@ -42,16 +32,12 @@ promptfoo eval
 
 Before starting, make sure you have:
 
-- Python 3.10+
-- Node.js `>=22.22.0`
-- OpenAI API access (for GPT-5, GPT-5-mini, or other models)
+- Python 3.10–3.13
+- A [supported Node.js version](/docs/installation#nodejs-runtime-support)
+- OpenAI API access for GPT-4.1, the model selected by this example
 - An OpenAI API key
 
 ## Step 1: Initial Setup
-
-Before we dive into building or testing anything, let’s make sure your system has all the basics installed and working.
-
-Here’s what to check:
 
 **Python installed**
 
@@ -61,7 +47,7 @@ Run this in your terminal:
 python3 --version
 ```
 
-If you see something like `Python 3.10.12` (or newer), you’re good to go.
+Use Python 3.10 through 3.13 for the CrewAI version used by this example.
 
 **Node.js and npm installed**
 
@@ -77,7 +63,7 @@ And check npm (Node package manager):
 npm -v
 ```
 
-In our example, you can see `v22.22.0` for Node and `10.9.0` for npm — that’s solid. Promptfoo requires Node.js `>=22.22.0`.
+Check that `node -v` reports a supported version.
 
 **Why do we need these?**
 
@@ -105,26 +91,24 @@ What’s happening here?
 
 Now it’s time to set up the key Python packages and the Promptfoo CLI.
 
-In your project folder, run:
+In your project folder, use a virtual environment and run:
 
-```
-pip install crewai
+```bash
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install "crewai>=1.15.28,<2"
 npm install -g promptfoo
 ```
 
 Here’s what’s happening:
 
-- **`pip install crewai`** →
+- **`python -m pip install "crewai>=1.15.28,<2"`** →
   This installs CrewAI for creating and managing multi-agent workflows.
-  Note: The `openai` package and other dependencies (langchain, pydantic, etc.) will be automatically installed as dependencies of crewai.
+  CrewAI installs the OpenAI SDK, Pydantic, and its other runtime dependencies.
 - **`npm install -g promptfoo`** →
   Installs Promptfoo globally using Node.js, so you can run its CLI commands anywhere.
 
-Optional: If you want to use `.env` files for API keys, also install:
-
-```bash
-pip install python-dotenv
-```
+To load API keys from a `.env` file, run `promptfoo eval --env-file .env`. No extra Python package is needed.
 
 **Verify the installation worked**
 
@@ -192,17 +176,13 @@ Inside your project folder, create a file called `agent.py` that contains the Cr
 ````python
 import asyncio
 import json
-import os
 import re
 import textwrap
 from typing import Any, Dict
 
-from crewai import Agent, Crew, Task
+from crewai import LLM, Agent, Crew, Task
 
-# ✅ Load the OpenAI API key from the environment
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
+def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
     This agent’s goal: find the best Ruby on Rails + React candidates.
@@ -216,8 +196,7 @@ def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
             You never fail to return a valid JSON object as your final answer.
         """).strip(),
         verbose=False,
-        model=model,
-        api_key=OPENAI_API_KEY  # ✅ Make sure to pass the API key
+        llm=LLM(model=model)
     )
 
     task = Task(
@@ -248,21 +227,15 @@ def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
     crew = Crew(agents=[agent], tasks=[task])
     return crew
 
-async def run_recruitment_agent(prompt, model='openai:gpt-5'):
+async def run_recruitment_agent(prompt, model='openai/gpt-4.1'):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
     """
-    # Check if API key is set
-    if not OPENAI_API_KEY:
-        return {
-            "error": "OpenAI API key not found. Please set the OPENAI_API_KEY environment variable or create a .env file with your API key."
-        }
-
     crew = get_recruitment_agent(model)
     try:
         # ⚡ Trigger the agent to start working
-        result = crew.kickoff(inputs={'job_requirements': prompt})
+        result = await crew.kickoff_async(inputs={'job_requirements': prompt})
 
         # The result might be a string, or an object with a 'raw' attribute.
         output_text = ""
@@ -309,7 +282,7 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> D
     try:
         # ✅ Run the async recruitment agent synchronously
         config = options.get("config", {})
-        model = config.get("model", "openai:gpt-5")
+        model = config.get("model", "openai/gpt-4.1")
         result = asyncio.run(run_recruitment_agent(prompt, model=model))
 
         if "error" in result:
@@ -334,26 +307,34 @@ if __name__ == "__main__":
     print("Provider result:", json.dumps(result, indent=2))
 ```
 
+CrewAI receives the model through `Agent(llm=LLM(...))`. Use its `provider/model`
+format, such as `openai/gpt-4.1`, for the custom provider’s `config.model` field.
+CrewAI resolves credentials for the selected provider. If you change providers,
+install that provider’s required CrewAI dependencies and set its credentials,
+such as `ANTHROPIC_API_KEY` for Anthropic.
+
 ### Edit `promptfooconfig.yaml`
 
 Open the generated `promptfooconfig.yaml` and update it like this:
 
-```python
-description: "CrewAI Recruitment Agent Evaluation"
+```yaml
+description: 'CrewAI Recruitment Agent Evaluation'
 
 # 📝 Define the input prompts (using variable placeholder)
 prompts:
-  - "{{job_requirements}}"
+  - '{{job_requirements}}'
 
 # ⚙️ Define the provider — here we point to our local agent.py
 providers:
-  - id: file://./agent.py  # Local file provider (make sure path is correct!)
+  - id: file://./agent.py # Local file provider (make sure path is correct!)
     label: CrewAI Recruitment Agent
+    config:
+      model: openai/gpt-4.1
 
 # ✅ Define default tests to check the agent output shape and content
 defaultTest:
   assert:
-    - type: is-json  # Ensure output is valid JSON
+    - type: is-json # Ensure output is valid JSON
       value:
         type: object
         properties:
@@ -366,18 +347,16 @@ defaultTest:
                   type: string
                 experience:
                   type: string
-          summary:
-            type: string
-        required: ['candidates', 'summary']  # Both fields must be present
+        required: ['candidates']
 
 # 🧪 Specific test case to validate basic output behavior
 tests:
-  - description: "Basic test for RoR and React candidates"
+  - description: 'Basic test for RoR and React candidates'
     vars:
-      job_requirements: "List top candidates with RoR and React"
+      job_requirements: 'List top candidates with RoR and React'
     assert:
-      - type: python  # Custom Python check
-        value: "'candidates' in output and isinstance(output['candidates'], list) and 'summary' in output"
+      - type: python # Custom Python check
+        value: "'candidates' in output and isinstance(output['candidates'], list)"
 ```
 
 **What did we just do?**
@@ -390,7 +369,7 @@ tests:
 
 Now that everything is set up, it’s time to run your first real evaluation!
 
-In your terminal, you first **export your OpenAI API key** so CrewAI and Promptfoo can connect securely:
+For the default OpenAI model, first **export your OpenAI API key**:
 
 ```
 export OPENAI_API_KEY="sk-xxx-your-api-key-here"
@@ -410,13 +389,13 @@ Promptfoo kicks off the evaluation job you set up.
 
 - It uses the promptfooconfig.yaml to call your custom CrewAI provider (from agent.py).
 - It feeds in the job requirements prompt and collects the structured output.
-- It checks the results against your Python and YAML assertions (like checking for a `candidates` list and a summary).
+- It checks the results against your YAML assertions, including the output shape and `candidates` list.
 - It shows a clear table: did the agent PASS or FAIL?
 
 In this example, you can see:
 
 - The CrewAI Recruitment Agent ran against the input “List top candidates with RoR and React.”
-- It returned a mock structured JSON with Alex, William, and Stanislav, plus a summary.
+- It returned structured JSON with candidate information.
 - Pass rate: **100%**
 
 <img width="800" height="499" alt="Promptfoo eval results" src="/img/docs/crewai/promptfoo-eval.png" />
@@ -567,7 +546,7 @@ We describe that it’s an **AI recruitment assistant** built using CrewAI that:
 - Identifies and recommends top candidates for specific job roles.
 - Focuses on Ruby on Rails and React developer positions.
 - Returns structured candidate lists with names and experience summaries.
-- Ensures recommendations are accurate and filters out irrelevant or unsafe outputs.
+- Is expected to return accurate recommendations and exclude irrelevant or unsafe outputs.
 
 **Key features provided:**
 

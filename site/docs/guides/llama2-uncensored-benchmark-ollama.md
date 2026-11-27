@@ -8,9 +8,7 @@ slug: censored-vs-uncensored-ollama
 
 Most LLMs go through fine-tuning that prevents them from answering questions like "_How do you make Tylenol_", "_Who would win in a fist fight..._", and "_Write a recipe for dangerously spicy mayo_."
 
-This guide will walk you through the process of benchmarking [Llama2 Uncensored](https://huggingface.co/georgesung/llama2_7b_chat_uncensored) against modern censored models (Llama 4 Scout and GPT) across a suite of test cases using promptfoo and [Ollama](https://ollama.com/). You can substitute any censored/uncensored model pair available on Ollama.
-
-By the end of this guide, you'll be able to produce a side-by-side comparison of these models using your own data. You can substitute your own test cases and choose the model that's best for you.
+Compare [Llama2 Uncensored](https://huggingface.co/georgesung/llama2_7b_chat_uncensored), Llama 4 Scout, and GPT on the same test cases using Promptfoo and [Ollama](https://ollama.com/). Replace the models or cases to test different refusal behavior.
 
 View the final example code [here](https://github.com/promptfoo/promptfoo/tree/main/examples/ollama).
 

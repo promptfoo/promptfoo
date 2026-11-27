@@ -367,6 +367,73 @@ describe('generateEvalSummary', () => {
       expect(output).toContain('Probes: 2');
     });
 
+    it('reports cached scan footprint separately from tokens actually incurred', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-logical-and-incurred-usage',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 295,
+          prompt: 201,
+          completion: 94,
+          cached: 295,
+          numRequests: 1,
+          assertions: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+          incurredTokenUsage: {
+            total: 0,
+            numRequests: 0,
+            assertions: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+          },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 332');
+      expect(output).toContain('Target: 295');
+      expect(output).toContain('Grading: 37');
+      expect(output).toContain('Incurred Tokens: 37');
+      expect(output).toContain('Cached Savings: 295');
+      expect(output).toContain('Actual Target Requests: 0');
+      expect(output).toContain('Probes: 1');
+    });
+
+    it('omits redundant incurred accounting when all provider responses were fresh', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-fresh-usage-only',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 100,
+          numRequests: 1,
+          incurredTokenUsage: { total: 100, numRequests: 1 },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 100');
+      expect(output).not.toContain('Incurred Tokens:');
+    });
+
     it('derives category totals from prompt and completion usage when total is absent', () => {
       const aggregatedUsage = createEmptyTokenUsage();
       accumulateTokenUsage(aggregatedUsage, {
@@ -754,6 +821,34 @@ describe('generateEvalSummary', () => {
       expect(plainOutput).not.toContain('1 errors');
     });
 
+    it('should disclose cache hits only when present', () => {
+      const baseParams: EvalSummaryParams = {
+        evalId: 'eval-cache-hits',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 0 },
+        successes: 4,
+        failures: 0,
+        errors: 0,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+      };
+
+      const withHits = stripAnsi(generateEvalSummary({ ...baseParams, cacheHits: 4 }).join('\n'));
+      expect(withHits).toContain('4 cache hits (100%)');
+
+      const withoutHits = stripAnsi(generateEvalSummary(baseParams).join('\n'));
+      expect(withoutHits).not.toContain('cache hits');
+
+      const zeroHits = stripAnsi(generateEvalSummary({ ...baseParams, cacheHits: 0 }).join('\n'));
+      expect(zeroHits).not.toContain('cache hits');
+    });
+
     it('should render colored icons with muted percentages', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-styling',
@@ -942,6 +1037,74 @@ describe('generateEvalSummary', () => {
 
       expect(output).toContain('Duration:');
       expect(output).toContain('(concurrency: 8)');
+    });
+  });
+
+  describe('repeat stability', () => {
+    it('shows unstable groups, errors, and cached-result caveats', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-repeated',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 0 },
+        successes: 4,
+        failures: 1,
+        errors: 1,
+        duration: 5,
+        maxConcurrency: 2,
+        tracker: mockTracker,
+        repeatStability: {
+          totalGroups: 2,
+          unstableGroups: 1,
+          groupsWithErrors: 1,
+          cachedResults: 1,
+          groups: [
+            {
+              repeatGroupId: 'test-0-vars-0',
+              promptIdx: 0,
+              provider: { id: 'provider-a' },
+              description: 'Flickering rubric',
+              repetitions: 3,
+              passed: 2,
+              failed: 1,
+              errors: 0,
+              cached: 0,
+              passRate: 2 / 3,
+              passRateConfidenceInterval: {
+                confidenceLevel: 0.95,
+                lower: 0.2077,
+                upper: 0.9385,
+              },
+              unstable: true,
+            },
+            {
+              repeatGroupId: 'test-1-vars-0',
+              promptIdx: 0,
+              provider: { id: 'provider-a' },
+              repetitions: 3,
+              passed: 2,
+              failed: 0,
+              errors: 1,
+              cached: 1,
+              passRate: 1,
+              unstable: false,
+            },
+          ],
+        },
+      };
+
+      const output = stripAnsi(generateEvalSummary(params).join('\n'));
+
+      expect(output).toContain('Repeat stability:');
+      expect(output).toContain('2 repeated groups; 1 unstable');
+      expect(output).toContain('Flickering rubric: 2/3 passed across 3 runs');
+      expect(output).toContain('95% CI 20.8%–93.8%');
+      expect(output).toContain('1 repeated group contained errors');
+      expect(output).toContain('1 cached result detected');
     });
   });
 

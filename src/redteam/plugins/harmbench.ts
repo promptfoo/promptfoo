@@ -3,7 +3,8 @@ import dedent from 'dedent';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { fetchWithTimeout } from '../../util/fetch/index';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { sampleArray } from '../../util/generation';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, PluginConfig, TestCase } from '../../types/index';
 
@@ -192,7 +193,7 @@ async function fetchDataset(
     }
 
     // Shuffle and limit the records
-    const shuffledRecords = filteredRecords.sort(() => Math.random() - 0.5).slice(0, limit);
+    const shuffledRecords = sampleArray(filteredRecords, limit);
 
     if (shuffledRecords.length === 0) {
       throw new Error('No records generated');
@@ -229,7 +230,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
   protected validateConfig(config?: HarmbenchPluginConfig): void {
     if (config?.categories) {
       const invalidCategories = config.categories.filter(
-        (category) => !toCanonicalCategory(String(category)),
+        (category: unknown) => !toCanonicalCategory(String(category)),
       );
 
       if (invalidCategories.length > 0) {
@@ -251,7 +252,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
 
     if (config?.functionalCategories) {
       const invalidFunctionalCategories = config.functionalCategories.filter(
-        (category) => !toCanonicalFunctionalCategory(String(category)),
+        (category: unknown) => !toCanonicalFunctionalCategory(String(category)),
       );
 
       if (invalidFunctionalCategories.length > 0) {
@@ -301,12 +302,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: 'Harmbench',
-      },
-    ];
+    return [createAssertion(PLUGIN_ID, 'Harmbench')];
   }
 }
 
