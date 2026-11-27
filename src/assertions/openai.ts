@@ -15,25 +15,34 @@ export const handleIsValidOpenAiToolsCall = async ({
   const verdict = (valid: boolean, reason: string) =>
     toolCallVerdict(assertion, inverse, valid, reason, 'OpenAI tools call');
 
-  // Handle MCP tool outputs from Responses API
-  const outputStr = typeof output === 'string' ? output : (JSON.stringify(output) ?? '');
-
-  // Check for MCP tool results in the output
-  if (outputStr.includes('MCP Tool Result') || outputStr.includes('MCP Tool Error')) {
-    // For MCP tools, we validate that the tool call was successful
-    if (outputStr.includes('MCP Tool Error')) {
-      const errorMatch = outputStr.match(/MCP Tool Error \(([^)]+)\): (.+)/);
-      const toolName = errorMatch ? errorMatch[1] : 'unknown';
-      const errorMsg = errorMatch ? errorMatch[2] : 'unknown error';
-      return verdict(false, `MCP tool call failed for ${toolName}: ${errorMsg}`);
-    }
-
-    // MCP tool call succeeded
-    const resultMatch = outputStr.match(/MCP Tool Result \(([^)]+)\):/);
-    const toolName = resultMatch ? resultMatch[1] : 'unknown';
-    return verdict(true, `MCP tool call succeeded for ${toolName}`);
+  // Text may explain a failed call, but cannot prove that a tool ran.
+  let outputStr: string;
+  if (typeof output === 'string') {
+    outputStr = output;
+  } else if (
+    output &&
+    typeof output === 'object' &&
+    !Array.isArray(output) &&
+    !('tool_calls' in output) &&
+    'content' in output &&
+    typeof output.content === 'string'
+  ) {
+    outputStr = output.content;
+  } else {
+    outputStr = '';
   }
 
+  // Match one header before examining the body. Even malformed subsequent
+  // MCP records delimit the error, so approval arguments never enter the reason.
+  const failure = /^[ \t]*MCP Tool Error\b/m.exec(outputStr);
+  if (failure) {
+    const rest = outputStr.slice(failure.index + failure[0].length);
+    const header = /^(?: \(([^()\r\n]+)\))?:/.exec(rest);
+    const body = header ? rest.slice(header[0].length) : '';
+    const next = body.search(/[\r\n][ \t]*MCP\b/);
+    const detail = (next < 0 ? body : body.slice(0, next)).trim() || 'unknown error';
+    return verdict(false, 'MCP tool call failed for ' + (header?.[1] ?? 'unknown') + ': ' + detail);
+  }
   // Handle traditional OpenAI function/tool calls
   if (output && typeof output === 'object' && 'tool_calls' in output) {
     output = output.tool_calls as string | object;
@@ -53,7 +62,7 @@ export const handleIsValidOpenAiToolsCall = async ({
   ) {
     return verdict(
       false,
-      `OpenAI did not return a valid-looking tools response: ${JSON.stringify(toolsOutput)}`,
+      'OpenAI did not return a valid-looking tools response. Expected a structured function call.',
     );
   }
 

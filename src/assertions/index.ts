@@ -639,7 +639,7 @@ async function runAssertionInternal({
 
   const assertionParams: AssertionParams = {
     assertion,
-    baseType: getAssertionBaseType(assertion),
+    baseType,
     providerCallContext,
     assertionValueContext: context,
     cost,
@@ -647,7 +647,8 @@ async function runAssertionInternal({
     latencyMs,
     logProbs,
     output,
-    outputString: coerceString(output),
+    // Tool-call validation inspects structured output directly, including non-JSON values.
+    outputString: baseType === 'is-valid-openai-tools-call' ? '' : coerceString(output),
     prompt,
     provider,
     providerResponse,
