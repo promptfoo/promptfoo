@@ -183,7 +183,7 @@
     "ibm-cloud-sdk-core": "5.6.2"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.325",
+    "@anthropic-ai/claude-agent-sdk": "0.3.327",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -261,7 +261,7 @@
     "sharp": "^0.35.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "1.8.0",
+    "@anthropic-ai/sdk": "1.10.0",
     "@apidevtools/json-schema-ref-parser": "^16.0.5",
     "@hono/node-server": "2.1.8",
     "@inquirer/checkbox": "^5.2.8",
