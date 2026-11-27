@@ -1482,7 +1482,12 @@ export function collectGroundingMetadata(data: GeminiResponseData[]): CollectedG
   };
 }
 
-export function formatCandidateContents(candidate: Candidate) {
+/** A thought summary part, sent when `thinkingConfig.includeThoughts` is set. */
+function isThoughtTextPart(part: Part): part is Part & { text: string } {
+  return part.thought === true && typeof part.text === 'string';
+}
+
+export function getCandidateParts(candidate: Candidate): Part[] {
   // Check if the candidate was blocked or stopped for safety reasons
   if (
     candidate.finishReason &&
@@ -1515,43 +1520,38 @@ export function formatCandidateContents(candidate: Candidate) {
     throw new Error(errorMessage);
   }
 
-  if (candidate.content?.parts) {
-    let output = '';
-    let is_text = true;
-    for (const part of candidate.content.parts) {
-      if ('text' in part) {
-        output += part.text;
-      } else {
-        is_text = false;
-      }
-    }
-    if (is_text) {
-      return output;
-    } else {
-      return candidate.content.parts;
-    }
-  } else {
+  if (!candidate.content?.parts) {
     throw new Error(`No output found in response: ${JSON.stringify(candidate)}`);
   }
+  return candidate.content.parts;
 }
 
-export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] | string) {
-  if (parts1 === undefined) {
-    // Detach the accumulator from the raw multipart response before appending later chunks.
-    return typeof parts2 === 'string' ? parts2 : [...parts2];
+export function formatCandidateContents(candidate: Candidate) {
+  const parts = getCandidateParts(candidate);
+  return parts.every((part) => 'text' in part)
+    ? parts.map((part) => part.text).join('')
+    : [...parts];
+}
+
+/** Format text after the last chunk. Multipart replies retain their wire order and signatures. */
+export function formatGeminiThinking(parts: Part[], showThinking: boolean | undefined) {
+  if (parts.some((part) => !('text' in part))) {
+    return showThinking === false ? parts.filter((part) => !isThoughtTextPart(part)) : parts;
   }
-
-  if (typeof parts1 === 'string' && typeof parts2 === 'string') {
-    return parts1 + parts2;
+  let output = '';
+  let thoughts = '';
+  for (const part of parts) {
+    if (isThoughtTextPart(part)) {
+      thoughts += part.text;
+    } else {
+      output += part.text ?? '';
+    }
   }
-
-  const array1: Part[] = typeof parts1 === 'string' ? [{ text: parts1 }] : parts1;
-
-  const array2: Part[] = typeof parts2 === 'string' ? [{ text: parts2 }] : parts2;
-
-  array1.push(...array2);
-
-  return array1;
+  const summary = thoughts.trim();
+  if (!summary || showThinking === false) {
+    return output;
+  }
+  return output ? `Thinking: ${summary}\n\n${output}` : `Thinking: ${summary}`;
 }
 
 export function normalizeGeminiAudio(output: Part[] | string | undefined) {

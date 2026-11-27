@@ -34,6 +34,7 @@ import {
   collectGroundingMetadata,
   collectThoughtSignatures,
   formatCandidateContents,
+  formatGeminiThinking,
   geminiFormatAndSystemInstructions,
   getGoogleApiBaseUrl,
   getGoogleResponseServiceTier,
@@ -41,7 +42,6 @@ import {
   maybeCoerceToGeminiFormat,
   mergeGoogleCompletionOptions,
   mergeGoogleRequestTools,
-  mergeParts,
   normalizeGoogleServiceTier,
   normalizeSafetySettings,
   normalizeTools,
@@ -5571,13 +5571,36 @@ describe('util', () => {
     });
   });
 
-  describe('mergeParts', () => {
+  describe('Gemini candidate formatting', () => {
     it('keeps signed textual responses compatible with text and JSON assertions', () => {
       const signedPart = { text: 'Signed response', thoughtSignature: 'signed-thought' };
 
       expect(formatCandidateContents({ content: { parts: [signedPart] } } as any)).toBe(
         'Signed response',
       );
+    });
+
+    it('labels streamed thought text once and preserves the final answer', () => {
+      const parts = [
+        { text: 'Add. ', thought: true },
+        { text: 'Done.\n', thought: true },
+        { text: '42' },
+      ];
+      expect(formatGeminiThinking(parts, undefined)).toBe('Thinking: Add. Done.\n\n42');
+      expect(formatGeminiThinking(parts, false)).toBe('42');
+      expect(formatGeminiThinking([{ text: '  ', thought: true }, { text: '42' }], true)).toBe(
+        '42',
+      );
+    });
+
+    it('preserves thought images and signed calls when filtering thought text', () => {
+      const thought = { text: 'Look it up.', thought: true };
+      const image = { thought: true, inlineData: { mimeType: 'image/png', data: 'AA==' } };
+      const call = { functionCall: { name: 'f', args: {} }, thoughtSignature: 'sig' };
+      const parts = [thought, image, call];
+      expect(formatGeminiThinking(parts, undefined)).toEqual(parts);
+      expect(formatGeminiThinking(parts, false)).toEqual([image, call]);
+      expect(formatCandidateContents({ content: { parts } } as any)).toEqual(parts);
     });
 
     it('collects thought signatures across streamed candidate parts', () => {
@@ -5604,21 +5627,11 @@ describe('util', () => {
       ).toEqual(['first', 'second']);
     });
 
-    it('detaches the initial multipart chunk and reuses the accumulator thereafter', () => {
-      const firstChunk = [{ functionCall: { name: 'look_up', args: { query: 'weather' } } }];
-      const secondChunk = [{ text: 'done' }];
-
-      const accumulator = mergeParts(undefined, firstChunk);
-      if (!Array.isArray(accumulator)) {
-        throw new Error('Expected multipart output');
-      }
-
-      expect(accumulator).not.toBe(firstChunk);
-      expect(mergeParts(accumulator, secondChunk)).toBe(accumulator);
-      expect(accumulator).toEqual([...firstChunk, ...secondChunk]);
-      expect(firstChunk).toEqual([
-        { functionCall: { name: 'look_up', args: { query: 'weather' } } },
-      ]);
+    it('detaches the multipart conversation output from the raw response', () => {
+      const parts = [{ functionCall: { name: 'look_up', args: { query: 'weather' } } }];
+      const output = formatCandidateContents({ content: { parts } } as any);
+      expect(output).toEqual(parts);
+      expect(output).not.toBe(parts);
     });
   });
 

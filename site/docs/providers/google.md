@@ -719,6 +719,23 @@ providers:
 
 Defaults vary by model: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash default to `MEDIUM`, Gemini 3.5 Flash-Lite defaults to `MINIMAL`, and Gemini 3.1 Pro defaults to `HIGH`.
 
+#### Thought summaries
+
+Set `generationConfig.thinkingConfig.includeThoughts: true` to return the model's thought summaries. Promptfoo puts them before the answer as `Thinking: <summary>`, followed by a blank line, as it does for other reasoning providers. Set `showThinking: false` to keep only the answer, for example when `equals` or `is-json` assertions check it:
+
+```yaml
+providers:
+  - id: google:gemini-4-hydrogen
+    config:
+      showThinking: false
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: LOW
+          includeThoughts: true
+```
+
+Function-call and other multipart outputs are returned as Gemini parts, where thought summaries are text parts marked `thought: true`. `showThinking: false` removes those parts too.
+
 #### Gemini 2.5 Models (thinkingBudget)
 
 For Gemini 2.5 models that still serve natively, use `generationConfig.thinkingConfig.thinkingBudget`. When migrating to a Gemini 3 replacement, use its supported `thinkingLevel` instead. See [Gemini thinking](https://ai.google.dev/gemini-api/docs/thinking). To return JSON with a specific shape, see [Structured Output](#structured-output).
