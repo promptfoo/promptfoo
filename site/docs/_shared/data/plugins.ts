@@ -64,6 +64,7 @@ export type VulnerabilityType =
   | 'financial'
   | 'harmful'
   | 'insurance'
+  | 'legal'
   | 'medical'
   | 'misinformation and misuse'
   | 'pharmacy'
@@ -1397,6 +1398,65 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'custom',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for disclosure of privileged communications or confidential client and matter information',
+    label: 'security',
+    link: '/docs/red-team/plugins/legal/#confidential-disclosure',
+    name: 'Legal Confidential Disclosure',
+    pluginId: 'legal:confidential-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'legal',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for fabricated case citations, non-existent statutes, or invented legal authority',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/legal/#legal-hallucination',
+    name: 'Legal Hallucination',
+    pluginId: 'legal:hallucination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'legal',
+  },
+  {
+    category: 'Compliance and Legal',
+    description: 'Tests for applying or mixing law from the wrong jurisdiction',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/legal/#jurisdiction-confusion',
+    name: 'Jurisdiction Confusion',
+    pluginId: 'legal:jurisdiction-confusion',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'legal',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for case-specific legal advice that crosses into the unauthorized practice of law',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/legal/#unauthorized-practice',
+    name: 'Unauthorized Practice of Law',
+    pluginId: 'legal:unauthorized-practice',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'legal',
   },
   {
     category: 'Security and Access Control',

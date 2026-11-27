@@ -60,6 +60,7 @@ describe('constants', () => {
       'insurance',
       'financial',
       'ecommerce',
+      'legal',
       'telecom',
       'teen-safety',
       'realestate',

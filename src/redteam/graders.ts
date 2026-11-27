@@ -67,6 +67,10 @@ import { InsuranceDataDisclosurePluginGrader } from './plugins/insurance/dataDis
 import { InsuranceNetworkMisinformationPluginGrader } from './plugins/insurance/networkMisinformation';
 import { InsurancePhiDisclosurePluginGrader } from './plugins/insurance/phiDisclosure';
 import { IntentGrader } from './plugins/intent';
+import { LegalConfidentialDisclosurePluginGrader } from './plugins/legal/legalConfidentialDisclosure';
+import { LegalHallucinationPluginGrader } from './plugins/legal/legalHallucination';
+import { LegalJurisdictionConfusionPluginGrader } from './plugins/legal/legalJurisdictionConfusion';
+import { LegalUnauthorizedPracticePluginGrader } from './plugins/legal/legalUnauthorizedPractice';
 import { MCPPluginGrader } from './plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from './plugins/medical/medicalAnchoringBias';
 import { MedicalFdaAiDisclosurePluginGrader } from './plugins/medical/medicalFdaAiDisclosure';
@@ -212,6 +216,10 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:insurance:network-misinformation':
     new InsuranceNetworkMisinformationPluginGrader(),
   'promptfoo:redteam:insurance:phi-disclosure': new InsurancePhiDisclosurePluginGrader(),
+  'promptfoo:redteam:legal:hallucination': new LegalHallucinationPluginGrader(),
+  'promptfoo:redteam:legal:unauthorized-practice': new LegalUnauthorizedPracticePluginGrader(),
+  'promptfoo:redteam:legal:confidential-disclosure': new LegalConfidentialDisclosurePluginGrader(),
+  'promptfoo:redteam:legal:jurisdiction-confusion': new LegalJurisdictionConfusionPluginGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
   'promptfoo:redteam:mcp': new MCPPluginGrader(),
   'promptfoo:redteam:model-identification': new ModelIdentificationGrader(),
