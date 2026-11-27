@@ -551,6 +551,12 @@ export interface GradingTaxonomy {
   categories: Record<string, string>;
 }
 
+/** A policy decides what is allowed. The taxonomy identifies what was observed. */
+export interface StructuredGradingRubric {
+  policy: string;
+  taxonomy: GradingTaxonomy;
+}
+
 export interface TaxonomyFinding {
   label: string;
   observed: boolean;

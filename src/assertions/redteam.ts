@@ -235,10 +235,13 @@ export const handleRedteam = async (
       ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
       : undefined;
   const grader = getGraderById(assertion.type);
-  const taxonomy = grader?.taxonomy;
+  const taxonomy = grader?.structuredRubric?.taxonomy;
   if (
     hasStrategyGrade &&
-    (!taxonomy || hasMatchingTaxonomy(storedResult, taxonomy, outputString)) &&
+    (!taxonomy ||
+      (typeof storedResult.metadata?.redteamGradingRubricHash === 'string' &&
+        storedResult.metadata.redteamGradingRubricHash === grader?.getStructuredRubricHash(test) &&
+        hasMatchingTaxonomy(storedResult, taxonomy, outputString))) &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
     storedResult.metadata?.redteamGradingInputHash ===

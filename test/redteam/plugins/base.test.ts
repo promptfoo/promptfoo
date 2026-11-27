@@ -1270,10 +1270,13 @@ describe('RedteamGraderBase', () => {
 
   it('judges a nonempty refusal once when a grader declares categories', async () => {
     class ContactGrader extends TestGrader {
-      readonly taxonomy = {
-        id: 'example',
-        version: 1,
-        categories: { 'example.contact': 'Contact details' },
+      readonly structuredRubric = {
+        policy: 'Apply the permissions for {{ purpose }}.',
+        taxonomy: {
+          id: 'example',
+          version: 1,
+          categories: { 'example.contact': 'Contact details' },
+        },
       };
     }
     const grade = { pass: false, score: 0, reason: 'Contact details disclosed' };
@@ -1292,10 +1295,9 @@ describe('RedteamGraderBase', () => {
       expect.not.stringContaining('example.contact'),
       output,
       expect.objectContaining({
-        taxonomy: {
-          id: 'example',
-          version: 1,
-          categories: { 'example.contact': 'Contact details' },
+        structuredRubric: {
+          policy: expect.stringContaining('Apply the permissions for test-purpose.'),
+          taxonomy: new ContactGrader().structuredRubric.taxonomy,
         },
       }),
     );

@@ -36,8 +36,8 @@ import type {
   CallApiContextParams,
   GradingConfig,
   GradingResult,
-  GradingTaxonomy,
   ProviderResponse,
+  StructuredGradingRubric,
   VarValue,
 } from '../types/index';
 
@@ -184,7 +184,7 @@ function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['au
 export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
-  grading?: GradingConfig & { taxonomy?: GradingTaxonomy },
+  grading?: GradingConfig & { structuredRubric?: StructuredGradingRubric },
   vars?: Record<string, VarValue>,
   assertion?: Assertion,
   options?: {
@@ -213,7 +213,7 @@ export async function matchesLlmRubric(
     imageOutputs,
   );
   // Evidence offsets refer to the original target text, never a media placeholder.
-  const taxonomy = gradingOutput === llmOutput ? grading.taxonomy : undefined;
+  const structuredRubric = gradingOutput === llmOutput ? grading.structuredRubric : undefined;
   if (
     !grading.rubricPrompt &&
     shouldPreferRemote &&
@@ -226,7 +226,7 @@ export async function matchesLlmRubric(
         ...(await doRemoteGrading({
           task: 'llm-rubric',
           rubric,
-          ...(taxonomy && { config: { taxonomy } }),
+          ...(structuredRubric && { config: { structuredRubric } }),
           output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
@@ -243,14 +243,13 @@ export async function matchesLlmRubric(
   }
 
   try {
-    // Keep the wire rubric identical for legacy servers. Only the taxonomy-aware
-    // matcher adds the category descriptions to the local judge's prompt.
+    // Select one policy. The legacy rubric never enters a structured judge prompt.
     let judgeRubric = rubric;
-    if (taxonomy) {
-      const categories = Object.entries(taxonomy.categories)
+    if (structuredRubric) {
+      const categories = Object.entries(structuredRubric.taxonomy.categories)
         .map(([label, description]) => `${label}: ${description}`)
         .join('\n');
-      judgeRubric = `${typeof rubric === 'string' ? rubric : JSON.stringify(rubric)}\n\nCategories:\n${categories}`;
+      judgeRubric = `${structuredRubric.policy}\n\nCategories:\n${categories}`;
       if (grading.rubricPrompt) {
         judgeRubric += `\n\n${TAXONOMY_GRADING_INSTRUCTIONS}`;
       }
@@ -258,8 +257,8 @@ export async function matchesLlmRubric(
     return await runJsonGradingPrompt({
       assertion,
       checkName: 'llm-rubric check',
-      defaultPrompt: taxonomy ? TAXONOMY_GRADING_PROMPT : DEFAULT_GRADING_PROMPT,
-      taxonomy,
+      defaultPrompt: structuredRubric ? TAXONOMY_GRADING_PROMPT : DEFAULT_GRADING_PROMPT,
+      taxonomy: structuredRubric?.taxonomy,
       evidenceOutput: llmOutput,
       grading,
       label: 'llm-rubric',
@@ -269,7 +268,7 @@ export async function matchesLlmRubric(
       audio,
       vars: {
         ...(vars || {}),
-        output: taxonomy ? gradingOutput : tryParse(gradingOutput),
+        output: structuredRubric ? gradingOutput : tryParse(gradingOutput),
         rubric: judgeRubric,
       },
     });

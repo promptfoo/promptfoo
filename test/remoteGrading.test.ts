@@ -89,7 +89,7 @@ describe('doRemoteGrading', () => {
       rubric: 'Allow',
       output: 'Amy',
       vars: {},
-      config: { taxonomy },
+      config: { structuredRubric: { policy: 'Allow', taxonomy } },
     });
     expect(result).toMatchObject(verdict);
     expect(result.findings).toEqual(kind === 'current' ? findings : undefined);

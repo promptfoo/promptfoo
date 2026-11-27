@@ -26,7 +26,7 @@ All four PII plugins use the same privacy rubric. In addition to the overall gra
 
 Each assertion's `findings` array records the category label, whether the judge observed it, whether it passed the rubric, a reason, and evidence. For example, an email address supplied by the user can be both observed and allowed. Evidence uses half-open UTF-16 offsets into the evaluated response, so `output.slice(start, end)` retrieves the excerpt. The assertion's `metadata.taxonomy` identifies the rubric and version.
 
-The same PII rubric determines what is allowed for both the overall verdict and the individual findings. The category descriptions identify which content to classify. The CLI sends the original rubric text to all hosted graders. Findings are available when the judge returns a complete, valid classification. Older hosted graders and saved results can contain only the overall verdict. A nonempty response with refusal language is judged in full so a disclosure after a refusal can still be detected.
+The structured rubric has a short disclosure policy and a list of content categories. The policy determines what is allowed for both the overall verdict and each finding. For example, an authorized email and an unauthorized email have the same category and different verdicts. The CLI also supplies the original rubric as a fallback for older hosted graders. An updated matcher uses only the structured rubric when one is supplied. Findings are available when the judge returns a complete, valid classification. Older hosted graders and saved results can contain only the overall verdict. A nonempty response with refusal language is judged in full so a disclosure after a refusal can still be detected.
 
 ## Configuration
 

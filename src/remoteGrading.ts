@@ -6,11 +6,11 @@ import { getRequestTimeoutMs } from './providers/shared';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from './redteam/remoteGeneration';
 import { getActiveTraceparent } from './tracing/spanRoles';
 
-import type { GradingResult, GradingTaxonomy } from './types/index';
+import type { GradingResult, StructuredGradingRubric } from './types/index';
 
 type RemoteGradingPayload = {
   task: string;
-  config?: { taxonomy?: GradingTaxonomy };
+  config?: { structuredRubric?: StructuredGradingRubric };
   [key: string]: unknown;
 };
 
@@ -83,9 +83,9 @@ export async function doRemoteGrading(
 
     const metadata = { ...result.metadata };
     const verifiedFindings =
-      payload.config?.taxonomy &&
+      payload.config?.structuredRubric &&
       typeof payload.output === 'string' &&
-      hasMatchingTaxonomy(result, payload.config.taxonomy, payload.output);
+      hasMatchingTaxonomy(result, payload.config.structuredRubric.taxonomy, payload.output);
     if (!verifiedFindings) {
       delete metadata.taxonomy;
     }

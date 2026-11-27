@@ -991,6 +991,7 @@ export async function runJsonGradingPrompt({
     metadata: {
       ...trustedResponseMetadata,
       ...(taxonomy && findings && { taxonomy: { id: taxonomy.id, version: taxonomy.version } }),
+      ...(taxonomy && typeof vars.rubric === 'string' && { renderedAssertionValue: vars.rubric }),
       renderedGradingPrompt: renderedPrompt,
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
       ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),
