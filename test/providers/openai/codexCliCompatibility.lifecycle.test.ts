@@ -42,7 +42,8 @@ const directory = process.env.CODEX_PREFLIGHT_TEST_DIR;
 const mode = process.env.CODEX_PREFLIGHT_TEST_MODE;
 const child = spawn(process.execPath, ['--input-type=module', '-e', ${JSON.stringify(childScript)}],
   { env: { ...process.env, NODE_OPTIONS: '' }, stdio: 'inherit' });
-fs.writeFileSync(path.join(directory, 'pids.json'), JSON.stringify({ wrapper: process.pid, child: child.pid, supervisor: process.ppid }));
+fs.writeFileSync(path.join(directory, 'pids.tmp'), JSON.stringify({ wrapper: process.pid, child: child.pid, supervisor: process.ppid }));
+fs.renameSync(path.join(directory, 'pids.tmp'), path.join(directory, 'pids.json'));
 process.on('SIGTERM', () => child.kill('SIGTERM'));
 child.on('exit', (code) => process.exit(code ?? 1));
 if (mode === 'overflow') {
@@ -75,7 +76,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 const directory = process.env.CODEX_PREFLIGHT_TEST_DIR;
 const mode = process.env.CODEX_PREFLIGHT_TEST_MODE;
-fs.writeFileSync(path.join(directory, 'pids.json'), JSON.stringify({ wrapper: process.pid, supervisor: process.ppid }));
+fs.writeFileSync(path.join(directory, 'pids.tmp'), JSON.stringify({ wrapper: process.pid, supervisor: process.ppid }));
+fs.renameSync(path.join(directory, 'pids.tmp'), path.join(directory, 'pids.json'));
 const timer = setInterval(() => {
   fs.writeFileSync(path.join(directory, 'heartbeat'), String(Date.now()));
   if (!fs.existsSync(path.join(directory, 'release'))) return;
