@@ -1912,6 +1912,7 @@
         "operationId": "addEvalResults",
         "tags": ["Eval"],
         "summary": "Append results to an evaluation",
+        "description": "Appends rows to an existing evaluation without recalculating prompt scores or pass/fail counts. When importing results in chunks, supply complete prompt metrics when you create the evaluation.",
         "parameters": [
           {
             "schema": { "type": "string", "minLength": 1 },

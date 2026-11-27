@@ -578,6 +578,8 @@ export function createServerOpenApiRegistry() {
     operationId: 'addEvalResults',
     tags: ['Eval'],
     summary: 'Append results to an evaluation',
+    description:
+      'Appends rows to an existing evaluation without recalculating prompt scores or pass/fail counts. When importing results in chunks, supply complete prompt metrics when you create the evaluation.',
     request: {
       params: EvalSchemas.AddResults.Params,
       body: jsonBody(EvalSchemas.AddResults.Request),

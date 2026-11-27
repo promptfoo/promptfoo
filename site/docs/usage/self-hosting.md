@@ -340,6 +340,8 @@ After configuring the CLI, you need to explicitly upload eval results to your se
 2. Run `promptfoo share` to upload the results
 3. Or use `promptfoo eval --share` to do both in one command
 
+`POST /api/eval/{id}/results` appends rows to an existing evaluation without recalculating prompt scores or pass/fail counts. When importing results in chunks, supply complete prompt metrics when you create the evaluation. Run a new eval to score additional tests.
+
 Alternatively, configure these URLs permanently in your `promptfooconfig.yaml`:
 
 ```yaml title="promptfooconfig.yaml"
