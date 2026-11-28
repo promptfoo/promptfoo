@@ -108,6 +108,8 @@ Grading spans describe each assertion with `gen_ai.evaluation.name`,
 reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
 by the grader appears in a child span. See [`is-refusal`](/docs/configuration/expected-outputs/deterministic/#is-refusal) for how provider-reported refusals and output transforms affect grading.
 
+For [`numeric-match`](/docs/configuration/expected-outputs/deterministic/#numeric-match), use the score label to see whether the stated amount passed. An answer at the inclusive tolerance boundary can pass with a numeric score of zero.
+
 ### Example Trace Output
 
 When calling OpenAI's GPT-6 Luna through Chat Completions with `reasoning_effort: none`:
