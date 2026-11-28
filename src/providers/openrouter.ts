@@ -240,6 +240,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     let status: number;
     let statusText: string;
     let cached = false;
+    let latencyMs: number | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let responseHeaders: Record<string, string> | undefined;
 
@@ -247,6 +248,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       ({
         data,
         cached,
+        latencyMs,
         status,
         statusText,
         deleteFromCache,
@@ -295,6 +297,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
                 ),
           ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
           cached,
+          latencyMs,
           cost: this.calculateResponseCost(data, config),
           isRefusal: true,
           guardrails: {
@@ -452,6 +455,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
             : message.refusal || 'Content filtered by the model provider.',
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
+        latencyMs,
         cost: this.calculateResponseCost(data, config),
         isRefusal: true,
         guardrails: { flagged: true },
@@ -475,6 +479,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         },
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
+        latencyMs,
         cost: this.calculateResponseCost(data, config),
         metadata: getOpenRouterBillingMetadata(data),
         ...(finishReason && { finishReason }),
@@ -525,6 +530,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       cached,
       cost: this.calculateResponseCost(data, config),
       metadata: getOpenRouterBillingMetadata(data),
+      ...(latencyMs !== undefined && { latencyMs }),
       ...(finishReason && { finishReason }),
     };
   }
