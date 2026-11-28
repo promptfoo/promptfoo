@@ -199,7 +199,7 @@ describe('public Chat callback cancellation releases its scheduler wait', () => 
       expect(observed).toHaveBeenCalledOnce();
       expect(observed).toHaveBeenCalledWith(firstHeaders);
       expect(updateQuota).toHaveBeenCalledOnce();
-      expect(updateQuota).toHaveBeenNthCalledWith(1, firstQuotaState);
+      expect(updateQuota).toHaveBeenNthCalledWith(1, firstQuotaState, false);
       expect(release).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(1000);
 
@@ -236,13 +236,16 @@ describe('public Chat callback cancellation releases its scheduler wait', () => 
         expect(globalThis.fetch).toHaveBeenCalledOnce();
         expect(updateQuota).toHaveBeenCalledOnce();
         expect(learned).toHaveBeenCalledOnce();
-        expect(updateQuota).toHaveBeenCalledWith({
-          remainingRequests: 0,
-          remainingTokens: undefined,
-          limitRequests: 10,
-          limitTokens: undefined,
-          resetAt,
-        });
+        expect(updateQuota).toHaveBeenCalledWith(
+          {
+            remainingRequests: 0,
+            remainingTokens: undefined,
+            limitRequests: 10,
+            limitTokens: undefined,
+            resetAt,
+          },
+          false,
+        );
         expect(updateQuota.mock.invocationCallOrder[0]).toBeLessThan(
           release.mock.invocationCallOrder[0],
         );
@@ -273,8 +276,8 @@ describe('public Chat callback cancellation releases its scheduler wait', () => 
       expect(globalThis.fetch).toHaveBeenCalledTimes(2);
       expect(release).toHaveBeenCalledTimes(2);
       expect(updateQuota).toHaveBeenCalledTimes(2);
-      expect(updateQuota).toHaveBeenNthCalledWith(1, firstQuotaState);
-      expect(updateQuota).toHaveBeenNthCalledWith(2, emptyQuotaState);
+      expect(updateQuota).toHaveBeenNthCalledWith(1, firstQuotaState, false);
+      expect(updateQuota).toHaveBeenNthCalledWith(2, emptyQuotaState, false);
       expect(retrying).not.toHaveBeenCalled();
       const metrics = registry.getMetrics();
       expect(Object.values(metrics)[0]).toMatchObject({

@@ -258,6 +258,20 @@ describe('parseRateLimitHeaders', () => {
       // Should use x-ratelimit-reset-requests (first in priority list)
       expect(result.resetAt).toBe(now + 30000);
     });
+
+    it('preserves distinct request and token reset times', () => {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const result = parseRateLimitHeaders({
+        'x-ratelimit-reset-requests': '30s',
+        'x-ratelimit-reset-tokens': '60s',
+      });
+
+      expect(result.resetAtRequests).toBe(now + 30000);
+      expect(result.resetAtTokens).toBe(now + 60000);
+      expect(result.resetAt).toBe(now + 30000);
+    });
   });
 
   describe('Retry-After handling', () => {
