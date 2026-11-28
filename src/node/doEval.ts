@@ -61,7 +61,12 @@ import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { isUuid } from '../util/uuid';
-import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import {
+  deleteErrorResults,
+  getErrorResultIds,
+  recalculatePromptMetrics,
+  trackRetryResults,
+} from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
@@ -790,6 +795,7 @@ async function doEvalWithEnv(
     const {
       providerFilter: _ignoredProviderFilter,
       restorePromptColumns: _ignoredRestorePromptColumns,
+      retryResults: _ignoredRetryResults,
       ...safeEvaluateOptions
     } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
@@ -968,8 +974,11 @@ async function doEvalWithEnv(
         }
       }
 
+      const retryResults =
+        retryErrorResultIds && trackRetryResults(evalRecord.id, retryErrorResultIds);
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
+        retryResults,
         restorePromptColumns: Boolean(resumeEval),
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
@@ -980,8 +989,8 @@ async function doEvalWithEnv(
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
       // Skip if evaluation was paused - no point cleaning up incomplete retry
-      if (retryErrors && cliState._retryErrorResultIds && !paused) {
-        const errorResultIds = cliState._retryErrorResultIds;
+      if (retryResults && !paused && !ret.resultPersistenceFailed) {
+        const errorResultIds = retryResults.replacedIds();
         try {
           await deleteErrorResults(errorResultIds);
           await recalculatePromptMetrics(ret);

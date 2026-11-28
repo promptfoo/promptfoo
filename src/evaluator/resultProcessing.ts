@@ -19,9 +19,11 @@ import {
 import type { ProviderConfig } from '../providers/shared';
 import type {
   ApiProvider,
+  Assertion,
   AtomicTestCase,
   EnvOverrides,
   EvaluateResult,
+  GradingConfig,
   Prompt,
   ProviderOptions,
   ProviderResponse,
@@ -228,6 +230,55 @@ export function projectTestCase(
   return options.stripPromptText
     ? stripTestProviderPromptSelectors(projectedTestCase)
     : projectedTestCase;
+}
+
+export function comparisonProviderOptions(provider: GradingConfig['provider']) {
+  if (isApiProvider(provider)) {
+    return {
+      id: provider.id(),
+      label: provider.label,
+      config: provider.config,
+      env: (provider as ApiProvider & { env?: EnvOverrides }).env,
+    };
+  }
+  return provider;
+}
+
+export function persistComparisonProvider(
+  provider: GradingConfig['provider'],
+): GradingConfig['provider'] {
+  const options = isProviderTypeMap(provider)
+    ? { ...provider, text: persistComparisonProvider(provider.text) }
+    : comparisonProviderOptions(provider);
+  return sanitizeObject(options, {
+    sanitizeUrls: true,
+    maxDepth: Number.POSITIVE_INFINITY,
+    throwOnError: true,
+  });
+}
+
+// Use the same serialized grader settings for persistence and retry matching.
+export function snapshotComparisonTest(test: AtomicTestCase): AtomicTestCase {
+  if (!test.assert?.some((assertion) => assertion.type === 'select-best')) {
+    return test;
+  }
+  return {
+    ...test,
+    ...(test.options && {
+      options: {
+        ...test.options,
+        provider: persistComparisonProvider(test.options.provider),
+      },
+    }),
+    assert: test.assert?.map((assertion) =>
+      assertion.type === 'select-best'
+        ? {
+            ...assertion,
+            provider: persistComparisonProvider((assertion as Assertion).provider),
+          }
+        : assertion,
+    ),
+  };
 }
 
 /** Map only grading assertion providers and component results. */
