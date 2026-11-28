@@ -1,6 +1,10 @@
 import logger from '../../logger';
 import { normalizeFinishReason } from '../../util/finishReason';
-import { formatOpenAiError, getOpenAICompletionTokenDetails } from '../openai/util';
+import {
+  formatOpenAiError,
+  getOpenAICompletionTokenDetails,
+  responsesToolItems,
+} from '../openai/util';
 import { isRootFinalAnswer } from './stream';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
@@ -164,6 +168,7 @@ export class ResponsesProcessor {
         result.raw = { ...data, annotations: processedOutput.annotations };
       }
 
+      responsesToolItems.add(data.output);
       return result;
     } catch (err) {
       return {

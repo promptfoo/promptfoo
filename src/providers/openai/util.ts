@@ -1649,9 +1649,7 @@ export function validateFunctionCall(
     typeof functionCall.name !== 'string' ||
     typeof functionCall.arguments !== 'string'
   ) {
-    throw new InvalidToolCallError(
-      `OpenAI did not return a valid-looking function call: ${JSON.stringify(functionCall)}`,
-    );
+    throw new InvalidToolCallError('OpenAI did not return a valid-looking function call');
   }
 
   // Parse function call and validate it against schema
@@ -1669,8 +1667,8 @@ export function validateFunctionCall(
   let functionArgs;
   try {
     functionArgs = JSON.parse(functionCall.arguments);
-  } catch (err) {
-    throw new InvalidToolCallError((err as Error).message);
+  } catch {
+    throw new InvalidToolCallError('Function call arguments are not valid JSON');
   }
   const functionName = functionCall.name;
   const definition = interpolatedFunctions.find((f) => f.name === functionName);
@@ -1692,11 +1690,13 @@ export function validateFunctionCall(
     throw new InvalidToolSchemaError((err as Error).message);
   }
   if (!validate(functionArgs)) {
-    throw new InvalidToolCallError(
-      `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,
-    );
+    throw new InvalidToolCallError(`Call to "${functionName}" does not match schema`);
   }
 }
+
+// Bind execution evidence to live Responses items. A model or remote provider
+// cannot forge membership by adding a marker to its JSON output or metadata.
+export const responsesToolItems = new WeakSet<unknown[]>();
 
 /** A completed provider error without a competing nonempty choice. */
 export function isOpenAiErrorOnlyResponse(data: unknown): data is { error: { message: string } } {

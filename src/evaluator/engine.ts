@@ -110,7 +110,11 @@ import { TransformInputType, transform } from '../util/transform';
 import { compileDerivedMetricFormula } from './derivedMetricFormula';
 import { PromptSuggestionsRejectedError } from './errors';
 import { getResultIndexKey } from './resultIndex';
-import { PROMPTFOO_METADATA_KEY, sanitizeResultForJsonlArtifact } from './resultProcessing';
+import {
+  PROMPTFOO_METADATA_KEY,
+  sanitizeResultForJsonlArtifact,
+  synchronizeProviderMetadata,
+} from './resultProcessing';
 import {
   ABORTED_GRADING_PREFIX,
   applyGradingError,
@@ -276,33 +280,6 @@ function logGroupedGradingStatus({
       `Serial grading grouping disabled because ${reasons.join(' and ')}; model-graded judges may reload between rows.`,
     );
   }
-}
-
-// When an afterEach hook replaces response.metadata, a legacy top-level metadata.headers that
-// was copied from the OLD transport headers becomes stale — and would persist as stale (and
-// possibly sensitive) headers. Only re-sync when the original top-level headers provably came
-// from the original transport (deep-equal) and the hook left that top-level copy unchanged;
-// otherwise the hook owns metadata.headers and we leave it alone.
-function synchronizeLegacyTransportHeaders(
-  originalMetadata: Record<string, unknown> | undefined,
-  originalResponseMetadata: Record<string, unknown> | undefined,
-  hookMetadata: Record<string, unknown> | undefined,
-  hookResponseMetadata: Record<string, unknown> | undefined,
-) {
-  const originalHeaders = originalMetadata?.headers;
-  if (
-    originalHeaders === undefined ||
-    !isDeepStrictEqual(originalHeaders, originalResponseMetadata?.headers) ||
-    !isDeepStrictEqual(hookMetadata?.headers, originalHeaders)
-  ) {
-    return hookMetadata;
-  }
-
-  const { headers: _staleHeaders, ...metadataWithoutHeaders } = hookMetadata ?? {};
-  if (hookResponseMetadata?.headers === undefined) {
-    return metadataWithoutHeaders;
-  }
-  return { ...metadataWithoutHeaders, headers: hookResponseMetadata.headers };
 }
 
 function getNonTransientTargetStatus(row: EvaluateResult): number | undefined {
@@ -2485,7 +2462,15 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (context.testSuite.extensions?.length) {
         try {
           const originalMetadata = row.metadata;
-          const originalResponseMetadata = row.response?.metadata;
+          // Retained responses are shared with result metadata. Snapshot them so a hook's
+          // in-place edits remain identifiable even if it replaces response metadata.
+          const originalResponseMetadata = row.response?.metadata && {
+            ...row.response.metadata,
+            functionToolCalls: structuredClone(row.response.metadata.functionToolCalls),
+            completedTargetResponses: structuredClone(
+              row.response.metadata.completedTargetResponses,
+            ),
+          };
           const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
             test: evalStep.test,
             result: {
@@ -2500,13 +2485,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           // runExtensionHook sanitizes namedScores via filterFiniteScores;
           // re-sanitize here to also catch in-place mutations that bypass the merge.
           row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
-          // If a hook replaced response.metadata, a legacy top-level metadata.headers copied
-          // from the old transport would otherwise persist as stale credentials. Re-sync it.
-          row.metadata = synchronizeLegacyTransportHeaders(
+          row.metadata = synchronizeProviderMetadata(
             originalMetadata,
             originalResponseMetadata,
             afterEachOut.result.metadata,
             afterEachOut.result.response?.metadata,
+            row.testCase.metadata,
           );
           if (row.response && afterEachOut.result.response) {
             row.response.metadata = afterEachOut.result.response.metadata;

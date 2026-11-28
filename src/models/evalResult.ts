@@ -19,6 +19,7 @@ import {
   serializeResultProviderRefs,
   surfaceRepeatMetadata,
   surfaceTraceMetadata,
+  synchronizeProviderMetadata,
 } from '../evaluator/resultProcessing';
 import { hashPrompt } from '../prompts/utils';
 import {
@@ -104,7 +105,15 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(persistedMetadata),
+      metadata: sanitizeForDb(
+        synchronizeProviderMetadata(
+          persistedMetadata,
+          result.response?.metadata,
+          persistedMetadata,
+          processedResponse?.metadata,
+          testCase.metadata,
+        ),
+      ),
       failureReason,
     };
     if (persist) {
@@ -140,6 +149,13 @@ export default class EvalResult {
       processedResults.push({
         ...serializeResultProviderRefs(result),
         response: processedResponse ?? undefined,
+        metadata: synchronizeProviderMetadata(
+          result.metadata,
+          result.response?.metadata,
+          result.metadata,
+          processedResponse?.metadata,
+          result.testCase.metadata,
+        ),
       });
     }
 

@@ -1,5 +1,6 @@
 import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
 import {
@@ -1167,6 +1168,55 @@ describe('OllamaChatProvider', () => {
     });
   });
 
+  describe('normalized tool-call assertions', () => {
+    afterEach(() => {
+      vi.resetAllMocks();
+    });
+
+    it.each([
+      { type: undefined, arguments: { location: 'Paris' }, pass: true },
+      { type: 'function', arguments: { location: 'Paris' }, pass: true },
+      { type: 'custom', arguments: { location: 'Paris' }, pass: false },
+      { type: null, arguments: { location: 'Paris' }, pass: false },
+      { type: undefined, arguments: '{"location":"Paris"}', pass: true },
+      { type: undefined, arguments: { location: 42 }, pass: false },
+      { type: undefined, arguments: '{"unit":"celsius"}', pass: false },
+    ])('validates native function calls against configured tools: %j', async (testCase) => {
+      for (const withContent of [false, true]) {
+        const chunks = [
+          {
+            message: {
+              role: 'assistant',
+              content: withContent ? 'Checking the weather.' : '',
+              tool_calls: [
+                {
+                  type: testCase.type,
+                  function: { name: 'get_weather', arguments: testCase.arguments },
+                },
+              ],
+            },
+            done: false,
+          },
+          { message: { role: 'assistant', content: '' }, done: true },
+        ];
+        vi.mocked(fetchWithCache).mockResolvedValue(
+          createStreamResponse(chunks.map((chunk) => JSON.stringify(chunk)).join('\n')),
+        );
+        const provider = new OllamaChatProvider('llama3.3', createWeatherToolsOptions());
+        const providerResponse = await provider.callApi('What is the weather?');
+        expect(providerResponse.error).toBeUndefined();
+        const grade = await runAssertion({
+          prompt: 'What is the weather?',
+          provider,
+          providerResponse,
+          assertion: { type: 'is-valid-openai-tools-call' },
+          test: {},
+        });
+        expect(grade).toMatchObject({ pass: testCase.pass, score: testCase.pass ? 1 : 0 });
+      }
+    });
+  });
+
   it('should handle tool calls in response', async () => {
     const mockResponse = {
       data: '{"message":{"role":"assistant","content":"","images":null,"tool_calls":[{"function":{"name":"get_weather","arguments":"{\\"location\\":\\"Amsterdam\\",\\"unit\\":\\"celsius\\"}"}}]},"done":true}\n',
@@ -1184,6 +1234,7 @@ describe('OllamaChatProvider', () => {
 
     expect(result.output).toEqual([
       {
+        type: 'function',
         function: {
           name: 'get_weather',
           arguments: '{"location":"Amsterdam","unit":"celsius"}',
@@ -1211,6 +1262,7 @@ describe('OllamaChatProvider', () => {
       content: 'Let me check the weather for you.',
       tool_calls: [
         {
+          type: 'function',
           function: {
             name: 'get_weather',
             arguments: '{"location":"Amsterdam","unit":"celsius"}',
@@ -1257,8 +1309,8 @@ describe('OllamaChatProvider', () => {
 
       const result = await new OllamaChatProvider('llama3.3').callApi('Compare the weather');
       const toolCalls = [
-        { function: { name: 'get_weather', arguments: '{"city":"Amsterdam"}' } },
-        { function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
+        { type: 'function', function: { name: 'get_weather', arguments: '{"city":"Amsterdam"}' } },
+        { type: 'function', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
       ];
       expect(result.output).toEqual(
         withContent ? { content: 'Checking weather.', tool_calls: toolCalls } : toolCalls,
@@ -1344,7 +1396,7 @@ describe('OllamaChatProvider', () => {
     // Tool calls must stay structured -- prepending a string would break
     // is-valid-openai-tools-call.
     expect(result.output).toEqual([
-      { function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
+      { type: 'function', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
     ]);
     expect(result.finishReason).toBe('stop');
   });
@@ -1401,7 +1453,9 @@ describe('OllamaChatProvider', () => {
     const result = await new OllamaChatProvider('llama3.3').callApi('test prompt');
 
     // Dropping the whole response because one entry is malformed would lose real data.
-    expect(result.output).toEqual([{ function: { name: 'f', arguments: '{"a":1}' } }]);
+    expect(result.output).toEqual([
+      { type: 'function', function: { name: 'f', arguments: '{"a":1}' } },
+    ]);
   });
 
   it.each([
@@ -1418,7 +1472,7 @@ describe('OllamaChatProvider', () => {
 
     const result = await new OllamaChatProvider('llama3.3').callApi('test prompt');
 
-    expect(result.output).toEqual([{ function: { name: 'f', arguments: '{}' } }]);
+    expect(result.output).toEqual([{ type: 'function', function: { name: 'f', arguments: '{}' } }]);
   });
 
   it('should handle multiple tool calls in response', async () => {
@@ -1438,12 +1492,14 @@ describe('OllamaChatProvider', () => {
 
     expect(result.output).toEqual([
       {
+        type: 'function',
         function: {
           name: 'get_weather',
           arguments: '{"location":"Amsterdam","unit":"celsius"}',
         },
       },
       {
+        type: 'function',
         function: {
           name: 'get_weather',
           arguments: '{"location":"Paris","unit":"celsius"}',
