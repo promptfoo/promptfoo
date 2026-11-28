@@ -132,6 +132,21 @@ sharing:
 
 Or set via **API Settings** in the top-right menu. See [sharing docs](/docs/usage/sharing) for auth and CI/CD.
 
+## Column Visibility
+
+Use **Columns** in the toolbar to choose which columns to display. The browser saves variable choices across evals with the same variable names. It saves prompt and description choices per eval.
+
+Set [`defaultColumnVisibility`](/docs/configuration/reference#defaultcolumnvisibility) to choose the initial view. For example, this config shows the question and hides other variables.
+
+```yaml
+defaultColumnVisibility:
+  variables: hidden
+  showColumns:
+    - var:question
+```
+
+Use `var:context` for a variable named `context`, and `Prompt 1` or `description` for standard columns. The prefix distinguishes variables even when their names match a standard column ID. Saved choices take priority over these defaults. Hidden columns remain available in the results.
+
 ## URL Parameters
 
 Viewer state syncs to the URL—bookmark or share filtered views:

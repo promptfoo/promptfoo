@@ -1308,6 +1308,16 @@ export const TestSuiteSchema = z.object({
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
 
+export const DefaultColumnVisibilitySchema = z.object({
+  // Omitted groups remain visible in the viewer.
+  variables: z.enum(['visible', 'hidden']).optional(),
+  prompts: z.enum(['visible', 'hidden']).optional(),
+  hideColumns: z.array(z.string()).optional(),
+  showColumns: z.array(z.string()).optional(),
+});
+
+export type DefaultColumnVisibility = z.infer<typeof DefaultColumnVisibilitySchema>;
+
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
 export const TestSuiteConfigSchema = z.object({
   // Optional tags to describe the test suite
@@ -1466,6 +1476,8 @@ export const TestSuiteConfigSchema = z.object({
     .optional(),
   /** Directory for local references, retained when replaying a saved evaluation. */
   basePath: z.string().optional(),
+  /** Initial viewer defaults. Saved browser choices take precedence. */
+  defaultColumnVisibility: DefaultColumnVisibilitySchema.optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;

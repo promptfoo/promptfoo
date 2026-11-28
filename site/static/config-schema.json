@@ -61,14 +61,17 @@
         "basePath": {
           "$ref": "#/definitions/__schema76"
         },
-        "evaluateOptions": {
+        "defaultColumnVisibility": {
           "$ref": "#/definitions/__schema77"
         },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema78"
+        },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema79"
+          "$ref": "#/definitions/__schema80"
         },
         "targets": {
-          "$ref": "#/definitions/__schema80"
+          "$ref": "#/definitions/__schema81"
         }
       },
       "required": ["prompts"],
@@ -2958,6 +2961,31 @@
     "__schema77": {
       "type": "object",
       "properties": {
+        "variables": {
+          "type": "string",
+          "enum": ["visible", "hidden"]
+        },
+        "prompts": {
+          "type": "string",
+          "enum": ["visible", "hidden"]
+        },
+        "hideColumns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "showColumns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "__schema78": {
+      "type": "object",
+      "properties": {
         "cache": {
           "type": "boolean"
         },
@@ -2998,14 +3026,14 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema78"
+          "$ref": "#/definitions/__schema79"
         }
       }
     },
-    "__schema78": {
+    "__schema79": {
       "type": "string"
     },
-    "__schema79": {
+    "__schema80": {
       "type": "object",
       "properties": {
         "description": {
@@ -3137,7 +3165,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema78"
+              "$ref": "#/definitions/__schema79"
             }
           ]
         },
@@ -3210,7 +3238,7 @@
         }
       }
     },
-    "__schema80": {
+    "__schema81": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"
