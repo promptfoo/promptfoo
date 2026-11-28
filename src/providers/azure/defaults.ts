@@ -572,7 +572,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
   ...modelsWithCost(['claude-sonnet-5-5'], {
     input: 2 / 1000000,
     output: 10 / 1000000,
-    cacheRead: 0.2 / 1000000,
+    cacheRead: 0.1 / 1000000,
   }),
   ...modelsWithCost(['claude-opus-5'], { input: 5 / 1000000, output: 25 / 1000000 }),
   ...modelsWithCost(['claude-opus-4-8'], { input: 5 / 1000000, output: 25 / 1000000 }),
