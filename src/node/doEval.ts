@@ -479,6 +479,12 @@ async function doEvalWithEnv(
           logForCli: () => logger.error(message),
         });
       }
+      if (resumeEval.runtimeOptions?.metadataAnyFiltered) {
+        return failEvalRun(
+          'Evaluations selected with --filter-metadata-any must be started again to preserve the original selection.',
+          isCliInvocation,
+        );
+      }
       logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
       // Use the saved config as our base to ensure identical test ordering
       ({
@@ -507,6 +513,12 @@ async function doEvalWithEnv(
         });
       }
 
+      if (latestEval.runtimeOptions?.metadataAnyFiltered) {
+        return failEvalRun(
+          'Evaluations selected with --filter-metadata-any must be started again to preserve the original selection.',
+          isCliInvocation,
+        );
+      }
       // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
       retryErrorResultIds = await getErrorResultIds(latestEval.id);
       if (retryErrorResultIds.length === 0) {
@@ -697,6 +709,16 @@ async function doEvalWithEnv(
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    const configuredMetadataAny = cmdObj.filterMetadataAny ?? commandLineOptions?.filterMetadataAny;
+    const filterMetadataAny =
+      Array.isArray(configuredMetadataAny) && configuredMetadataAny.length === 0
+        ? undefined
+        : configuredMetadataAny;
+    if (!resumeEval && filterMetadataAny !== undefined && hasScenarios) {
+      throw new Error(
+        '--filter-metadata-any supports top-level tests only. Remove scenarios before using this option.',
+      );
+    }
     const hasActiveTestFilter =
       filterRange !== undefined ||
       cmdObj.filterFailing !== undefined ||
@@ -704,6 +726,7 @@ async function doEvalWithEnv(
       cmdObj.filterErrorsOnly !== undefined ||
       cmdObj.filterFirstN !== undefined ||
       cmdObj.filterMetadata !== undefined ||
+      filterMetadataAny !== undefined ||
       cmdObj.filterPattern !== undefined ||
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
@@ -722,6 +745,7 @@ async function doEvalWithEnv(
         errorsOnly: cmdObj.filterErrorsOnly,
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
+        metadataAny: filterMetadataAny,
         pattern: cmdObj.filterPattern,
         range: hasScenarios ? undefined : filterRange,
         sample: filterSample,
@@ -859,6 +883,7 @@ async function doEvalWithEnv(
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
       ...(providerFilter ? { providerFilter } : {}),
+      ...(filterMetadataAny === undefined ? {} : { metadataAnyFiltered: true }),
     };
 
     if (!resumeEval && config.metadata && 'generationAccounting' in config.metadata) {
