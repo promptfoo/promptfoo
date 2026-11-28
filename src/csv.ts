@@ -101,9 +101,16 @@ export function assertionFromString(expected: string): Assertion {
   }
 
   const regexMatch = expected.match(getAssertionRegex());
+  const thresholdStr = regexMatch?.[3];
+  const threshold = parseFiniteNumber(thresholdStr);
 
-  if (regexMatch) {
-    const [_, notPrefix, type, thresholdStr, value] = regexMatch as [
+  // Accept the match only when a supplied threshold converts to a finite
+  // number. An overflowing exponent such as 1e309 matches the numeric
+  // grammar but converts to Infinity; accepting it would silently
+  // substitute the default threshold, so route it through the
+  // warning/fallback path below instead.
+  if (regexMatch && (thresholdStr === undefined || threshold !== undefined)) {
+    const [_, notPrefix, type, _thresholdStr, value] = regexMatch as [
       string,
       string,
       BaseAssertionTypes,
@@ -112,7 +119,6 @@ export function assertionFromString(expected: string): Assertion {
       string?,
     ];
     const fullType: AssertionType = notPrefix ? `not-${type}` : type;
-    const threshold = parseFiniteNumber(thresholdStr);
 
     if (
       type === 'contains-all' ||
@@ -164,14 +170,18 @@ export function assertionFromString(expected: string): Assertion {
   }
 
   // The cell looks like `type(threshold):value` but the threshold is not a
-  // number. Warn instead of silently re-typing it as an equals assertion on
-  // the literal cell text, which fails with a misleading reason.
+  // finite number. Warn instead of silently re-typing it as an equals assertion on
+  // the literal cell text, which fails with a misleading reason. The assertion
+  // value stays out of the diagnostic: it can carry credentials (for example a
+  // contains-json payload), and message-only log calls are not sanitized, so
+  // the threshold goes through the object-context API instead.
   const thresholdMatch = expected.match(getAssertionWithThresholdRegex());
   if (thresholdMatch && !uniqueErrorMessages.has(expected)) {
     uniqueErrorMessages.add(expected);
     logger.warn(
-      `Could not parse threshold "${thresholdMatch[1]}" in assertion "${expected}". ` +
+      'Could not parse threshold in assertion. ' +
         'Treating the cell as an equals assertion on the literal text.',
+      { threshold: thresholdMatch[1].trim() },
     );
   }
 

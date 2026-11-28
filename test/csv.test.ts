@@ -575,7 +575,44 @@ describe('assertionFromString', () => {
     const result: Assertion = assertionFromString('similar(abc):hello');
     expect(result.type).toBe('equals');
     expect(result.value).toBe('similar(abc):hello');
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('abc'));
+    // The diagnostic goes through the sanitized object-context API and must
+    // not embed the assertion value in the message.
+    expect(logger.warn).toHaveBeenCalledWith(expect.any(String), { threshold: 'abc' });
+  });
+
+  it('should not log the assertion value in the invalid-threshold warning', () => {
+    const secret = 'sk-test-secret-123';
+    const result: Assertion = assertionFromString(`contains-json(abc):{"apiKey":"${secret}"}`);
+    expect(result.type).toBe('equals');
+    expect(logger.warn).toHaveBeenCalled();
+    const logged = JSON.stringify(vi.mocked(logger.warn).mock.calls);
+    expect(logged).not.toContain(secret);
+    expect(logged).not.toContain('apiKey');
+  });
+
+  // An overflowing exponent matches the numeric grammar but converts to
+  // Infinity, so parseFiniteNumber returns undefined. Accepting the match
+  // would silently substitute the default threshold; it must warn and fall
+  // back to equals like any other non-numeric threshold.
+  it.each([
+    ['similar(1e309):hello', '1e309'],
+    ['levenshtein(-1e309):hello', '-1e309'],
+    ['javascript(1e309):output.length', '1e309'],
+  ])(
+    'should warn and fall back to equals for the overflowing threshold in %s',
+    (expected, threshold) => {
+      const result: Assertion = assertionFromString(expected);
+      expect(result.type).toBe('equals');
+      expect(result.value).toBe(expected);
+      expect(logger.warn).toHaveBeenCalledWith(expect.any(String), { threshold });
+    },
+  );
+
+  it('should still parse a large but finite exponent threshold', () => {
+    const result: Assertion = assertionFromString('similar(1e308):hello');
+    expect(result.type).toBe('similar');
+    expect(result.threshold).toBe(1e308);
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('should create a contains assertion', () => {
