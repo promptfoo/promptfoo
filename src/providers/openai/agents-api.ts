@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { CloudAuthRedirectError } from '../../util/fetch/cloudAuthRedirects';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/render';
 import {
@@ -386,6 +387,11 @@ function referencesVariable(template: string, names: string[]): boolean {
   });
 }
 
+/** Opaque IDs must identify a resource and stay in their own URL path segment. */
+function isResourceId(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value !== '.' && value !== '..';
+}
+
 /** Render only strings that reference test vars, preserving literal braces in commands and code. */
 function renderConfigTemplates(
   value: unknown,
@@ -494,11 +500,18 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           method,
           headers,
           signal,
+          // A redirect must not forward gateway headers or credentials in the session body.
+          restrictCloudAuthRedirects: true,
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         },
         30_000,
         idempotent ? this.config.maxRetries : 0,
-      );
+      ).catch((error: unknown) => {
+        if (error instanceof CloudAuthRedirectError) {
+          throw new Error('Agents API cannot follow a redirect to a different origin.');
+        }
+        throw error;
+      });
       // Bodies stay out of debug logs; the status is enough to follow the session lifecycle.
       logger.debug('[OpenAI Agents API] Response', { method, endpoint, status: response.status });
       if (idempotent && TRANSIENT_STATUS_CODES.has(response.status) && attempt < maxRetries) {
@@ -605,7 +618,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   ): Promise<string[]> {
     const subagents = await this.list<{ id?: unknown }>(`${endpoint}/subagents`, headers, signal);
     return subagents.map(({ id }) => {
-      if (typeof id !== 'string' || !id) {
+      if (!isResourceId(id)) {
         throw new Error('Agents API returned an invalid subagent');
       }
       return id;
@@ -931,7 +944,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         vault_ids: this.config.vault_ids,
         stream: false,
       });
-      if (!session?.id || typeof session.id !== 'string') {
+      if (!isResourceId(session?.id)) {
         throw new Error('Agents API did not return a session ID');
       }
       endpoint = `agents/sessions/${encodeURIComponent(session.id)}`;
@@ -994,6 +1007,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         ...usageMetadata,
         ...subagentUsageMetadata,
       });
+      options?.abortSignal?.throwIfAborted();
       completed = true;
     } catch (error) {
       options?.abortSignal?.throwIfAborted();
@@ -1036,6 +1050,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       const turns = await this.list<Turn>(`${endpoint}/turns`, headers, signal);
       // Subagent completion and an idle session are not proof that the root turn succeeded.
       const turn = turns.find((candidate) => candidate.subagent_id === null);
+      if (turn && !isResourceId(turn.id)) {
+        throw new Error('Agents API returned an invalid root turn ID');
+      }
       if (turn?.status === 'failed' || turn?.status === 'cancelled') {
         const error = this.redact(turn.error?.message ?? turn.id);
         throw new Error(
@@ -1074,7 +1091,14 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const pollIntervalMs = Math.min(this.config.pollIntervalMs ?? 1_000, 1_000);
     const turnEndpoint = `${endpoint}/turns/${encodeURIComponent(turn.id)}`;
     const latest = { session, turn };
+    const usageController = new AbortController();
+    const usageTimer = setTimeout(
+      () => usageController.abort(),
+      Math.max(0, waitUntil - Date.now()),
+    );
+    const usageSignal = AbortSignal.any([signal, usageController.signal]);
     let turnUsageSeenAt: number | undefined;
+    let firstRead = true;
     try {
       while (!isUsage(latest.session.usage) && Date.now() < waitUntil) {
         if (isUsage(latest.turn.usage) && !hasSubagents) {
@@ -1083,21 +1107,31 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
             break;
           }
         }
-        await sleepWithAbort(Math.min(pollIntervalMs, waitUntil - Date.now()), signal);
-        const [nextSession, nextTurn] = await Promise.all([
-          this.request<Session>(endpoint, 'GET', headers, signal),
-          // Root-turn usage is only a fallback; a failed turn read must not stop session polling.
-          this.request<Turn>(turnEndpoint, 'GET', headers, signal).catch((error: unknown) => {
-            signal.throwIfAborted();
-            logger.debug('[OpenAI Agents API] Root turn usage read failed', {
-              sessionId: session.id,
-              error: this.redact(error instanceof Error ? error.message : String(error)),
-            });
-            return undefined;
+        if (!firstRead) {
+          await sleepWithAbort(Math.min(pollIntervalMs, waitUntil - Date.now()), usageSignal);
+          if (Date.now() >= waitUntil) {
+            break;
+          }
+        }
+        firstRead = false;
+        // Keep either completed read when its sibling outlasts the usage deadline.
+        await Promise.all([
+          this.request<Session | undefined>(endpoint, 'GET', headers, usageSignal).then((next) => {
+            latest.session = next ?? latest.session;
           }),
+          // Root-turn usage is only a fallback; a failed turn read must not stop session polling.
+          this.request<Turn | undefined>(turnEndpoint, 'GET', headers, usageSignal)
+            .then((next) => {
+              latest.turn = next ?? latest.turn;
+            })
+            .catch((error: unknown) => {
+              usageSignal.throwIfAborted();
+              logger.debug('[OpenAI Agents API] Root turn usage read failed', {
+                sessionId: session.id,
+                error: this.redact(error instanceof Error ? error.message : String(error)),
+              });
+            }),
         ]);
-        latest.session = nextSession;
-        latest.turn = nextTurn ?? latest.turn;
       }
     } catch (error) {
       evalSignal?.throwIfAborted();
@@ -1106,6 +1140,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         sessionId: session.id,
         error: this.redact(error instanceof Error ? error.message : String(error)),
       });
+    } finally {
+      clearTimeout(usageTimer);
+      usageController.abort();
     }
     const sessionUsage = isUsage(latest.session.usage) ? latest.session.usage : undefined;
     const usage = sessionUsage ?? (isUsage(latest.turn.usage) ? latest.turn.usage : undefined);
