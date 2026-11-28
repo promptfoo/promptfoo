@@ -13,11 +13,11 @@ To use the `llama` provider, specify `llama` as the provider in your `promptfooc
 
 Supported environment variables:
 
-- `LLAMA_BASE_URL` - Scheme, hostname, and port (defaults to `http://localhost:8080`)
+- `LLAMA_BASE_URL` - Scheme, hostname, and port (defaults to `http://localhost:9931`, the llama.cpp server default)
 - `REQUEST_TIMEOUT_MS` - Request timeout in milliseconds
 
 :::note
-The server address comes from `LLAMA_BASE_URL` only. A `config.baseUrl` key is ignored.
+Set `LLAMA_BASE_URL` for a custom port or an older llama.cpp release that uses port 8080. For example, run `LLAMA_BASE_URL=http://localhost:8080 promptfoo eval`. The provider ignores `config.baseUrl`.
 :::
 
 ## Configuration options
