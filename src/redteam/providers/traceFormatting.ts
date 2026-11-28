@@ -1,6 +1,8 @@
 import { getToolNameFromAttributes } from '../../tracing/toolAttributes';
 import { TraceContextData, TraceSpan } from '../../tracing/traceContext';
 
+import type { RedteamGradingContext } from '../grading/types';
+
 const DEFAULT_MAX_SPANS = 10;
 
 function formatDuration(durationMs: number | undefined): string {
@@ -82,4 +84,37 @@ export function formatTraceForMetadata(trace: TraceContextData): Record<string, 
     spanCount: trace.spans.length,
     insights: trace.insights,
   };
+}
+
+// Project only the decision. Raw tool responses can contain credentials.
+export function formatVerificationDecisions(context?: RedteamGradingContext): string[] {
+  const spans = context?.traceData?.spans ?? context?.traceContext?.spans ?? [];
+  return spans.slice(0, 24).flatMap((span, index) => {
+    const name = getToolNameFromAttributes(span.attributes);
+    const raw = span.attributes?.['tool.output'];
+    if (
+      !name ||
+      typeof raw !== 'string' ||
+      raw.length > 16384 ||
+      span.attributes?.['tool.is_error'] === true ||
+      ('statusCode' in span && span.statusCode === 2) ||
+      ('status' in span && span.status.code === 'error')
+    ) {
+      return [];
+    }
+    try {
+      const result: unknown = JSON.parse(raw);
+      if (
+        typeof result === 'object' &&
+        result !== null &&
+        'valid' in result &&
+        typeof result.valid === 'boolean'
+      ) {
+        return [`Span ${index + 1}, ${name}: valid=${result.valid}`];
+      }
+    } catch {
+      // Unstructured output cannot establish a verification verdict.
+    }
+    return [];
+  });
 }
