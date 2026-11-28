@@ -358,6 +358,90 @@ async function doEvalWithEnv(
   // Set once watch mode starts watching; awaited before doEval returns so the CLI does
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
+  let watcher: FSWatcher | undefined;
+  let watchedPaths = new Set<string>();
+  // Watch evaluations can overlap; a slow older run must never reset the
+  // subscriptions resolved by the most recent file change.
+  let latestWatchGeneration = 0;
+  let watchReconciliation: Promise<void> = Promise.resolve();
+
+  // The same dependency set drives initial subscriptions, successful reloads,
+  // and reloads that fail because a newly referenced input does not exist yet.
+  const resolveWatchPaths = (
+    activeCmd: Partial<CommandLineOptions & Command>,
+    activeConfig: Partial<UnifiedConfig>,
+    sources?: Awaited<ReturnType<typeof resolveConfigs>>['testSources'],
+  ): string[] => {
+    const configPaths = (activeCmd.config || [defaultConfigPath]).filter(Boolean) as string[];
+    if (!configPaths.length) {
+      return [];
+    }
+    const basePath = activeConfig.basePath ?? path.dirname(configPaths[0]);
+    const prompts = activeCmd.prompts ?? activeConfig.prompts;
+    const promptBase = activeCmd.prompts ? process.cwd() : basePath;
+    const promptPaths = Array.isArray(prompts)
+      ? (prompts
+          .map((p) => {
+            if (typeof p === 'string' && p.startsWith('file://')) {
+              return path.resolve(promptBase, p.slice('file://'.length));
+            } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
+              return path.resolve(promptBase, p.id.slice('file://'.length));
+            }
+            return null;
+          })
+          .filter(Boolean) as string[])
+      : [];
+    const providerPaths = Array.isArray(activeConfig.providers)
+      ? (activeConfig.providers
+          .map((p) =>
+            typeof p === 'string' && p.startsWith('file://')
+              ? path.resolve(basePath, p.slice('file://'.length))
+              : null,
+          )
+          .filter(Boolean) as string[])
+      : [];
+    const cliTests = activeCmd.tests || activeCmd.vars;
+    const varPaths: string[] = [];
+    if (cliTests) {
+      // --tests is relative to the working directory; --vars to the config.
+      varPaths.push(
+        ...resolveTestsWatchPaths(cliTests, activeCmd.tests ? process.cwd() : basePath),
+      );
+    } else {
+      varPaths.push(...resolveTestsWatchPaths(activeConfig.tests, basePath));
+      for (const source of sources ?? []) {
+        varPaths.push(...resolveTestsWatchPaths(source.tests, source.basePath));
+      }
+    }
+    return Array.from(new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]));
+  };
+
+  const reconcileWatchPaths = (paths: string[], generation: number): Promise<void> => {
+    // Serialize chokidar changes: its unwatch() is asynchronous, so a newer
+    // config must not race an older removal or an older finished evaluation.
+    const update = watchReconciliation.then(async () => {
+      if (!watcher || generation !== latestWatchGeneration) {
+        return;
+      }
+      const nextPaths = new Set(paths);
+      const removed = [...watchedPaths].filter((watchPath) => !nextPaths.has(watchPath));
+      const added = paths.filter((watchPath) => !watchedPaths.has(watchPath));
+      // Install new inputs first: edits while a long evaluation is running
+      // must already be observable even if removing old paths takes time.
+      if (added.length) {
+        watcher.add(added);
+        added.forEach((watchPath) => logger.info(`Watching for file changes on ${watchPath} ...`));
+      }
+      watchedPaths = nextPaths;
+      if (removed.length) {
+        await watcher.unwatch(removed);
+      }
+    });
+    // Keep the serial queue usable after a failed watcher operation, while
+    // still propagating that failure to the run which requested the update.
+    watchReconciliation = update.catch(() => {});
+    return update;
+  };
 
   const runEvaluationWithEnv = async (
     runEnv: EnvOverrides,
@@ -366,6 +450,7 @@ async function doEvalWithEnv(
     defaultConfig: Partial<UnifiedConfig>,
     evaluateOptions: InternalEvaluateOptions,
     initialization?: boolean,
+    watchGeneration?: number,
   ) => {
     const startTime = Date.now();
     let config: Partial<UnifiedConfig>;
@@ -540,7 +625,14 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
         testSources,
-      } = await resolveConfigs(cmdObj, defaultConfig));
+      } = await (cmdObj.watch && watcher
+        ? resolveConfigs(cmdObj, defaultConfig, undefined, async (fileConfig, sources) => {
+            await reconcileWatchPaths(
+              resolveWatchPaths(cmdObj, fileConfig, sources),
+              watchGeneration!,
+            );
+          })
+        : resolveConfigs(cmdObj, defaultConfig)));
     }
 
     // Clean up the providers this run loaded once no evaluation is using them.
@@ -1184,91 +1276,60 @@ async function doEvalWithEnv(
     });
 
     if (cmdObj.watch && !resumeEval) {
+      const watchPaths = resolveWatchPaths(cmdObj, config, testSources);
+      if (!watchPaths.length) {
+        const message = `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}.`;
+        return failEvalRun(message, isCliInvocation, {
+          logForCli: () => logger.error(message),
+          cliFallback: ret,
+        });
+      }
       if (initialization) {
-        const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
-        if (!configPaths.length) {
-          const message = `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
-            ',',
-          )}}.`;
-          return failEvalRun(message, isCliInvocation, {
-            logForCli: () => logger.error(message),
-            cliFallback: ret,
-          });
-        }
-        const basePath = config.basePath ?? path.dirname(configPaths[0]);
-        const promptPaths = Array.isArray(config.prompts)
-          ? (config.prompts
-              .map((p) => {
-                if (typeof p === 'string' && p.startsWith('file://')) {
-                  return path.resolve(basePath, p.slice('file://'.length));
-                } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
-                  return path.resolve(basePath, p.id.slice('file://'.length));
-                }
-                return null;
-              })
-              .filter(Boolean) as string[])
-          : [];
-        const providerPaths = Array.isArray(config.providers)
-          ? (config.providers
-              .map((p) =>
-                typeof p === 'string' && p.startsWith('file://')
-                  ? path.resolve(basePath, p.slice('file://'.length))
-                  : null,
-              )
-              .filter(Boolean) as string[])
-          : [];
-        // `--tests`, and its `--vars` alias, replace the config's own tests entirely
-        // (see resolveConfigs), so `config.tests` already holds the command-line value.
-        const cliTests = cmdObj.tests || cmdObj.vars;
-        const varPaths: string[] = [];
-        if (cliTests) {
-          // Preserve the released path bases: --tests uses CWD, while --vars uses
-          // the config directory. --tests takes precedence when both are supplied.
-          varPaths.push(
-            ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath),
-          );
-        } else {
-          varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
-          for (const source of testSources ?? []) {
-            varPaths.push(...resolveTestsWatchPaths(source.tests, source.basePath));
-          }
-        }
-        const watchPaths = Array.from(
-          new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
-        );
         // Editor saves must produce a change event even when CHOKIDAR_USEPOLLING is set.
-        const watcher = chokidar.watch(watchPaths, {
+        watcher = chokidar.watch(watchPaths, {
           atomic: true,
           ignored: /^\./,
+          ignoreInitial: true,
           persistent: true,
         });
+        watchedPaths = new Set(watchPaths);
         // Library callers own their own process lifetime, so only the CLI blocks here.
         if (isCliInvocation) {
           watchTermination = watchUntilTerminated(watcher);
         }
 
-        watcher
-          .on('change', async (path) => {
-            printBorder();
-            logger.info(`File change detected: ${path}`);
-            printBorder();
-            // Watch reruns have always reloaded CommonJS .js default configurations.
-            clearCjsModuleCache();
-            try {
-              await runEvaluation();
-            } catch (error) {
-              if (handleRecoverableWatchError(error)) {
-                return;
-              }
-              throw error;
+        const onWatchedFileChanged = async (path: string) => {
+          printBorder();
+          logger.info(`File change detected: ${path}`);
+          printBorder();
+          // Watch reruns have always reloaded CommonJS .js default configurations.
+          clearCjsModuleCache();
+          try {
+            await runEvaluation();
+          } catch (error) {
+            if (handleRecoverableWatchError(error)) {
+              return;
             }
-          })
+            throw error;
+          }
+        };
+        watcher
+          .on('change', onWatchedFileChanged)
+          .on('add', onWatchedFileChanged)
+          .on('unlink', (filePath) =>
+            // A rename or replacement may recreate the input on the next add event.
+            onWatchedFileChanged(filePath).catch((error) => {
+              logger.error(`Could not reload after removing ${filePath}: ${error}`);
+            }),
+          )
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
           .on('ready', () =>
             watchPaths.forEach((watchPath) =>
               logger.info(`Watching for file changes on ${watchPath} ...`),
             ),
           );
+      } else {
+        await reconcileWatchPaths(watchPaths, watchGeneration!);
       }
     } else {
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
@@ -1302,6 +1363,9 @@ async function doEvalWithEnv(
   };
 
   const runEvaluation = async (initialization?: boolean) => {
+    // Assign in event order, not completion order, so overlapping evaluations
+    // cannot roll subscriptions back to an earlier version of the config.
+    const watchGeneration = ++latestWatchGeneration;
     // Each watch run keeps its inputs, resolved environment and providers through cleanup.
     const runEnv: EnvOverrides = {};
     const runEnvFileOverrides =
@@ -1330,6 +1394,7 @@ async function doEvalWithEnv(
                       runDefaults,
                       runOptions,
                       initialization,
+                      watchGeneration,
                     ),
                   ),
                 ),

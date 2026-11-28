@@ -914,6 +914,10 @@ export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
+  onConfigSourcesResolved?: (
+    config: Partial<UnifiedConfig>,
+    testSources?: TestSource[],
+  ) => Promise<void> | void,
 ): Promise<{
   testSuite: TestSuite;
   config: Partial<UnifiedConfig>;
@@ -939,8 +943,10 @@ export async function resolveConfigs(
   }
   const resolved = await cliState.withBasePath(undefined, () =>
     cliState.withEnv(fileConfig.env || defaultConfig.env || {}, () =>
-      cliState.withConfig({ ...defaultConfig, ...fileConfig }, () =>
-        resolveLoadedConfig(
+      cliState.withConfig({ ...defaultConfig, ...fileConfig }, async () => {
+        // Subscribe using the new config environment before attempting to read its inputs.
+        await onConfigSourcesResolved?.(configPaths ? fileConfig : defaultConfig, testSources);
+        return resolveLoadedConfig(
           cmdObj,
           fileConfig,
           defaultConfig,
@@ -948,8 +954,8 @@ export async function resolveConfigs(
           type,
           testSources,
           promptBasePaths,
-        ),
-      ),
+        );
+      }),
     ),
   );
   cliState.basePath = resolved.basePath;
