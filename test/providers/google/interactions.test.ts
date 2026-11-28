@@ -213,9 +213,15 @@ describe('GoogleInteractionsProvider', () => {
     },
   );
 
-  it.each(['gemini-omni-flash-preview', 'gemini-omni-1.1-flash'])(
-    'routes %s through the Interactions API and prices video output tokens',
-    async (modelName) => {
+  it.each([
+    ['gemini-omni-flash-preview', 17.5],
+    ['gemini-omni-1.1-flash', 17.5],
+    ['gemini-omni-1.2-flash', 12],
+  ])(
+    'routes %s through the Interactions API and prices video output tokens at $%s/1M',
+    async (modelName, videoRate) => {
+      // Price before Google's December 3, 2026 gemini-omni-1.1-flash redirect.
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 10, 19));
       mockFetchWithCache.mockResolvedValue({
         data: {
           id: 'interaction-1',
@@ -339,9 +345,95 @@ describe('GoogleInteractionsProvider', () => {
         numRequests: 1,
         completionDetails: { reasoning: 20 },
       });
-      expect(result.cost).toBeCloseTo((100 * 1.5 + 120 * 9 + 500 * 17.5) / 1e6, 12);
+      expect(result.cost).toBeCloseTo((100 * 1.5 + 120 * 9 + 500 * videoRate) / 1e6, 12);
     },
   );
+
+  it.each([
+    { name: 'before', now: Date.UTC(2026, 11, 3) - 1, videoRate: 17.5 },
+    { name: 'after', now: Date.UTC(2026, 11, 3), videoRate: 12 },
+  ])(
+    'prices gemini-omni-1.1-flash $name the redirect to gemini-omni-1.2-flash',
+    async ({ now, videoRate }) => {
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          status: 'completed',
+          steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
+          usage: {
+            total_input_tokens: 18,
+            total_output_tokens: 5_793,
+            total_thought_tokens: 554,
+            total_tokens: 6_365,
+            output_tokens_by_modality: [{ modality: 'video', tokens: 5_793 }],
+          },
+        },
+        cached: false,
+      } as any);
+      const provider = new GoogleInteractionsProvider('gemini-omni-1.1-flash', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('A red ball rolling across a table');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeCloseTo((18 * 1.5 + 554 * 9 + 5_793 * videoRate) / 1e6, 12);
+    },
+  );
+
+  it('does not bill cached gemini-omni-1.2-flash responses', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
+        usage: {
+          total_input_tokens: 18,
+          total_output_tokens: 5_793,
+          output_tokens_by_modality: [{ modality: 'video', tokens: 5_793 }],
+        },
+      },
+      cached: true,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-1.2-flash', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('A red ball rolling across a table');
+
+    expect(result.error).toBeUndefined();
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeUndefined();
+    expect(result.tokenUsage).toMatchObject({ prompt: 18, completion: 5_793 });
+  });
+
+  it('sends gemini-omni-1.2-flash duration and resolution through passthrough.response_format', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
+      },
+      cached: false,
+    } as any);
+    const responseFormat = {
+      type: 'video',
+      duration: '15s',
+      resolution: '360p',
+      aspect_ratio: '9:16',
+    };
+    const provider = new GoogleInteractionsProvider('gemini-omni-1.2-flash', {
+      config: {
+        apiKey: 'test-key',
+        aspectRatio: '16:9',
+        passthrough: { response_format: responseFormat },
+      },
+    });
+
+    const result = await provider.callApi('A paper airplane gliding through a library');
+
+    expect(result.error).toBeUndefined();
+    const body = JSON.parse(mockFetchWithCache.mock.calls[0]?.[1]?.body as string);
+    expect(body).toMatchObject({ model: 'gemini-omni-1.2-flash', response_format: responseFormat });
+  });
 
   it.each(
     [
@@ -3741,6 +3833,8 @@ describe('GoogleInteractionsProvider', () => {
 
   it.each([
     ['vertex:gemini-omni-1.1-flash-preview', 'gemini-omni-1.1-flash-preview'],
+    ['vertex:gemini-omni-1.2-flash', 'gemini-omni-1.2-flash'],
+    ['google:gemini-omni-1.2-flash', 'gemini-omni-1.2-flash'],
     ['google:gemini-omni-flash-preview', 'gemini-omni-flash-preview'],
     ['palm:gemini-omni-flash-preview', 'gemini-omni-flash-preview'],
   ])('routes %s through the configured Vertex endpoint with OAuth', async (selector, modelName) => {

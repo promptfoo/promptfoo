@@ -2844,6 +2844,19 @@ describe('Provider Registry', () => {
         async () =>
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
+      ...[
+        'google:gemini-omni-1.2-flash',
+        'palm:gemini-omni-1.2-flash',
+        'vertex:gemini-omni-1.2-flash',
+        'vertex:chat:gemini-omni-1.2-flash',
+      ].map(
+        (path) =>
+          [
+            path,
+            async () =>
+              (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+          ] as const,
+      ),
       [
         'google:gemini-omni-1.1-flash-custom',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
@@ -3023,6 +3036,26 @@ describe('Provider Registry', () => {
       },
     );
 
+    it.each(['google:gemini-omni-1.2-flash', 'palm:gemini-omni-1.2-flash'])(
+      'keeps the configured API mode for %s because Vertex serves the same model ID',
+      async (providerPath) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        for (const vertexai of [true, false, undefined]) {
+          const provider = await factory!.create(
+            providerPath,
+            { config: { apiKey: 'test-key', vertexai } },
+            bareContext,
+          );
+          expect(provider).toMatchObject({
+            modelName: 'gemini-omni-1.2-flash',
+            config: { vertexai },
+          });
+        }
+      },
+    );
+
     it.each([
       'google:gemini-robotics-er-2-streaming-preview',
       'google:gemini-3.5-live-translate-preview',
@@ -3177,8 +3210,11 @@ describe('Provider Registry', () => {
       ['palm:interactions:gemini-omni-flash-preview', true],
       ['google:interactions:gemini-omni-1.1-flash', false],
       ['palm:interactions:gemini-omni-1.1-flash', false],
+      ['google:interactions:gemini-omni-1.2-flash', true],
+      ['palm:interactions:gemini-omni-1.2-flash', true],
       ['vertex:interactions:gemini-omni-flash-preview', true],
       ['vertex:interactions:gemini-omni-1.1-flash-preview', true],
+      ['vertex:interactions:gemini-omni-1.2-flash', true],
     ])(
       'routes explicit Interactions selector %s without losing its model',
       async (providerPath, vertexai) => {
@@ -3210,8 +3246,10 @@ describe('Provider Registry', () => {
       'palm:interactions:gemini-omni-flash-preview',
       'google:interactions:gemini-omni-1.1-flash',
       'palm:interactions:gemini-omni-1.1-flash',
+      'google:interactions:gemini-omni-1.2-flash',
       'vertex:interactions:gemini-omni-flash-preview',
       'vertex:interactions:gemini-omni-1.1-flash-preview',
+      'vertex:interactions:gemini-omni-1.2-flash',
     ])(
       'preserves distinct configured IDs for explicit Interactions selector %s',
       async (providerPath) => {
@@ -3241,6 +3279,8 @@ describe('Provider Registry', () => {
       'vertex:interactions:gemini-4-hydrogen',
       'vertex:interactions:gemini-robotics-er-2-preview',
       'vertex:interactions:gemini-omni-1.1-flash',
+      'google:interactions:gemini-omni-9.99-fakemodel',
+      'vertex:interactions:gemini-omni-9.99-fakemodel',
     ])(
       'rejects unimplemented explicit Interactions selector %s before chat fallback',
       async (providerPath) => {
@@ -3302,6 +3342,8 @@ describe('Provider Registry', () => {
     it.each([
       'vertex:gemini-omni-flash-preview',
       'vertex:chat:gemini-omni-flash-preview',
+      'vertex:gemini-omni-1.2-flash',
+      'vertex:chat:gemini-omni-1.2-flash',
       'vertex:gemini-robotics-er-2-preview',
       'vertex:chat:gemini-robotics-er-2-preview',
     ])('applies vertexai config and provider id for %s', async (providerPath) => {

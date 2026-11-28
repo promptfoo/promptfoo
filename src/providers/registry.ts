@@ -143,7 +143,9 @@ function getProviderEnvAliasGroups(
   if (
     (isGeminiImage && determineGoogleVertexMode(config ?? {}, env)) ||
     (config?.vertexai === true &&
-      /^(?:google|palm):(?:interactions:)?gemini-omni-flash-preview$/.test(providerPath))
+      /^(?:google|palm):(?:interactions:)?gemini-omni-(?:flash-preview|1\.2-flash)$/.test(
+        providerPath,
+      ))
   ) {
     return [
       ['VERTEX_API_KEY', 'GOOGLE_API_KEY'],
@@ -220,7 +222,7 @@ function getProviderEnvAliasGroups(
     ];
   }
   if (
-    /^(?:google|palm):(?:interactions:)?(?:gemini-omni-flash-preview|gemini-omni-1\.1-flash|gemini-3\.5-transcribe|gemini-robotics-er-2-preview)$/.test(
+    /^(?:google|palm):(?:interactions:)?(?:gemini-omni-flash-preview|gemini-omni-1\.[12]-flash|gemini-3\.5-transcribe|gemini-robotics-er-2-preview)$/.test(
       providerPath,
     )
   ) {

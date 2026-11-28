@@ -916,6 +916,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       'gemini-omni-flash-preview',
       'gemini-omni-1.1-flash',
       'gemini-omni-1.1-flash-preview',
+      'gemini-omni-1.2-flash',
     ].includes(capabilityModel);
     const allowSamplingControls = config.vertexai && isVideoModel;
     const {

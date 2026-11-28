@@ -651,6 +651,7 @@ const GEMINI_API_REDIRECTS = [
   { id: 'gemini-3.7-flash', target: 'gemini-3.8-flash', from: Date.UTC(2026, 9, 8) },
   { id: 'gemini-2.5-pro', target: 'gemini-3.8-flash', from: Date.UTC(2026, 11, 1) },
   { id: 'gemini-2.5-flash', target: 'gemini-3.5-flash-lite', from: Date.UTC(2026, 11, 1) },
+  { id: 'gemini-omni-1.1-flash', target: 'gemini-omni-1.2-flash', from: Date.UTC(2026, 11, 3) },
 ];
 
 export function getEffectiveGeminiApiModel(modelName: string, timestamp = Date.now()): string {
