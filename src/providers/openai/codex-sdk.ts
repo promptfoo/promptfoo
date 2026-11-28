@@ -30,6 +30,7 @@ import { getPackageVersion } from '../../util/packageVersion';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { AgenticRunQueue, createAbortError } from '../agenticRunQueue';
+import { getMinimalProcessEnv } from '../agentProcessEnv';
 import { assertIsolatedWorkingDir, clearRepositoryEnv } from '../agentWorkspace';
 import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
@@ -53,11 +54,7 @@ import {
   usesCustomModelProvider,
 } from './codexApiKeyGating';
 import { CodexCliCompatibilityError, checkCodexCliCompatibility } from './codexCliCompatibility';
-import {
-  COMMON_OPTIONAL_PROCESS_ENV_KEYS,
-  findGitRepositoryRoot,
-  getMinimalProcessEnv,
-} from './codexProcess';
+import { COMMON_OPTIONAL_PROCESS_ENV_KEYS, findGitRepositoryRoot } from './codexProcess';
 import {
   buildCodexSkillMetadata,
   extractCodexSkillPathCandidates,

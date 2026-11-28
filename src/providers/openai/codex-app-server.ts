@@ -7,9 +7,7 @@ import readline from 'readline';
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
-import cliState from '../../cliState';
 import { getProcessEnv } from '../../envars';
-import logger from '../../logger';
 import {
   addActiveSpanRoleAttribute,
   closeTurnSpan,
@@ -20,15 +18,16 @@ import {
   openTurnSpan,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { AgenticRunQueue, createAbortError } from '../agenticRunQueue';
+import { getMinimalProcessEnv } from '../agentProcessEnv';
 import { clearRepositoryEnv, isAgentWorkspace } from '../agentWorkspace';
 import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import { cliState, logger, renderVarsInObject } from './codex-runtime';
 import {
   getCodexTraceEndpoint,
   getCodexTraceProtocol,
@@ -36,11 +35,7 @@ import {
   withCodexTraceExporter,
 } from './codex-tracing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
-import {
-  COMMON_OPTIONAL_PROCESS_ENV_KEYS,
-  findGitRepositoryRoot,
-  getMinimalProcessEnv,
-} from './codexProcess';
+import { COMMON_OPTIONAL_PROCESS_ENV_KEYS, findGitRepositoryRoot } from './codexProcess';
 import {
   buildCodexSkillMetadata,
   getCodexSkillMetadataFields,
@@ -48,11 +43,11 @@ import {
 } from './codexSkillMetadata';
 import type { Usage as CodexSdkUsage } from '@openai/codex-sdk';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   ProviderResponse,
 } from '../../types/index';
 

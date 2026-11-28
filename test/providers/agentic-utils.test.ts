@@ -41,6 +41,8 @@ describe('agentic-utils', () => {
       }) as unknown as ApiProvider;
 
     it.each([
+      'acp',
+      'acp:cursor',
       'openai:codex-sdk',
       'openai:codex-sdk:gpt-5.5',
       'openai:codex-security',

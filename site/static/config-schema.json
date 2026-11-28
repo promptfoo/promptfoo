@@ -312,6 +312,15 @@
         "COHERE_CLIENT_NAME": {
           "type": "string"
         },
+        "COPILOT_GITHUB_TOKEN": {
+          "type": "string"
+        },
+        "CURSOR_API_KEY": {
+          "type": "string"
+        },
+        "CURSOR_AUTH_TOKEN": {
+          "type": "string"
+        },
         "DATABRICKS_TOKEN": {
           "type": "string"
         },
@@ -322,6 +331,9 @@
           "type": "string"
         },
         "DEEPSEEK_API_KEY": {
+          "type": "string"
+        },
+        "DSH_HOME": {
           "type": "string"
         },
         "DOCKER_MODEL_RUNNER_BASE_URL": {
@@ -394,6 +406,9 @@
           "type": "string"
         },
         "HELICONE_API_KEY": {
+          "type": "string"
+        },
+        "HERMES_HOME": {
           "type": "string"
         },
         "HF_API_TOKEN": {
