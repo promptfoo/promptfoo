@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Offline selective clarification evaluation
+
+prompts:
+  - '{"id": {{id | dump}}, "request": {{request | dump}}}'
+
+providers:
+  - id: file://provider.cjs
+    label: Always answer
+    config:
+      policy: always-answer
+  - id: file://provider.cjs
+    label: Always clarify
+    config:
+      policy: always-clarify
+  - id: file://provider.cjs
+    label: Recorded decisions (teaching fixture)
+    config:
+      policy: recorded
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://grade.cjs
+
+tests: file://cases.yaml
+
+derivedMetrics:
+  - name: decision_accuracy
+    value: 'cases > 0 ? correct / cases : 0'
+  - name: missed_clarification_rate
+    value: 'needs_clarification > 0 ? missed_clarification / needs_clarification : 0'
+  - name: unnecessary_clarification_rate
+    value: 'answerable > 0 ? unnecessary_clarification / answerable : 0'
+  - name: invalid_output_rate
+    value: 'cases > 0 ? invalid / cases : 0'
