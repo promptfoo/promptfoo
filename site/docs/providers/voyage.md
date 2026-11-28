@@ -43,3 +43,10 @@ defaultTest:
 ```
 
 `apiBaseUrl` can also be set with the `VOYAGE_API_BASE_URL` environment variable.
+
+The embedding provider also forwards `input_type` (`query` or `document`),
+`truncation` (including `false` to reject inputs exceeding the context window), and
+`output_dimension` from `config`. Omitted options use Voyage's defaults. Supported
+dimensions depend on the model; see the [Voyage embedding API](https://docs.voyageai.com/reference/embeddings-api).
+Similarity assertions apply the same configuration to both compared texts and use
+Voyage's default floating-point embeddings.

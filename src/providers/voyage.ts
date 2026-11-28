@@ -83,6 +83,9 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
     const body = {
       input: [input],
       model: this.modelName,
+      input_type: this.config.input_type,
+      truncation: this.config.truncation,
+      output_dimension: this.config.output_dimension,
     };
 
     let data,
