@@ -303,7 +303,8 @@ export async function runRedteamConversation({
     );
     TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
     accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
-    accumulateResponseCost(totalCost, redteamResp);
+    // Attacker spend stays out of the target cost total, matching the token
+    // accounting above and the target-only contract for ProviderResponse cost.
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);

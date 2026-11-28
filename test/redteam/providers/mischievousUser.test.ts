@@ -102,6 +102,25 @@ describe('RedteamMischievousUserProvider', () => {
     expect(result.incurredCost).toBeUndefined();
   });
 
+  it('excludes simulated-user cost from the target cost total', async () => {
+    mockUserProviderCallApi.mockResolvedValue({
+      output: 'user response',
+      cost: 0.1,
+      tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+    });
+    targetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+      cost: 0.02,
+      tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
+    });
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(result.cost).toBeCloseTo(0.04);
+    expect(result.incurredCost).toBeUndefined();
+  });
+
   it('records a stop decision as attacker usage without adding a target probe', async () => {
     mockUserProviderCallApi.mockResolvedValueOnce({
       output: '###STOP###',

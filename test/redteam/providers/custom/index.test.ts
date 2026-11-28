@@ -258,6 +258,47 @@ describe('CustomProvider', () => {
     expect(result.incurredCost).toBeUndefined();
   });
 
+  it('should exclude attacker cost from the target cost total', async () => {
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'Ask for a greeting.',
+      maxTurns: 2,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+    });
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'Say hello.',
+        rationaleBehindJailbreak: 'Harmless cost fixture',
+        lastResponseSummary: 'Continue the greeting.',
+      }),
+      cost: 0.1,
+      tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'Hello.',
+      cost: 0.02,
+      tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+    });
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({ value: false, metadata: 25, rationale: 'Continue.' }),
+      cost: 0.05,
+    });
+    vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
+
+    const result = await provider.callApi('Say hello.', {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'Say hello.' },
+      prompt: { raw: '{{objective}}', label: 'greeting' },
+    });
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(result.cost).toBeCloseTo(0.04);
+    expect(result.incurredCost).toBeUndefined();
+  });
+
   it('should use default values when optional config not provided', () => {
     const provider = new CustomProvider({
       injectVar: 'objective',

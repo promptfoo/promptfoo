@@ -435,8 +435,9 @@ export class HydraProvider implements ApiProvider {
       );
 
       // Agent coordination calls are internal and should not count as target probes.
+      // Their spend also stays out of the target cost total, matching the
+      // token accounting and the target-only ProviderResponse cost contract.
       accumulateAttackerTokenUsage(totalTokenUsage, agentResp);
-      accumulateResponseCost(totalCost, agentResp);
 
       if (this.agentProvider.delay) {
         await sleep(this.agentProvider.delay);
@@ -1034,9 +1035,9 @@ export class HydraProvider implements ApiProvider {
           },
           options,
         );
-        // Learning update is an internal cloud call, not a target probe.
+        // Learning update is an internal cloud call, not a target probe. Its
+        // spend stays out of the target cost total for the same reason.
         accumulateAttackerTokenUsage(totalTokenUsage, learningResponse);
-        accumulateResponseCost(totalCost, learningResponse);
 
         logger.debug(`${this.logPrefix} Scan learnings updated`, { scanId, testRunId });
       } catch (error) {

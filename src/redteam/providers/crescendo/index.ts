@@ -18,7 +18,6 @@ import {
   accumulatedCostFields,
   accumulateResponseCost,
   accumulateResponseTokenUsage,
-  type CostAccumulator,
   createCostAccumulator,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
@@ -424,7 +423,6 @@ export class CrescendoProvider implements ApiProvider {
           context,
           tracingOptions,
           totalTokenUsage,
-          totalCost,
           options,
         );
 
@@ -891,7 +889,6 @@ export class CrescendoProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     tracingOptions: RedteamTracingOptions,
     totalTokenUsage: TokenUsage,
-    totalCost: CostAccumulator,
     options?: CallApiOptionsParams,
   ): Promise<CrescendoAttackPromptResponse> {
     logger.debug(
@@ -959,7 +956,8 @@ export class CrescendoProvider implements ApiProvider {
     );
 
     accumulateAttackerTokenUsage(totalTokenUsage, response);
-    accumulateResponseCost(totalCost, response);
+    // Attacker spend stays out of the target cost total, matching the token
+    // accounting above and the target-only contract for ProviderResponse cost.
     TokenUsageTracker.getInstance().trackResponseUsage(redTeamingChat.id(), response);
 
     if (redTeamingChat.delay) {

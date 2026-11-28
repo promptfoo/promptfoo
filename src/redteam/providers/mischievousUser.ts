@@ -5,7 +5,6 @@ import invariant from '../../util/invariant';
 import {
   accumulateAttackerTokenUsage,
   accumulatedCostFields,
-  accumulateResponseCost,
   type CostAccumulator,
 } from '../../util/tokenUsageUtils';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
@@ -51,11 +50,12 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
 
   protected accumulateSimulatedUserTokenUsage(
     tokenUsage: TokenUsage,
-    costs: CostAccumulator,
+    _costs: CostAccumulator,
     response: ProviderResponse,
   ): void {
     accumulateAttackerTokenUsage(tokenUsage, response);
-    accumulateResponseCost(costs, response);
+    // Attacker spend stays out of the target cost total, matching the token
+    // accounting above and the target-only contract for ProviderResponse cost.
   }
 
   serializeOutput(

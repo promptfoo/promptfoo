@@ -1544,6 +1544,164 @@ describe('RedteamIterativeProvider', () => {
       expect(result.incurredCost).toBeUndefined();
     });
 
+    it('should exclude attacker cost from the target cost total', async () => {
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
+
+      mockRedteamProvider.callApi.mockImplementation(async (prompt) => {
+        const input = JSON.parse(prompt as string);
+        if (Array.isArray(input) && input[0]?.role === 'system') {
+          return createProviderResponse({
+            output: JSON.stringify({ improvement: 'test improvement', prompt: 'test prompt' }),
+            cost: 0.1,
+          });
+        }
+        return createProviderResponse({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'test' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+          cost: 0.1,
+        });
+      });
+
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'first response',
+          cost: 0.02,
+          tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+          cached: false,
+        })
+        .mockResolvedValueOnce({
+          output: 'second response',
+          cost: 0.02,
+          tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+          cached: false,
+        });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 2,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      // Two $0.02 target calls only. Attacker and grading spend stays separate.
+      expect(result.cost).toBeCloseTo(0.04);
+      expect(result.incurredCost).toBeUndefined();
+    });
+
+    it('should report zero incurred cost when target calls are cached and the attacker is costly', async () => {
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
+
+      mockRedteamProvider.callApi.mockImplementation(async (prompt) => {
+        const input = JSON.parse(prompt as string);
+        if (Array.isArray(input) && input[0]?.role === 'system') {
+          return createProviderResponse({
+            output: JSON.stringify({ improvement: 'test improvement', prompt: 'test prompt' }),
+            cost: 0.1,
+          });
+        }
+        return createProviderResponse({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'test' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+          cost: 0.1,
+        });
+      });
+
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'first cached response',
+          cost: 0.02,
+          tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 0, cached: 100 },
+          cached: true,
+        })
+        .mockResolvedValueOnce({
+          output: 'second cached response',
+          cost: 0.02,
+          tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 0, cached: 100 },
+          cached: true,
+        });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 2,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.cost).toBeCloseTo(0.04);
+      expect(result.incurredCost).toBe(0);
+    });
+
+    it('should keep cost undefined when only the attacker reports a cost', async () => {
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
+
+      mockRedteamProvider.callApi.mockImplementation(async (prompt) => {
+        const input = JSON.parse(prompt as string);
+        if (Array.isArray(input) && input[0]?.role === 'system') {
+          return createProviderResponse({
+            output: JSON.stringify({ improvement: 'test improvement', prompt: 'test prompt' }),
+            cost: 0.1,
+          });
+        }
+        return createProviderResponse({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'test' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+          cost: 0.1,
+        });
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'free response',
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+        cached: false,
+      });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 2,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.cost).toBeUndefined();
+      expect(result.incurredCost).toBeUndefined();
+    });
+
     it('includes the internal judge call in persisted grading usage', async () => {
       const gradingProvider = createMockProvider({
         id: 'mock-grading-provider',

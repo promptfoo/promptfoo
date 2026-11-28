@@ -29,7 +29,6 @@ import {
   accumulateGradingResponseTokenUsage,
   accumulateResponseCost,
   accumulateResponseTokenUsage,
-  type CostAccumulator,
   createCostAccumulator,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
@@ -285,7 +284,6 @@ export async function getNewPrompt(
     purpose?: string;
   },
   totalTokenUsage?: TokenUsage,
-  totalCost?: CostAccumulator,
 ): Promise<{
   improvement: string;
   inputMaterialization?: Record<string, unknown>;
@@ -313,9 +311,8 @@ export async function getNewPrompt(
   if (totalTokenUsage) {
     accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
   }
-  if (totalCost) {
-    accumulateResponseCost(totalCost, redteamResp);
-  }
+  // Attacker spend stays out of the target cost total, matching the token
+  // accounting above and the target-only contract for ProviderResponse cost.
   TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
   if (redteamProvider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
@@ -718,7 +715,6 @@ async function runRedteamConversation({
                 }
               : undefined,
             totalTokenUsage,
-            totalCost,
           );
         } catch (error) {
           if (

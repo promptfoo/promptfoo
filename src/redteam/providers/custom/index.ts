@@ -13,7 +13,6 @@ import {
   accumulatedCostFields,
   accumulateResponseCost,
   accumulateResponseTokenUsage,
-  type CostAccumulator,
   createCostAccumulator,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
@@ -392,7 +391,6 @@ export class CustomProvider implements ApiProvider {
           lastFeedback,
           objectiveScore,
           totalTokenUsage,
-          totalCost,
           options,
         );
 
@@ -774,7 +772,6 @@ export class CustomProvider implements ApiProvider {
     lastFeedback: string,
     objectiveScore: { value: number; rationale: string } | undefined,
     totalTokenUsage: TokenUsage,
-    totalCost: CostAccumulator,
     options?: CallApiOptionsParams,
   ): Promise<{ generatedQuestion: string | undefined; tokenUsage?: TokenUsage }> {
     logger.debug(
@@ -825,7 +822,8 @@ export class CustomProvider implements ApiProvider {
       options,
     );
     accumulateAttackerTokenUsage(totalTokenUsage, response);
-    accumulateResponseCost(totalCost, response);
+    // Attacker spend stays out of the target cost total, matching the token
+    // accounting above and the target-only contract for ProviderResponse cost.
     TokenUsageTracker.getInstance().trackResponseUsage(redTeamingChat.id(), response);
     if (redTeamingChat.delay) {
       logger.debug(`[Custom] Sleeping for ${redTeamingChat.delay}ms`);

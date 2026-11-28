@@ -236,6 +236,8 @@ export class SimulatedUser implements ApiProvider {
   /**
    * Accumulate usage for the model that simulates the user. Red-team subclasses can
    * override this hook to keep attack generation separate from target usage.
+   * Cost follows the same routing as tokens: a subclass that separates
+   * attacker tokens must also keep attacker cost out of the target total.
    */
   protected accumulateSimulatedUserTokenUsage(
     tokenUsage: TokenUsage,

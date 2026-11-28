@@ -791,12 +791,26 @@ describe('RedteamIterativeProvider', () => {
       }
     });
 
-    it('accumulates the final target probe cost into the result', async () => {
+    it('accumulates branch and final target probe costs into the result', async () => {
       const gradingProvider = createMockProvider({ id: 'mock-grader' });
       const targetProvider = createMockProvider({ id: 'mock-target' });
-      targetProvider.callApi.mockResolvedValue({
-        output: 'final response',
-        cost: 0.05,
+      // Exploration stays enabled: one branch probe at $0.03, then the final
+      // probe at $0.05. Removing per-branch accumulation drops the total to
+      // $0.05 and fails this test.
+      targetProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'branch response',
+          cost: 0.03,
+          tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'final response',
+          cost: 0.05,
+          tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+        });
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ improvement: 'branch improvement', prompt: 'branch prompt' }),
+        cost: 0.1,
         tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
       });
       const remoteGenerationSpy = vi
@@ -810,16 +824,21 @@ describe('RedteamIterativeProvider', () => {
         .mockResolvedValue(gradingProvider);
 
       try {
-        const provider = new RedteamIterativeTreeProvider({ injectVar: 'goal', maxDepth: 1 });
-        (provider as unknown as { treeParams: { maxDepth: number } }).treeParams.maxDepth = 0;
+        const provider = new RedteamIterativeTreeProvider({
+          injectVar: 'goal',
+          maxDepth: 1,
+          branchingFactor: 1,
+        });
         const result = await provider.callApi('test prompt', {
           originalProvider: targetProvider,
           vars: { goal: 'test objective' },
           prompt: { raw: '{{goal}}', label: 'test' },
         });
 
-        expect(targetProvider.callApi).toHaveBeenCalledOnce();
-        expect(result.cost).toBeCloseTo(0.05);
+        expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+        // Target probes only: $0.03 branch plus $0.05 final. The $0.10
+        // attacker call stays out of the target total.
+        expect(result.cost).toBeCloseTo(0.08);
         expect(result.incurredCost).toBeUndefined();
       } finally {
         remoteGenerationSpy.mockRestore();
