@@ -43,6 +43,8 @@ import {
   type OpenAIToolChoice,
   openaiToolChoiceToBedrock,
   openaiToolsToBedrock,
+  shouldBustProviderCache,
+  withResponseCacheMetadata,
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import {
@@ -1219,13 +1221,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       region,
     })}`;
 
-    if (isCacheEnabled()) {
+    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
+    if (useCache) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
         const result = await this.parseResponse(parsed, toolsDisabled, betweenToolsThinking);
-        return { ...result, cached: true };
+        return withResponseCacheMetadata(result, true);
       }
     }
 
@@ -1260,7 +1263,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     // Cache the response
-    if (isCacheEnabled()) {
+    if (useCache) {
       try {
         await cache.set(cacheKey, JSON.stringify(response));
       } catch (err) {
@@ -1458,6 +1461,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       getBedrockRuntimeBillingRegion(this.getRegion(), this.config.endpoint),
       response.serviceTier?.type ? { type: response.serviceTier.type } : this.config.serviceTier,
       cacheWrite1hTokens,
+      this.config,
     );
 
     // Build metadata
@@ -1831,6 +1835,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         getBedrockRuntimeBillingRegion(this.getRegion(), this.config.endpoint),
         billedTier,
         getOneHourCacheWriteTokens(usage.cacheDetails),
+        this.config,
       );
 
       // Surface MCP failures via the response `error` field. If the model also
