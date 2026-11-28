@@ -1149,11 +1149,13 @@ async function buildRunEvalOptions({
 }): Promise<RunEvalOptions[]> {
   const runEvalOptions: RunEvalOptions[] = [];
   const configuredProviderMap = buildConfiguredProviderMap(testSuite.providers);
+  // Share default-provider instances across rows in this evaluation only.
+  const defaultTestProviderCache = new WeakMap<object, ApiProvider>();
 
   let testIdx = 0;
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
-    await prepareTestCaseForEval(testSuite, testCase, index);
+    await prepareTestCaseForEval(testSuite, testCase, index, defaultTestProviderCache);
     resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap);
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
@@ -1179,6 +1181,7 @@ async function prepareTestCaseForEval(
   testSuite: TestSuite,
   testCase: AtomicTestCase,
   index: number,
+  defaultTestProviderCache: WeakMap<object, ApiProvider>,
 ) {
   const defaultTest = getDefaultTest(testSuite);
   invariant(
@@ -1205,7 +1208,12 @@ async function prepareTestCaseForEval(
     ...testCase.metadata,
   };
   testCase.prompts = testCase.prompts ?? defaultTest?.prompts;
-  testCase.provider = await resolveDefaultTestProvider(defaultTest, testCase);
+  testCase.provider = await resolveDefaultTestProvider(
+    defaultTest,
+    testCase,
+    defaultTestProviderCache,
+    testSuite.env,
+  );
   testCase.assertScoringFunction =
     testCase.assertScoringFunction || defaultTest?.assertScoringFunction;
   testCase.providers = testCase.providers ?? defaultTest?.providers;
@@ -1222,6 +1230,8 @@ async function prepareTestCaseForEval(
 async function resolveDefaultTestProvider(
   defaultTest: ReturnType<typeof getDefaultTest>,
   testCase: AtomicTestCase,
+  defaultTestProviderCache: WeakMap<object, ApiProvider>,
+  env: TestSuite['env'],
 ) {
   if (testCase.provider || !defaultTest?.provider) {
     return testCase.provider;
@@ -1232,12 +1242,20 @@ async function resolveDefaultTestProvider(
     return defaultProvider;
   }
   if (typeof defaultProvider === 'object' && defaultProvider.id) {
-    const { loadApiProvider } = await import('../providers');
     const providerId =
       typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
-    return loadApiProvider(providerId, {
-      options: defaultProvider as ProviderOptions,
-    });
+    let provider = defaultTestProviderCache.get(defaultProvider);
+    if (!provider) {
+      const { loadApiProvider } = await import('../providers');
+      provider = await loadApiProvider(providerId, {
+        options: defaultProvider as ProviderOptions,
+        env,
+        // Resolve relative file:// references against the config directory.
+        basePath: cliState.basePath,
+      });
+      defaultTestProviderCache.set(defaultProvider, provider);
+    }
+    return provider;
   }
   return defaultProvider;
 }

@@ -118,20 +118,34 @@ export function renderEnvOnlyInObject<T>(
       return match;
     });
 
-  const render = (value: unknown): unknown => {
+  const simulatedUser = 'promptfoo:simulated-user';
+  const render = (value: unknown, scope?: 'simulator' | 'simulator-config'): unknown => {
     if (typeof value === 'string') {
       return renderString(value);
     }
 
     if (Array.isArray(value)) {
-      return value.map(render);
+      return value.map((item) => render(item));
     }
 
     if (typeof value === 'object' && value !== null) {
-      return mapObjectValues(value, (key, child) =>
-        // Conversation history is runtime data and may contain untrusted model output.
-        key === '_conversation' ? child : render(child),
-      );
+      return mapObjectValues(value, (key, child) => {
+        // Conversation history is runtime data, and nested provider definitions
+        // render against their own environment when they are loaded.
+        if (key === '_conversation' || (scope === 'simulator-config' && key === 'userProvider')) {
+          return child;
+        }
+        if (key === simulatedUser) {
+          return render(child, 'simulator');
+        }
+        if (
+          key === 'config' &&
+          (scope === 'simulator' || ('id' in value && value.id === simulatedUser))
+        ) {
+          return render(child, 'simulator-config');
+        }
+        return render(child);
+      });
     }
 
     return value;

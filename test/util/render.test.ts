@@ -205,6 +205,30 @@ describe('renderVarsInObject', () => {
 });
 
 describe('renderEnvOnlyInObject', () => {
+  it('defers the simulated-user child until its own provider environment is available', () => {
+    const template = '{{env.OPENAI_ORGANIZATION}}';
+    const userProvider = {
+      id: 'echo',
+      config: { account: template },
+      env: { OPENAI_ORGANIZATION: 'child' },
+    };
+    const simulated = { config: { instructions: template, userProvider } };
+    const input = {
+      defaultTest: { provider: { id: 'promptfoo:simulated-user', ...simulated } },
+      providers: [{ 'promptfoo:simulated-user': simulated }],
+      vars: { userProvider: template },
+    };
+    const suite = renderEnvOnlyInObject(input, { OPENAI_ORGANIZATION: 'suite' });
+    expect(suite.defaultTest.provider.config).toEqual({ instructions: 'suite', userProvider });
+    expect(suite.providers[0]['promptfoo:simulated-user'].config.userProvider).toEqual(
+      userProvider,
+    );
+    expect(suite.vars.userProvider).toBe('suite');
+    expect(renderEnvOnlyInObject(userProvider.config, userProvider.env)).toEqual({
+      account: 'child',
+    });
+  });
+
   beforeEach(() => {
     mockProcessEnv({ TEST_ENV_VAR: undefined });
     mockProcessEnv({ AZURE_ENDPOINT: undefined });
