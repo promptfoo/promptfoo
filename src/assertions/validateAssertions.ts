@@ -5,6 +5,7 @@ import {
   type AssertionSet,
   type TestCase,
 } from '../types/index';
+import { getMeteorOptions } from './meteorOptions';
 
 export class AssertValidationError extends Error {
   constructor(message: string) {
@@ -42,6 +43,16 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
     );
   }
 
+  if (assertionObj.type === 'meteor' || assertionObj.type === 'not-meteor') {
+    try {
+      getMeteorOptions(assertionObj);
+    } catch (error) {
+      throw new AssertValidationError(
+        `Invalid assertion at ${context}: ${(error as Error).message}`,
+      );
+    }
+  }
+
   // Validate with Zod schema for complete validation
   const result = AssertionOrSetSchema.safeParse(assertion);
 
@@ -55,7 +66,8 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
 
   // For assert-set, also validate nested assertions recursively
   if (result.data.type === 'assert-set') {
-    const assertSet = result.data as AssertionSet;
+    // Preserve assertion-specific options that the common schema strips.
+    const assertSet = assertion as AssertionSet;
     if (!assertSet.assert || !Array.isArray(assertSet.assert)) {
       throw new AssertValidationError(
         `Invalid assertion at ${context}:\n` +
