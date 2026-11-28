@@ -38,7 +38,9 @@ function mergeMaterializationTokenUsage(
   targetWasCalled: boolean,
 ): ProviderResponse {
   if (!materializationUsage?.tokenUsage) {
-    return response;
+    return targetWasCalled
+      ? response
+      : { ...response, tokenUsage: { ...response.tokenUsage, numRequests: 0 } };
   }
 
   const tokenUsage = createEmptyTokenUsage();
@@ -136,7 +138,10 @@ class RedteamMcpTargetProvider implements ApiProvider {
             value: prompt,
           },
           options,
-        );
+        ).catch((error: unknown) => {
+          materializationUsage = { tokenUsage: getErrorTokenUsage(error) };
+          throw error;
+        });
         signal?.throwIfAborted();
 
         if (remoteMaterializedPrompt) {
@@ -192,6 +197,9 @@ class RedteamMcpTargetProvider implements ApiProvider {
     } catch (error) {
       signal?.throwIfAborted();
       const errorResponse: ProviderResponse = {
+        // Retrying the entire target call would hide the materializer's bill.
+        ...(!targetWasCalled &&
+          materializationUsage?.tokenUsage && { metadata: { rateLimitRetryable: false } }),
         error: `Failed to materialize MCP target prompt: ${
           error instanceof Error ? error.message : String(error)
         }`,

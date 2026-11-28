@@ -5,12 +5,17 @@ import {
   type NormalizedTokenUsage,
   type TokenUsage,
 } from '../types/shared';
+import { isHttpRateLimitError } from './fetch/errors';
 
 /**
  * Safely extract token usage carried by a thrown value.
  */
 export function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
   try {
+    // The HTTP layer preserves a parsed 429 payload on the typed error.
+    if (isHttpRateLimitError(error) && !('tokenUsage' in error)) {
+      error = error.body;
+    }
     if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
       return undefined;
     }

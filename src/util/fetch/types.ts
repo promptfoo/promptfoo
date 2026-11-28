@@ -21,6 +21,9 @@ export interface FetchOptions extends RequestInit {
    */
   disableTransientRetries?: boolean;
 
+  /** With zero retries, return non-429 responses intact. HTTP 429 still raises HttpRateLimitError. */
+  preserveSingleAttemptResponse?: boolean;
+
   /**
    * Skip automatic injection of the saved Cloud auth header (and cloud task
    * team header). Set by callers that explicitly manage their own Cloud auth
