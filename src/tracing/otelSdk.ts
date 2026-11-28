@@ -70,7 +70,7 @@ export function initializeOtel(config: OtelConfig): void {
 
   logger.debug('[OtelSdk] Initializing OpenTelemetry SDK', {
     serviceName: config.serviceName,
-    endpoint: config.endpoint,
+    otlpExport: Boolean(config.endpoint),
     localExport: config.localExport,
   });
 
@@ -100,7 +100,7 @@ export function initializeOtel(config: OtelConfig): void {
     const { OTLPTraceExporter } =
       require('@opentelemetry/exporter-trace-otlp-http') as typeof import('@opentelemetry/exporter-trace-otlp-http');
     spanProcessors.push(batchProcessorFromEnv(new OTLPTraceExporter({ url: config.endpoint })));
-    logger.debug(`[OtelSdk] Added OTLP exporter to ${config.endpoint}`);
+    logger.debug('[OtelSdk] Added OTLP exporter');
   }
 
   // Create trace provider with resource and span processors

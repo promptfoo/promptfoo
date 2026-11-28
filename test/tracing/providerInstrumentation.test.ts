@@ -1,4 +1,5 @@
-import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { context, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { suppressTracing } from '@opentelemetry/core';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
@@ -6,6 +7,7 @@ import {
 } from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  extractProviderResponseAttributes,
   GenAIAttributes,
   getTraceparent,
   PromptfooAttributes,
@@ -678,6 +680,96 @@ describe('GenAI span export and provider instrumentation', () => {
 
       const span = memoryExporter.getFinishedSpans()[0];
       expect(span.attributes[GenAIAttributes.RESPONSE_FINISH_REASONS]).toEqual(['stop', 'length']);
+    });
+  });
+
+  describe('Tracing suppression', () => {
+    const spanContext: GenAISpanContext = {
+      system: 'openai',
+      operationName: 'chat',
+      model: 'gpt-4',
+      providerId: 'openai:gpt-4',
+    };
+
+    it('should not emit a span when the active context suppresses tracing', async () => {
+      const result = await context.with(suppressTracing(context.active()), () =>
+        withGenAISpan(
+          spanContext,
+          async () => ({ output: 'test' }),
+          extractProviderResponseAttributes,
+        ),
+      );
+
+      expect(result).toEqual({ output: 'test' });
+      expect(memoryExporter.getFinishedSpans()).toHaveLength(0);
+    });
+
+    it('should stay suppressed when a traceparent reparents the span', async () => {
+      // An explicit traceparent makes withGenAISpan rebuild the parent context from
+      // ROOT_CONTEXT, which drops the suppression key -- so the SDK tracer's own
+      // suppression check no longer sees it. Tracing evaluations set a traceparent on
+      // essentially every provider call, so this is the case that matters.
+      await context.with(suppressTracing(context.active()), () =>
+        withGenAISpan(
+          {
+            ...spanContext,
+            traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+          },
+          async () => ({ output: 'test' }),
+        ),
+      );
+
+      expect(memoryExporter.getFinishedSpans()).toHaveLength(0);
+    });
+
+    it('should emit a span again once suppression falls out of scope', async () => {
+      await context.with(suppressTracing(context.active()), () =>
+        withGenAISpan(spanContext, async () => ({ output: 'suppressed' })),
+      );
+      await withGenAISpan(spanContext, async () => ({ output: 'recorded' }));
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0].name).toBe('chat gpt-4');
+    });
+  });
+
+  describe('Response identity attributes', () => {
+    it('should emit gen_ai.response.id and gen_ai.response.model from provider metadata', async () => {
+      await withGenAISpan(
+        {
+          system: 'openai',
+          operationName: 'chat',
+          model: 'gpt-4o-mini',
+          providerId: 'openai:gpt-4o-mini',
+        },
+        async () => ({
+          output: 'test',
+          metadata: { responseId: 'chatcmpl-abc123', model: 'gpt-4o-mini-2024-07-18' },
+        }),
+        extractProviderResponseAttributes,
+      );
+
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.attributes[GenAIAttributes.RESPONSE_ID]).toBe('chatcmpl-abc123');
+      expect(span.attributes[GenAIAttributes.RESPONSE_MODEL]).toBe('gpt-4o-mini-2024-07-18');
+    });
+
+    it('should ignore non-string and empty response identity metadata', async () => {
+      await withGenAISpan(
+        {
+          system: 'openai',
+          operationName: 'chat',
+          model: 'gpt-4o-mini',
+          providerId: 'openai:gpt-4o-mini',
+        },
+        async () => ({ output: 'test', metadata: { responseId: '', model: 42 } }),
+        extractProviderResponseAttributes,
+      );
+
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.attributes).not.toHaveProperty(GenAIAttributes.RESPONSE_ID);
+      expect(span.attributes).not.toHaveProperty(GenAIAttributes.RESPONSE_MODEL);
     });
   });
 });
