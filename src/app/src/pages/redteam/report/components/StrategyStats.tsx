@@ -12,7 +12,12 @@ import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redtea
 import { type RedteamPluginObject } from '@promptfoo/redteam/types';
 import { compareByASRDescending } from '../utils/utils';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
-import { getPluginIdFromResult, getStrategyIdFromTest, type TestWithMetadata } from './shared';
+import {
+  getPluginIdFromResult,
+  getPromptDisplayString,
+  getStrategyIdFromTest,
+  type TestWithMetadata,
+} from './shared';
 
 /**
  * Gets the progress bar color based on ASR percentage.
@@ -86,21 +91,6 @@ const DrawerContent = ({
       examplesByStrategy: { failures, passes },
     };
   }, [succeededAttacksByPlugin, failedAttacksByPlugin, selectedStrategy]);
-
-  const getPromptDisplayString = (prompt: string): string => {
-    try {
-      const parsedPrompt = JSON.parse(prompt);
-      if (Array.isArray(parsedPrompt)) {
-        const lastPrompt = parsedPrompt[parsedPrompt.length - 1];
-        if (lastPrompt?.content) {
-          return lastPrompt.content || '-';
-        }
-      }
-    } catch {
-      // Raw prompt strings are valid display input.
-    }
-    return prompt;
-  };
 
   const getOutputDisplay = (output: string | object) => {
     if (typeof output === 'string') {

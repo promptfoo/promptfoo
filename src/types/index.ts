@@ -389,6 +389,8 @@ export type ServerPromptWithMetadata = Omit<PromptWithMetadata, 'recentEvalDate'
 export { isResultFailureReason, ResultFailureReason } from './results';
 
 export interface EvaluateResult {
+  /** Array position used to load a compact legacy report row. */
+  legacyResultIndex?: number;
   id?: string; // on the new version 2, this is stored per-result
   description?: string; // on the new version 2, this is stored per-result // FIXME(ian): The EvalResult model doesn't pass this through, but that's ok since we can use testCase.description?
   promptIdx: number; // on the new version 2, this is stored per-result
@@ -1538,6 +1540,8 @@ export interface ResultsFile {
   prompts?: CompletedPrompt[];
   /** Persisted display order for table variable columns. */
   vars?: string[];
+  /** Included by default; omitted when `includeTraces=false`. */
+  traces?: TraceData[];
   // Included by readResult() in util.
   datasetId?: string | null;
 }
