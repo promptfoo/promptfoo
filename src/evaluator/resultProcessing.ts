@@ -54,28 +54,83 @@ function stripMediaReferences(value: unknown): unknown {
   return value;
 }
 
+const RESPONSE_OUTPUT_METADATA_KEYS: readonly string[] = [
+  'audio',
+  'blobUris',
+  'content',
+  'trace',
+  'additionalModelResponseFields',
+];
+
+// Keep provider-derived copies aligned when hooks or blob extraction change response metadata.
+// Preserve distinct values supplied by tests or hooks.
+export function synchronizeResponseMetadata(
+  originalMetadata: Record<string, unknown> | undefined,
+  originalResponseMetadata: Record<string, unknown> | undefined,
+  updatedMetadata: Record<string, unknown> | undefined,
+  updatedResponseMetadata: Record<string, unknown> | undefined,
+  testMetadata: Record<string, unknown> | undefined,
+) {
+  if (!updatedMetadata || originalResponseMetadata === updatedResponseMetadata) {
+    return updatedMetadata;
+  }
+  const metadata = { ...updatedMetadata };
+  for (const key of ['headers', ...RESPONSE_OUTPUT_METADATA_KEYS]) {
+    const originalValue = originalMetadata?.[key];
+    if (
+      originalValue === undefined ||
+      !isDeepStrictEqual(originalValue, originalResponseMetadata?.[key]) ||
+      !isDeepStrictEqual(updatedMetadata?.[key], originalValue) ||
+      (key !== 'headers' && testMetadata && isDeepStrictEqual(originalValue, testMetadata[key]))
+    ) {
+      continue;
+    }
+
+    if (updatedResponseMetadata?.[key] === undefined) {
+      delete metadata[key];
+    } else {
+      metadata[key] = updatedResponseMetadata[key];
+    }
+  }
+  return metadata;
+}
+
 export function projectOutputMetadata<T>(
   metadata: T,
   stripOutput: boolean,
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
 ): T {
-  if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
+  if (!stripOutput || !metadata || typeof metadata !== 'object') {
     return metadata;
   }
-  return Object.fromEntries(
-    Object.entries(metadata).flatMap(([key, value]) => {
-      if (
-        !Object.prototype.hasOwnProperty.call(responseMetadata, key) ||
-        (testMetadata && isDeepStrictEqual(value, testMetadata[key]))
-      ) {
-        return [[key, value]];
-      }
-      return key === 'audio' || key === 'blobUris'
-        ? []
-        : [[key, stripMediaReferences(sanitizeForDb(value))]];
-    }),
-  ) as T;
+  // Reserved keys can contain output even if a hook replaced their original values.
+  const projected = { ...metadata } as Record<string, unknown>;
+  for (const key of RESPONSE_OUTPUT_METADATA_KEYS) {
+    if (testMetadata && Object.prototype.hasOwnProperty.call(testMetadata, key)) {
+      projected[key] = sanitizeForDb(testMetadata[key]);
+    } else {
+      delete projected[key];
+    }
+  }
+  for (const key of Object.keys(responseMetadata ?? {})) {
+    if (
+      !Object.prototype.hasOwnProperty.call(projected, key) ||
+      RESPONSE_OUTPUT_METADATA_KEYS.includes(key)
+    ) {
+      continue;
+    }
+    const value = sanitizeForDb(projected[key]);
+    if (
+      testMetadata &&
+      Object.prototype.hasOwnProperty.call(testMetadata, key) &&
+      isDeepStrictEqual(value, sanitizeForDb(testMetadata[key]))
+    ) {
+      continue;
+    }
+    projected[key] = stripMediaReferences(value);
+  }
+  return projected as T;
 }
 
 export function projectProviderResponse(
@@ -913,6 +968,9 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   } = stripFlags;
 
   const artifactResult = serializeResultProviderRefs(result) as T & Record<string, unknown>;
+  const testCase = artifactResult.testCase
+    ? sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase)
+    : undefined;
   const redacted = redactSensitiveResultFieldsForDb({
     response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
     gradingResult: sanitizeForDb(artifactResult.gradingResult),
@@ -925,17 +983,14 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
 
   return {
     ...result,
-    ...(artifactResult.testCase
+    ...(testCase
       ? {
-          testCase: projectTestCase(
-            sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase),
-            {
-              stripMetadata: shouldStripMetadata,
-              stripVars: shouldStripTestVars,
-              stripOutput: shouldStripResponseOutput,
-              stripPromptText: shouldStripPromptText,
-            },
-          ),
+          testCase: projectTestCase(testCase, {
+            stripMetadata: shouldStripMetadata,
+            stripVars: shouldStripTestVars,
+            stripOutput: shouldStripResponseOutput,
+            stripPromptText: shouldStripPromptText,
+          }),
         }
       : {}),
     ...(artifactResult.vars === undefined
@@ -969,7 +1024,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
           redacted.metadata,
           shouldStripResponseOutput,
           redacted.response?.metadata,
-          (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
+          testCase?.metadata,
         ),
   } as T;
 }

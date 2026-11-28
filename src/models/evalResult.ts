@@ -19,6 +19,7 @@ import {
   serializeResultProviderRefs,
   surfaceRepeatMetadata,
   surfaceTraceMetadata,
+  synchronizeResponseMetadata,
 } from '../evaluator/resultProcessing';
 import { hashPrompt } from '../prompts/utils';
 import {
@@ -66,19 +67,29 @@ export default class EvalResult {
       repeatGroupId,
     } = serializeResultProviderRefs(result);
 
-    // Persist trace and repeat linkage inside a private metadata namespace so they
-    // survive EvalResult round-trips without a Drizzle schema migration.
-    const persistedMetadata = persistTraceMetadata(
-      persistRepeatMetadata(metadata, repeatIndex, repeatGroupId),
-      traceId,
-      evaluationId,
-    );
-
     const processedResponse = await extractAndStoreBinaryData(result.response, {
       evalId,
       testIdx: result.testIdx,
       promptIdx: result.promptIdx,
     });
+
+    // Persist trace and repeat linkage inside a private metadata namespace so they
+    // survive EvalResult round-trips without a Drizzle schema migration.
+    const persistedMetadata = persistTraceMetadata(
+      persistRepeatMetadata(
+        synchronizeResponseMetadata(
+          metadata,
+          result.response?.metadata,
+          metadata,
+          processedResponse?.metadata,
+          testCase.metadata,
+        ),
+        repeatIndex,
+        repeatGroupId,
+      ),
+      traceId,
+      evaluationId,
+    );
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under
@@ -140,6 +151,13 @@ export default class EvalResult {
       processedResults.push({
         ...serializeResultProviderRefs(result),
         response: processedResponse ?? undefined,
+        metadata: synchronizeResponseMetadata(
+          result.metadata,
+          result.response?.metadata,
+          result.metadata,
+          processedResponse?.metadata,
+          result.testCase.metadata,
+        ),
       });
     }
 

@@ -48,6 +48,7 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 import { transform } from '../util/transform';
+import { synchronizeResponseMetadata } from './resultProcessing';
 import type winston from 'winston';
 
 import type {
@@ -1116,6 +1117,13 @@ async function gradeRunEvalResponse({
     testIdx,
     vars,
   });
+  ret.metadata = synchronizeResponseMetadata(
+    ret.metadata,
+    response.metadata,
+    ret.metadata,
+    processedResponse.metadata,
+    test.metadata,
+  );
   const traceId = getTraceId(traceContext);
   if (
     traceId &&
