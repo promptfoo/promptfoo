@@ -74,7 +74,7 @@ const config: Config = {
   scripts: [
     {
       src: '/js/consent.js',
-      async: true,
+      async: false,
     },
   ],
 
@@ -419,7 +419,7 @@ const config: Config = {
               href: 'https://trust.openai.com',
             },
             {
-              html: '<a href="#manage-cookies" class="footer__link-item">Cookie Settings</a>',
+              html: '<a href="#manage-cookies" class="footer__link-item">Your Privacy Choices</a>',
             },
             {
               html: `
