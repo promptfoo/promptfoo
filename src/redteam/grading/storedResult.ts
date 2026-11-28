@@ -37,6 +37,7 @@ export function getGradingInputHash(
   output: string,
   messages?: unknown,
   pluginId?: string,
+  transformedAnswer?: string,
 ): string {
   const conversation = Array.isArray(messages)
     ? messages
@@ -47,9 +48,11 @@ export function getGradingInputHash(
         )
         .map(({ role, content }) => ({ role, content }))
     : [];
-  return createHash('sha256')
-    .update(JSON.stringify([pluginId, prompt, output, conversation]))
-    .digest('hex');
+  const input: unknown[] = [pluginId, prompt, output, conversation];
+  if (transformedAnswer !== undefined) {
+    input.push(transformedAnswer);
+  }
+  return createHash('sha256').update(JSON.stringify(input)).digest('hex');
 }
 
 export function getTargetConversation(messages: unknown): {

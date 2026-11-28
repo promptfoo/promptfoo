@@ -399,6 +399,18 @@ export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;
 
+  /** Recheck a provisional strategy verdict when further evidence arrives at assertion time. */
+  recheckStoredResult?(
+    stored: GradingResult,
+    output: string,
+    test: AtomicTestCase,
+    value: AssertionValue | undefined,
+    trace: RedteamGradingContext['traceData'],
+    turnCount?: number,
+    targetPrompt?: string,
+    transformedAnswer?: string,
+  ): Promise<GradingResult>;
+
   renderRubric(vars: Record<string, any>): string {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
 

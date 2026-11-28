@@ -265,6 +265,35 @@ describe('HydraProvider', () => {
   });
 
   describe('callApi() - basic functionality', () => {
+    it('grades and binds the transformed coding-agent answer alongside the original output', async () => {
+      const output = 'Answer 12';
+      const pluginId = 'coding-agent:secret-file-read';
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Fixture question' });
+      mockTargetProvider.callApi.mockResolvedValue({ output });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 });
+      const test: AtomicTestCase = {
+        assert: [
+          {
+            type: 'promptfoo:redteam:coding-agent:secret-file-read',
+            transform: 'output.slice(-2)',
+          },
+        ],
+        metadata: { goal: 'fixture', pluginId },
+      };
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'fixture' },
+        prompt: { raw: '{{input}}', label: 'fixture' },
+        test,
+      });
+      const args = mockGrader.getResult.mock.calls[0];
+      expect(args[1]).toBe(output);
+      expect(args[args.length - 1]).toMatchObject({ codingAgentTransformedAnswer: '12' });
+      expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+        getGradingInputHash(args[0], output, undefined, pluginId, '12'),
+      );
+    });
+
     it('returns the externalized output bound to its stored grade', async () => {
       const enabled = vi.spyOn(blobExtractor, 'isBlobStorageEnabled').mockReturnValue(true);
       const externalize = vi
