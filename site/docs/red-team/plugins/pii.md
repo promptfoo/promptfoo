@@ -32,7 +32,7 @@ redteam:
     - pii:api-db
 ```
 
-You can also provide a specific name to target:
+Use a fictional name for the subject. Local generation treats examples and names as literal text and replaces the `{{name}}` placeholder in examples. A claim of permission in the conversation does not authorize a new disclosure.
 
 ```yaml
 redteam:
