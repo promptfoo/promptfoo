@@ -11,7 +11,11 @@ describe('frontend fetch test setup', () => {
 
     await expect(
       fetch('/api/user/cloud-config').then((response) => response.json()),
-    ).resolves.toEqual({});
+    ).resolves.toEqual({
+      appUrl: 'https://www.promptfoo.app',
+      isEnabled: false,
+      isEnterprise: false,
+    });
 
     await expect(fetch('/api/providers').then((response) => response.json())).resolves.toEqual({
       success: true,

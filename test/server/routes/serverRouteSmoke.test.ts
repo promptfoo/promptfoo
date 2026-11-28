@@ -19,7 +19,9 @@ const mocks = vi.hoisted(() => ({
     delete: vi.fn(),
     getApiHost: vi.fn(),
     getAppUrl: vi.fn(),
+    getConfiguredAppUrl: vi.fn(),
     isEnabled: vi.fn(),
+    reload: vi.fn(),
     validateAndSetApiToken: vi.fn(),
   },
   createShareableUrl: vi.fn(),
@@ -126,9 +128,13 @@ vi.mock('../../../src/globalConfig/accounts', () => ({
   setUserEmail: mocks.setUserEmail,
 }));
 
-vi.mock('../../../src/globalConfig/cloud', () => ({
-  cloudConfig: mocks.cloudConfig,
-}));
+vi.mock('../../../src/globalConfig/cloud', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/globalConfig/cloud')>();
+  return {
+    ...actual,
+    cloudConfig: mocks.cloudConfig,
+  };
+});
 
 vi.mock('../../../src/node', () => ({
   evaluate: mocks.promptfooEvaluate,
@@ -293,6 +299,7 @@ function setupDefaultMocks() {
   mocks.checkRemoteHealth.mockResolvedValue({ status: 'OK', message: 'healthy' });
   mocks.cloudConfig.getApiHost.mockReturnValue('https://api.promptfoo.dev');
   mocks.cloudConfig.getAppUrl.mockReturnValue('https://app.promptfoo.dev');
+  mocks.cloudConfig.getConfiguredAppUrl.mockReturnValue('https://app.promptfoo.dev');
   mocks.cloudConfig.isEnabled.mockReturnValue(false);
   mocks.deleteEval.mockResolvedValue(undefined);
   mocks.deleteEvals.mockReturnValue(undefined);
