@@ -1546,7 +1546,7 @@ METEOR requires the optional `natural` package. Install it before using METEOR a
 npm install natural@^8.2.6
 ```
 
-If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
+For nonblank output, a missing package produces a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
 :::
 
 #### How METEOR Works
@@ -1561,6 +1561,8 @@ METEOR evaluates text by:
    - Unigram precision (accuracy of matched words)
    - Unigram recall (coverage of reference words)
    - Word order/fragmentation (how well the word order matches)
+
+Leading, trailing, and repeated whitespace is ignored during tokenization. Empty or whitespace-only output receives a METEOR score of 0.
 
 #### Basic Usage
 

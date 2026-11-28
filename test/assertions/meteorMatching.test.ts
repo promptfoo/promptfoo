@@ -49,7 +49,7 @@ describe('METEOR matching with the real handler', () => {
     // Two matches in separate chunks: F-mean 20/21, fragmentation penalty 1/2.
     expect(result.score).toBeCloseTo(10 / 21, 12);
     expect(result.pass).toBe(false);
-    expect(result.reason).toBe('METEOR score 0.4762 did not meet threshold 0.5');
+    expect(result.reason).toBe('METEOR score 0.4762 is less than threshold 0.5');
   });
 
   it('combines stem and synonym matches using the original token positions', async () => {
