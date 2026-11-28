@@ -20,3 +20,9 @@ promptfoo eval
 ```
 
 The included config compares the flagship M3 model with the previous-generation M2.7 on a simple factual prompt.
+
+To generate a six-second H3 video, run the video config with the same API key. This submits one paid video generation.
+
+```bash
+promptfoo eval -c video.yaml
+```

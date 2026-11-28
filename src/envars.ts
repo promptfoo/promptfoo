@@ -381,6 +381,7 @@ type EnvVars = {
 
   // MiniMax
   MINIMAX_API_KEY?: string;
+  MINIMAX_VIDEO_API_BASE_URL?: string;
 
   // Moonshot AI (Kimi)
   MOONSHOT_API_KEY?: string;
