@@ -1,5 +1,6 @@
 import React, { useCallback, useId, useMemo } from 'react';
 
+import { Dialog, DialogClose, DialogContent, DialogTitle } from '@app/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useCopyFeedback } from '@app/hooks/useCopyFeedback';
@@ -527,7 +528,6 @@ function renderOutputNode({
   firstOutput,
   showDiffs,
   searchText,
-  shouldHighlightSearchText,
   text,
   normalizedText,
   renderMarkdown,
@@ -541,7 +541,6 @@ function renderOutputNode({
   firstOutput?: EvaluateTableOutput | null;
   showDiffs: boolean;
   searchText?: string;
-  shouldHighlightSearchText: boolean;
   text: string;
   normalizedText: string;
   renderMarkdown: boolean;
@@ -571,7 +570,7 @@ function renderOutputNode({
 
   if (!node) {
     const shouldPreserveFormattedRendering = extractMarkdownImageSources(normalizedText).length > 0;
-    if (searchText && shouldHighlightSearchText && !shouldPreserveFormattedRendering) {
+    if (searchText && !shouldPreserveFormattedRendering) {
       node = renderHighlightedTextNode(text, searchText) ?? node;
     }
   }
@@ -1246,6 +1245,131 @@ function renderOutputActions({
   );
 }
 
+export function EvalRunOutput({ output }: { output: EvaluateTableOutput }) {
+  const verdict =
+    output.failureReason === ResultFailureReason.ERROR ? 'ERROR' : output.pass ? 'PASS' : 'FAIL';
+  return (
+    <>
+      <strong>{verdict}</strong>
+      <EvalOutputContent output={output} maxTextLength={250} />
+    </>
+  );
+}
+
+function EvalOutputContent({
+  output,
+  text = stringifyOutputText(output.text),
+  maxTextLength,
+  firstOutput,
+  showDiffs = false,
+  searchText,
+}: {
+  output: EvaluateTableOutput;
+  text?: string;
+  maxTextLength: number;
+  firstOutput?: EvaluateTableOutput | null;
+  showDiffs?: boolean;
+  searchText?: string;
+}) {
+  const { renderMarkdown, prettifyJson } = useResultsViewSettingsStore();
+  const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
+
+  // Memoized to maintain stable reference across renders, preventing
+  // unnecessary re-renders of markdown components that use this callback.
+  // @see https://github.com/promptfoo/promptfoo/issues/969
+  const toggleLightbox = useCallback((url?: string) => {
+    setLightboxImage(url ?? null);
+  }, []);
+
+  // Memoized components object for ReactMarkdown to prevent re-renders.
+  // Creating this inline would cause ReactMarkdown to re-render on every
+  // parent render, even when content hasn't changed.
+  // @see https://github.com/promptfoo/promptfoo/issues/969
+  const markdownComponents = useMemo(
+    () => ({
+      img: ({ src, alt }: { src?: string; alt?: string }) => (
+        <img
+          loading="lazy"
+          src={src}
+          alt={alt}
+          onClick={() => toggleLightbox(src)}
+          style={{ cursor: 'pointer' }}
+        />
+      ),
+    }),
+    [toggleLightbox],
+  );
+
+  const normalizedText = normalizeMediaText(text);
+  const inlineImageSrc = resolveImageSource(text);
+  const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
+  const outputAudioSource = resolveAudioSource(output.audio);
+  // Extract response audio from the last turn of redteamHistory for display in the cell
+  const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
+  const lastTurn = redteamHistory?.[redteamHistory.length - 1];
+  const responseAudio = lastTurn?.outputAudio as
+    | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
+    | undefined;
+  const responseAudioSource = resolveAudioSource(responseAudio);
+
+  const node = renderOutputNode({
+    output,
+    firstOutput,
+    showDiffs,
+    searchText,
+    text,
+    normalizedText,
+    renderMarkdown,
+    prettifyJson,
+    markdownComponents,
+    toggleLightbox,
+    outputAudioSource,
+    primaryRenderedImageSrc,
+  });
+
+  return (
+    <>
+      {renderResponseAudioPlayer(responseAudioSource)}
+      <TruncatedText
+        text={node || normalizedText}
+        maxLength={
+          renderMarkdown &&
+          (output.images?.length ||
+            isImageProvider(output.provider) ||
+            isVideoProvider(output.provider))
+            ? 0
+            : maxTextLength
+        }
+      />
+      {lightboxImage && (
+        <Dialog open onOpenChange={(open) => !open && setLightboxImage(null)}>
+          <DialogContent className="w-fit max-w-[90vw] p-0" hideCloseButton>
+            <DialogTitle className="sr-only">Image preview</DialogTitle>
+            <DialogClose asChild>
+              <button
+                type="button"
+                aria-label="Close image preview"
+                className="cursor-zoom-out"
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    setLightboxImage(null);
+                  }
+                }}
+              >
+                <img
+                  src={lightboxImage}
+                  alt="Lightbox"
+                  className="max-h-[85vh] max-w-[90vw] object-contain"
+                />
+              </button>
+            </DialogClose>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
+  );
+}
+
 export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
@@ -1298,8 +1422,6 @@ function EvalOutputCell({
 }) {
   const outputCellId = useId();
   const {
-    renderMarkdown,
-    prettifyJson,
     showPrompts,
     showPassFail,
     showMetricPills,
@@ -1346,37 +1468,6 @@ function EvalOutputCell({
     }
   };
 
-  const [lightboxOpen, setLightboxOpen] = React.useState(false);
-  const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
-
-  // Memoized to maintain stable reference across renders, preventing
-  // unnecessary re-renders of markdown components that use this callback.
-  // Uses functional update to avoid stale closure issues.
-  // @see https://github.com/promptfoo/promptfoo/issues/969
-  const toggleLightbox = useCallback((url?: string) => {
-    setLightboxImage(url ?? null);
-    setLightboxOpen((prev) => !prev);
-  }, []);
-
-  // Memoized components object for ReactMarkdown to prevent re-renders.
-  // Creating this inline would cause ReactMarkdown to re-render on every
-  // parent render, even when content hasn't changed.
-  // @see https://github.com/promptfoo/promptfoo/issues/969
-  const markdownComponents = useMemo(
-    () => ({
-      img: ({ src, alt }: { src?: string; alt?: string }) => (
-        <img
-          loading="lazy"
-          src={src}
-          alt={alt}
-          onClick={() => toggleLightbox(src)}
-          style={{ cursor: 'pointer' }}
-        />
-      ),
-    }),
-    [toggleLightbox],
-  );
-
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
   const [commentText, setCommentText] = React.useState(output.gradingResult?.comment || '');
   const [commentDraftText, setCommentDraftText] = React.useState(
@@ -1420,35 +1511,7 @@ function EvalOutputCell({
   };
 
   const text = stringifyOutputText(output.text);
-  const normalizedText = normalizeMediaText(text);
-  const inlineImageSrc = resolveImageSource(text);
-  const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
-  const outputAudioSource = resolveAudioSource(output.audio);
   const { failReasons, passReasons } = getFailAndPassReasons(output);
-
-  // Extract response audio from the last turn of redteamHistory for display in the cell
-  const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
-  const lastTurn = redteamHistory?.[redteamHistory.length - 1];
-  const responseAudio = lastTurn?.outputAudio as
-    | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
-    | undefined;
-  const responseAudioSource = resolveAudioSource(responseAudio);
-
-  const node = renderOutputNode({
-    output,
-    firstOutput,
-    showDiffs,
-    searchText,
-    shouldHighlightSearchText,
-    text,
-    normalizedText,
-    renderMarkdown,
-    prettifyJson,
-    markdownComponents,
-    toggleLightbox,
-    outputAudioSource,
-    primaryRenderedImageSrc,
-  });
 
   const handleRating = (isPass: boolean) => {
     const newRating = activeRating === isPass ? null : isPass;
@@ -1553,21 +1616,17 @@ function EvalOutputCell({
         passReasons,
       })}
       {renderPromptBlock({ showPrompts, firstOutput, prompt: output.prompt })}
-      {renderResponseAudioPlayer(responseAudioSource)}
       <div
         className={!showPassFail && !showPrompts ? 'content-needs-action-clearance' : undefined}
         style={contentStyle}
       >
-        <TruncatedText
-          text={node || normalizedText}
-          maxLength={
-            renderMarkdown &&
-            (output.images?.length ||
-              isImageProvider(output.provider) ||
-              isVideoProvider(output.provider))
-              ? 0
-              : maxTextLength
-          }
+        <EvalOutputContent
+          output={output}
+          text={text}
+          maxTextLength={maxTextLength}
+          firstOutput={firstOutput}
+          showDiffs={showDiffs}
+          searchText={shouldHighlightSearchText ? searchText : undefined}
         />
       </div>
       {renderCommentNode({
@@ -1609,11 +1668,6 @@ function EvalOutputCell({
         handlePromptClose,
         setActionsHovered,
       })}
-      {lightboxOpen && lightboxImage && (
-        <div className="lightbox" onClick={() => toggleLightbox()}>
-          <img src={lightboxImage} alt="Lightbox" />
-        </div>
-      )}
       {commentDialogOpen && (
         <CommentDialog
           open={commentDialogOpen}

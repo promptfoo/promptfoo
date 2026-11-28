@@ -519,6 +519,21 @@ export function createServerOpenApiRegistry() {
 
   register({
     method: 'get',
+    path: '/api/eval/{id}/repeat-groups',
+    operationId: 'listEvalRepeatGroups',
+    tags: ['Eval'],
+    summary: 'List recorded repeat outcomes by expanded test and prompt',
+    request: { params: EvalSchemas.RepeatGroups.Params, query: EvalSchemas.RepeatGroups.Query },
+    responses: {
+      200: jsonResponse(EvalSchemas.RepeatGroups.Response),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      404: jsonResponse(ErrorResponseSchema, 'Evaluation not found'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
+    },
+  });
+
+  register({
+    method: 'get',
     path: '/api/eval/{id}/table',
     operationId: 'getEvalTable',
     tags: ['Eval'],

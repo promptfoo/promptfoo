@@ -425,6 +425,8 @@ export interface EvaluateResult {
 }
 
 export interface EvaluateTableOutput {
+  repeatGroupId?: string;
+  repeatIndex?: number;
   cost: number;
   failureReason: ResultFailureReason;
   gradingResult?: GradingResult | null;
@@ -525,7 +527,11 @@ export interface EvaluateSummaryV2 {
   stats: EvaluateStats;
 }
 
+export type { RepeatGroup, RepeatGroupsResponse } from './repeatGroups';
+
 export type EvalTableDTO = {
+  hasRepeatGroups?: boolean;
+  runtimeRepeat?: number;
   table: EvaluateTable;
   totalCount: number;
   filteredCount: number;

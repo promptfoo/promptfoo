@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
+import { RepeatGroupsResponseSchema } from '../repeatGroups';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */
@@ -90,6 +91,7 @@ export { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
 export const EvalTableQuerySchema = z
   .object({
     format: z.enum(['csv', 'json']).optional(),
+    repeatGroupId: z.string().min(1).optional(),
     limit: z.coerce.number().int().positive().prefault(50),
     offset: z.coerce.number().int().nonnegative().prefault(0),
     filterMode: EvalResultsFilterMode.prefault('all'),
@@ -103,6 +105,16 @@ export const EvalTableQuerySchema = z
       .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
       .prefault([]),
   })
+  .refine(
+    (query) =>
+      !query.repeatGroupId ||
+      (!query.format &&
+        !query.comparisonEvalIds.length &&
+        !query.filter.length &&
+        query.filterMode === 'all' &&
+        !query.search),
+    { message: 'Group detail requires an unfiltered, single-evaluation table' },
+  )
   .refine((query) => query.format || query.limit <= EVAL_TABLE_MAX_PAGE_SIZE, {
     message: `limit must be less than or equal to ${EVAL_TABLE_MAX_PAGE_SIZE}`,
     path: ['limit'],
@@ -125,6 +137,8 @@ export const EvalTableResponseSchema = z
     totalCount: z.number(),
     filteredCount: z.number(),
     filteredMetrics: z.array(z.unknown()).nullable(),
+    hasRepeatGroups: z.boolean().optional(),
+    runtimeRepeat: z.number().optional(),
     config: z.record(z.string(), z.unknown()),
     author: z.string().nullable(),
     version: z.number(),
@@ -368,6 +382,14 @@ export const EvalSchemas = {
     Params: CopyEvalParamsSchema,
     Request: CopyEvalRequestSchema,
     Response: CopyEvalResponseSchema,
+  },
+  RepeatGroups: {
+    Params: EvalIdParamSchema,
+    Query: z.object({
+      offset: z.coerce.number().int().nonnegative().prefault(0),
+      limit: z.coerce.number().int().positive().max(100).prefault(20),
+    }),
+    Response: RepeatGroupsResponseSchema,
   },
   Table: {
     Params: EvalIdParamSchema,

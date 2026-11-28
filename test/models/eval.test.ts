@@ -77,6 +77,124 @@ describe('evaluator', () => {
     vi.resetAllMocks();
   });
 
+  it('pages repeat summaries by expanded test and loads only the selected group of runs', async () => {
+    const evaluation = await Eval.create({}, []);
+    const testCase = { description: 'Shared description' };
+    await evaluation.addResult(createEvaluateResult({ testIdx: 0, testCase }));
+    for (const [testIdx, groupId, repeatIndex, failureReason] of [
+      [1, 'A', 0, ResultFailureReason.NONE],
+      [2, 'B', 0, ResultFailureReason.ASSERT],
+      [3, 'A', 1, ResultFailureReason.ERROR],
+    ] as const) {
+      await evaluation.addResult(
+        createEvaluateResult({
+          testIdx,
+          testCase,
+          repeatGroupId: groupId,
+          repeatIndex,
+          failureReason,
+          success: failureReason === ResultFailureReason.NONE,
+        }),
+      );
+    }
+    await evaluation.addResult(
+      createEvaluateResult({
+        testIdx: 1,
+        promptIdx: 1,
+        testCase,
+        repeatGroupId: 'A',
+        repeatIndex: 0,
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
+      }),
+    );
+    const firstPage = await evaluation.getTablePage({ offset: 0, limit: 1 });
+    expect(firstPage.body[0].outputs[0]?.repeatGroupId).toBeUndefined();
+    expect(firstPage.hasRepeatGroups).toBe(true);
+    expect(await evaluation.getRepeatGroups(0, 1)).toEqual({
+      hasMore: true,
+      groups: [
+        {
+          id: 'A',
+          description: testCase.description,
+          firstTestIdx: 1,
+          prompts: [
+            { promptIdx: 0, passed: 1, failed: 0, errors: 1 },
+            { promptIdx: 1, passed: 0, failed: 1, errors: 0 },
+          ],
+        },
+      ],
+    });
+    expect(await evaluation.getRepeatGroups(1, 1)).toMatchObject({
+      hasMore: false,
+      groups: [{ id: 'B', prompts: [{ passed: 0, failed: 1, errors: 0 }] }],
+    });
+    const details = await evaluation.getTablePage({ repeatGroupId: 'A', offset: 1, limit: 1 });
+    expect(details.filteredCount).toBe(2);
+    expect(details.body).toMatchObject([
+      { testIdx: 3, outputs: [{ repeatGroupId: 'A', repeatIndex: 1 }] },
+    ]);
+  });
+
+  it('refreshes repeat availability after adding a group beyond the first page', async () => {
+    const evaluation = await Eval.create({}, []);
+    for (const testIdx of [0, 1]) {
+      await evaluation.addResult(createEvaluateResult({ testIdx }));
+    }
+    const firstPage = () => evaluation.getTablePage({ limit: 1 });
+    expect((await firstPage()).hasRepeatGroups).toBe(false);
+    expect((await firstPage()).hasRepeatGroups).toBe(false);
+
+    await evaluation.addResult(
+      createEvaluateResult({ testIdx: 2, repeatGroupId: 'later', repeatIndex: 0 }),
+    );
+    expect((await firstPage()).hasRepeatGroups).toBe(true);
+  });
+
+  it('keeps repeat summaries available when a stored test case contains malformed JSON', async () => {
+    const evaluation = await Eval.create({}, []);
+    for (const [testIdx, group] of ['legacy', 'valid'].entries()) {
+      await evaluation.addResult(
+        createEvaluateResult({
+          testIdx,
+          testCase: { description: group },
+          repeatGroupId: group,
+          repeatIndex: 0,
+          success: true,
+        }),
+      );
+    }
+
+    const db = await getDb();
+    for (const [i, description] of [12, false, { text: 'old' }].entries()) {
+      const id = `non-text-${i}`;
+      await evaluation.addResult(
+        createEvaluateResult({ testIdx: i + 2, repeatGroupId: id, repeatIndex: 0 }),
+      );
+      await db.run(sql`UPDATE ${evalResultsTable} SET test_case = ${JSON.stringify({ description })}
+        WHERE eval_id = ${evaluation.id} AND test_idx = ${i + 2}`);
+    }
+    // Older databases can lack the expression index that rejects malformed test_case JSON on write.
+    await db.run('CREATE TEMP TABLE eval_results AS SELECT * FROM main.eval_results');
+    try {
+      await db.run(sql`UPDATE ${evalResultsTable} SET test_case = '{'
+        WHERE eval_id = ${evaluation.id} AND test_idx = 0`);
+
+      expect(await evaluation.getRepeatGroups(0, 5)).toMatchObject({
+        hasMore: false,
+        groups: [
+          { id: 'legacy', description: null, prompts: [{ passed: 1 }] },
+          { id: 'valid', description: 'valid', prompts: [{ passed: 1 }] },
+          { id: 'non-text-0', description: null },
+          { id: 'non-text-1', description: null },
+          { id: 'non-text-2', description: null },
+        ],
+      });
+    } finally {
+      await db.run('DROP TABLE temp.eval_results');
+    }
+  });
+
   describe('repeat stability export', () => {
     it('includes final comparison verdicts for a row that failed persistence', async () => {
       const evaluation = await Eval.create({}, [], { id: 'repeat-failed-persistence' });

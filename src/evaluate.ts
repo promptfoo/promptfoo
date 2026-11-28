@@ -349,10 +349,13 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
     testSuiteConfig,
     constructedTestSuite.prompts,
   );
-  const author = getAuthor(suiteAuthor);
+  const recordOptions = {
+    author: getAuthor(suiteAuthor),
+    runtimeOptions: options.repeat === undefined ? undefined : { repeat: options.repeat },
+  };
   const evalRecord = testSuiteConfig.writeLatestResults
-    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
-    : new Eval(unifiedConfig, { author });
+    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, recordOptions)
+    : new Eval(unifiedConfig, recordOptions);
 
   const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
     doEvaluate(constructedTestSuite, evalRecord, {

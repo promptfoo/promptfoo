@@ -18,6 +18,7 @@ interface TestIndexRow {
 
 interface CountCacheEntry {
   count: number;
+  hasRepeatGroups?: boolean;
   timestamp: number;
 }
 
@@ -91,6 +92,32 @@ export function clearCountCache(evalId?: string) {
   }
 }
 
+// Use only evaluator-owned linkage. A test description or variable value can be shared
+// by independent tests. SQLite aggregates metadata without fetching response payloads.
+export const repeatGroupIdSql = sql`CASE WHEN json_valid(metadata)
+  AND json_type(metadata, '$.__promptfoo.repeatLinkage.repeatIndex') = 'integer'
+  AND json_extract(metadata, '$.__promptfoo.repeatLinkage.repeatIndex') >= 0
+  AND json_type(metadata, '$.__promptfoo.repeatLinkage.repeatGroupId') = 'text'
+  THEN json_extract(metadata, '$.__promptfoo.repeatLinkage.repeatGroupId') END`;
+
+// Table pagination has already populated the distinct-count cache. Keep group availability
+// on that same entry so result writes and expiry invalidate both together.
+export async function hasStoredRepeatGroups(evalId: string): Promise<boolean> {
+  const cached = countCache.get(`distinct:${evalId}`);
+  if (cached?.hasRepeatGroups !== undefined && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.hasRepeatGroups;
+  }
+
+  const db = await getDb();
+  const rows = await db.all(sql`SELECT 1 FROM ${evalResultsTable}
+    WHERE eval_id = ${evalId} AND ${repeatGroupIdSql} != '' LIMIT 1`);
+  const found = rows.length > 0;
+  if (cached) {
+    cached.hasRepeatGroups = found;
+  }
+  return found;
+}
+
 // Optimized query for test indices without heavy JSON search
 export async function queryTestIndicesOptimized(
   evalId: string,
@@ -99,6 +126,7 @@ export async function queryTestIndicesOptimized(
     limit?: number;
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
+    repeatGroupId?: string;
     filters?: string[];
   },
 ): Promise<{ testIndices: number[]; filteredCount: number }> {
@@ -109,6 +137,10 @@ export async function queryTestIndicesOptimized(
 
   // Build base query with efficient filtering
   let baseQuery = sql`eval_id = ${evalId}`;
+
+  if (opts.repeatGroupId) {
+    baseQuery = sql`${baseQuery} AND ${repeatGroupIdSql} = ${opts.repeatGroupId}`;
+  }
 
   // Add mode filter (these can use indexes)
   if (mode === 'errors') {

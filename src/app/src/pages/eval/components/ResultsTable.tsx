@@ -37,6 +37,7 @@ import {
   type EvaluateTableRow,
   type GradingResult,
   type ProviderOptions,
+  type UnifiedConfig,
   type Vars,
 } from '@promptfoo/types';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
@@ -57,6 +58,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
+import RepeatGroupsDialog from './RepeatGroupsDialog';
 import { isFilterApplied, useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import { useHeaderCollapse } from './useHeaderCollapse';
@@ -86,6 +88,41 @@ import {
 const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
 );
+
+function testsUseRepeat(tests: UnifiedConfig['tests'], inherited: boolean): boolean {
+  if (!Array.isArray(tests)) {
+    return inherited;
+  }
+  return tests.some((test) => {
+    const repeat =
+      test && typeof test === 'object' && 'options' in test ? test.options?.repeat : undefined;
+    return repeat === undefined ? inherited : repeat > 1;
+  });
+}
+
+function hasConfiguredRepeats(config: Partial<UnifiedConfig>, runtimeRepeat?: number) {
+  const defaultRepeat =
+    typeof config.defaultTest === 'object' ? config.defaultTest?.options?.repeat : undefined;
+  const inherited = (defaultRepeat ?? runtimeRepeat ?? config.evaluateOptions?.repeat ?? 1) > 1;
+  // Without tests or scenarios the evaluator runs one implicit test case.
+  const tests = Array.isArray(config.tests) && !config.tests.length ? undefined : config.tests;
+  if ((tests || !config.scenarios?.length) && testsUseRepeat(tests, inherited)) {
+    return true;
+  }
+  return (
+    config.scenarios?.some((scenario) => {
+      if (
+        !scenario ||
+        typeof scenario !== 'object' ||
+        (Array.isArray(scenario.config) && !scenario.config.length)
+      ) {
+        return false;
+      }
+      const scenarioRepeats = testsUseRepeat(scenario.config, inherited);
+      return testsUseRepeat(scenario.tests, scenarioRepeats);
+    }) ?? false
+  );
+}
 
 function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
   const audioUrl = isMediaRef(data)
@@ -1614,6 +1651,8 @@ function ResultsTable({
     table,
     setTable,
     config,
+    hasRepeatGroups,
+    runtimeRepeat,
     version,
     filteredResultsCount,
     fetchEvalData,
@@ -1634,6 +1673,14 @@ function ResultsTable({
   const isRedteam = React.useMemo(() => {
     return config?.redteam !== undefined;
   }, [config?.redteam]);
+
+  const hasRepeatedTests = React.useMemo(
+    () =>
+      hasRepeatGroups ||
+      (config && hasConfiguredRepeats(config, runtimeRepeat)) ||
+      body.some((row) => row.outputs?.some((output) => output?.repeatGroupId)),
+    [body, config, hasRepeatGroups, runtimeRepeat],
+  );
 
   const visiblePromptCount = React.useMemo(
     () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
@@ -2369,6 +2416,11 @@ function ResultsTable({
       {filteredResultsCount === 0 && !isFetching && isFilteringActive && (
         <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
           <p>No results found for the current filters.</p>
+        </div>
+      )}
+      {evalId && !inComparisonMode && !isFilteringActive && hasRepeatedTests && (
+        <div className="pt-2">
+          <RepeatGroupsDialog key={evalId} evalId={evalId} prompts={head.prompts} />
         </div>
       )}
       <div className="h-4" />

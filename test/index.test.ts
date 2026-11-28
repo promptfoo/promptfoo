@@ -475,6 +475,14 @@ describe('evaluate function', () => {
     createEvalSpy.mockRestore();
   });
 
+  it('persists the programmatic repeat count with the evaluation', async () => {
+    const createEvalSpy = vi.spyOn(Eval, 'create');
+    await evaluate({ prompts: ['test'], providers: [], writeLatestResults: true }, { repeat: 20 });
+
+    expect(createEvalSpy.mock.calls[0][2]?.runtimeOptions?.repeat).toBe(20);
+    createEvalSpy.mockRestore();
+  });
+
   it('should not persist evaluate-only author in config', async () => {
     const createEvalSpy = vi.spyOn(Eval, 'create');
 

@@ -29,6 +29,8 @@ import {
   type EvaluateTable,
   type EvaluateTableRow,
   type Prompt,
+  type RepeatGroup,
+  type RepeatGroupsResponse,
   type RepeatStabilitySummary,
   ResultFailureReason,
   type ResultsFile,
@@ -60,7 +62,9 @@ import {
 import {
   getCachedResultsCount,
   getTotalResultRowCount,
+  hasStoredRepeatGroups,
   queryTestIndicesOptimized,
+  repeatGroupIdSql,
 } from './evalPerformance';
 import EvalResult, {
   getResultIndexKey,
@@ -1269,7 +1273,53 @@ export default class Eval {
     });
   }
 
+  async getRepeatGroups(offset: number, limit: number): Promise<RepeatGroupsResponse> {
+    const db = await getDb();
+    const records = await db.all<{
+      id: string;
+      firstTestIdx: number;
+      description: string | null;
+      promptIdx: number;
+      passed: number;
+      failed: number;
+      errors: number;
+    }>(sql`
+    WITH repeats AS MATERIALIZED (
+      SELECT ${repeatGroupIdSql} AS group_id, test_idx, prompt_idx, success, failure_reason,
+        CASE WHEN json_valid(test_case) AND json_type(test_case, '$.description') = 'text'
+          THEN json_extract(test_case, '$.description') END AS description
+      FROM ${evalResultsTable}
+      WHERE eval_id = ${this.id}
+    ), page AS (
+      SELECT group_id, MIN(test_idx) AS first_idx
+      FROM repeats WHERE typeof(group_id) = 'text' AND group_id != ''
+      GROUP BY group_id ORDER BY first_idx, group_id LIMIT ${limit + 1} OFFSET ${offset}
+    )
+    SELECT page.group_id AS id, page.first_idx AS firstTestIdx, MIN(r.description) AS description,
+      r.prompt_idx AS promptIdx,
+      SUM(r.failure_reason != ${ResultFailureReason.ERROR} AND r.success = 1) AS passed,
+      SUM(r.failure_reason != ${ResultFailureReason.ERROR} AND r.success = 0) AS failed,
+      SUM(r.failure_reason = ${ResultFailureReason.ERROR}) AS errors
+    FROM page JOIN repeats r ON r.group_id = page.group_id
+    GROUP BY page.group_id, r.prompt_idx ORDER BY page.first_idx, page.group_id, r.prompt_idx
+  `);
+    const groups = new Map<string, RepeatGroup>();
+    for (const { id, description, firstTestIdx, ...prompt } of records) {
+      let group = groups.get(id);
+      if (!group) {
+        if (groups.size === limit) {
+          return { groups: [...groups.values()], hasMore: true };
+        }
+        group = { id, description, firstTestIdx, prompts: [] };
+        groups.set(id, group);
+      }
+      group.prompts.push(prompt);
+    }
+    return { groups: [...groups.values()], hasMore: false };
+  }
+
   async getTablePage(opts: {
+    repeatGroupId?: string;
     offset?: number;
     limit?: number;
     filterMode?: EvalResultsFilterMode;
@@ -1281,6 +1331,7 @@ export default class Eval {
     body: EvaluateTableRow[];
     totalCount: number;
     filteredCount: number;
+    hasRepeatGroups?: boolean;
     id: string;
   }> {
     // Get total count of tests for this eval
@@ -1313,6 +1364,7 @@ export default class Eval {
         // Use optimized query for better performance
         logger.debug('Using optimized query for table page');
         queryResult = await queryTestIndicesOptimized(this.id, {
+          repeatGroupId: opts.repeatGroupId,
           offset: opts.offset,
           limit: opts.limit,
           filterMode: opts.filterMode,
@@ -1387,7 +1439,19 @@ export default class Eval {
     const bodyEnd = Date.now();
     logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
 
-    return { head: { prompts: this.prompts, vars }, body, totalCount, filteredCount, id: this.id };
+    // Search beyond this page only if the rows already loaded cannot answer the question.
+    const hasRepeatGroups =
+      body.some((row) => row.outputs.some((output) => output?.repeatGroupId)) ||
+      (body.length < totalCount && (await hasStoredRepeatGroups(this.id)));
+
+    return {
+      head: { prompts: this.prompts, vars },
+      body,
+      totalCount,
+      filteredCount,
+      hasRepeatGroups,
+      id: this.id,
+    };
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {

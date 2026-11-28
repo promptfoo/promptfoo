@@ -42,6 +42,11 @@ import type {
 
 export const evalRouter = Router();
 
+function getStoredRepeat(value: unknown): number | undefined {
+  const count = typeof value === 'string' ? Number(value) : value;
+  return typeof count === 'number' && Number.isSafeInteger(count) && count > 0 ? count : undefined;
+}
+
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   let parsedPayload: EvalTableDTO;
   try {
@@ -301,6 +306,22 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
 
 const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
 
+evalRouter.get('/:id/repeat-groups', async (req: Request, res: Response): Promise<void> => {
+  const params = EvalSchemas.RepeatGroups.Params.safeParse(req.params);
+  const query = EvalSchemas.RepeatGroups.Query.safeParse(req.query);
+  if (!params.success || !query.success) {
+    res.status(400).json({ error: 'Invalid repeat group request' });
+    return;
+  }
+  const evaluation = await Eval.findById(params.data.id);
+  if (!evaluation) {
+    res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+  const page = await evaluation.getRepeatGroups(query.data.offset, query.data.limit);
+  res.json(EvalSchemas.RepeatGroups.Response.parse(page));
+});
+
 evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = EvalSchemas.Table.Params.safeParse(req.params);
   if (!paramsResult.success) {
@@ -360,6 +381,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   }
 
   const table = await eval_.getTablePage({
+    ...(queryResult.data.repeatGroupId && { repeatGroupId: queryResult.data.repeatGroupId }),
     offset,
     limit,
     filterMode,
@@ -462,6 +484,8 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     filteredCount: table.filteredCount,
     filteredMetrics,
     config: redactAzureBlobSasTokens(eval_.config),
+    hasRepeatGroups: table.hasRepeatGroups,
+    runtimeRepeat: getStoredRepeat(eval_.runtimeOptions?.repeat),
     author: eval_.author || null,
     version: eval_.version(),
     id,

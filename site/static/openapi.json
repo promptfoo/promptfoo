@@ -1513,6 +1513,128 @@
         }
       }
     },
+    "/api/eval/{id}/repeat-groups": {
+      "get": {
+        "operationId": "listEvalRepeatGroups",
+        "tags": ["Eval"],
+        "summary": "List recorded repeat outcomes by expanded test and prompt",
+        "parameters": [
+          {
+            "schema": { "type": "string", "minLength": 1 },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": { "type": ["integer", "null"], "minimum": 0, "default": 0 },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": { "type": "integer", "exclusiveMinimum": 0, "maximum": 100, "default": 20 },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "description": { "type": ["string", "null"] },
+                          "firstTestIdx": { "type": "number" },
+                          "prompts": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "promptIdx": { "type": "number" },
+                                "passed": { "type": "number" },
+                                "failed": { "type": "number" },
+                                "errors": { "type": "number" }
+                              },
+                              "required": ["promptIdx", "passed", "failed", "errors"]
+                            }
+                          }
+                        },
+                        "required": ["id", "description", "firstTestIdx", "prompts"]
+                      }
+                    },
+                    "hasMore": { "type": "boolean" }
+                  },
+                  "required": ["groups", "hasMore"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Evaluation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/eval/{id}/table": {
       "get": {
         "operationId": "getEvalTable",
@@ -1529,6 +1651,12 @@
             "schema": { "type": "string", "enum": ["csv", "json"] },
             "required": false,
             "name": "format",
+            "in": "query"
+          },
+          {
+            "schema": { "type": "string", "minLength": 1 },
+            "required": false,
+            "name": "repeatGroupId",
             "in": "query"
           },
           {
@@ -1605,6 +1733,8 @@
                         "totalCount": { "type": "number" },
                         "filteredCount": { "type": "number" },
                         "filteredMetrics": { "type": ["array", "null"], "items": {} },
+                        "hasRepeatGroups": { "type": "boolean" },
+                        "runtimeRepeat": { "type": "number" },
                         "config": { "type": "object", "additionalProperties": {} },
                         "author": { "type": ["string", "null"] },
                         "version": { "type": "number" },
