@@ -382,6 +382,16 @@ describe('getProviderDescription', () => {
     expect(description).not.toContain('abc12345678901234567890');
   });
 
+  it.each([
+    'https:/api.example.invalid/v1/chat?api_key=SUPERSECRET123',
+    'http:api.example.invalid/v1/chat?api_key=SUPERSECRET123',
+  ])('redacts credentials in HTTP URL ids without double slashes: %s', (id) => {
+    const description = getProviderDescription(createMockProvider({ id }));
+
+    expect(description).toContain('api.example.invalid/v1/chat');
+    expect(description).not.toContain('SUPERSECRET123');
+  });
+
   it('leaves non-URL ids such as file:// paths unchanged', () => {
     const provider = createMockProvider({ id: 'file://providers/custom.js', label: 'custom' });
     expect(getProviderDescription(provider)).toBe('custom (file://providers/custom.js)');

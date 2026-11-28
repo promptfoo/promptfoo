@@ -62,6 +62,7 @@ describe('validateTestProviderReferences', () => {
         `https://gateway.example/?token=${secret}`,
       ),
       createProvider(`n8n:https://example.org/webhook/%ZZ${secret}/tail`),
+      createProvider(`https:/api.example.invalid/v1/chat?api_key=${secret}`),
     ];
     const validate = () =>
       validateTestProviderReferences(

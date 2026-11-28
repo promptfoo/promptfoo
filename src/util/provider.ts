@@ -52,7 +52,7 @@ export function formatProviderReference(ref: string): string {
   if (/^exec:/i.test(ref)) {
     return 'exec:[REDACTED]';
   }
-  const urlIndex = ref.search(/(?:https?|wss?):\/\//i);
+  const urlIndex = ref.search(/(?:https?|wss?):/i);
   return urlIndex >= 0 ? ref.slice(0, urlIndex) + sanitizeUrlForLogging(ref.slice(urlIndex)) : ref;
 }
 
