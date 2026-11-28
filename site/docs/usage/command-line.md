@@ -673,6 +673,8 @@ Promptfoo Cloud API keys are scoped to one organization. To switch organizations
 
 For gateways that reserve `Authorization`, use `--auth-header-name X-Promptfoo-Api-Key` or `PROMPTFOO_CLOUD_AUTH_HEADER`. The value remains `Bearer <token>`. Precedence is the login flag, saved setting, environment variable, then `Authorization`. A successful login saves the header name; changing `--host` does not reset it. Pass `--auth-header-name Authorization` to reset it. See [gateway configuration](/docs/usage/sharing.md#enterprise-sharing).
 
+With `--api-key`, `--host` must be an HTTP(S) API base URL. A path prefix such as `https://example.com/promptfoo` is supported; credentials, query strings, and fragments are not.
+
 After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
 
 ### `promptfoo auth logout`
