@@ -3,14 +3,22 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
+import logger from '../../src/logger';
 import { RubyProvider } from '../../src/providers/rubyCompletion';
 import { runRuby } from '../../src/ruby/rubyUtils';
 import * as fileReference from '../../src/util/fileReference';
 import { createBasePathOptions } from '../factories/literalFixtures';
+import { createDeferred } from '../util/utils';
 
 const fsMocks = vi.hoisted(() => ({
   readFileSync: vi.fn(),
 }));
+
+const { createWarningOrderedLoggerFactory } = await vi.hoisted(
+  () => import('../factories/moduleMocks'),
+);
+
+vi.mock('../../src/logger', createWarningOrderedLoggerFactory());
 
 const pathMocks = vi.hoisted(() => {
   const actualPath = require('path') as typeof import('path');
@@ -370,6 +378,46 @@ describe('RubyProvider', () => {
         expect.stringContaining('ruby:script.rb:default:call_api:'),
         '{"output":"new result"}',
       );
+    });
+
+    it('returns without waiting for a slow cache write', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const write = createDeferred<void>();
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockReturnValue(write.promise),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockRunRuby.mockResolvedValue({ output: 'fresh result' });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({ output: 'fresh result', cached: false });
+      expect(mockCache.set).toHaveBeenCalledTimes(1);
+      write.resolve();
+      await write.promise;
+    });
+
+    it('logs a warning and still returns when a cache write fails', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockRejectedValue(new Error('disk full')),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockRunRuby.mockResolvedValue({ output: 'fresh result' });
+
+      await expect(provider.callApi('test prompt')).resolves.toEqual({
+        output: 'fresh result',
+        cached: false,
+      });
+      await vi.waitFor(() => {
+        expect(logger.warn).toHaveBeenCalledWith('RubyProvider failed to cache result', {
+          error: expect.objectContaining({ message: 'disk full' }),
+        });
+      });
     });
 
     it('should properly transform token usage in cached results', async () => {

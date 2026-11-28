@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import logger from '../logger';
+import { flushPendingScriptProviderCacheWrites } from './scriptResult';
 
 interface CleanupProvider {
   shutdown(): Promise<void>;
@@ -305,6 +306,9 @@ export class ProviderRegistry {
     while (this.activeCalls.size || this.processReleases.size) {
       await Promise.all([...this.activeCalls, ...this.processReleases]);
     }
+    // Python/Ruby cache writes are fire-and-forget; drained calls may have just published
+    // one, so wait for them before graceful shutdown or SIGTERM lets the process exit.
+    await flushPendingScriptProviderCacheWrites();
   }
 
   private closedScopeError(): DOMException {
