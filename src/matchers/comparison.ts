@@ -70,8 +70,16 @@ export async function matchesSelectBest(
 
   invariant(typeof resp.output === 'string', 'select-best produced malformed response');
 
-  const firstIntegerMatch = resp.output.trim().match(/\d+/);
-  const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
+  // Keep single-index prose compatible, without reading parts of words, signed values,
+  // or decimals as indexes. Several distinct valid indexes do not identify a winner.
+  const indexes = (
+    resp.output.match(/(?<![\p{L}\p{N}_.,+−-])\d+(?![\p{L}\p{N}_+−-]|[.,]\d)/gu) ?? []
+  ).map(Number);
+  const validIndexes = [...new Set(indexes.filter((index) => index < outputs.length))];
+  if (validIndexes.length > 1) {
+    return failureResults(() => 'Ambiguous select-best verdict: multiple output indexes');
+  }
+  const verdict = validIndexes[0] ?? indexes[0] ?? Number.NaN;
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
     return failureResults(() => `Invalid select-best verdict: ${verdict}`);
