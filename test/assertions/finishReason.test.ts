@@ -156,4 +156,101 @@ describe('finishReason assertion', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
   });
+
+  describe('provider-specific finish reason normalization', () => {
+    it('should treat Anthropic end_turn as stop', () => {
+      const params: Partial<AssertionParams> = {
+        assertion: { type: 'finish-reason', value: 'stop' },
+        providerResponse: { finishReason: 'end_turn' },
+      };
+
+      const result = handleFinishReason(params as AssertionParams);
+      expect(result.pass).toBe(true);
+    });
+
+    it('should treat Anthropic max_tokens as length', () => {
+      const params: Partial<AssertionParams> = {
+        assertion: { type: 'finish-reason', value: 'length' },
+        providerResponse: { finishReason: 'max_tokens' },
+      };
+
+      const result = handleFinishReason(params as AssertionParams);
+      expect(result.pass).toBe(true);
+    });
+
+    it('should treat Anthropic tool_use as tool_calls', () => {
+      const params: Partial<AssertionParams> = {
+        assertion: { type: 'finish-reason', value: 'tool_calls' },
+        providerResponse: { finishReason: 'tool_use' },
+      };
+
+      const result = handleFinishReason(params as AssertionParams);
+      expect(result.pass).toBe(true);
+    });
+
+    it('should not invert for end_turn when inverse is true and value is stop', () => {
+      const params: Partial<AssertionParams> = {
+        assertion: { type: 'not-finish-reason' as any, value: 'stop' },
+        inverse: true,
+        providerResponse: { finishReason: 'end_turn' },
+      };
+
+      const result = handleFinishReason(params as AssertionParams);
+      expect(result.pass).toBe(false);
+    });
+
+    it('should not invert for max_tokens when inverse is true and value is length', () => {
+      const params: Partial<AssertionParams> = {
+        assertion: { type: 'not-finish-reason' as any, value: 'length' },
+        inverse: true,
+        providerResponse: { finishReason: 'max_tokens' },
+      };
+
+      const result = handleFinishReason(params as AssertionParams);
+      expect(result.pass).toBe(false);
+    });
+
+    it('should not invert for tool_use when inverse is true and value is tool_calls', () => {
+      const params: Partial<AssertionParams> = {
+        assertion: { type: 'not-finish-reason' as any, value: 'tool_calls' },
+        inverse: true,
+        providerResponse: { finishReason: 'tool_use' },
+      };
+
+      const result = handleFinishReason(params as AssertionParams);
+      expect(result.pass).toBe(false);
+    });
+
+    it('should normalize a provider-specific value on the assertion side too', () => {
+      const params: Partial<AssertionParams> = {
+        assertion: { type: 'finish-reason', value: 'end_turn' },
+        providerResponse: { finishReason: 'stop' },
+      };
+
+      const result = handleFinishReason(params as AssertionParams);
+      expect(result.pass).toBe(true);
+    });
+
+    it('should keep raw provider strings in the failure message', () => {
+      const params: Partial<AssertionParams> = {
+        assertion: { type: 'finish-reason', value: 'stop' },
+        providerResponse: { finishReason: 'tool_use' },
+      };
+
+      const result = handleFinishReason(params as AssertionParams);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Expected finish reason "stop" but got "tool_use"');
+    });
+
+    it('should report no finish reason when normalization yields undefined', () => {
+      const params: Partial<AssertionParams> = {
+        assertion: { type: 'finish-reason', value: 'stop' },
+        providerResponse: { finishReason: '   ' },
+      };
+
+      const result = handleFinishReason(params as AssertionParams);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('did not supply');
+    });
+  });
 });
