@@ -129,8 +129,8 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'amazon.nova-lite': { input: 0.06, output: 0.24 },
   'amazon.nova-pro': { input: 0.8, output: 3.2 },
   'amazon.nova-premier': { input: 2.5, output: 12.5 },
-  // Amazon Nova 2 (reasoning models). The cross-region global profile is cheaper
-  // ($0.30/$2.50); this is the plain us-east-1 on-demand rate.
+  // More specific profile names must precede the regional fallback.
+  'global.amazon.nova-2-lite': { input: 0.3, output: 2.5 },
   'amazon.nova-2-lite': { input: 0.33, output: 2.75 },
   // Amazon Titan Text
   'amazon.titan-text-lite': { input: 0.15, output: 0.2 },
@@ -503,6 +503,7 @@ function hasPublishedRegionalPricing(normalizedModelId: string, region?: string)
 }
 
 const BEDROCK_INVOKE_PRICING_MODEL_PREFIXES = [
+  'amazon.nova-2-lite',
   'zai.glm-',
   'minimax.minimax-',
   'kimi-k2',
@@ -540,10 +541,10 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
-  // Every GPT-6 system profile goes to the shared Runtime billing table, which owns the
+  // Each commercial GPT-5.6 or GPT-6 system profile goes to the shared Runtime billing table, which owns the
   // list of priced variants and returns no cost for the others.
   const gptProfile =
-    /^(?:arn:aws:bedrock:([a-z0-9-]+):\d{12}:inference-profile\/)?(us|global)\.openai\.(gpt-6(?:\.\d+)?-[a-z]+)$/.exec(
+    /^(?:arn:aws:bedrock:([a-z0-9-]+):\d{12}:inference-profile\/)?(us|global)\.openai\.(gpt-(?:5\.6|6(?:\.\d+)?)-[a-z]+)$/.exec(
       normalizedModelId,
     );
   if (gptProfile) {

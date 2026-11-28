@@ -324,6 +324,85 @@ describe('calculateBedrockCost', () => {
     ).toBeUndefined();
   });
 
+  it('bills the Nova 2 Lite global profile at its own cheaper meter', () => {
+    // The catalog distinguishes global and regional Nova 2 Lite meters.
+    expect(
+      calculateBedrockCost('global.amazon.nova-2-lite-v1:0', INPUT_TOKENS, OUTPUT_TOKENS),
+    ).toBeCloseTo(costAtRates(0.3, 2.5), 6);
+    expect(
+      calculateBedrockCost(
+        'arn:aws:bedrock:us-east-2::inference-profile/global.amazon.nova-2-lite-v1:0',
+        INPUT_TOKENS,
+        OUTPUT_TOKENS,
+      ),
+    ).toBeCloseTo(costAtRates(0.3, 2.5), 6);
+    expect(
+      calculateBedrockCost('us.amazon.nova-2-lite-v1:0', INPUT_TOKENS, OUTPUT_TOKENS),
+    ).toBeCloseTo(costAtRates(0.33, 2.75), 6);
+  });
+
+  describe('OpenAI GPT-5.6 frontier models on Converse', () => {
+    it.each([
+      { id: 'us.openai.gpt-5.6-sol', input: 4.4, output: 22, longInput: 8.8, longOutput: 33 },
+      { id: 'us.openai.gpt-5.6-terra', input: 2.2, output: 13.2, longInput: 4.4, longOutput: 19.8 },
+      {
+        id: 'us.openai.gpt-5.6-luna',
+        input: 0.22,
+        output: 1.32,
+        longInput: 0.44,
+        longOutput: 1.98,
+      },
+      { id: 'global.openai.gpt-5.6-sol', input: 4, output: 20, longInput: 8, longOutput: 30 },
+      { id: 'global.openai.gpt-5.6-terra', input: 2, output: 12, longInput: 4, longOutput: 18 },
+      {
+        id: 'global.openai.gpt-5.6-luna',
+        input: 0.2,
+        output: 1.2,
+        longInput: 0.4,
+        longOutput: 1.8,
+      },
+    ])(
+      'prices $id at standard and long-context rates',
+      ({ id, input, output, longInput, longOutput }) => {
+        for (const model of [
+          id,
+          `arn:aws:bedrock:us-east-1:123456789012:inference-profile/${id}`,
+        ]) {
+          expect(
+            calculateBedrockCost(model, INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1'),
+          ).toBeCloseTo(costAtRates(input, output), 10);
+          expect(calculateBedrockCost(model, 272_000, 1_000, 0, 0, 'us-east-1')).toBeCloseTo(
+            (272_000 / 1e6) * input + (1_000 / 1e6) * output,
+            10,
+          );
+          expect(calculateBedrockCost(model, 272_001, 1_000, 0, 0, 'us-east-1')).toBeCloseTo(
+            (272_001 / 1e6) * longInput + (1_000 / 1e6) * longOutput,
+            10,
+          );
+        }
+      },
+    );
+
+    it('includes reads and writes in the long-context threshold', () => {
+      expect(
+        calculateBedrockCost('global.openai.gpt-5.6-sol', 271_999, 500, 1, 1, 'us-east-1'),
+      ).toBeCloseTo((271_999 * 8 + 500 * 30 + 0.8 + 10) / 1e6, 10);
+    });
+
+    it('requires a known source region and supported system profile', () => {
+      expect(
+        calculateBedrockCost('us.openai.gpt-5.6-sol', 1, 1, 0, 0, 'eu-central-1'),
+      ).toBeUndefined();
+      expect(calculateBedrockCost('openai.gpt-5.6-sol', 1, 1, 0, 0, 'us-east-1')).toBeUndefined();
+    });
+
+    it('stays fail-closed on InvokeModel, which does not serve these models', () => {
+      expect(
+        calculateBedrockInvokeModelCost('us.openai.gpt-5.6-sol', 1e6, 1e6, 0, 0, 'us-east-1'),
+      ).toBeUndefined();
+    });
+  });
+
   it('matches Command R+ before the broader Command R key', () => {
     expect(calculateBedrockCost('cohere.command-r-plus-v1:0', 1e6, 1e6)).toBeCloseTo(18, 6);
   });
