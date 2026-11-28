@@ -144,7 +144,7 @@ export async function applyRuntimeTransforms(
     // Track which media layers were applied
     if (layerId === 'audio') {
       audioApplied = true;
-    } else if (layerId === 'image') {
+    } else if (layerId === 'image' || layerId === 'image-stego') {
       imageApplied = true;
     }
 

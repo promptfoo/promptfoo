@@ -16,6 +16,15 @@ describe('validateSharpDependency', () => {
       ).resolves.not.toThrow();
     });
 
+    it('should not throw when image-stego strategy is used', async () => {
+      const strategies = [{ id: 'image-stego' }];
+      const plugins = [{ id: 'harmful', numTests: 5 }];
+
+      await expect(
+        validateSharpDependency(strategies, plugins, sharpAvailable),
+      ).resolves.not.toThrow();
+    });
+
     it('should not throw when unsafebench plugin is used', async () => {
       const strategies = [{ id: 'base64' }];
       const plugins = [{ id: 'unsafebench', numTests: 5 }];
@@ -60,6 +69,18 @@ describe('validateSharpDependency', () => {
 
       await expect(validateSharpDependency(strategies, plugins, sharpUnavailable)).rejects.toThrow(
         "The sharp library is required for strategy 'image'",
+      );
+      await expect(validateSharpDependency(strategies, plugins, sharpUnavailable)).rejects.toThrow(
+        'npm install sharp',
+      );
+    });
+
+    it('should throw error when image-stego strategy is used', async () => {
+      const strategies = [{ id: 'image-stego' }];
+      const plugins = [{ id: 'harmful', numTests: 5 }];
+
+      await expect(validateSharpDependency(strategies, plugins, sharpUnavailable)).rejects.toThrow(
+        "The sharp library is required for strategy 'image-stego'",
       );
       await expect(validateSharpDependency(strategies, plugins, sharpUnavailable)).rejects.toThrow(
         'npm install sharp',

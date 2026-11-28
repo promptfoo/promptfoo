@@ -41,7 +41,7 @@ export const isCustomStrategy = (strategyId: string): boolean => {
   return strategyId === 'custom' || strategyId.startsWith('custom:');
 };
 
-export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
+export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'image-stego', 'video'] as const;
 export const MULTI_MODAL_STRATEGIES_SET: ReadonlySet<string> = new Set(MULTI_MODAL_STRATEGIES);
 
 export const AGENTIC_STRATEGIES = [
@@ -78,6 +78,7 @@ export const ADDITIONAL_STRATEGIES = [
   'base64',
   'best-of-n',
   'camelcase',
+  'char-split',
   'citation',
   'crescendo',
   'custom',
@@ -87,6 +88,7 @@ export const ADDITIONAL_STRATEGIES = [
   'hex',
   'homoglyph',
   'image',
+  'image-stego',
   'indirect-web-pwn',
   'jailbreak:goblin',
   'jailbreak:hydra',
@@ -150,6 +152,7 @@ export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGUR
 export const ENCODING_STRATEGIES = new Set([
   'arabic-presentation-forms',
   'base64',
+  'char-split',
   'hex',
   'rot13',
   'leetspeak',
@@ -164,6 +167,7 @@ export const ENCODING_STRATEGIES = new Set([
   'octal',
   'audio',
   'image',
+  'image-stego',
   'video',
 ]);
 
