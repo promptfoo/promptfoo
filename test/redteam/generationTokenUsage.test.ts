@@ -4,6 +4,8 @@ import {
   trackAdditionalGenerationProvider,
   trackGenerationTokenUsage,
 } from '../../src/redteam/generationTokenUsage';
+import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 
 import type { ApiProvider, TokenUsage } from '../../src/types/index';
@@ -13,6 +15,90 @@ function createProvider(callApi: ApiProvider['callApi']): ApiProvider {
 }
 
 describe('generation token usage', () => {
+  it.each([
+    { accountingFirst: false, cached: false },
+    { accountingFirst: true, cached: false },
+    { accountingFirst: false, cached: true },
+    { accountingFirst: true, cached: true },
+  ])(
+    'records one call with accountingFirst=$accountingFirst and cached=$cached',
+    async ({ accountingFirst, cached }) => {
+      const usage: TokenUsage = {};
+      const response = {
+        output: 'Hello, world.',
+        cached,
+        tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
+      };
+      const callApi = vi.fn().mockResolvedValue(response);
+      const source = createProvider(callApi);
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const execute = vi.spyOn(registry, 'execute');
+      const provider = accountingFirst
+        ? wrapProviderWithRateLimiting(trackGenerationTokenUsage(source, usage), registry)
+        : trackGenerationTokenUsage(wrapProviderWithRateLimiting(source, registry), usage);
+
+      try {
+        expect(await provider.callApi('Say hello.')).toBe(response);
+        expect(callApi).toHaveBeenCalledExactlyOnceWith(
+          'Say hello.',
+          undefined,
+          expect.objectContaining({ onResponseHeaders: expect.any(Function) }),
+        );
+        expect(execute).toHaveBeenCalledOnce();
+        expect(usage).toMatchObject({ total: 23, prompt: 14, completion: 9, numRequests: 1 });
+        expect(usage.cached ?? 0).toBe(cached ? 23 : 0);
+        expect(usage.incurredTokenUsage ?? usage).toMatchObject({
+          total: cached ? 0 : 23,
+          prompt: cached ? 0 : 14,
+          completion: cached ? 0 : 9,
+          numRequests: cached ? 0 : 1,
+        });
+        expect(response).toEqual({
+          output: 'Hello, world.',
+          cached,
+          tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
+        });
+      } finally {
+        execute.mockRestore();
+        registry.dispose();
+      }
+    },
+  );
+
+  it('counts a billed 429 attempt and the successful retry exactly once', async () => {
+    const usage: TokenUsage = {};
+    const callApi = vi
+      .fn()
+      .mockResolvedValueOnce({
+        error: 'Rate limited',
+        metadata: { http: { status: 429, headers: { 'retry-after-ms': '1000' } } },
+        tokenUsage: { total: 2, prompt: 2, completion: 0, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Hello',
+        tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+      });
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const source = { ...createProvider(callApi), config: { maxRetries: 1 } };
+    const provider = wrapProviderWithRateLimiting(
+      trackGenerationTokenUsage(source, usage),
+      registry,
+    );
+    vi.useFakeTimers();
+    try {
+      const response = provider.callApi('Say hello');
+      await vi.runAllTimersAsync();
+      expect((await response).output).toBe('Hello');
+      expect(callApi).toHaveBeenCalledTimes(2);
+      const expected = { total: 5, prompt: 4, completion: 1, numRequests: 2 };
+      expect(usage).toMatchObject(expected);
+      expect(usage.incurredTokenUsage ?? usage).toMatchObject(expected);
+    } finally {
+      registry.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it('preserves cached generation in the logical footprint without incurring usage', async () => {
     const usage: TokenUsage = {};
     const provider = trackGenerationTokenUsage(
