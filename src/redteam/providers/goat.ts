@@ -16,7 +16,10 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import {
   accumulateAttackerTokenUsage,
+  accumulatedCostFields,
+  accumulateResponseCost,
   accumulateResponseTokenUsage,
+  createCostAccumulator,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { getTargetConversation } from '../grading/storedResult';
@@ -230,6 +233,7 @@ export default class GoatProvider implements ApiProvider {
 
     const messages: Message[] = [];
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
+    const totalCost = createCostAccumulator();
 
     // Track redteamHistory entries with audio/image data for UI rendering
     const redteamHistory: Array<{
@@ -345,6 +349,7 @@ export default class GoatProvider implements ApiProvider {
             }
 
             accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
+            accumulateResponseCost(totalCost, unblockingResponse);
 
             const unblockingOutput =
               typeof unblockingResponse.output === 'string'
@@ -617,6 +622,7 @@ export default class GoatProvider implements ApiProvider {
           await sleep(targetProvider.delay);
         }
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+        accumulateResponseCost(totalCost, targetResponse);
 
         logger.debug(`GOAT turn ${turn} target response`, { response: targetResponse });
 
@@ -909,6 +915,7 @@ export default class GoatProvider implements ApiProvider {
         }),
       },
       tokenUsage: totalTokenUsage,
+      ...accumulatedCostFields(totalCost),
       guardrails: reported.guardrails,
     };
   }

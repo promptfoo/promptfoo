@@ -507,6 +507,63 @@ export function accumulateResponseTokenUsage(
 }
 
 /**
+ * Running cost totals for a provider that makes several billable calls per
+ * test case. `cost` sums every reported cost; `incurredCost` excludes
+ * response-cache replays. Both stay undefined until a call reports one, so
+ * callers never invent a $0 total.
+ */
+export interface CostAccumulator {
+  cost?: number;
+  incurredCost?: number;
+}
+
+export function createCostAccumulator(): CostAccumulator {
+  return {};
+}
+
+/**
+ * Add one response's cost to a running total, mirroring the accounting in
+ * the evaluator's pause path (runEval.ts): logical cost sums every reported
+ * cost, while incurred cost prefers an explicit incurredCost and treats a
+ * cached replay as free. Mutates {@code target}.
+ */
+export function accumulateResponseCost(
+  target: CostAccumulator,
+  response: { cached?: boolean; cost?: number; incurredCost?: number } | undefined,
+): void {
+  if (!response) {
+    return;
+  }
+
+  if (response.cost !== undefined) {
+    target.cost = (target.cost ?? 0) + response.cost;
+  }
+
+  const incurredCost = response.incurredCost ?? (response.cached ? 0 : response.cost);
+  if (incurredCost !== undefined) {
+    target.incurredCost = (target.incurredCost ?? 0) + incurredCost;
+  }
+}
+
+/**
+ * Spread-ready cost fields for a ProviderResponse. Omits cost when no call
+ * reported one, and omits incurredCost when it adds no information beyond
+ * cost (the same convention as bestOfN).
+ */
+export function accumulatedCostFields(accumulated: CostAccumulator): {
+  cost?: number;
+  incurredCost?: number;
+} {
+  return {
+    ...(accumulated.cost !== undefined && { cost: accumulated.cost }),
+    ...(accumulated.incurredCost !== undefined &&
+      accumulated.incurredCost !== accumulated.cost && {
+        incurredCost: accumulated.incurredCost,
+      }),
+  };
+}
+
+/**
  * Record generation-time provider tokens separately from target usage and probes.
  * Returns whether the payload contained observable generation usage.
  */

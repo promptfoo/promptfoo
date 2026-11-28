@@ -15,7 +15,11 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
+  accumulatedCostFields,
+  accumulateResponseCost,
   accumulateResponseTokenUsage,
+  type CostAccumulator,
+  createCostAccumulator,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
 import {
@@ -313,6 +317,7 @@ export class CrescendoProvider implements ApiProvider {
     let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
+    const totalCost = createCostAccumulator();
 
     // Track redteamHistory entries with audio/image data for UI rendering
     const redteamHistory: Array<{
@@ -419,6 +424,7 @@ export class CrescendoProvider implements ApiProvider {
           context,
           tracingOptions,
           totalTokenUsage,
+          totalCost,
           options,
         );
 
@@ -476,6 +482,7 @@ export class CrescendoProvider implements ApiProvider {
         // Track current input vars for history entry
         const lastInputVars = currentInputVars;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
+        accumulateResponseCost(totalCost, lastResponse);
         if (lastResponse.error && options?.abortSignal?.aborted) {
           exitReason = 'Target error';
           break;
@@ -547,6 +554,7 @@ export class CrescendoProvider implements ApiProvider {
             accumulateAttackerTokenUsage(totalTokenUsage, unblockingTransform);
           }
           accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
+          accumulateResponseCost(totalCost, unblockingResponse);
 
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
@@ -867,6 +875,7 @@ export class CrescendoProvider implements ApiProvider {
           }),
         },
         tokenUsage: totalTokenUsage,
+        ...accumulatedCostFields(totalCost),
         guardrails: reported.guardrails,
       },
       lastResponse,
@@ -882,6 +891,7 @@ export class CrescendoProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     tracingOptions: RedteamTracingOptions,
     totalTokenUsage: TokenUsage,
+    totalCost: CostAccumulator,
     options?: CallApiOptionsParams,
   ): Promise<CrescendoAttackPromptResponse> {
     logger.debug(
@@ -949,6 +959,7 @@ export class CrescendoProvider implements ApiProvider {
     );
 
     accumulateAttackerTokenUsage(totalTokenUsage, response);
+    accumulateResponseCost(totalCost, response);
     TokenUsageTracker.getInstance().trackResponseUsage(redTeamingChat.id(), response);
 
     if (redTeamingChat.delay) {

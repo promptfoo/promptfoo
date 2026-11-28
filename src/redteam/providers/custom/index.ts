@@ -10,7 +10,11 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
+  accumulatedCostFields,
+  accumulateResponseCost,
   accumulateResponseTokenUsage,
+  type CostAccumulator,
+  createCostAccumulator,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
 import { getTargetConversation } from '../../grading/storedResult';
@@ -312,6 +316,7 @@ export class CustomProvider implements ApiProvider {
     let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
     const totalTokenUsage = createEmptyTokenUsage();
+    const totalCost = createCostAccumulator();
 
     // Track redteamHistory entries with audio/image data for UI rendering
     const redteamHistory: Array<{
@@ -387,6 +392,7 @@ export class CustomProvider implements ApiProvider {
           lastFeedback,
           objectiveScore,
           totalTokenUsage,
+          totalCost,
           options,
         );
 
@@ -426,6 +432,7 @@ export class CustomProvider implements ApiProvider {
           accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
         }
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
+        accumulateResponseCost(totalCost, lastResponse);
         if (isConversationEndedResponse(lastResponse)) {
           logger.info('[Custom] Target ended conversation', {
             round: roundNum,
@@ -496,6 +503,7 @@ export class CustomProvider implements ApiProvider {
             accumulateAttackerTokenUsage(totalTokenUsage, unblockingTransform);
           }
           accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
+          accumulateResponseCost(totalCost, unblockingResponse);
 
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
@@ -751,6 +759,7 @@ export class CustomProvider implements ApiProvider {
           sessionId: getSessionId(lastResponse, context),
         },
         tokenUsage: totalTokenUsage,
+        ...accumulatedCostFields(totalCost),
         guardrails: reported.guardrails,
         ...(!flaggedRound && error ? { error } : {}),
       },
@@ -765,6 +774,7 @@ export class CustomProvider implements ApiProvider {
     lastFeedback: string,
     objectiveScore: { value: number; rationale: string } | undefined,
     totalTokenUsage: TokenUsage,
+    totalCost: CostAccumulator,
     options?: CallApiOptionsParams,
   ): Promise<{ generatedQuestion: string | undefined; tokenUsage?: TokenUsage }> {
     logger.debug(
@@ -815,6 +825,7 @@ export class CustomProvider implements ApiProvider {
       options,
     );
     accumulateAttackerTokenUsage(totalTokenUsage, response);
+    accumulateResponseCost(totalCost, response);
     TokenUsageTracker.getInstance().trackResponseUsage(redTeamingChat.id(), response);
     if (redTeamingChat.delay) {
       logger.debug(`[Custom] Sleeping for ${redTeamingChat.delay}ms`);

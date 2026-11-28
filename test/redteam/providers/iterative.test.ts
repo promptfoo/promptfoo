@@ -1500,6 +1500,50 @@ describe('RedteamIterativeProvider', () => {
       expect(result.tokenUsage.numRequests).toBe(1);
     });
 
+    it('should accumulate target cost across iterations', async () => {
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
+
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'first response',
+          cost: 0.01,
+          tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+          cached: false,
+        })
+        .mockResolvedValueOnce({
+          output: 'second response',
+          cost: 0.02,
+          tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+          cached: false,
+        })
+        .mockResolvedValueOnce({
+          output: 'third response',
+          cost: 0.03,
+          tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+          cached: false,
+        });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 3,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.cost).toBeCloseTo(0.06);
+      expect(result.incurredCost).toBeUndefined();
+    });
+
     it('includes the internal judge call in persisted grading usage', async () => {
       const gradingProvider = createMockProvider({
         id: 'mock-grading-provider',

@@ -16,8 +16,11 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
+  accumulatedCostFields,
   accumulateGradingResponseTokenUsage,
+  accumulateResponseCost,
   accumulateResponseTokenUsage,
+  createCostAccumulator,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
 import {
@@ -167,6 +170,8 @@ export async function runRedteamConversation({
   prompt?: string;
   metadata: IterativeMetadata;
   tokenUsage: TokenUsage;
+  cost?: number;
+  incurredCost?: number;
   error?: string;
 }> {
   const nunjucks = getNunjucksEngine();
@@ -227,6 +232,7 @@ export async function runRedteamConversation({
   const sessionIds: string[] = [];
 
   const totalTokenUsage = createEmptyTokenUsage();
+  const totalCost = createCostAccumulator();
   const usingRemoteRedteamProvider = attackerUsesRemoteProvider ?? shouldGenerateRemote();
 
   const previousOutputs: {
@@ -297,6 +303,7 @@ export async function runRedteamConversation({
     );
     TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
     accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
+    accumulateResponseCost(totalCost, redteamResp);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
@@ -470,6 +477,7 @@ export async function runRedteamConversation({
     lastResponse = targetResponse;
     lastInjectVar = finalInjectVar;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+    accumulateResponseCost(totalCost, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
     if (targetResponse.error) {
       logger.info(`[Iterative] ${i + 1}/${numIterations} - Target error`, {
@@ -888,6 +896,7 @@ export async function runRedteamConversation({
             : undefined,
       },
       tokenUsage: totalTokenUsage,
+      ...accumulatedCostFields(totalCost),
     },
     lastResponse,
   );
@@ -965,6 +974,8 @@ class RedteamIterativeProvider implements ApiProvider {
     output: string;
     metadata: IterativeMetadata;
     tokenUsage: TokenUsage;
+    cost?: number;
+    incurredCost?: number;
   }> {
     logger.debug('[Iterative] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');

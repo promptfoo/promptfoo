@@ -791,6 +791,43 @@ describe('RedteamIterativeProvider', () => {
       }
     });
 
+    it('accumulates the final target probe cost into the result', async () => {
+      const gradingProvider = createMockProvider({ id: 'mock-grader' });
+      const targetProvider = createMockProvider({ id: 'mock-target' });
+      targetProvider.callApi.mockResolvedValue({
+        output: 'final response',
+        cost: 0.05,
+        tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      });
+      const remoteGenerationSpy = vi
+        .spyOn(remoteGeneration, 'shouldGenerateRemote')
+        .mockReturnValue(false);
+      const attackerProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(mockRedteamProvider);
+      const gradingProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(gradingProvider);
+
+      try {
+        const provider = new RedteamIterativeTreeProvider({ injectVar: 'goal', maxDepth: 1 });
+        (provider as unknown as { treeParams: { maxDepth: number } }).treeParams.maxDepth = 0;
+        const result = await provider.callApi('test prompt', {
+          originalProvider: targetProvider,
+          vars: { goal: 'test objective' },
+          prompt: { raw: '{{goal}}', label: 'test' },
+        });
+
+        expect(targetProvider.callApi).toHaveBeenCalledOnce();
+        expect(result.cost).toBeCloseTo(0.05);
+        expect(result.incurredCost).toBeUndefined();
+      } finally {
+        remoteGenerationSpy.mockRestore();
+        attackerProviderSpy.mockRestore();
+        gradingProviderSpy.mockRestore();
+      }
+    });
+
     it('finalizes a completed branch error without a canceled final target re-probe', async () => {
       const fixture = createSelectedToolErrorTarget();
       mockRedteamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
