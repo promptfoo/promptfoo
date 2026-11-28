@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { runAssertion } from '../../assertions/index';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
@@ -705,6 +706,38 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     res.status(500).json({ error: 'Failed to replay evaluation' });
   }
 });
+
+evalRouter.post(
+  '/:evalId/results/:id/check',
+  async (req: Request, res: Response): Promise<void> => {
+    const params = EvalSchemas.CheckOutput.Params.safeParse(req.params);
+    const body = EvalSchemas.CheckOutput.Request.safeParse(req.body);
+    if (!params.success || !body.success) {
+      replyValidationError(res, params.success ? body.error! : params.error);
+      return;
+    }
+    try {
+      const output = await EvalQueries.getSavedOutput(params.data.evalId, params.data.id);
+      if (output === undefined) {
+        res.status(404).json({ error: 'Evaluation result not found' });
+        return;
+      }
+      if (output === null) {
+        res.status(400).json({ error: 'This result has no saved output to check' });
+        return;
+      }
+      // Check only the literal assertion supplied here; saved scoring and provider settings stay out.
+      const { pass, score, reason } = await runAssertion({
+        assertion: body.data.assertion,
+        test: {},
+        providerResponse: { output },
+      });
+      res.json(EvalSchemas.CheckOutput.Response.parse({ pass, score, reason }));
+    } catch (error) {
+      sendError(res, 500, 'Failed to check saved output', error);
+    }
+  },
+);
 
 evalRouter.post(
   '/:evalId/results/:id/rating',

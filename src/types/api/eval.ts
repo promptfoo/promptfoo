@@ -289,6 +289,44 @@ export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
 export type SubmitRatingResponse = z.infer<typeof SubmitRatingResponseSchema>;
 
+// POST /api/eval/:evalId/results/:id/check
+
+const LiteralAssertionValueSchema = z
+  .string()
+  .max(10000)
+  .refine(
+    (value) =>
+      !value.startsWith('file://') && !value.startsWith('package:') && !/\{[{%#]|#\}/.test(value),
+    'Enter literal text without files, packages, or templates',
+  );
+
+export const CheckOutputRequestSchema = z
+  .object({
+    assertion: z.discriminatedUnion('type', [
+      z
+        .object({
+          type: z.enum(['contains', 'icontains', 'not-contains', 'not-icontains', 'starts-with']),
+          value: LiteralAssertionValueSchema.refine(
+            (value) => value.length > 0,
+            'Enter text to check',
+          ),
+        })
+        .strict(),
+      z.object({ type: z.literal('equals'), value: LiteralAssertionValueSchema }).strict(),
+      z.object({ type: z.enum(['is-json', 'not-is-json']) }).strict(),
+    ]),
+  })
+  .strict();
+
+export const CheckOutputResponseSchema = z.object({
+  pass: z.boolean(),
+  score: z.number(),
+  reason: z.string(),
+});
+
+export type CheckOutputRequest = z.infer<typeof CheckOutputRequestSchema>;
+export type CheckOutputResponse = z.infer<typeof CheckOutputResponseSchema>;
+
 // POST /api/eval (save eval to database)
 
 export const SaveEvalRequestSchema = z
@@ -336,6 +374,11 @@ export type BulkDeleteEvalsRequest = z.infer<typeof BulkDeleteEvalsRequestSchema
 
 /** Grouped schemas for server-side validation. */
 export const EvalSchemas = {
+  CheckOutput: {
+    Params: SubmitRatingParamsSchema,
+    Request: CheckOutputRequestSchema,
+    Response: CheckOutputResponseSchema,
+  },
   CreateJob: {
     Request: CreateJobRequestSchema,
     Response: CreateJobResponseSchema,
