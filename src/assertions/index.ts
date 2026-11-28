@@ -141,44 +141,71 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
 ]);
 
-const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
-  'javascript',
-  'python',
-  'ruby',
-  'trace-error-spans',
-  'trace-span-count',
-  'trace-span-duration',
-  'trajectory:goal-success',
-  'trajectory:step-count',
-  'trajectory:tool-args-match',
-  'trajectory:tool-sequence',
-  'trajectory:tool-used',
-]);
+const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
+
+function isTraceAssertionType(type: string): boolean {
+  return (
+    type.startsWith('trace-') ||
+    type.startsWith('trajectory:') ||
+    type.startsWith('promptfoo:redteam:coding-agent:')
+  );
+}
+
+export function assertionRequiresTrace(assertion: AssertionOrSet, rejected = false): boolean {
+  if (assertion.weight === 0) {
+    return false;
+  }
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some((child) => assertionRequiresTrace(child, rejected));
+  }
+  // Scripts can access the trace dynamically. Once a snapshot is rejected,
+  // even a script that appears to grade output cannot trust remaining spans.
+  return rejected
+    ? assertionMayNeedTraceContext(assertion)
+    : isTraceAssertionType(getAssertionBaseType(assertion));
+}
 
 export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
   if (assertion.type === 'assert-set') {
     return assertion.assert.some(assertionUsesTrace);
   }
-
-  return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
+  const type = getAssertionBaseType(assertion);
+  return SCRIPT_RESULT_ASSERTIONS.has(type) || isTraceAssertionType(type);
 }
 
 function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(assertionMayNeedTraceContext);
+  }
   if (assertionUsesTrace(assertion)) {
     return true;
   }
 
-  if (assertion.type === 'assert-set') {
-    return assertion.assert.some(assertionMayNeedTraceContext);
+  const { value } = assertion;
+  if (typeof value !== 'string') {
+    return false;
   }
+  return value.startsWith('file://')
+    ? resolveAssertionFile(value).language !== undefined
+    : isPackagePath(value);
+}
 
-  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
-    return true;
-  }
-
-  return typeof assertion.value === 'string'
-    ? assertion.value.startsWith('file://') || isPackagePath(assertion.value)
-    : false;
+function resolveAssertionFile(value: string) {
+  const fileRef = value.slice('file://'.length);
+  const colonIndex = fileRef.indexOf(':');
+  const filePath = path.resolve(
+    cliState.basePath || '',
+    colonIndex === -1 ? fileRef : fileRef.slice(0, colonIndex),
+  );
+  const functionName = colonIndex === -1 ? undefined : fileRef.slice(colonIndex + 1);
+  const language = isJavascriptFile(filePath)
+    ? 'javascript'
+    : filePath.endsWith('.py')
+      ? 'python'
+      : filePath.endsWith('.rb')
+        ? 'ruby'
+        : undefined;
+  return { filePath, functionName, language };
 }
 
 export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
@@ -492,39 +519,30 @@ async function runAssertionInternal({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
-  const scriptFailure = (reason: string): GradingResult =>
+  const failure = (reason: string): GradingResult =>
     applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
+  const baseType = getAssertionBaseType(assertion);
+  if (!context.trace && (baseType.startsWith('trace-') || baseType.startsWith('trajectory:'))) {
+    return failure(`No trace data available for ${baseType} assertion`);
+  }
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
-      const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const colonIndex = fileRef.indexOf(':');
-        filePath = fileRef.slice(0, colonIndex);
-        functionName = fileRef.slice(colonIndex + 1);
-      }
-
-      filePath = path.resolve(basePath, filePath);
-
-      if (isJavascriptFile(filePath)) {
+      const { filePath, functionName, language } = resolveAssertionFile(renderedValue);
+      if (language === 'javascript') {
         // Load errors (missing file or export) are config mistakes and still throw.
         const assertionFunction = await resolveJavaScriptFileFunction(filePath, functionName);
         try {
           valueFromScript = await assertionFunction(output, context);
         } catch (error) {
-          return scriptFailure(
+          return failure(
             `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
           );
         }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
-      } else if (filePath.endsWith('.py') || filePath.endsWith('.rb')) {
+      } else if (language === 'python' || language === 'ruby') {
         try {
-          const runScript = filePath.endsWith('.py')
-            ? runPython
-            : (await import('../ruby/rubyUtils.js')).runRuby;
+          const runScript =
+            language === 'python' ? runPython : (await import('../ruby/rubyUtils.js')).runRuby;
           valueFromScript = await runScript<ValueFromScriptType>(
             filePath,
             functionName || 'get_assert',
@@ -532,7 +550,7 @@ async function runAssertionInternal({
           );
           logger.debug(`Script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return scriptFailure((error as Error).message);
+          return failure((error as Error).message);
         }
       } else {
         renderedValue = processFileReference(renderedValue);
@@ -549,7 +567,7 @@ async function runAssertionInternal({
       try {
         valueFromScript = await Promise.resolve(requiredModule(output, context));
       } catch (error) {
-        return scriptFailure(
+        return failure(
           `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
         );
       }
@@ -573,8 +591,6 @@ async function runAssertionInternal({
   // Centralized script output resolution
   // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
   // All other types should use the script output as the comparison value
-  const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
-  const baseType = getAssertionBaseType(assertion);
 
   if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
     // Validate the script result type - only javascript/python/ruby can return functions
@@ -899,7 +915,7 @@ export async function runAssertions({
 
     mainAssertResult.addResult({
       index,
-      result,
+      result: applyAssertionWeight(result, weight),
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
     });

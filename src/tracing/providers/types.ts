@@ -61,6 +61,9 @@ export class TraceProviderError extends Error {
   }
 }
 
+// Partial evidence must never be mistaken for a missing optional trace during grading.
+export class IncompleteTraceError extends TraceProviderError {}
+
 /**
  * Result from fetching a trace
  */

@@ -5,7 +5,7 @@ import {
   releaseResponse,
   validateTraceProviderEndpoint,
 } from './fetch';
-import { TraceProviderError } from './types';
+import { IncompleteTraceError, TraceProviderError } from './types';
 
 import type { SpanData } from '../store';
 import type {
@@ -35,13 +35,21 @@ interface TempoSpan {
   endTimeUnixNano?: string;
   attributes?: Array<{ key: string; value: TempoAttributeValue }>;
   status?: { code?: number | string; message?: string };
+  droppedAttributesCount?: unknown;
+  droppedEventsCount?: unknown;
+  droppedLinksCount?: unknown;
+  events?: Array<{ droppedAttributesCount?: unknown }>;
+  links?: Array<{ droppedAttributesCount?: unknown }>;
 }
 
 interface TempoTraceResponse {
-  batches?: Array<{
-    resource?: { attributes?: Array<{ key: string; value: TempoAttributeValue }> };
+  batches: Array<{
+    resource?: {
+      attributes?: Array<{ key: string; value: TempoAttributeValue }>;
+      droppedAttributesCount?: unknown;
+    };
     scopeSpans?: Array<{
-      scope?: { name?: string; version?: string };
+      scope?: { name?: string; version?: string; droppedAttributesCount?: unknown };
       spans?: TempoSpan[];
     }>;
   }>;
@@ -95,13 +103,28 @@ function attributesToRecord(
   );
 }
 
+function assertNoDroppedTelemetry(...counts: unknown[]): void {
+  const incomplete = counts.some((count) => {
+    if (count == null || count === 0) {
+      return false;
+    }
+    return (
+      typeof count !== 'string' ||
+      !/^[ \t\r\n]*-?0(?:\.0+)?(?:[eE][+-]?\d+)?[ \t\r\n]*$/.test(count)
+    );
+  });
+  if (incomplete) {
+    throw new IncompleteTraceError('Tempo returned incomplete trace data: dropped telemetry');
+  }
+}
+
 function decodeId(
   id: string | undefined,
   hexPattern: RegExp,
   base64Pattern: RegExp,
   byteLength: number,
 ): string | undefined {
-  if (!id) {
+  if (typeof id !== 'string' || !id) {
     return undefined;
   }
 
@@ -151,23 +174,31 @@ function normalizeStatusCode(code: number | string | undefined): number | undefi
   }
 }
 
+function assertCompleteSpan(span: TempoSpan) {
+  assertNoDroppedTelemetry(
+    span.droppedAttributesCount,
+    span.droppedEventsCount,
+    span.droppedLinksCount,
+  );
+  for (const records of [span.events, span.links]) {
+    if (records == null) {
+      continue;
+    }
+    if (!Array.isArray(records)) {
+      throw new IncompleteTraceError('Tempo span events and links must be arrays');
+    }
+    for (const record of records) {
+      assertNoDroppedTelemetry(record?.droppedAttributesCount);
+    }
+  }
+}
+
 function transformSpan(
   span: TempoSpan,
-  traceId: string,
+  spanId: string,
   resourceAttributes: Record<string, unknown>,
   scopeName: string | undefined,
-): SpanData | null {
-  if (
-    decodeId(span.traceId, TRACE_ID_PATTERN, BASE64_TRACE_ID_PATTERN, 16) !== traceId.toLowerCase()
-  ) {
-    throw new Error('Span trace ID must match the requested trace');
-  }
-
-  const spanId = decodeId(span.spanId, SPAN_ID_PATTERN, BASE64_SPAN_ID_PATTERN, 8);
-  if (!spanId) {
-    throw new Error('Span ID must be a valid nonzero eight-byte identifier');
-  }
-
+): SpanData {
   const parentSpanId = decodeId(span.parentSpanId, SPAN_ID_PATTERN, BASE64_SPAN_ID_PATTERN, 8);
   if (span.parentSpanId && !parentSpanId) {
     throw new Error('Parent span ID must be a valid nonzero eight-byte identifier');
@@ -208,6 +239,24 @@ function transformSpan(
     statusCode: normalizeStatusCode(span.status?.code),
     statusMessage: span.status?.message,
   };
+}
+
+function parseTrace(body: string): TempoTraceResponse {
+  try {
+    // JSON numbers like 1e-400 round to zero. Preserve the token for the same
+    // exact zero check as quoted OTLP counters, after selecting the requested trace.
+    const data = JSON.parse(body, (key, value, context?: { source: string }) =>
+      value === 0 && /^dropped(Attributes|Events|Links)Count$/.test(key)
+        ? (context?.source ?? value)
+        : value,
+    ) as TempoTraceResponse;
+    if (Array.isArray(data?.batches)) {
+      return data;
+    }
+  } catch {
+    // JSON parser errors can include response excerpts. Report only the incomplete snapshot.
+  }
+  throw new IncompleteTraceError('Tempo returned an invalid trace response');
 }
 
 export class TempoProvider implements TraceProvider {
@@ -256,38 +305,58 @@ export class TempoProvider implements TraceProvider {
   }
 
   private transformSpans(data: TempoTraceResponse, traceId: string): SpanData[] {
-    const spans: SpanData[] = [];
-    const seenSpanIds = new Set<string>();
+    const spans = new Map<string, SpanData | null>();
+    const requestedId = traceId.toLowerCase();
     let malformedSpans = 0;
 
-    for (const batch of data.batches ?? []) {
-      if (!batch || !Array.isArray(batch.scopeSpans)) {
+    for (const batch of data.batches) {
+      const resourceCount = batch?.resource?.droppedAttributesCount;
+      if (!Array.isArray(batch?.scopeSpans) || batch.scopeSpans.length === 0) {
+        // Without children we cannot establish that the lost telemetry belongs elsewhere.
+        assertNoDroppedTelemetry(resourceCount);
         malformedSpans++;
         continue;
       }
-      const resourceAttributes = attributesToRecord(batch.resource?.attributes);
+      let resourceAttributes: Record<string, unknown> | undefined;
       for (const scopeSpan of batch.scopeSpans) {
-        if (!scopeSpan || !Array.isArray(scopeSpan.spans)) {
+        const scopeCount = scopeSpan?.scope?.droppedAttributesCount;
+        if (!Array.isArray(scopeSpan?.spans) || scopeSpan.spans.length === 0) {
+          assertNoDroppedTelemetry(resourceCount, scopeCount);
           malformedSpans++;
           continue;
         }
-        for (const span of scopeSpan.spans) {
-          if (spans.length >= MAX_SPANS) {
-            return spans;
+        const matching = scopeSpan.spans.filter(
+          (span) =>
+            decodeId(span?.traceId, TRACE_ID_PATTERN, BASE64_TRACE_ID_PATTERN, 16) === requestedId,
+        );
+        malformedSpans += scopeSpan.spans.length - matching.length;
+        if (!matching.length) {
+          continue;
+        }
+        if (!resourceAttributes) {
+          assertNoDroppedTelemetry(resourceCount);
+          resourceAttributes = attributesToRecord(batch.resource?.attributes);
+        }
+        assertNoDroppedTelemetry(scopeCount);
+        for (const span of matching) {
+          assertCompleteSpan(span);
+          const id = decodeId(span.spanId, SPAN_ID_PATTERN, BASE64_SPAN_ID_PATTERN, 8);
+          if (!id) {
+            malformedSpans++;
+            continue;
           }
-
+          if (spans.get(id)) {
+            continue;
+          }
+          if (!spans.has(id) && spans.size >= MAX_SPANS) {
+            throw new IncompleteTraceError('Tempo trace exceeds the maximum span count');
+          }
           try {
-            const normalizedSpan = transformSpan(
-              span,
-              traceId,
-              resourceAttributes,
-              scopeSpan.scope?.name,
-            );
-            if (normalizedSpan && !seenSpanIds.has(normalizedSpan.spanId)) {
-              seenSpanIds.add(normalizedSpan.spanId);
-              spans.push(normalizedSpan);
-            }
+            spans.set(id, transformSpan(span, id, resourceAttributes, scopeSpan.scope?.name));
           } catch {
+            // Count a distinct valid ID even if another field is malformed. A valid
+            // duplicate can still supply its data.
+            spans.set(id, null);
             malformedSpans++;
           }
         }
@@ -298,7 +367,7 @@ export class TempoProvider implements TraceProvider {
       logger.warn(`[TempoProvider] Skipped ${malformedSpans} malformed spans`);
     }
 
-    return spans;
+    return [...spans.values()].filter((span) => span !== null);
   }
 
   async fetchTrace(traceId: string, options?: FetchTraceOptions): Promise<FetchTraceResult | null> {
@@ -323,14 +392,8 @@ export class TempoProvider implements TraceProvider {
       return null;
     }
     const body = await readLimitedResponse(response, 'Tempo');
-    const data = JSON.parse(body) as TempoTraceResponse;
-    if (!Array.isArray(data.batches)) {
-      throw new TraceProviderError('Tempo returned an invalid trace response');
-    }
-
-    const spans = this.transformSpans(data, traceId);
     return {
-      spans,
+      spans: this.transformSpans(parseTrace(body), traceId),
       fetchedAt: Date.now(),
     };
   }

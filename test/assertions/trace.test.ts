@@ -1,7 +1,12 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
+import {
+  assertionRequiresTrace,
+  assertionUsesTrace,
+  runAssertion,
+  runAssertions,
+} from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { getTraceStore } from '../../src/tracing/store';
@@ -218,6 +223,17 @@ describe('trace assertions', () => {
       expect(result.reason).toContain('Attribute filters applied to keys: ["gen_ai.tool.name"]');
       expect(result.reason).not.toContain('private-tool-value');
     });
+  });
+
+  it.each([
+    ['is-json', 'file://schema.json', false],
+    ['equals', 'file://expected_output.txt', false],
+    ['equals', 'file://expected.cjs:getValue', true],
+    ['equals', 'file://expected.py:get_value', true],
+    ['equals', 'file://expected.rb:Values::Expected.get', true],
+    ['equals', 'package:expected:getValue', true],
+  ] as const)('checks rejected evidence for %s with %s', (type, value, required) => {
+    expect(assertionRequiresTrace({ type, value }, true)).toBe(required);
   });
 
   describe('javascript assertions with trace', () => {

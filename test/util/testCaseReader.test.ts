@@ -907,6 +907,10 @@ describe('readTest', () => {
     expect(result).toEqual(input);
   });
 
+  it('accepts an empty precomputed output as the only field', async () => {
+    await expect(readTest({ providerOutput: '' })).resolves.toEqual({ providerOutput: '' });
+  });
+
   it('readTest with invalid input', async () => {
     const input: any = 123;
 

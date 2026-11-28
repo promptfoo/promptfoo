@@ -1,6 +1,6 @@
 import { hasTraceCredentialPath } from '../../contracts/traceProviderEndpoint';
 import logger from '../../logger';
-import { TraceProviderError } from './types';
+import { IncompleteTraceError, TraceProviderError } from './types';
 
 export { fetchWithProxy } from '../../util/fetch/index';
 
@@ -52,7 +52,7 @@ export async function readLimitedResponse(
 
   if (Number(response.headers.get('content-length')) > maxResponseBytes) {
     await releaseResponse(response, providerName);
-    throw new TraceProviderError(`${providerName} trace exceeds the maximum response size`);
+    throw new IncompleteTraceError(`${providerName} trace exceeds the maximum response size`);
   }
 
   const reader = response.body?.getReader();
@@ -72,8 +72,9 @@ export async function readLimitedResponse(
 
     byteLength += value.byteLength;
     if (byteLength > maxResponseBytes) {
-      await reader.cancel();
-      throw new TraceProviderError(`${providerName} trace exceeds the maximum response size`);
+      reader.releaseLock();
+      await releaseResponse(response, providerName);
+      throw new IncompleteTraceError(`${providerName} trace exceeds the maximum response size`);
     }
     body += decoder.decode(value, { stream: true });
   }
