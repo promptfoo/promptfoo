@@ -989,7 +989,7 @@ describe('createShareableUrl', () => {
           testCase: {
             provider: 'file:///home/alice/project/target.js',
             options: {
-              provider: {
+              graderProvider: {
                 text: {
                   id: 'openai:chat:test',
                   config: { basePath: '/home/alice/project', temperature: 0 },
@@ -1068,8 +1068,10 @@ describe('createShareableUrl', () => {
           tools: 'file://tools.json',
           nested: [{ schema: 'file://schema.json' }],
         });
-        expect(uploaded.testCase.options.provider.text.config).toEqual({ temperature: 0 });
-        expect(uploaded.testCase.options.provider.classification).toBe('file://classifier.js');
+        expect(uploaded.testCase.options.graderProvider.text.config).toEqual({ temperature: 0 });
+        expect(uploaded.testCase.options.graderProvider.classification).toBe(
+          'file://classifier.js',
+        );
         expect(row.provider.config.basePath).toBe('/home/alice/project');
         expect(row.testCase.metadata.__promptfoo.providerBasePath).toBe(
           '/home/alice/project/tests',

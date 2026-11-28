@@ -71,6 +71,7 @@ import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import {
   buildConfiguredProviderMap,
   isProviderTypeMap,
+  normalizeGraderProvider,
   resolveConfiguredProviderReference,
 } from '../util/gradingProvider';
 import invariant from '../util/invariant';
@@ -1064,9 +1065,9 @@ function mergeScenarioTest(
       ...test.vars,
     },
     options: {
-      ...(defaultTest?.options || {}),
-      ...data.options,
-      ...test.options,
+      ...normalizeGraderProvider(defaultTest?.options, 'defaultTest.options'),
+      ...normalizeGraderProvider(data.options, 'scenario.config.options'),
+      ...normalizeGraderProvider(test.options, 'scenario.tests.options'),
     },
     assert: [...(data.assert || []), ...(test.assert || [])],
     metadata: mergedMetadata,
@@ -1197,8 +1198,8 @@ async function prepareTestCaseForEval(
   ];
   testCase.threshold = testCase.threshold ?? defaultTest?.threshold;
   testCase.options = {
-    ...(defaultTest?.options || {}),
-    ...testCase.options,
+    ...normalizeGraderProvider(defaultTest?.options, 'defaultTest.options'),
+    ...normalizeGraderProvider(testCase.options, 'test.options'),
   };
   testCase.metadata = {
     ...(defaultTest?.metadata || {}),

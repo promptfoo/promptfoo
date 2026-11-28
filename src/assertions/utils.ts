@@ -5,19 +5,23 @@ import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import { type Assertion, type TestCase } from '../types/index';
+import { normalizeGraderProvider } from '../util/gradingProvider';
 import { loadYaml } from '../util/yamlLoad';
 
 const clone = Clone();
 
 export function getFinalTest(test: TestCase, assertion: Assertion) {
+  const normalizedOptions = normalizeGraderProvider(test.options, 'test.options');
+  const testGraderProvider = normalizedOptions?.provider;
   // Deep copy
   const ret = clone({
     ...test,
     ...(test.options &&
-      test.options.provider && {
+      (test.options.provider !== undefined || test.options.graderProvider !== undefined) && {
         options: {
           ...test.options,
           provider: undefined,
+          graderProvider: undefined,
         },
       }),
     ...(test.provider && {
@@ -46,7 +50,8 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
   if (test.provider) {
     ret.provider = test.provider;
   }
-  ret.options.provider = assertion.provider || test?.options?.provider;
+  delete ret.options.graderProvider;
+  ret.options.provider = assertion.provider ?? testGraderProvider;
   ret.options.rubricPrompt = assertion.rubricPrompt || ret.options.rubricPrompt;
   return Object.freeze(ret);
 }

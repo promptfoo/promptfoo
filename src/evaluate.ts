@@ -18,6 +18,7 @@ import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
   isProviderTypeMap,
+  normalizeGraderProvider,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
@@ -131,7 +132,8 @@ function toSerializableTestCase(test: unknown, droppedRef: { value: boolean }): 
   let sanitizedTest = withSerializableProvider(test);
 
   if (isRecord(test.options)) {
-    let options = withSerializableProvider(test.options);
+    const normalized = normalizeGraderProvider(test.options, 'test.options');
+    let options = withSerializableProvider(normalized ?? test.options);
     options = replaceFunctionTransforms(options, droppedRef);
     if (options !== test.options) {
       sanitizedTest = {
@@ -246,6 +248,11 @@ async function resolveNestedProviders(
   if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
     constructedTestSuite.defaultTest = cloneTestForResolve(constructedTestSuite.defaultTest);
 
+    constructedTestSuite.defaultTest.options = normalizeGraderProvider(
+      constructedTestSuite.defaultTest.options,
+      'defaultTest.options',
+    );
+
     if (
       constructedTestSuite.defaultTest.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.provider)
@@ -271,6 +278,7 @@ async function resolveNestedProviders(
   constructedTestSuite.tests = (constructedTestSuite.tests || []).map(cloneTestForResolve);
 
   for (const test of constructedTestSuite.tests) {
+    test.options = normalizeGraderProvider(test.options, 'test.options');
     if (test.options?.provider && !isApiProvider(test.options.provider)) {
       test.options.provider = await resolveGradingProvider(test.options.provider, providerMap, {
         env: testSuiteConfig.env,

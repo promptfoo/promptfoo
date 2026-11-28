@@ -1256,6 +1256,28 @@
             }
           }
         },
+        "graderProvider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {},
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {}
+                ]
+              }
+            }
+          ]
+        },
         "disableVarExpansion": {
           "type": "boolean"
         },

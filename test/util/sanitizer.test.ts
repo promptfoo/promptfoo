@@ -318,7 +318,12 @@ describe('sanitizeConfigForOutput', () => {
     expect(JSON.stringify(input)).toContain('ordinary selector');
   });
 
-  it.each([true, false])('projects nested provider selectors in config (strip: %s)', (strip) => {
+  it.each([
+    { strip: true, key: 'provider' },
+    { strip: false, key: 'provider' },
+    { strip: true, key: 'graderProvider' },
+    { strip: false, key: 'graderProvider' },
+  ])('projects nested $key selectors in config (strip: $strip)', ({ strip, key }) => {
     const provider = {
       id: 'echo',
       prompts: ['ordinary nested selector'],
@@ -327,7 +332,7 @@ describe('sanitizeConfigForOutput', () => {
     const test = {
       provider,
       options: {
-        provider: {
+        [key]: {
           text: provider,
           embedding: provider,
           label: 'ordinary map label',
@@ -356,7 +361,7 @@ describe('sanitizeConfigForOutput', () => {
       metadata: test.metadata,
       provider: { config: provider.config },
       options: {
-        provider: {
+        [key]: {
           text: { config: provider.config },
           label: 'ordinary map label',
           config: { prompts: ['ordinary map configuration'] },
