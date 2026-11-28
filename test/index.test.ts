@@ -87,6 +87,8 @@ vi.mock('../src/util/file');
 describe('index.ts exports', () => {
   const expectedNamedExports = [
     'ConfigResolutionError',
+    'EVALPORT_RUNNER_NAME',
+    'EVALPORT_SPEC_VERSION',
     'EmailValidationError',
     'EvalRunError',
     'EVENT_SOURCES',
@@ -95,9 +97,15 @@ describe('index.ts exports', () => {
     'PromptSuggestionsRejectedError',
     'ServerError',
     'assertions',
+    'assertionToEvalPortGrader',
     'buildInputPromptDescription',
     'cache',
+    'evalPortResultSetToEvaluateResults',
+    'evalPortSuiteToPromptfooTests',
     'evaluate',
+    'evaluateResultsToEvalPortResultSet',
+    'evaluateSummaryToEvalPortResultSet',
+    'flattenAssertions',
     'generateTable',
     'getInputDescription',
     'getInputType',
@@ -113,7 +121,10 @@ describe('index.ts exports', () => {
     'normalizeInputDefinition',
     'normalizeInputs',
     'ProbeLimitExceededError',
+    'promptfooTestsToEvalPortSuite',
     'redteam',
+    'validateEvalPortResultSet',
+    'validateEvalPortSuite',
   ];
 
   const expectedSchemaExports = [
