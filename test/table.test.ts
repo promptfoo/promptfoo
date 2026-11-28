@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_MAX_WIDTH } from '../src/constants';
 import { generateTable, wrapTable } from '../src/table';
-import { type EvaluateTable, ResultFailureReason } from '../src/types/index';
+import { type EvaluateTable, type GradingResult, ResultFailureReason } from '../src/types/index';
 import {
   createCompletedPrompt,
   createEvaluateTable,
@@ -112,6 +112,138 @@ describe('table', () => {
         chalk.red('[FAIL] ') + chalk.red.bold('failing test'),
       ]);
     });
+
+    it('shows a passing group and its failing child once using existing metadata', () => {
+      const children: GradingResult[] = [
+        {
+          pass: true,
+          score: 1,
+          reason: 'match',
+          assertion: { type: 'contains', metric: 'Greeting' },
+        },
+        {
+          pass: false,
+          score: 0,
+          reason: 'missing',
+          assertion: { type: 'contains', metric: 'Location' },
+        },
+      ];
+      const group: GradingResult = {
+        pass: true,
+        score: 0.5,
+        reason: 'threshold met',
+        metadata: {
+          assertionSet: {
+            type: 'assert-set',
+            metric: 'Response',
+            threshold: 0.5,
+            assertionCount: 2,
+          },
+        },
+        componentResults: children,
+      };
+      const table = {
+        ...mockEvaluateTable,
+        body: [
+          {
+            ...mockEvaluateTable.body[0],
+            outputs: [
+              createEvaluateTableOutput({
+                text: 'Hello',
+                gradingResult: {
+                  pass: true,
+                  score: 0.5,
+                  reason: 'passed',
+                  componentResults: [group, ...children.map((child) => ({ ...child }))],
+                },
+              }),
+            ],
+          },
+        ],
+      };
+      generateTable(table, 500);
+      const cell = mockTableInstances[0].push.mock.calls[0][0].at(-1);
+      expect(cell).toContain('[PASS] Response (score 0.50 >= 0.5)');
+      expect(cell).toContain('  [PASS] Greeting (score 1.00)');
+      expect(cell).toContain('  [FAIL] Location (score 0.00)');
+      expect(cell.split('Greeting')).toHaveLength(2);
+      expect(cell.split('Location')).toHaveLength(2);
+      expect(cell).toContain('Hello');
+    });
+
+    it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+      'renders persisted non-finite child score %s without changing pass/fail',
+      (score) => {
+        const gradingResult: GradingResult = JSON.parse(
+          JSON.stringify({
+            pass: false,
+            score: 0,
+            reason: 'fixture',
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'fixture',
+                metadata: { assertionSet: { type: 'assert-set', threshold: 1 } },
+                componentResults: [
+                  { pass: false, score, reason: 'fixture', assertion: { type: 'search-rubric' } },
+                ],
+              },
+            ],
+          }),
+        );
+        const table = createEvaluateTable({
+          body: [
+            createEvaluateTableRow({ outputs: [createEvaluateTableOutput({ gradingResult })] }),
+          ],
+        });
+        generateTable(table, 500);
+        const cell = mockTableInstances[0].push.mock.calls[0][0].at(-1);
+        expect(cell).toContain('[FAIL] search-rubric (score unavailable)');
+        expect(cell).toContain('[FAIL] assert-set (score 0.00 < 1)');
+      },
+    );
+
+    it.each([undefined, 0, 1])(
+      'shows group requirements for threshold %s within the existing cell bound',
+      (threshold) => {
+        const group: GradingResult = {
+          pass: threshold !== 1,
+          score: 0,
+          reason: 'fixture',
+          metadata: { assertionSet: { type: 'assert-set', threshold } },
+          componentResults: [],
+        };
+        const table = {
+          ...mockEvaluateTable,
+          body: [
+            {
+              ...mockEvaluateTable.body[0],
+              outputs: [
+                createEvaluateTableOutput({
+                  text: 'long response '.repeat(100),
+                  gradingResult: {
+                    pass: true,
+                    score: 0,
+                    reason: 'fixture',
+                    componentResults: [group],
+                  },
+                }),
+              ],
+            },
+          ],
+        };
+        generateTable(table, 100);
+        const cell = mockTableInstances[0].push.mock.calls[0][0]
+          .at(-1)
+          .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+        expect(cell).toContain(
+          threshold === undefined ? 'all assertions must pass' : threshold === 0 ? '>= 0' : '< 1',
+        );
+        expect(cell).toHaveLength(107);
+        expect(cell.endsWith('...')).toBe(true);
+      },
+    );
 
     it('should respect maxRows parameter', () => {
       generateTable(mockEvaluateTable, 250, 1);
