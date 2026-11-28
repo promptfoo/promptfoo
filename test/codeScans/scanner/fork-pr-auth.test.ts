@@ -12,17 +12,20 @@ describe('Scanner fork PR auth rejection', () => {
 
   function mockForkPrAuthScanner() {
     vi.doMock('../../../src/codeScan/git/diffProcessor', () => ({
-      processDiff: vi.fn().mockResolvedValue([
-        {
-          path: 'src/index.ts',
-          status: 'M',
-          shaA: 'abc123',
-          shaB: 'def456',
-          linesAdded: 5,
-          linesRemoved: 2,
-          patch: '@@ -1,3 +1,4 @@\n+const test = true;\n const existing = true;',
-        },
-      ]),
+      processDiff: vi.fn().mockResolvedValue({
+        totalFiles: 1,
+        files: [
+          {
+            path: 'src/index.ts',
+            status: 'M',
+            shaA: 'abc123',
+            shaB: 'def456',
+            linesAdded: 5,
+            linesRemoved: 2,
+            patch: '@@ -1,3 +1,4 @@\n+const test = true;\n const existing = true;',
+          },
+        ],
+      }),
     }));
     vi.doMock('../../../src/codeScan/git/diff', () => ({
       validateOnBranch: vi.fn().mockResolvedValue('main'),

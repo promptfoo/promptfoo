@@ -16,6 +16,7 @@ describe('Scanner machine-readable output', () => {
     processDiffError,
     configApiHost,
     files = [],
+    totalFiles = files.length,
     dirtyFiles,
   }: {
     initialLogLevel?: string;
@@ -23,6 +24,7 @@ describe('Scanner machine-readable output', () => {
     processDiffError?: Error;
     configApiHost?: string;
     files?: FileRecord[];
+    totalFiles?: number;
     dirtyFiles?: Array<{ path: string }>;
   } = {}) {
     let currentLogLevel = initialLogLevel;
@@ -34,7 +36,7 @@ describe('Scanner machine-readable output', () => {
     vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
       processDiff: processDiffError
         ? vi.fn().mockRejectedValue(processDiffError)
-        : vi.fn().mockResolvedValue(files),
+        : vi.fn().mockResolvedValue({ files, totalFiles }),
     }));
     vi.doMock('../../src/codeScan/git/metadata', () => ({
       extractMetadata: vi.fn().mockResolvedValue({ branch: 'feature', commitMessages: [] }),
@@ -195,7 +197,7 @@ describe('Scanner machine-readable output', () => {
 
     expect(executeScanRequestWithRetry).not.toHaveBeenCalled();
     expect(displayScanResults).toHaveBeenCalledWith(
-      { success: true, comments: [], review: 'No files to scan' },
+      { success: true, comments: [], review: 'No files to scan', skippedFiles: 1 },
       expect.any(Number),
       { format: CodeScanOutputFormat.JSON, githubPr: undefined },
     );
@@ -210,8 +212,21 @@ describe('Scanner machine-readable output', () => {
     const { executeScan } = await import('../../src/codeScan/scanner/index');
     const { executeScanRequestWithRetry } = await import('../../src/codeScan/scanner/request');
 
+    const { displayScanResults } = await import('../../src/codeScan/scanner/output');
+    vi.mocked(executeScanRequestWithRetry).mockResolvedValueOnce({
+      success: true,
+      comments: [],
+      skippedFiles: 3,
+    });
+
     await executeScan('/test/repo', { json: true, diffsOnly: true });
 
+    // A larger server-side count must keep the result incomplete for SARIF consumers.
+    expect(displayScanResults).toHaveBeenCalledWith(
+      expect.objectContaining({ skippedFiles: 3 }),
+      expect.any(Number),
+      expect.any(Object),
+    );
     expect(executeScanRequestWithRetry).toHaveBeenCalledOnce();
     // The request retains skipped-file metadata alongside the usable diff.
     expect(executeScanRequestWithRetry).toHaveBeenCalledWith(
@@ -241,7 +256,7 @@ describe('Scanner machine-readable output', () => {
       await executeScan('/test/repo', options);
 
       expect(displayScanResults).toHaveBeenCalledWith(
-        { success: true, comments: [], review: 'No files to scan' },
+        { success: true, comments: [], review: 'No files to scan', skippedFiles: 0 },
         expect.any(Number),
         { format: expectedFormat, githubPr: undefined },
       );
@@ -250,6 +265,22 @@ describe('Scanner machine-readable output', () => {
       expect(getLogLevel()).toBe('info');
     },
   );
+
+  it('reports filtered records in a full scan without disclosing the files', async () => {
+    mockScanner({ totalFiles: 2 });
+    mockMcpLifecycle();
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { displayScanResults } = await import('../../src/codeScan/scanner/output');
+
+    await executeScan('/test/repo', { json: true, diffsOnly: false });
+
+    expect(displayScanResults).toHaveBeenCalledWith(
+      { success: true, comments: [], review: 'No files to scan', skippedFiles: 2 },
+      expect.any(Number),
+      { format: CodeScanOutputFormat.JSON, githubPr: undefined },
+    );
+  });
 
   it.each([
     ['CLI option', 'https://cli.example', 'https://config.example', 'https://cli.example'],

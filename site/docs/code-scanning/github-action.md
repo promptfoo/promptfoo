@@ -54,11 +54,91 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 | `promptfoo-version` | Exact `promptfoo` CLI version to install for scanning (e.g. `0.121.0`). Ranges and dist-tags are rejected.                               | Version pinned at release   |
 | `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning                                                                             | None                        |
 
-[1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
+[1]: /docs/code-scanning/cli#custom-guidance
+
+When `config-path` is omitted, the Action generates a temporary config from its severity, diff-scope, and guidance inputs. When `config-path` is set, that file supplies those settings and any corresponding Action inputs are ignored with a warning. The `api-host` input remains workflow-controlled in both modes.
+
+SARIF output requires a scanner response with `skippedFiles: 0`. If the scanner skips the run or an older CLI omits this field, the action withholds SARIF and fails when SARIF was requested. PR comment reporting still works.
+
+Run the action in a clean job on a trusted runner before any pull request code executes. Check out the pull request head with `fetch-depth: 0` and `persist-credentials: false`. The action uses the base commit reported by GitHub. It never fetches through a credentialed Git remote. Git must be installed at `/usr/bin/git` on Linux or macOS, or in the default Git for Windows location. If the pull request changes during the scan, the action fails before writing SARIF or posting fallback comments.
+
+Only select config content from a trusted workflow or base revision. A config read from the pull request checkout can let the pull request weaken its own scan policy. For example, a workflow can materialize the file from the trusted base SHA before invoking the Action:
+
+```yaml
+- name: Checkout code
+  uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+  with:
+    ref: ${{ github.event.pull_request.head.sha || github.ref }}
+    fetch-depth: 0
+    persist-credentials: false
+
+- name: Load trusted Code Scan config
+  env:
+    BASE_SHA: ${{ github.event.pull_request.base.sha }}
+  run: |
+    git worktree add --detach "${RUNNER_TEMP}/promptfoo-code-scan-base" "${BASE_SHA}"
+
+- name: Run Promptfoo Code Scan
+  uses: promptfoo/code-scan-action@v0
+  with:
+    config-path: ${{ runner.temp }}/promptfoo-code-scan-base/.github/promptfoo-code-scan.yaml
+```
+
+The detached base worktree preserves relative `guidanceFile` paths. For `workflow_dispatch`, resolve the requested pull request's base SHA through the GitHub API rather than using the user-selected dispatch ref.
 
 ### Triggering Additional Scans
 
 If you made changes to your PR and want to run another scan, you can trigger a new scan by commenting on the PR with `@promptfoo-scanner`.
+
+### Manual Scans with `workflow_dispatch`
+
+For a manual scan, pass `pr_number` and check out that PR's head SHA. The Action scans the current workspace (`--compare HEAD`); the default dispatch checkout uses the ref selected when starting the workflow.
+
+Resolve the head SHA through the GitHub API, check out that commit, and verify the PR still points to it before scanning:
+
+```yaml
+name: Promptfoo Code Scan (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to scan
+        required: true
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+      security-events: write
+    steps:
+      - name: Resolve PR head SHA
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
+        run: |
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || exit 1
+          head_sha="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq '.headRefOid')"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the requested PR head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run Promptfoo Code Scan
+        uses: promptfoo/code-scan-action@v0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+When you also materialize a trusted `config-path`, resolve it from the PR's base SHA (as shown above) so policy comes from the base while the scanned code comes from the verified PR head.
 
 ### Fork Pull Requests
 
@@ -112,12 +192,21 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
 - name: Run Promptfoo Code Scan
   uses: promptfoo/code-scan-action@v0
   with:
-    config-path: .promptfoo-code-scan.yaml
+    config-path: ${{ runner.temp }}/promptfoo-code-scan.yaml # Materialized from a trusted revision
+```
+
+**Scan only changed lines without repository tracing:**
+
+```yaml
+- name: Run Promptfoo Code Scan
+  uses: promptfoo/code-scan-action@v0
+  with:
+    diffs-only: true
 ```
 
 **Write SARIF output for GitHub Code Scanning:**
 
-The action sets `sarif-path` only when a scan actually completes, so keep the upload step conditional. Intentionally skipped scans do not publish a clean Code Scanning result.
+The action sets `sarif-path` only for a complete scan, so keep the upload step conditional. If changed files were skipped, it withholds SARIF and fails when `sarif-output-path` was requested. Available findings can still be posted as PR comments.
 
 ```yaml
 - name: Run Promptfoo Code Scan
@@ -127,7 +216,7 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
     sarif-output-path: promptfoo-code-scan.sarif
 
 - name: Upload SARIF to GitHub Code Scanning
-  if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
+  if: ${{ !cancelled() && steps.promptfoo-code-scan.outputs.sarif-path != '' }}
   uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
   with:
     sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
@@ -176,6 +265,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read # Required for SARIF upload in private repositories
       pull-requests: write
       security-events: write
 
@@ -183,7 +273,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -202,7 +294,7 @@ jobs:
           # ... other configuration options...
 
       - name: Upload SARIF to GitHub Code Scanning
-        if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
+        if: ${{ !cancelled() && steps.promptfoo-code-scan.outputs.sarif-path != '' }}
         uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
         with:
           sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
