@@ -933,6 +933,155 @@ describe('ClaudeCodeSDKProvider', () => {
     );
   });
 
+  describe('API key environment precedence', () => {
+    let restoreEnv: () => void;
+
+    beforeEach(() => {
+      restoreEnv = mockProcessEnv({
+        ANTHROPIC_API_KEY: undefined,
+        CLAUDE_CODE_USE_BEDROCK: undefined,
+        CLAUDE_CODE_USE_VERTEX: undefined,
+      });
+    });
+
+    afterEach(() => {
+      restoreEnv();
+    });
+
+    it.each([
+      // Ambient, provider config, prompt config, provider env, explicit provider, explicit prompt.
+      [undefined, 'config', undefined, undefined, undefined, undefined, 'config'],
+      [undefined, undefined, 'prompt-env', undefined, undefined, undefined, 'prompt-env'],
+      ['ambient', 'config', undefined, undefined, undefined, undefined, 'config'],
+      ['ambient', 'config', 'prompt-env', undefined, undefined, undefined, 'prompt-env'],
+      ['ambient', 'config', 'prompt-env', 'override', undefined, undefined, 'override'],
+      ['ambient', 'config', 'prompt-env', 'override', 'provider', undefined, 'provider'],
+      ['ambient', 'config', 'prompt-env', 'override', 'provider', 'prompt', 'prompt'],
+      ['ambient', '', '', '', 'provider', undefined, 'provider'],
+    ])(
+      'resolves credential precedence in case %#',
+      async (ambient, configured, perPrompt, override, providerKey, promptKey, expected) => {
+        mockProcessEnv({ ANTHROPIC_API_KEY: ambient });
+        mockQuery.mockReturnValue(createMockResponse('Authenticated response'));
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            apiKey: providerKey,
+            env: configured === undefined ? undefined : { ANTHROPIC_API_KEY: configured },
+          },
+          env: { ANTHROPIC_API_KEY: override },
+        });
+        await provider.callApi('Prompt', {
+          vars: {},
+          prompt: {
+            raw: 'Prompt',
+            label: 'test',
+            config: { apiKey: promptKey, env: { ANTHROPIC_API_KEY: perPrompt } },
+          },
+        });
+        expect(mockQuery.mock.calls[0][0].options.env.ANTHROPIC_API_KEY).toBe(expected);
+      },
+    );
+
+    it('layers prompt environment values over provider values without removing undefined entries', async () => {
+      mockQuery.mockReturnValue(createMockResponse('Authenticated response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: {
+          env: {
+            ANTHROPIC_API_KEY: 'config-env-key',
+            PROVIDER_ONLY: 'preserved',
+            PROMPT_OVERRIDE: 'provider-value',
+            EMPTY_OVERRIDE: 'provider-value',
+            UNDEFINED_OVERRIDE: 'provider-value',
+            ANTHROPIC_BASE_URL: 'https://provider.example',
+          },
+        },
+        env: { ANTHROPIC_BASE_URL: 'https://override.example' },
+      });
+
+      const result = await provider.callApi('Prompt', {
+        vars: {},
+        prompt: {
+          raw: 'Prompt',
+          label: 'test',
+          config: {
+            env: {
+              ANTHROPIC_API_KEY: undefined,
+              PROMPT_ONLY: 'added',
+              PROMPT_OVERRIDE: 'prompt-value',
+              EMPTY_OVERRIDE: '',
+              UNDEFINED_OVERRIDE: undefined,
+              ANTHROPIC_BASE_URL: 'https://prompt.example',
+            },
+          },
+        },
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Authenticated response');
+      expect(mockQuery).toHaveBeenCalledOnce();
+      const env = mockQuery.mock.calls[0][0].options.env;
+      for (const [key, expected] of Object.entries({
+        ANTHROPIC_API_KEY: 'config-env-key',
+        PROVIDER_ONLY: 'preserved',
+        PROMPT_ONLY: 'added',
+        PROMPT_OVERRIDE: 'prompt-value',
+        EMPTY_OVERRIDE: '',
+        UNDEFINED_OVERRIDE: 'provider-value',
+        ANTHROPIC_BASE_URL: 'https://override.example',
+      })) {
+        expect(env[key], key).toBe(expected);
+      }
+    });
+
+    it('keeps an explicit empty key in the subprocess when authentication is optional', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: 'ambient' });
+      mockQuery.mockReturnValue(createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({ config: { apiKeyRequired: false } });
+      provider.apiKey = '';
+      expect(provider.getApiKey()).toBe('');
+      await provider.callApi('Prompt');
+      expect(mockQuery.mock.calls[0][0].options.env.ANTHROPIC_API_KEY).toBe('');
+    });
+
+    it.each<{
+      name: string;
+      config?: ClaudeCodeOptions;
+      env?: EnvOverrides;
+      promptConfig?: ClaudeCodeOptions;
+    }>([
+      { name: 'provider apiKey', config: { apiKey: '' } },
+      { name: 'prompt apiKey', config: { apiKey: 'provider' }, promptConfig: { apiKey: '' } },
+      {
+        name: 'provider config.env',
+        config: { env: { ANTHROPIC_API_KEY: '' } },
+      },
+      {
+        name: 'provider env',
+        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
+        env: { ANTHROPIC_API_KEY: '' },
+      },
+      {
+        name: 'prompt config.env',
+        config: { env: { ANTHROPIC_API_KEY: 'config-env-key' } },
+        promptConfig: { env: { ANTHROPIC_API_KEY: '' } },
+      },
+    ])(
+      'rejects an empty $name key instead of reviving ambient credentials',
+      async ({ config, env, promptConfig }) => {
+        mockProcessEnv({ ANTHROPIC_API_KEY: 'process-key' });
+        const provider = new ClaudeCodeSDKProvider({ config, env });
+
+        await expect(
+          provider.callApi('Prompt', {
+            vars: {},
+            prompt: { raw: 'Prompt', label: 'test', config: promptConfig },
+          }),
+        ).rejects.toThrow('Anthropic API key is not set');
+        expect(mockQuery).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe('scheduler composition', () => {
     let registry: RateLimitRegistry;
 
@@ -5943,6 +6092,28 @@ describe('ClaudeCodeSDKProvider', () => {
         });
         expect(mockQuery).toHaveBeenCalledTimes(2);
       });
+
+      it.each(['env', 'apiKey'])(
+        'retires cached responses when %s rotates on the same provider',
+        async (source) => {
+          const env = { ANTHROPIC_API_KEY: 'tenant-a-key' };
+          const provider = new ClaudeCodeSDKProvider({ env });
+          mockQuery
+            .mockReturnValueOnce(createMockResponse('Tenant A'))
+            .mockReturnValueOnce(createMockResponse('Tenant B'));
+          expect((await provider.callApi('Same prompt')).output).toBe('Tenant A');
+          if (source === 'env') {
+            env.ANTHROPIC_API_KEY = 'tenant-b-key';
+          } else {
+            provider.apiKey = 'tenant-b-key';
+          }
+          expect(provider.apiKey).toBe('tenant-b-key');
+          expect((await provider.callApi('Same prompt')).output).toBe('Tenant B');
+          expect(mockQuery.mock.calls[1][0].options.env.ANTHROPIC_API_KEY).toBe('tenant-b-key');
+          expect((await provider.callApi('Same prompt')).cached).toBe(true);
+          expect(mockQuery).toHaveBeenCalledTimes(2);
+        },
+      );
 
       it('isolates cache entries across provider instances even with the same credential', async () => {
         mockQuery
