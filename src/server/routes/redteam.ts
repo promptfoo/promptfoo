@@ -10,11 +10,8 @@ import {
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
-import {
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
-  neverGenerateRemote,
-} from '../../redteam/remoteGeneration';
+import { getRemoteGenerationHeaders, neverGenerateRemote } from '../../redteam/remoteGeneration';
+import { resolveRemoteGenerationUrl } from '../../redteam/remoteGenerationRequest';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
@@ -371,7 +368,6 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
     return;
   }
 
-  const cloudFunctionUrl = getRemoteGenerationUrl();
   logger.debug(`Received ${taskId} task request`, {
     method: req.method,
     url: req.url,
@@ -379,6 +375,7 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
   });
 
   try {
+    const cloudFunctionUrl = await resolveRemoteGenerationUrl(bodyResult.data);
     logger.debug(`Sending request to cloud function: ${cloudFunctionUrl}`);
     const response = await fetchWithProxy(cloudFunctionUrl, {
       method: 'POST',

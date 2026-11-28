@@ -33,6 +33,12 @@ vi.mock('../../src/globalConfig/cloud', () => {
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
       getApiKey: vi.fn().mockReturnValue('test-api-key'),
       getAuthHeaderName: () => 'Authorization',
+      getRequestConfig: () => ({
+        apiHost: 'https://api.promptfoo.dev',
+        authHeaderName: 'Authorization',
+        headers: { Authorization: 'Bearer test-api-key' },
+        teamId: undefined,
+      }),
     },
   };
 });

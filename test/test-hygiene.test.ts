@@ -239,7 +239,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'redteam/plugins/canGenerateRemote.test.ts',
   'redteam/plugins/codingAgent.test.ts',
   'redteam/plugins/index.test.ts',
-  'redteam/plugins/intent.test.ts',
   'redteam/plugins/pliny.test.ts',
   'redteam/providers/authoritativeMarkupInjection.test.ts',
   'redteam/providers/bestOfN.test.ts',

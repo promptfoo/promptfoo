@@ -92,25 +92,41 @@ function restrictLegacyConfig(fd: number): void {
   }
 }
 
+/** Read the latest configuration before applying this caller's changes. */
+export function updateGlobalConfig(update: (config: GlobalConfig) => void): void {
+  const config = readGlobalConfig();
+  update(config);
+  writeGlobalConfig(config);
+}
+
+/** Reset email verification whenever the address changes. */
+export function updateAccountEmail(config: GlobalConfig, email?: string): void {
+  const account = (config.account ??= {});
+  if (email) {
+    if (account.email !== email) {
+      account.emailValidated = false;
+      account.emailNeedsValidation = true;
+    }
+    account.email = email;
+  } else {
+    delete account.email;
+    delete account.emailValidated;
+    delete account.emailNeedsValidation;
+  }
+}
+
 /**
  * Merges the top-level keys into existing config.
  * @param partialConfig New keys to merge into the existing config.
  */
 export function writeGlobalConfigPartial(partialConfig: Partial<GlobalConfig>): void {
-  const currentConfig = readGlobalConfig();
-  // Create a shallow copy of the current config
-  const updatedConfig: GlobalConfig = { ...currentConfig };
-
-  // Use Object.entries for better type safety
-  Object.entries(partialConfig).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      // Type assertion: we know key is valid from partialConfig, and value matches the key's type
-      (updatedConfig as Record<string, unknown>)[key] = value;
-    } else {
-      // Remove the property if value is falsy
-      delete (updatedConfig as Record<string, unknown>)[key];
+  updateGlobalConfig((config) => {
+    for (const [key, value] of Object.entries(partialConfig)) {
+      if (value !== undefined && value !== null) {
+        (config as Record<string, unknown>)[key] = value;
+      } else {
+        delete (config as Record<string, unknown>)[key];
+      }
     }
   });
-
-  writeGlobalConfig(updatedConfig);
 }

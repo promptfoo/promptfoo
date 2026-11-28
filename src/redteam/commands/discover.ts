@@ -18,13 +18,10 @@ import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
-import {
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
-  neverGenerateRemote,
-} from '../remoteGeneration';
+import { getRemoteGenerationHeaders, neverGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getCloudTargetIdFromProviders } from '../remoteGenerationContextFromProviders';
+import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 
 import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
 
@@ -254,7 +251,7 @@ export async function doTargetPurposeDiscovery(
 
         logger.debug(`${LOG_PREFIX} Discovery loop turn: ${turn}`);
 
-        const response = await fetchWithProxy(getRemoteGenerationUrl(), {
+        const response = await fetchWithProxy(await resolveRemoteGenerationUrl({ targetId }), {
           method: 'POST',
           // Auth is injected centrally at the fetch layer for the configured cloud
           // origin only, so the saved token is never sent to a custom

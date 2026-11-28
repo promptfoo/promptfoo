@@ -2,20 +2,42 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvString } from '../../src/envars';
 import { CLOUD_API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
-import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
+import {
+  readGlobalConfig,
+  updateGlobalConfig,
+  writeGlobalConfig,
+} from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/util/fetch/index');
 vi.mock('../../src/logger');
-vi.mock('../../src/globalConfig/globalConfig');
+vi.mock('../../src/globalConfig/globalConfig', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/globalConfig/globalConfig')>()),
+  readGlobalConfig: vi.fn(),
+  updateGlobalConfig: vi.fn(),
+  writeGlobalConfig: vi.fn(),
+}));
+
+async function validateAndSave(config: CloudConfig, token: string, apiHost: string) {
+  const authHeaderName = config.getAuthHeaderName();
+  const response = await config.validateApiToken(token, apiHost, authHeaderName);
+  config.saveValidatedApiToken({ ...response, token, apiHost, authHeaderName, teamId: null });
+  return response;
+}
 
 describe('CloudConfig', () => {
   let cloudConfigInstance: CloudConfig;
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(updateGlobalConfig).mockImplementation((update) => {
+      const config = structuredClone(readGlobalConfig());
+      update(config);
+      writeGlobalConfig(config);
+      vi.mocked(readGlobalConfig).mockReturnValue(config);
+    });
     vi.mocked(readGlobalConfig).mockReturnValue({
       id: 'test-id',
       cloud: {
@@ -162,7 +184,7 @@ describe('CloudConfig', () => {
   describe('setters and getters', () => {
     it('should set and get apiHost', () => {
       cloudConfigInstance.setApiHost('https://new.api');
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
         cloud: expect.objectContaining({
           apiHost: 'https://new.api',
         }),
@@ -171,7 +193,7 @@ describe('CloudConfig', () => {
 
     it('should strip a trailing slash when persisting apiHost', () => {
       cloudConfigInstance.setApiHost('https://onprem.example.com/');
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
         cloud: expect.objectContaining({
           apiHost: 'https://onprem.example.com',
         }),
@@ -180,7 +202,7 @@ describe('CloudConfig', () => {
 
     it('should set and get apiKey', () => {
       cloudConfigInstance.setApiKey('new-key');
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
         cloud: expect.objectContaining({
           apiKey: 'new-key',
         }),
@@ -189,7 +211,7 @@ describe('CloudConfig', () => {
 
     it('should set and get appUrl', () => {
       cloudConfigInstance.setAppUrl('https://new.app');
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
         cloud: expect.objectContaining({
           appUrl: 'https://new.app',
         }),
@@ -198,7 +220,7 @@ describe('CloudConfig', () => {
 
     it('should set and get sharing', () => {
       cloudConfigInstance.setSharing(true);
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
         cloud: expect.objectContaining({
           sharing: true,
         }),
@@ -218,7 +240,10 @@ describe('CloudConfig', () => {
   describe('delete', () => {
     it('should clear cloud config', () => {
       cloudConfigInstance.delete();
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({ cloud: {} });
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toEqual({
+        id: 'test-id',
+        account: {},
+      });
     });
 
     it('should reset in-memory state after delete', () => {
@@ -233,7 +258,7 @@ describe('CloudConfig', () => {
     });
   });
 
-  describe('validateAndSetApiToken', () => {
+  describe('validated login sharing', () => {
     const mockResponse = {
       user: {
         id: '1',
@@ -263,14 +288,11 @@ describe('CloudConfig', () => {
 
       vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
 
-      const result = await cloudConfigInstance.validateAndSetApiToken(
-        'test-token',
-        'https://test.api',
-      );
+      const result = await validateAndSave(cloudConfigInstance, 'test-token', 'https://test.api');
 
       expect(result).toEqual(mockResponse);
       // Verify sharing was persisted as true
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith(
+      expect(writeGlobalConfig).toHaveBeenCalledWith(
         expect.objectContaining({
           cloud: expect.objectContaining({
             sharing: true,
@@ -293,10 +315,10 @@ describe('CloudConfig', () => {
 
       vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
 
-      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
+      const result = await validateAndSave(cloudConfigInstance, 'test-token', CLOUD_API_HOST);
 
       expect(result.hasActiveLicense).toBe(false);
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      const lastCall = vi.mocked(writeGlobalConfig).mock.calls.at(-1)?.[0];
       expect(lastCall).toEqual(
         expect.objectContaining({
           cloud: expect.objectContaining({
@@ -320,10 +342,10 @@ describe('CloudConfig', () => {
 
       vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
 
-      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
+      const result = await validateAndSave(cloudConfigInstance, 'test-token', CLOUD_API_HOST);
 
       expect(result.hasActiveLicense).toBe(false);
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      const lastCall = vi.mocked(writeGlobalConfig).mock.calls.at(-1)?.[0];
       expect(lastCall).toEqual(
         expect.objectContaining({
           cloud: expect.objectContaining({
@@ -333,8 +355,8 @@ describe('CloudConfig', () => {
       );
     });
 
-    it('should preserve existing sharing value when public cloud omits hasActiveLicense', async () => {
-      // Pre-set sharing to true to verify it is preserved
+    it('should recompute sharing when public cloud omits hasActiveLicense', async () => {
+      // A new account must not inherit the previous account's sharing setting.
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
         cloud: {
@@ -354,15 +376,11 @@ describe('CloudConfig', () => {
       } as Response;
 
       vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
-      const setSharingSpy = vi.spyOn(cloudConfigInstance, 'setSharing');
 
-      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
+      const result = await validateAndSave(cloudConfigInstance, 'test-token', CLOUD_API_HOST);
 
-      expect(result.hasActiveLicense).toBe(false);
-      // setSharing should NOT have been called when hasActiveLicense is undefined
-      expect(setSharingSpy).not.toHaveBeenCalled();
-      // The existing sharing value should be preserved
-      expect(cloudConfigInstance.getSharing()).toBe(true);
+      expect(result.hasActiveLicense).toBeUndefined();
+      expect(cloudConfigInstance.getSharing()).toBe(false);
     });
 
     it('should throw error on failed validation', async () => {
@@ -376,7 +394,7 @@ describe('CloudConfig', () => {
       vi.mocked(fetchWithProxy).mockResolvedValue(mockErrorResponse);
 
       await expect(
-        cloudConfigInstance.validateAndSetApiToken('invalid-token', 'https://test.api'),
+        validateAndSave(cloudConfigInstance, 'invalid-token', 'https://test.api'),
       ).rejects.toThrow('Failed to validate API token: Unauthorized');
     });
 
@@ -392,7 +410,7 @@ describe('CloudConfig', () => {
       } as Response;
       vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
 
-      await cloudConfigInstanceWithEnv.validateAndSetApiToken('test-token', 'https://test.api');
+      await validateAndSave(cloudConfigInstanceWithEnv, 'test-token', 'https://test.api');
 
       expect(fetchWithProxy).toHaveBeenCalledWith(
         'https://test.api/api/v1/users/me',
@@ -400,7 +418,7 @@ describe('CloudConfig', () => {
           headers: { 'X-Env-Header': 'Bearer test-token' },
         }),
       );
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith(
+      expect(writeGlobalConfig).toHaveBeenCalledWith(
         expect.objectContaining({
           cloud: expect.objectContaining({
             authHeaderName: 'X-Env-Header',
@@ -445,10 +463,10 @@ describe('CloudConfig', () => {
         makeFetch({ ...onPremResponse, hasActiveLicense: false }),
       );
 
-      const result = await cloudConfigInstance.validateAndSetApiToken('token', onPremHost);
+      const result = await validateAndSave(cloudConfigInstance, 'token', onPremHost);
 
       expect(result.hasActiveLicense).toBe(false);
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      const lastCall = vi.mocked(writeGlobalConfig).mock.calls.at(-1)?.[0];
       expect(lastCall).toEqual(
         expect.objectContaining({ cloud: expect.objectContaining({ sharing: true }) }),
       );
@@ -462,10 +480,10 @@ describe('CloudConfig', () => {
       };
       vi.mocked(fetchWithProxy).mockResolvedValue(makeFetch(body));
 
-      const result = await cloudConfigInstance.validateAndSetApiToken('token', onPremHost);
+      const result = await validateAndSave(cloudConfigInstance, 'token', onPremHost);
 
       expect(result.hasActiveLicense).toBe(false);
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      const lastCall = vi.mocked(writeGlobalConfig).mock.calls.at(-1)?.[0];
       expect(lastCall).toEqual(
         expect.objectContaining({ cloud: expect.objectContaining({ sharing: true }) }),
       );
@@ -476,9 +494,9 @@ describe('CloudConfig', () => {
         makeFetch({ ...onPremResponse, hasActiveLicense: true }),
       );
 
-      await cloudConfigInstance.validateAndSetApiToken('token', onPremHost);
+      await validateAndSave(cloudConfigInstance, 'token', onPremHost);
 
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      const lastCall = vi.mocked(writeGlobalConfig).mock.calls.at(-1)?.[0];
       expect(lastCall).toEqual(
         expect.objectContaining({ cloud: expect.objectContaining({ sharing: true }) }),
       );
@@ -489,9 +507,9 @@ describe('CloudConfig', () => {
         makeFetch({ ...onPremResponse, hasActiveLicense: false }),
       );
 
-      await cloudConfigInstance.validateAndSetApiToken('token', `${onPremHost}/`);
+      await validateAndSave(cloudConfigInstance, 'token', `${onPremHost}/`);
 
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      const lastCall = vi.mocked(writeGlobalConfig).mock.calls.at(-1)?.[0];
       expect(lastCall).toEqual(
         expect.objectContaining({ cloud: expect.objectContaining({ sharing: true }) }),
       );
@@ -510,9 +528,9 @@ describe('CloudConfig', () => {
       cloudConfigInstance = new CloudConfig();
       vi.mocked(fetchWithProxy).mockResolvedValue(makeFetch(onPremResponse));
 
-      await cloudConfigInstance.validateAndSetApiToken('token', onPremHost);
+      await validateAndSave(cloudConfigInstance, 'token', onPremHost);
 
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      const lastCall = vi.mocked(writeGlobalConfig).mock.calls.at(-1)?.[0];
       expect(lastCall).toEqual(
         expect.objectContaining({ cloud: expect.objectContaining({ sharing: true }) }),
       );
@@ -531,9 +549,9 @@ describe('CloudConfig', () => {
         makeFetch({ ...onPremResponse, hasActiveLicense: false }),
       );
 
-      await cloudConfigInstance.validateAndSetApiToken('token', host);
+      await validateAndSave(cloudConfigInstance, 'token', host);
 
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      const lastCall = vi.mocked(writeGlobalConfig).mock.calls.at(-1)?.[0];
       expect(lastCall).toEqual(
         expect.objectContaining({ cloud: expect.objectContaining({ sharing: true }) }),
       );
@@ -550,12 +568,9 @@ describe('CloudConfig', () => {
           }),
         );
 
-        await cloudConfigInstance.validateAndSetApiToken(
-          'token',
-          'https://cloud-proxy.example.com',
-        );
+        await validateAndSave(cloudConfigInstance, 'token', 'https://cloud-proxy.example.com');
 
-        const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+        const lastCall = vi.mocked(writeGlobalConfig).mock.calls.at(-1)?.[0];
         expect(lastCall).toEqual(
           expect.objectContaining({ cloud: expect.objectContaining({ sharing: false }) }),
         );
@@ -570,10 +585,10 @@ describe('CloudConfig', () => {
       };
       vi.mocked(fetchWithProxy).mockResolvedValue(makeFetch(body));
 
-      const result = await cloudConfigInstance.validateAndSetApiToken('token', CLOUD_API_HOST);
+      const result = await validateAndSave(cloudConfigInstance, 'token', CLOUD_API_HOST);
 
       expect(result.hasActiveLicense).toBe(false);
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      const lastCall = vi.mocked(writeGlobalConfig).mock.calls.at(-1)?.[0];
       expect(lastCall).toEqual(
         expect.objectContaining({ cloud: expect.objectContaining({ sharing: false }) }),
       );
@@ -597,9 +612,9 @@ describe('CloudConfig', () => {
       };
       vi.mocked(fetchWithProxy).mockResolvedValue(makeFetch(body));
 
-      await cloudConfigInstance.validateAndSetApiToken('token', host);
+      await validateAndSave(cloudConfigInstance, 'token', host);
 
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      const lastCall = vi.mocked(writeGlobalConfig).mock.calls.at(-1)?.[0];
       expect(lastCall).toEqual(
         expect.objectContaining({ cloud: expect.objectContaining({ sharing: false }) }),
       );
@@ -840,7 +855,7 @@ describe('CloudConfig', () => {
   describe('setAuthHeaderName', () => {
     it('should persist the configured header name', () => {
       cloudConfigInstance.setAuthHeaderName('X-Promptfoo-Api-Key');
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
         cloud: expect.objectContaining({
           authHeaderName: 'X-Promptfoo-Api-Key',
         }),
@@ -880,7 +895,7 @@ describe('CloudConfig', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            user: { id: '1', email: 'test@example.com' },
+            user: { id: '1', name: 'Test User', email: 'test@example.com' },
             organization: { id: '1', name: 'Test Org' },
             app: { url: 'https://test.app' },
           }),
@@ -911,7 +926,7 @@ describe('CloudConfig', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            user: { id: '1', email: 'test@example.com' },
+            user: { id: '1', name: 'Test User', email: 'test@example.com' },
             organization: { id: '1', name: 'Test Org' },
             app: { url: 'https://test.app' },
           }),
@@ -932,7 +947,7 @@ describe('CloudConfig', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            user: { id: '1', email: 'test@example.com' },
+            user: { id: '1', name: 'Test User', email: 'test@example.com' },
             organization: { id: '1', name: 'Test Org' },
             app: { url: 'https://test.app' },
           }),
@@ -955,22 +970,24 @@ describe('CloudConfig', () => {
 
   describe('saveValidatedApiToken with authHeaderName', () => {
     it('should persist the authHeaderName when provided', () => {
-      cloudConfigInstance.saveValidatedApiToken(
-        'token',
-        'https://test.api',
-        {
+      cloudConfigInstance.saveValidatedApiToken({
+        token: 'token',
+        apiHost: 'https://test.api',
+        organization: { id: 'org', name: 'Org' },
+        teamId: null,
+        user: {
           id: '1',
           name: 'Test User',
           email: 'test@example.com',
           createdAt: new Date(),
           updatedAt: new Date(),
         },
-        { url: 'https://test.app' },
-        true,
-        'X-Promptfoo-Api-Key',
-      );
+        app: { url: 'https://test.app' },
+        hasActiveLicense: true,
+        authHeaderName: 'X-Promptfoo-Api-Key',
+      });
 
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
         cloud: expect.objectContaining({
           authHeaderName: 'X-Promptfoo-Api-Key',
         }),
@@ -983,22 +1000,24 @@ describe('CloudConfig', () => {
         cloud: { authHeaderName: 'X-Saved-Auth' },
       });
       cloudConfigInstance = new CloudConfig();
-      cloudConfigInstance.saveValidatedApiToken(
-        'token',
-        'https://test.api',
-        {
+      cloudConfigInstance.saveValidatedApiToken({
+        token: 'token',
+        apiHost: 'https://test.api',
+        organization: { id: 'org', name: 'Org' },
+        teamId: null,
+        user: {
           id: '1',
           name: 'Test User',
           email: 'test@example.com',
           createdAt: new Date(),
           updatedAt: new Date(),
         },
-        { url: 'https://test.app' },
-        true,
-      );
+        app: { url: 'https://test.app' },
+        hasActiveLicense: true,
+      });
 
       expect(cloudConfigInstance.getAuthHeaderName()).toBe('X-Saved-Auth');
-      expect(writeGlobalConfigPartial).toHaveBeenLastCalledWith({
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
         cloud: expect.objectContaining({ authHeaderName: 'X-Saved-Auth' }),
       });
     });

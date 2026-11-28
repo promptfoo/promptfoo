@@ -6,11 +6,8 @@ import {
   type MultiTurnStrategy,
   type Plugin,
 } from '../../redteam/constants';
-import {
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
-  neverGenerateRemote,
-} from '../../redteam/remoteGeneration';
+import { getRemoteGenerationHeaders, neverGenerateRemote } from '../../redteam/remoteGeneration';
+import { resolveRemoteGenerationUrl } from '../../redteam/remoteGenerationRequest';
 import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
@@ -239,9 +236,9 @@ function getStringMetadataValue(
   return typeof value === 'string' ? value : undefined;
 }
 
-function fetchGenerationRequest(body: Record<string, unknown>) {
+async function fetchGenerationRequest(body: Record<string, unknown>) {
   return fetchWithRetries(
-    getRemoteGenerationUrl(),
+    await resolveRemoteGenerationUrl(body),
     {
       method: 'POST',
       headers: getRemoteGenerationHeaders(),

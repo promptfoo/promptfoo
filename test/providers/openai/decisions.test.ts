@@ -758,6 +758,20 @@ describe('OpenAiDecisionsProvider', () => {
   });
 
   describe('effective Cloud authentication', () => {
+    beforeEach(() => {
+      vi.spyOn(cloudConfig, 'getRequestConfig').mockImplementation(() => {
+        const authHeaderName = cloudConfig.getAuthHeaderName();
+        const token = cloudConfig.getApiKey();
+        return {
+          apiHost: cloudConfig.getApiHost(),
+          appUrl: 'https://cloud.example',
+          sessionId: 'fixture-session',
+          authHeaderName,
+          headers: token ? { [authHeaderName]: `Bearer ${token}` } : undefined,
+          teamId: undefined,
+        };
+      });
+    });
     it.each(['Authorization', 'X-Session'])(
       'isolates rotated %s credentials and sanitizes fresh and cached responses',
       async (headerName) => {
