@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Classify support requests with IteraCompute
+
+prompts:
+  - 'Classify this support request as BILLING or TECHNICAL. Reply with only the label. Request: {{request}}'
+
+providers:
+  - id: openai:chat:z-ai/glm-5.3-flash
+    config:
+      apiBaseUrl: https://api.iteracompute.com/v1
+      apiKeyEnvar: ITERACOMPUTE_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      omitDefaults: true
+      showThinking: false
+
+tests:
+  - vars:
+      request: I was charged twice for my subscription.
+    assert:
+      - type: equals
+        value: BILLING
+  - vars:
+      request: The app crashes whenever I upload a file.
+    assert:
+      - type: equals
+        value: TECHNICAL
