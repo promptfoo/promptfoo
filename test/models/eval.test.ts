@@ -1,3 +1,4 @@
+import Ajv from 'ajv';
 import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
@@ -1619,6 +1620,100 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    function schemaRow() {
+      const value = {
+        type: 'object',
+        properties: { password: { type: 'string', pattern: '^opaque$' } },
+      };
+      const assertion = { type: 'is-json' as const, value };
+      const reason = 'data/password must match pattern "^opaque$"';
+      return createEvaluateResult({
+        testCase: { assert: [assertion] },
+        gradingResult: { assertion, reason, score: 0, pass: false },
+        error: reason,
+        score: 0,
+        success: false,
+        response: { output: 'ordinary response' },
+      });
+    }
+
+    it.each(['single', 'batch'])(
+      'projects schema copies during %s writes, updates and exports',
+      async (mode) => {
+        const evaluation = await EvalFactory.create({ numResults: 0 });
+        const row = schemaRow();
+        const saved =
+          mode === 'single'
+            ? await EvalResult.createFromEvaluateResult(evaluation.id, row)
+            : (await EvalResult.createManyFromEvaluateResult([row], evaluation.id))[0];
+        expect(JSON.stringify(saved)).not.toContain('opaque');
+        Object.assign(saved, {
+          error: row.error,
+          gradingResult: row.gradingResult,
+          testCase: row.testCase,
+        });
+        expect(JSON.stringify(saved.toEvaluateResult())).not.toContain('opaque');
+        await saved.save();
+        const [stored] = await (await getDb())
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.id, saved.id));
+        expect(JSON.stringify(stored)).not.toContain('opaque');
+        const file = await (await Eval.findById(evaluation.id))!.toResultsFile();
+        expect(JSON.stringify(file.results)).not.toContain('opaque');
+        expect(file.results.results[0]).toMatchObject({
+          score: 0,
+          success: false,
+          response: { output: 'ordinary response' },
+        });
+        expect(row.error).toContain('opaque');
+      },
+    );
+
+    it('projects legacy summaries and table diagnostics without mutating stored rows', async () => {
+      const stored = await EvalFactory.createOldResult();
+      const evaluation = (await Eval.findById(stored.id))!;
+      const row = schemaRow();
+      const old = evaluation.oldResults!;
+      Object.assign(old.results[0], row);
+      const tableRow = old.table.body[0];
+      tableRow.test = row.testCase;
+      Object.assign(tableRow.outputs[0], {
+        error: row.error,
+        text: row.error,
+        gradingResult: row.gradingResult,
+      });
+      const table = await evaluation.getTable();
+      const file = await evaluation.toResultsFile();
+      expect(JSON.stringify([table, file.results])).not.toContain('opaque');
+      expect(table.body[0].outputs[0].text).toContain('must match pattern');
+      expect(tableRow.outputs[0].text).toContain('opaque');
+      expect(file.results.results[0].response?.output).toBe('ordinary response');
+    });
+
+    it('preserves saved assertion schema definitions without exposing config credentials', async () => {
+      const schema = {
+        type: 'object',
+        properties: { token: { type: 'string' }, password: { type: 'string' } },
+        required: ['token'],
+      };
+      const config = {
+        providers: [{ id: 'echo', config: { apiKey: 'private-provider-key' } }],
+        tests: [{ assert: [{ type: 'is-json' as const, value: schema }] }],
+      };
+      const evaluation = await Eval.create(config, []);
+      const reloaded = await Eval.findById(evaluation.id);
+      expect(reloaded).not.toBeNull();
+      const output = await reloaded!.toResultsFile();
+      const projected = (output.config.tests as typeof config.tests)[0].assert[0].value;
+      expect(projected).toEqual(schema);
+      const validate = new Ajv().compile(projected);
+      expect(validate({ token: 'public' })).toBe(true);
+      expect(validate({ token: 123 })).toBe(false);
+      expect(JSON.stringify(output.config)).not.toContain('private-provider-key');
+      expect(reloaded!.config).toEqual(config);
+    });
+
     it('redacts gateway URL credentials from result files while preserving the live config', async () => {
       const gateway = 'https://gateway.example/v1?googleAccessToken=short-private-value';
       const evaluation = new Eval({

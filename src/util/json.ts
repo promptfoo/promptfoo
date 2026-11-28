@@ -1,12 +1,13 @@
-import Ajv from 'ajv';
+import Ajv, { type ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
 import { getEnvBool, getEnvString } from '../envars';
 import invariant from '../util/invariant';
+import { sanitizeSchemaValidationMessage, schemaParseFailure } from './sanitizer';
 import { loadYaml } from './yamlLoad';
 
 import type { EvaluateResult, ResultFailureReason } from '../types/index';
 
-const ajvInstances = new Map<boolean, Ajv>();
+const ajvInstances = new Map<string, Ajv>();
 
 export function resetAjv(): void {
   if (getEnvString('NODE_ENV') !== 'test') {
@@ -15,17 +16,53 @@ export function resetAjv(): void {
   ajvInstances.clear();
 }
 
-export function getAjv(): Ajv {
+export function getAjv(scope: 'provider' | 'assertion' = 'provider'): Ajv {
   const strictSchema = !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE');
-  let ajvInstance = ajvInstances.get(strictSchema);
+  const key = `${scope}:${strictSchema}`;
+  let ajvInstance = ajvInstances.get(key);
   if (!ajvInstance) {
-    ajvInstance = new Ajv({ strictSchema });
+    // AJV can log schema paths and generated code before compilation returns.
+    // Assertion errors are reported through the sanitized diagnostic below.
+    ajvInstance = new Ajv({ strictSchema, logger: scope === 'assertion' ? false : undefined });
     addFormats(ajvInstance);
     // Gemini schemas can reuse this annotation in tool and JSON assertions.
     ajvInstance.addKeyword({ keyword: ['property_ordering', 'propertyOrdering'], valid: true });
-    ajvInstances.set(strictSchema, ajvInstance);
+    ajvInstances.set(key, ajvInstance);
   }
   return ajvInstance;
+}
+
+export function compileInlineAssertionSchema(source: string): ValidateFunction {
+  let schema: unknown;
+  try {
+    schema = loadYaml(source);
+  } catch (error) {
+    throw new Error(schemaParseFailure(error instanceof Error ? error.message : ''));
+  }
+  return compileAssertionSchema(schema as object);
+}
+
+export function compileAssertionSchema(schema: object): ValidateFunction {
+  try {
+    return getAjv('assertion').compile(schema);
+  } catch (error) {
+    if (error instanceof Error) {
+      const safe = sanitizeSchemaValidationMessage(error.message, schema);
+      if (safe !== error.message) {
+        // A new error also drops credentials from the original stack and AJV's missingRef.
+        throw new Error(safe);
+      }
+    }
+    throw error;
+  }
+}
+
+export function schemaValidationFailure(validate: ValidateFunction): string {
+  const errors = sanitizeSchemaValidationMessage(
+    getAjv('assertion').errorsText(validate.errors),
+    validate.schema,
+  );
+  return `JSON does not conform to the provided schema. Errors: ${errors}`;
 }
 
 export function isValidJson(str: string): boolean {

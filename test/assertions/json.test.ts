@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import { handleContainsJson, handleIsJson } from '../../src/assertions/json';
 import cliState from '../../src/cliState';
+import { sanitizeResultForJsonlArtifact } from '../../src/evaluator/resultProcessing';
 import { validateFunctionCall } from '../../src/providers/google/util';
 import { resetAjv } from '../../src/util/json';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
@@ -238,4 +240,53 @@ describe('handleContainsJson', () => {
       ),
     ).toThrow('contains-json assertion must have a string or object value');
   });
+});
+
+describe('schema diagnostics', () => {
+  it.each([handleIsJson, handleContainsJson])(
+    'protects validation and YAML errors in %s',
+    (handler) => {
+      const renderedValue = {
+        type: 'object',
+        properties: { password: { type: 'string', pattern: '^opaque$' } },
+      };
+      const params = makeParams({
+        renderedValue,
+        assertion: { type: 'is-json', value: renderedValue },
+        outputString: '{"password":"wrong"}',
+      });
+      const grade = handler(params);
+      expect(grade.pass).toBe(false);
+      expect(grade.reason).toContain('must match pattern');
+      expect(grade.reason).not.toContain('opaque');
+      expect(handler({ ...params, outputString: '{"password":"opaque"}' }).pass).toBe(true);
+      expect(() =>
+        handler({ ...params, renderedValue: 'properties:\n  password: {const: "opaque"' }),
+      ).toThrow(/^Invalid inline assertion schema at line 2, column \d+$/);
+    },
+  );
+
+  it.each([
+    'properties:\n  password:\n    type: string\n    pattern: "^{{password}}$"',
+    '{"properties":{"password":{"type":"string","pattern":"^{{password}}$"}}}',
+  ])(
+    'projects rendered inline schemas in grading metadata without changing the live result',
+    async (value) => {
+      const assertion = { type: 'is-json' as const, value };
+      const testCase = { vars: { password: 'opaque' }, assert: [assertion] };
+      const response = { output: '{"password":"wrong"}' };
+      const gradingResult = await runAssertion({
+        prompt: 'test',
+        assertion,
+        test: testCase,
+        providerResponse: response,
+        provider: mockProvider,
+      });
+      const artifact = sanitizeResultForJsonlArtifact({ testCase, gradingResult, response });
+      expect(gradingResult.metadata?.renderedAssertionValue).toContain('opaque');
+      expect(JSON.stringify(artifact)).not.toContain('opaque');
+      expect(artifact.gradingResult.score).toBe(0);
+      expect(artifact.response).toEqual(response);
+    },
+  );
 });

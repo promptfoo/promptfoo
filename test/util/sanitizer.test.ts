@@ -1,9 +1,12 @@
+import Ajv from 'ajv';
+import Ajv2020 from 'ajv/dist/2020';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isCredentialHeader,
   isSecretEnvVarName,
   looksLikeSecret,
   preserveTracingCredentialReferences,
+  projectAssertionSchemas,
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeBody,
@@ -12,6 +15,7 @@ import {
   sanitizeObject,
   sanitizeQueryParams,
   sanitizeRuntimeOptions,
+  sanitizeSchemaValidationMessage,
   sanitizeTracingConfigForPersistence,
   sanitizeUrl,
   sanitizeUrlEncodedString,
@@ -261,7 +265,953 @@ describe('stripProviderPromptSelectors', () => {
   });
 });
 
+describe('assertion schema projection', () => {
+  const credential = 'sk-' + 'a'.repeat(24);
+  const privateUrl = 'https://example.test/?token=opaque';
+  const constraint = { type: 'string', pattern: '^opaque$' };
+
+  function project<T>(value: T): T {
+    const output = projectAssertionSchemas({ type: 'is-json', value });
+    expect(JSON.stringify(output)).not.toContain('opaque');
+    expect(JSON.stringify(output)).not.toContain(credential);
+    expect(projectAssertionSchemas(output)).toEqual(output);
+    return output.value;
+  }
+
+  it.each([
+    'Bearer Token',
+    '  BeArEr ToKeN  ',
+    'Bearer-Token',
+    'Token Secret',
+    'Token Value',
+    'API-Key Value',
+    'Token Hash',
+    'db_password',
+    'userToken',
+    'X-API-Token',
+    'Ocp-Apim-Subscription-Key',
+    'X-Session-Id',
+    'X-Honeycomb-Team',
+  ])('protects %s constraints, $defs, literal data and diagnostics together', (name) => {
+    const sample = { [name]: 'opaque', 'Token count': 3 };
+    const value = {
+      type: 'object',
+      properties: { [name]: { $ref: '#/$defs/' + encodeURIComponent(name) } },
+      $defs: { [name]: { ...constraint, const: 'opaque' } },
+      required: [name],
+      default: sample,
+      examples: [sample],
+    };
+    const safe = project(value);
+    expect(safe.default).toEqual({ [safe.required[0]]: '[REDACTED]', 'Token count': 3 });
+    expect(new Ajv().compile(safe)(safe.default)).toBe(true);
+
+    const ajv = new Ajv({ allErrors: true });
+    const validate = ajv.compile(value);
+    expect(validate(sample)).toBe(true);
+    expect(validate({ [name]: 'wrong' })).toBe(false);
+    const error = ajv.errorsText(validate.errors);
+    expect(error).toContain('opaque');
+    expect(sanitizeSchemaValidationMessage(error, value)).not.toContain('opaque');
+  });
+
+  it('keeps ordinary schema identifiers, counts and header settings unchanged', () => {
+    const data = {
+      key: 2,
+      token_count: 3,
+      tokenCount: 4,
+      token_budget: 5,
+      tokenLimit: 6,
+      tokenUsage: 7,
+      'X-Cache-Key': 'public',
+      'X-Request-Id': 'public',
+      'Basic plan': '  Basic plan  ',
+      '["a", "b"]': 'Idempotency-Key: public',
+    };
+    const value = {
+      type: 'object',
+      properties: Object.fromEntries(
+        Object.entries(data).map(([name, item]) => [name, { const: item }]),
+      ),
+      required: Object.keys(data),
+      const: data,
+    };
+    expect(project(value)).toEqual(value);
+    expect(new Ajv().compile(value)(data)).toBe(true);
+  });
+
+  it.each([
+    'Ocp-Apim-Subscription-Key: opaque',
+    'Authorization: Bearer opaque',
+    'X-API-Token: opaque',
+    'X-Session-Id: opaque',
+    'X-Honeycomb-Team: opaque',
+    'Basic dTpw',
+    'Bearer opaque',
+    '  ' + credential,
+    'password = opaque',
+    'api_key=opaque',
+    '?api_key=opaque',
+    'file.json?api_key=opaque',
+    '../file#token=opaque',
+    privateUrl,
+    '/apiKey/' + credential,
+    '{"db_password":"opaque"}',
+    '[{"X-Honeycomb-Team":"opaque"}]',
+    '{"inner":{"?token=opaque":1}}',
+    '{"settings":{"password":"opaque"},"settings":{}}',
+  ])('masks the value-bearing name %s without changing its public field type', (name) => {
+    const value = {
+      type: 'object',
+      properties: { [name]: { type: 'integer' }, label: { default: name } },
+      required: [name],
+      const: { [name]: 1 },
+    };
+    const safe = project(value);
+    expect(safe.required[0]).not.toBe(name);
+    expect(safe.properties.label.default).toBe(safe.required[0]);
+    expect(project({ default: name }).default).not.toBe(name);
+    expect(new Ajv().compile(safe)(safe.const)).toBe(true);
+    const path = name.replace(/~/g, '~0').replace(/\//g, '~1');
+    for (const schema of [value, safe]) {
+      for (const message of [
+        `data must have required property '${name}'`,
+        `data/${path} must be integer`,
+      ]) {
+        const reason = sanitizeSchemaValidationMessage(message, schema);
+        expect(reason).not.toMatch(/opaque|dTpw/);
+        expect(reason).not.toContain(credential);
+      }
+    }
+  });
+
+  it.each([
+    ['^password$', 'password'],
+    ['^(?:password)$', 'password'],
+    ['^(password|secret)$', 'secret'],
+    [String.raw`^\x61piKey$`, 'apiKey'],
+    [String.raw`^\u0070assword$`, 'password'],
+    [String.raw`^\u{70}assword$`, 'password'],
+  ])('recognizes static credential names in %s', (pattern, name) => {
+    const value = {
+      type: 'object',
+      patternProperties: {
+        [pattern]: { $ref: '#/definitions/field' },
+        '^token_count$': { const: 7 },
+      },
+      definitions: { field: constraint },
+    };
+    expect(new Ajv().compile(value)({ [name]: 'opaque' })).toBe(true);
+    const validate = new Ajv().compile(project(value));
+    expect(validate({ [name]: '[REDACTED]', token_count: 7 })).toBe(true);
+    expect(validate({ [name]: 'opaque' })).toBe(false);
+    expect(validate({ token_count: 5 })).toBe(false);
+  });
+
+  it('renames colliding names consistently in data, propertyNames and dependencies', () => {
+    const names = [credential, 'sk-' + 'b'.repeat(24), '[REDACTED]'];
+    const data = Object.fromEntries(names.map((name) => [name, name]));
+    const value = {
+      type: 'object',
+      properties: Object.fromEntries(names.map((name) => [name, { const: name }])),
+      propertyNames: {
+        anyOf: names.map((name) => ({
+          pattern: name === '[REDACTED]' ? String.raw`^\[REDACTED\]$` : `^${name}$`,
+        })),
+      },
+      required: names,
+      dependencies: { [names[0]]: [names[1]] },
+      default: data,
+      examples: [data],
+      const: data,
+      enum: [data],
+    };
+    const safe = project(value);
+    expect(new Set(safe.required).size).toBe(names.length);
+    expect(safe.dependencies[safe.required[0]]).toEqual([safe.required[1]]);
+    expect(safe.const).toEqual(Object.fromEntries(safe.required.map((name) => [name, name])));
+    expect(new Ajv().compile(safe)(safe.const)).toBe(true);
+  });
+
+  it.each([credential, privateUrl])(
+    'keeps renamed patternProperties and their pointers valid (%s)',
+    (name) => {
+      const pattern = '^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$';
+      const token = encodeURIComponent(pattern.replace(/~/g, '~0').replace(/\//g, '~1'));
+      const value = {
+        type: 'object',
+        patternProperties: { [pattern]: { type: 'integer' } },
+        properties: { alias: { $ref: '#/patternProperties/' + token } },
+        additionalProperties: false,
+        examples: [{ [name]: 7 }],
+      };
+      const safe = project(value);
+      const validate = new Ajv().compile(safe);
+      expect(validate({ ...safe.examples[0], alias: 2 })).toBe(true);
+      expect(validate({ alias: 'bad' })).toBe(false);
+      expect(validate({ R: 1 })).toBe(false);
+      expect(validate({ [name]: 1 })).toBe(false);
+    },
+  );
+
+  it.each([
+    ['urn:example:foo', './leaf', 'leaf'],
+    ['https://example.test/root', 'leaf#', 'leaf'],
+    ['https://example.test/root', 'leaf#/', 'leaf'],
+    ['https://example.test/root', '#named', '#named'],
+    ['https://example.test/root', 'leaf', 'root#/definitions/rule'],
+    [
+      'https://example.test/root',
+      'leaf?name=a%20b&token=opaque',
+      'https://example.test/leaf?name=a%20b&token=opaque',
+    ],
+    [
+      'https://example.test/root',
+      'apiKey/opaque1234567890',
+      'https://example.test/apiKey/opaque1234567890',
+    ],
+  ])('resolves embedded %s / %s without masking unrelated rules', ($id, id, ref) => {
+    const value = {
+      $id,
+      type: 'object',
+      definitions: { rule: { $id: id, ...constraint } },
+      properties: { password: { $ref: ref }, color: { enum: ['blue', 'red'] } },
+    };
+    expect(new Ajv().compile(value)({ password: 'opaque' })).toBe(true);
+    const validate = new Ajv().compile(project(value));
+    expect(validate({ password: '[REDACTED]', color: 'blue' })).toBe(true);
+    expect(validate({ password: 'opaque' })).toBe(false);
+    expect(validate({ color: 'green' })).toBe(false);
+  });
+
+  it.each([
+    ['leaf?token=opaque1', 'leaf?token=opaque2'],
+    [credential, 'sk-' + 'b'.repeat(24)],
+  ])('keeps distinct resource IDs and relative references for %s', (first, second) => {
+    const value = {
+      $id: 'https://example.test/root',
+      type: 'object',
+      $defs: { a: { $id: first, type: 'string' }, b: { $id: second, type: 'number' } },
+      properties: { a: { $ref: './' + first }, b: { $ref: './' + second } },
+    };
+    const safe = project(value);
+    expect(safe.$defs.a.$id).not.toBe(safe.$defs.b.$id);
+    expect(JSON.stringify(safe)).not.toContain(second);
+    const validate = new Ajv().compile(safe);
+    expect(validate({ a: 'ok', b: 2 })).toBe(true);
+    expect(validate({ a: 1, b: 'wrong' })).toBe(false);
+  });
+
+  it.each(['$id', '$anchor', '$dynamicAnchor'])(
+    'renames credential-shaped %s anchors',
+    (keyword) => {
+      const ref = '#' + credential;
+      const value = {
+        definitions: {
+          reserved: { [keyword]: keyword === '$id' ? '#id' : 'id', type: 'string' },
+          target: { [keyword]: keyword === '$id' ? ref : credential, type: 'number' },
+        },
+        type: 'object',
+        properties: { alias: { $ref: ref } },
+      };
+      const validate = new Ajv({ strictSchema: false }).compile(project(value));
+      expect(validate({ alias: 3 })).toBe(true);
+      expect(validate({ alias: 'no' })).toBe(false);
+    },
+  );
+
+  it.each(['#missing', '#/missing', '[REDACTED]'])(
+    'protects possible local targets of an unresolved credential reference (%s)',
+    ($ref) => {
+      const value = {
+        type: 'object',
+        properties: { password: { $ref } },
+        definitions: { target: constraint },
+      };
+      expect(project(value).definitions.target.type).toBe('string');
+      const external = { ...value, properties: { password: { $ref: 'external.json' } } };
+      expect(projectAssertionSchemas({ type: 'is-json', value: external }).value).toEqual(external);
+    },
+  );
+
+  it.each(['#/examples/0', '#/examples/0#', '#/examples/0#/'])(
+    'follows credential references in an annotation at %s',
+    ($ref) => {
+      const value = {
+        $ref,
+        examples: [{ type: 'object', properties: { password: { $ref: '#/default' } } }],
+        default: { $ref: '#/$defs/field' },
+        $defs: { field: { const: 'opaque' } },
+      };
+      expect(new Ajv().compile(value)({ password: 'opaque' })).toBe(true);
+      const safe = project(value);
+      expect(project(safe)).toEqual(safe);
+      const validate = new Ajv().compile(safe);
+      expect(validate({ password: '[REDACTED]' })).toBe(true);
+      expect(validate({ password: 'opaque' })).toBe(false);
+    },
+  );
+
+  it.each(['default', 'examples/0'])(
+    'inherits an embedded $id along a pointer through %s',
+    (path) => {
+      const nested = { $id: 'nested/', properties: { item: { $ref: 'rule' } } };
+      const value = {
+        $id: 'https://example.test/root',
+        type: 'object',
+        definitions: { rule: { $id: 'nested/rule', const: 'opaque' } },
+        ...(path === 'default' ? { default: nested } : { examples: [nested] }),
+        properties: { password: { $ref: `#/${path}/properties/item` } },
+      };
+      expect(new Ajv().compile(value)({ password: 'opaque' })).toBe(true);
+      expect(new Ajv().compile(project(value))({ password: '[REDACTED]' })).toBe(true);
+    },
+  );
+
+  it.each(['rule', '#/extension/dbPassword/field'])(
+    'keeps references into credential extension data (%s)',
+    ($ref) => {
+      const value = {
+        extension: { dbPassword: { extra: 'opaque', field: { $id: 'rule', ...constraint } } },
+        type: 'object',
+        properties: { alias: { $ref } },
+      };
+      const validate = new Ajv({ strictSchema: false }).compile(project(value));
+      expect(validate({ alias: '[REDACTED]' })).toBe(true);
+      expect(validate({ alias: 'opaque' })).toBe(false);
+    },
+  );
+
+  it('retains boolean reference targets but redacts unreferenced credential data', () => {
+    const value = {
+      type: 'object',
+      default: { dbPassword: false, userToken: false },
+      properties: {
+        alias: { $ref: '#/default/dbPassword' },
+        headers: { default: { allowed: false, password: 'opaque' } },
+        item: { $ref: '#/properties/headers/default/allowed' },
+      },
+    };
+    const safe = project(value);
+    expect(safe.default).toEqual({ dbPassword: false, userToken: '[REDACTED]' });
+    const validate = new Ajv().compile(safe);
+    expect(validate({})).toBe(true);
+    expect(validate({ alias: 'x' })).toBe(false);
+    expect(validate({ item: 'x' })).toBe(false);
+  });
+
+  it('keeps Windows placeholders distinct in public literals and masks credential values', () => {
+    const choices = ['%DATE%', '%CD%'];
+    const sample = { cmd: choices[0], password: choices[1] };
+    const value = {
+      type: 'object',
+      properties: {
+        command: { enum: choices, default: choices[0] },
+        nested: { enum: choices.map((cmd) => ({ cmd })) },
+        password: { enum: choices },
+      },
+      examples: [sample, JSON.stringify(sample)],
+    };
+    const safe = project(value);
+    expect(JSON.parse(project(JSON.stringify(value)))).toEqual(safe);
+    expect(safe.properties.command).toEqual(value.properties.command);
+    expect(safe.properties.nested).toEqual(value.properties.nested);
+    expect(safe.properties.password.enum).toEqual(['[REDACTED]']);
+    const masked = { ...sample, password: '[REDACTED]' };
+    expect(safe.examples).toEqual([masked, JSON.stringify(masked)]);
+    const validate = new Ajv().compile(safe);
+    for (const command of choices) {
+      expect(validate({ command, nested: { cmd: command } })).toBe(true);
+    }
+  });
+
+  it('deduplicates masked enum values by JSON equality and redirects shifted pointers', () => {
+    const value = {
+      type: 'object',
+      definitions: {
+        sample: {
+          enum: [
+            { type: 'string', default: privateUrl },
+            { default: 'https://example.test/?token=opaque2', type: 'string' },
+            { type: 'integer' },
+          ],
+        },
+      },
+      properties: {
+        word: { $ref: '#/definitions/sample/enum/1' },
+        number: { $ref: '#/definitions/sample/enum/2' },
+        data: {
+          enum: [
+            [{ id: 1, dbPassword: 'opaque1' }, 2],
+            [{ dbPassword: 'opaque2', id: 1 }, 2],
+            [2, { id: 1, dbPassword: 'opaque1' }],
+          ],
+        },
+      },
+    };
+    const safe = project(value);
+    expect(safe.definitions.sample.enum).toHaveLength(2);
+    expect(safe.properties.data.enum).toHaveLength(2);
+    const validate = new Ajv().compile(safe);
+    expect(
+      validate({ word: 'test', number: 7, data: [2, { id: 1, dbPassword: '[REDACTED]' }] }),
+    ).toBe(true);
+    expect(validate({ word: 7, number: 'test' })).toBe(false);
+  });
+
+  it('protects environment constraints through references and allOf', () => {
+    const env = { DBPWD: 'opaque', SENTRY_DSN: 'opaque', GITHUB_KEY: 'opaque', PUBLIC_URL: 'ok' };
+    const value = {
+      definitions: {
+        vars: {
+          type: 'object',
+          properties: {
+            DBPWD: { const: 'opaque' },
+            SENTRY_DSN: { $ref: '#/definitions/field' },
+            GITHUB_KEY: { const: 'opaque' },
+            PUBLIC_URL: { const: 'ok' },
+          },
+        },
+        field: constraint,
+      },
+      type: 'object',
+      properties: { env: { allOf: [{ $ref: '#/definitions/vars' }] } },
+      examples: [{ env }],
+    };
+    const safe = project(value);
+    expect(safe.examples[0].env.PUBLIC_URL).toBe('ok');
+    expect(new Ajv().compile(value)({ env })).toBe(true);
+    expect(new Ajv().compile(safe)(safe.examples[0])).toBe(true);
+  });
+
+  it.each([
+    ['#vars', '#vars#'],
+    ['#vars', '#vars#/'],
+    ['#vars', '#%76ars'],
+    ['#vars', '#%76ars#'],
+    ['#%76ars', '#vars'],
+    ['#vars#', '#vars'],
+    ['#vars#/', '#vars'],
+  ])('protects environment members through anchor %s and reference %s', ($id, $ref) => {
+    const value = {
+      $id: 'https://example.test/root',
+      type: 'object',
+      definitions: {
+        vars: {
+          $id,
+          type: 'object',
+          properties: { DBPWD: { const: 'opaque' }, PUBLIC: { const: 'ok' } },
+        },
+      },
+      properties: { env: { $ref } },
+    };
+    const safe = project(value);
+    expect(safe.definitions.vars.properties.PUBLIC.const).toBe('ok');
+    expect(project(safe)).toEqual(safe);
+    const validate = new Ajv().compile(safe);
+    expect(validate({ env: { DBPWD: '[REDACTED]' } })).toBe(true);
+    expect(validate({ env: { DBPWD: 'opaque' } })).toBe(false);
+  });
+
+  const itemRef = { $ref: '#/definitions/item' };
+  const envItem = {
+    type: 'object',
+    required: ['DBPWD'],
+    properties: { DBPWD: constraint, GITHUB_KEY: { const: 'opaque' }, PUBLIC: { const: 'ok' } },
+  };
+
+  it.each([
+    { items: envItem },
+    { items: itemRef },
+    { items: [itemRef] },
+    { items: [true], additionalItems: itemRef },
+    { contains: itemRef },
+    { prefixItems: [itemRef] },
+    { unevaluatedItems: itemRef },
+  ])('protects environment array constraints, samples and diagnostics (%j)', (rule) => {
+    const prefix = 'additionalItems' in rule ? ['first'] : [];
+    const example = (DBPWD: string) => ({
+      env: [...prefix, { DBPWD, GITHUB_KEY: DBPWD, PUBLIC: 'ok' }],
+    });
+    const value = {
+      ...(rule.items === envItem ? {} : { definitions: { item: envItem } }),
+      type: 'object',
+      properties: { env: { type: 'array', ...rule } },
+      examples: [example('opaque')],
+    };
+    const ajv = 'prefixItems' in rule || 'unevaluatedItems' in rule ? new Ajv2020() : new Ajv();
+    const live = ajv.compile(value);
+    expect(live(value.examples[0])).toBe(true);
+    expect(live(example('wrong'))).toBe(false);
+    expect(sanitizeSchemaValidationMessage(ajv.errorsText(live.errors), value)).not.toContain(
+      'opaque',
+    );
+    const safe = project(value);
+    expect(safe.examples[0]).toEqual(example('[REDACTED]'));
+    const validate = ajv.compile(safe);
+    expect(validate(safe.examples[0])).toBe(true);
+    expect(validate(value.examples[0])).toBe(false);
+  });
+
+  it('preserves sensitivity along pointers through environment arrays in literal data', () => {
+    const value = {
+      type: 'object',
+      properties: { item: { $ref: '#/default/env/0/DBPWD' } },
+      default: { env: [{ DBPWD: { $ref: '#/definitions/field' }, PUBLIC: 'ok' }] },
+      definitions: { field: constraint },
+    };
+    expect(new Ajv().compile(value)({ item: 'opaque' })).toBe(true);
+    const safe = project(value);
+    expect(safe.default).toEqual(value.default);
+    const validate = new Ajv().compile(safe);
+    expect(validate({ item: '[REDACTED]' })).toBe(true);
+    expect(validate({ item: 'opaque' })).toBe(false);
+  });
+
+  it.each(['default', 'examples', 'enum', 'const'])(
+    'propagates sensitivity through a reference into an env item under %s',
+    (keyword) => {
+      const list = keyword === 'examples' || keyword === 'enum';
+      const data = { DBPWD: { $ref: '#/definitions/field' }, PUBLIC: 'ok' };
+      const value = {
+        type: 'object',
+        properties: {
+          env: { type: 'array', items: itemRef },
+          alias: { $ref: `#/definitions/item/${keyword}/${list ? '0/' : ''}DBPWD` },
+        },
+        definitions: { item: { [keyword]: list ? [data] : data }, field: constraint },
+      };
+      expect(new Ajv().compile(value)({ alias: 'opaque' })).toBe(true);
+      const validate = new Ajv().compile(project(value));
+      expect(validate({ alias: '[REDACTED]' })).toBe(true);
+      expect(validate({ alias: 'opaque' })).toBe(false);
+    },
+  );
+
+  it.each(['direct', 'definition'])(
+    'protects env members when a pointer designates an entire %s literal or a nested schema',
+    (location) => {
+      const fields = {
+        DBPWD: 'opaque',
+        GITHUB_KEY: 'opaque',
+        vendorPassword: 'opaque',
+        PUBLIC: 'ok',
+      };
+      const data = [
+        { ...fields, type: 'number' },
+        { $id: 'item', ...fields, meta: { type: 'string' } },
+      ];
+      const direct = location === 'direct';
+      const path = direct ? '#/default/env/' : '#/definitions/vars/examples/';
+      const value = {
+        type: 'object',
+        ...(direct ? { default: { env: data } } : {}),
+        definitions: {
+          alias: { $ref: path + '0' },
+          ...(direct ? {} : { vars: { examples: data } }),
+        },
+        properties: {
+          alias: { $ref: path + '1/meta' },
+          ...(direct ? {} : { env: { type: 'array', items: { $ref: '#/definitions/vars' } } }),
+        },
+      };
+      const safe = project(value);
+      const entries = direct ? safe.default!.env : safe.definitions.vars!.examples;
+      for (const entry of entries) {
+        expect(entry).toMatchObject({
+          DBPWD: '[REDACTED]',
+          GITHUB_KEY: '[REDACTED]',
+          vendorPassword: '[REDACTED]',
+          PUBLIC: 'ok',
+        });
+      }
+      for (const schema of [value, safe]) {
+        const validate = new Ajv().compile(schema);
+        expect(validate({ alias: 'text' })).toBe(true);
+        expect(validate({ alias: 1 })).toBe(false);
+      }
+      expect(data[0].DBPWD).toBe('opaque');
+    },
+  );
+
+  it('checks host literals, nested credentials and duplicate JSON members before restoring text', () => {
+    const formatted = '{ "label": "two words" }';
+    const nested = '[{"password":"opaque","password":"[REDACTED]"}]';
+    const data = { apiHost: credential, users: [{ userToken: 'opaque', token_count: 7 }] };
+    const safe = project({ const: data, examples: [JSON.stringify(data), nested, formatted] });
+    expect(safe.const).toEqual({
+      apiHost: '[REDACTED]',
+      users: [{ userToken: '[REDACTED]', token_count: 7 }],
+    });
+    expect(JSON.parse(safe.examples[0])).toEqual(safe.const);
+    expect(JSON.parse(safe.examples[1])).toEqual([{ password: '[REDACTED]' }]);
+    expect(safe.examples[2]).toBe(formatted);
+  });
+
+  it.each(['dependencies', 'dependentRequired'])(
+    'removes URL credentials from %s diagnostics',
+    (keyword) => {
+      const value = { type: 'object', [keyword]: { flag: [privateUrl] } };
+      const safe = project(value);
+      const error = `data must have property ${privateUrl} when property flag is present`;
+      for (const schema of [value, safe]) {
+        expect(sanitizeSchemaValidationMessage(error, schema)).not.toContain('opaque');
+      }
+    },
+  );
+
+  it.each([credential, privateUrl])(
+    'masks credential-shaped patterns in ordinary fields and errors (%s)',
+    (pattern) => {
+      const value = { type: 'string', pattern };
+      const safe = project(value);
+      expect(new Ajv().compile(safe)('[REDACTED]')).toBe(true);
+      expect(
+        sanitizeSchemaValidationMessage(`data must match pattern "${pattern}"`, value),
+      ).not.toContain(pattern);
+    },
+  );
+});
+
 describe('sanitizeConfigForOutput', () => {
+  const assertionSchema = {
+    type: 'object',
+    properties: {
+      token: { $ref: '#/definitions/token' },
+      password: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+      nested: {
+        type: 'array',
+        items: { type: 'object', properties: { apiKey: { type: 'string' } } },
+      },
+      secret: false,
+    },
+    definitions: { token: { type: 'string', minLength: 1 } },
+    required: ['token', 'password'],
+    additionalProperties: false,
+  };
+
+  it.each(['is-json', 'not-is-json', 'contains-json', 'not-contains-json'] as const)(
+    'preserves %s schema definitions at each config test location',
+    (type) => {
+      const test = { assert: [{ type, value: assertionSchema }] };
+      const config = {
+        tests: [test],
+        defaultTest: test,
+        scenarios: [{ config: [test], tests: [test] }],
+      };
+      const output = sanitizeConfigForOutput(config);
+      expect(output).toEqual(config);
+      expect(config.tests[0].assert[0].value).toBe(assertionSchema);
+      const projected = (output.tests as typeof config.tests)[0].assert[0].value;
+      const validate = new Ajv().compile(projected);
+      expect(
+        validate({ token: 'public', password: 'example', nested: [{ apiKey: 'sample' }] }),
+      ).toBe(true);
+      expect(validate({ token: 5, password: 'example' })).toBe(false);
+      expect(validate({ token: 'public', password: 'example', secret: 'unexpected' })).toBe(false);
+    },
+  );
+
+  it('preserves JSON string schemas and schemas in assertion sets', () => {
+    const config = {
+      tests: [
+        {
+          assert: [
+            {
+              type: 'assert-set' as const,
+              assert: [{ type: 'is-json' as const, value: JSON.stringify(assertionSchema) }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(sanitizeConfigForOutput(config)).toEqual(config);
+  });
+
+  it('preserves schema maps, dependencies, tuples and conditional subschemas', () => {
+    const schema = {
+      $defs: { token: { type: 'string' } },
+      patternProperties: { password: { type: 'string' } },
+      dependentSchemas: { token: { properties: { password: { type: 'string' } } } },
+      dependencies: { token: ['password'] },
+      dependentRequired: { token: ['password'] },
+      allOf: [
+        {
+          if: { properties: { token: { type: 'string' } } },
+          // biome-ignore lint/suspicious/noThenProperty: `then` is a JSON Schema keyword, not a promise callback.
+          then: { not: false },
+        },
+      ],
+      items: [{ properties: { apiKey: true } }],
+      prefixItems: [{ properties: { token: false } }],
+      additionalProperties: { properties: { secret: { type: 'string' } } },
+    };
+    const config = { tests: [{ assert: [{ type: 'is-json' as const, value: schema }] }] };
+    expect(sanitizeConfigForOutput(config)).toEqual(config);
+  });
+
+  it('keeps operational credentials and literal schema credentials redacted', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        password: { type: 'string', default: 'private-default', enum: ['private-enum'] },
+        apiKey: { type: 'string', const: 'private-const', examples: ['private-example'] },
+        data: { default: { apiKey: 'private-data-key', label: 'public' } },
+      },
+      apiKey: 'private-extension',
+    };
+    const config = {
+      env: { API_KEY: 'private-env' },
+      providers: [{ id: 'echo', config: { apiKey: 'private-provider' } }],
+      tests: [
+        {
+          vars: { password: 'private-var' },
+          assert: [{ type: 'is-json' as const, value: schema }],
+        },
+      ],
+    };
+    const output = sanitizeConfigForOutput(config);
+    expect(JSON.stringify(output)).not.toContain('private-');
+    const projected = (output.tests as typeof config.tests)[0].assert[0].value;
+    expect(projected.properties.password).toEqual({
+      type: 'string',
+      default: '[REDACTED]',
+      enum: ['[REDACTED]'],
+    });
+    expect(projected.properties.data.default.label).toBe('public');
+    expect(config.tests[0].assert[0].value).toBe(schema);
+    expect(schema.properties.password.default).toBe('private-default');
+  });
+
+  it('does not exempt arbitrary assertion data or malformed schema property values', () => {
+    const value = { properties: { password: 'private-value' } };
+    const config = {
+      tests: [
+        {
+          assert: [
+            { type: 'is-json' as const, value },
+            { type: 'equals' as const, value },
+          ],
+        },
+      ],
+    };
+    expect(JSON.stringify(sanitizeConfigForOutput(config))).not.toContain('private-value');
+  });
+
+  it('retains ordinary property and definition constraints', () => {
+    const schema = {
+      type: 'object',
+      definitions: { key: { enum: ['id', 'name'] } },
+      properties: {
+        key: { type: 'number', const: 7 },
+        sortField: { $ref: '#/definitions/key' },
+        sortDirection: { enum: ['first', 'second'] },
+      },
+      required: ['key', 'sortField', 'sortDirection'],
+    };
+    const config = { tests: [{ assert: [{ type: 'is-json' as const, value: schema }] }] };
+    const output = sanitizeConfigForOutput(config);
+    expect(output).toEqual(config);
+    const projected = (output.tests as typeof config.tests)[0].assert[0].value;
+    const validate = new Ajv().compile(projected);
+    expect(validate({ key: 7, sortField: 'id', sortDirection: 'first' })).toBe(true);
+    expect(validate({ key: 8, sortField: 'id', sortDirection: 'first' })).toBe(false);
+    expect(validate({ key: 7, sortField: 'other', sortDirection: 'first' })).toBe(false);
+  });
+
+  it.each([false, true])(
+    'redacts schema credential literals without invalid enums (JSON: %s)',
+    (json) => {
+      const schema = {
+        type: 'object',
+        properties: {
+          password: {
+            type: 'string',
+            pattern: '^private-password$',
+            enum: ['private-password', 'private-alternative'],
+            title: 'private-title',
+            description: 'private-description',
+          },
+          headers: {
+            type: 'object',
+            default: { 'X-Custom': 'private-header-default' },
+            const: { 'X-Custom': 'private-header-const' },
+            enum: [{ 'X-Custom': 'private-one' }, { 'X-Custom': 'private-two' }],
+            examples: [{ 'X-Custom': 'private-example' }],
+          },
+          publicField: { type: 'string', pattern: '^ordinary$' },
+          dbPassword: { enum: ['private-password'] },
+          userToken: { default: 'private-token' },
+        },
+      };
+      const value = json ? JSON.stringify(schema) : schema;
+      const config = { tests: [{ assert: [{ type: 'is-json' as const, value }] }] };
+      const original = structuredClone(config);
+      const output = sanitizeConfigForOutput(config);
+      expect(JSON.stringify(output)).not.toContain('private-');
+      const projectedValue = (output.tests as typeof config.tests)[0].assert[0].value;
+      const projected =
+        typeof projectedValue === 'string' ? JSON.parse(projectedValue) : projectedValue;
+      expect(projected.properties.password.enum).toEqual(['[REDACTED]']);
+      expect(projected.properties.headers.enum).toEqual(['[REDACTED]']);
+      expect(new RegExp(projected.properties.password.pattern).test('R')).toBe(false);
+      expect(projected.properties.publicField).toEqual(schema.properties.publicField);
+      const validate = new Ajv().compile(projected);
+      expect(validate({ publicField: 'ordinary' })).toBe(true);
+      expect(validate({ publicField: 'other' })).toBe(false);
+      expect(validate({ password: 'private-password' })).toBe(false);
+      expect(config).toEqual(original);
+    },
+  );
+
+  it('redacts referenced credential constraints across cycles without resolving external references', () => {
+    const schema = {
+      $defs: {
+        field: { $ref: '#/$defs/a~1b' },
+        'a/b': { default: 'private-default', anyOf: [{ $ref: '#/$defs/field' }] },
+        public: { default: 'ordinary' },
+        nested: {
+          $id: 'child.json',
+          $defs: { public: { $id: '#field', const: 'private-nested' } },
+          properties: { token: { $ref: '#field' } },
+        },
+      },
+      properties: { apiKey: { $ref: '#/$defs/field' }, token: { $ref: 'public.json' } },
+    };
+    const config = { tests: [{ assert: [{ type: 'is-json' as const, value: schema }] }] };
+    const projected = (sanitizeConfigForOutput(config).tests as typeof config.tests)[0].assert[0]
+      .value;
+    expect(projected.$defs['a/b'].default).toBe('[REDACTED]');
+    expect(projected.$defs.public.default).toBe('ordinary');
+    expect(projected.$defs.nested.$defs.public.const).toBe('[REDACTED]');
+    expect(projected.properties).toEqual(schema.properties);
+  });
+
+  it.each([
+    ['valid', 'tail'],
+    ['malformed', '\n%zz'],
+    ['non-UTF-8', 'token%3Dopaque%FF'],
+  ])('keeps a long %s URL alias equivalent to its escaped pointer', (_, tail) => {
+    const name = `https://example.test/${'u://'.repeat(2048)}${tail}?token=opaque`;
+    const escaped = encodeURIComponent(name.replace(/~/g, '~0').replace(/\//g, '~1'));
+    const value = {
+      type: 'object',
+      $defs: { [name]: { type: 'number' } },
+      properties: {
+        alias: { $ref: '#/$defs/' + name },
+        escaped: { $ref: '#/$defs/' + escaped },
+      },
+    };
+    const safe = projectAssertionSchemas({ type: 'is-json', value }).value;
+    expect(JSON.stringify(safe)).not.toContain('opaque');
+    expect(safe.properties.alias.$ref).toBe(safe.properties.escaped.$ref);
+    expect(projectAssertionSchemas({ type: 'is-json', value: safe }).value).toEqual(safe);
+    const validate = new Ajv().compile(safe);
+    expect(validate({ alias: 1, escaped: 2 })).toBe(true);
+    expect(validate({ alias: 'wrong' })).toBe(false);
+  });
+
+  it.each(['#/', '#%2F'])('treats the whole %s fragment as the resource', ($ref) => {
+    const value = { '': true, const: 'opaque', properties: { password: { $ref } } };
+    const safe = projectAssertionSchemas({ type: 'is-json', value });
+    expect(safe.value.const).toBe('[REDACTED]');
+    expect(projectAssertionSchemas(safe)).toEqual(safe);
+  });
+
+  it.each(['#', '#/'])('preserves a literal URL key ending in %s during lookup', (suffix) => {
+    const url = 'https://example.test/line\nbreak';
+    const value = {
+      type: 'object',
+      $defs: { [url]: { const: 'ordinary' }, [url + suffix]: { const: 'opaque' } },
+      properties: { password: { $ref: '#/$defs/' + url + suffix } },
+    };
+    const safe = projectAssertionSchemas({ type: 'is-json', value });
+    expect(JSON.stringify(safe)).not.toContain('opaque');
+    expect(safe.value.$defs[url]).toEqual(value.$defs[url]);
+    expect(projectAssertionSchemas(safe)).toEqual(safe);
+    const validate = new Ajv().compile(safe.value);
+    expect(validate({ password: '[REDACTED]' })).toBe(true);
+    expect(validate({ password: 'ordinary' })).toBe(false);
+  });
+
+  it('decodes an escaped percent sign once and preserves valid Unicode keys', () => {
+    const name = '%41🧪#';
+    const value = {
+      type: 'object',
+      $defs: { [name]: { type: 'number' }, 'A🧪#': { type: 'string' } },
+      properties: { alias: { $ref: '#' + encodeURIComponent('/$defs/' + name) } },
+    };
+    const safe = projectAssertionSchemas({ type: 'is-json', value }).value;
+    expect(safe.$defs).toEqual(value.$defs);
+    const validate = new Ajv().compile(safe);
+    expect(validate({ alias: 1 })).toBe(true);
+    expect(validate({ alias: 'wrong' })).toBe(false);
+  });
+
+  it('safely renames a pattern containing an escaped lone surrogate and its pointer', () => {
+    const pattern = String.raw`^doc\uD800\?token=opaque$`;
+    const value = {
+      type: 'object',
+      patternProperties: { [pattern]: { type: 'number' } },
+      properties: { alias: { $ref: '#/patternProperties/' + encodeURIComponent(pattern) } },
+    };
+    const safe = projectAssertionSchemas({ type: 'is-json', value }).value;
+    expect(JSON.stringify(safe)).not.toContain('opaque');
+    const validate = new Ajv().compile(safe);
+    expect(validate({ alias: 1 })).toBe(true);
+    expect(validate({ alias: 'wrong' })).toBe(false);
+  });
+
+  it('updates name lists and local pointers when URL names collide', () => {
+    const authored = 'https://example.test/data?token=private-value';
+    const existing = 'https://example.test/data?token=%5BREDACTED%5D';
+    const schema = {
+      definitions: { [authored]: { type: 'string' }, [existing]: { type: 'number' } },
+      type: 'object',
+      properties: {
+        [authored]: { $ref: '#/definitions/https:~1~1example.test~1data?token=private-value' },
+        [existing]: { type: 'number' },
+        alias: { $ref: `#/definitions/${authored}` },
+        escaped: { $ref: '#/definitions/https%3A~1~1example.test~1data%3Ftoken%3Dprivate-value' },
+      },
+      required: [authored],
+      dependencies: { alias: [authored] },
+    };
+    const config = { tests: [{ assert: [{ type: 'is-json' as const, value: schema }] }] };
+    const projected = (sanitizeConfigForOutput(config).tests as typeof config.tests)[0].assert[0]
+      .value;
+    expect(JSON.stringify(projected)).not.toContain('private-value');
+    const [renamed] = projected.required;
+    expect(renamed).not.toBe(existing);
+    expect(projected.dependencies.alias).toEqual([renamed]);
+    const validate = new Ajv().compile(projected);
+    expect(validate({ [existing]: 1 })).toBe(false);
+    expect(validate({ [renamed]: 'ok', alias: 'ok' })).toBe(true);
+    expect(validate({ [renamed]: 1 })).toBe(false);
+  });
+
+  it('reserves existing schema map names when URL redaction changes another name', () => {
+    const authored = 'https://example.com/?token=private-value';
+    const existing = 'https://example.com/?token=%5BREDACTED%5D';
+    const schema = {
+      type: 'object',
+      properties: { [authored]: { type: 'string' }, [existing]: { type: 'integer' } },
+      required: [existing],
+    };
+    const config = { tests: [{ assert: [{ type: 'is-json' as const, value: schema }] }] };
+    const output = sanitizeConfigForOutput(config);
+    const projected = (output.tests as typeof config.tests)[0].assert[0].value;
+    expect(projected.properties).toEqual({
+      [existing]: { type: 'integer' },
+      [`${existing}#1`]: { type: 'string' },
+    });
+    expect(JSON.stringify(projected)).not.toContain('private-value');
+    const validate = new Ajv().compile(projected);
+    expect(validate({ [existing]: 7 })).toBe(true);
+    expect(validate({ [existing]: 'wrong' })).toBe(false);
+    expect(schema.properties[authored]).toEqual({ type: 'string' });
+  });
+
   it.each(['AccountKey', 'SharedAccessSignature'])(
     'redacts Azure Storage connection strings containing %s in exports and request logs',
     (credentialName) => {

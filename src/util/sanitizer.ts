@@ -2,9 +2,12 @@
  * Generic utility functions for sanitizing objects to prevent logging of secrets and credentials
  * Uses a custom recursive approach for reliable deep object sanitization.
  */
+import Ajv from 'ajv';
 import deepEqual from 'fast-deep-equal';
 import safeStringify from 'fast-safe-stringify';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider';
+import { escapeRegExp } from './text';
+import { loadYaml } from './yamlLoad';
 
 import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
 
@@ -697,6 +700,1328 @@ export function sanitizeTracingConfigForPersistence(
   };
 }
 
+const PROPERTY_MAPS = new Set(['properties', 'patternProperties']);
+// AJV does not change the resource scope on these JSON Pointer steps.
+const POINTER_CONTAINERS = new Set([...PROPERTY_MAPS, 'enum', 'definitions', 'dependencies']);
+const JSON_SCHEMA_MAP_KEYWORDS = new Set([
+  '$defs',
+  'definitions',
+  ...PROPERTY_MAPS,
+  'dependentSchemas',
+  'dependencies',
+  'dependentRequired',
+]);
+// Environment member names apply to the same instance and to elements
+// of an env array, matching the traversal of literal data.
+const ENV_SCHEMA_APPLICATORS = new Set([
+  'allOf',
+  'anyOf',
+  'oneOf',
+  'if',
+  'then',
+  'else',
+  'not',
+  'items',
+  'prefixItems',
+  'additionalItems',
+  'unevaluatedItems',
+  'contains',
+]);
+const SCHEMA_LITERALS = new Set(['const', 'default', 'enum', 'examples']);
+const JSON_SCHEMA_CHILD_KEYWORDS = new Set([
+  ...ENV_SCHEMA_APPLICATORS,
+  'additionalProperties',
+  'unevaluatedProperties',
+  'propertyNames',
+  'contentSchema',
+]);
+// These keywords describe structure or validation rules, rather than example data.
+const JSON_SCHEMA_STRUCTURAL_KEYWORDS = new Set([
+  '$schema',
+  '$id',
+  '$ref',
+  '$anchor',
+  '$dynamicRef',
+  '$dynamicAnchor',
+  '$recursiveRef',
+  '$recursiveAnchor',
+  '$vocabulary',
+  'type',
+  'format',
+  'required',
+  'multipleOf',
+  'minimum',
+  'maximum',
+  'exclusiveMinimum',
+  'exclusiveMaximum',
+  'minLength',
+  'maxLength',
+  'minItems',
+  'maxItems',
+  'uniqueItems',
+  'minContains',
+  'maxContains',
+  'minProperties',
+  'maxProperties',
+  'contentEncoding',
+  'contentMediaType',
+  'readOnly',
+  'writeOnly',
+  'deprecated',
+  'nullable',
+]);
+
+function isSchemaObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+const SCHEMA_REFS = new Set(['$ref', '$dynamicRef', '$recursiveRef']);
+const SCHEMA_URIS = new Set(['$id', '$schema', ...SCHEMA_REFS]);
+
+// Conservative static alternatives only. Never execute an authored regex.
+// If any field is a credential, its shared constraints must be protected.
+function patternMembers(pattern: string): string[] {
+  return pattern
+    .replace(/(?<!\\)(?:\(\?:|[()])/g, '')
+    .split(/(?<!\\)\|/)
+    .map(schemaPatternLiteral);
+}
+
+const SCHEMA_TOKEN_METRIC = /^token[-_\s]*(?:count|limit|budget|usage)$/i;
+
+function credentialSchemaName(literal: string, keyword?: string, env = false): boolean {
+  if (keyword === 'patternProperties') {
+    return patternMembers(literal).some((name) => credentialSchemaName(name, undefined, env));
+  }
+  if (env && isSecretEnvVarName(literal)) {
+    return true;
+  }
+  // A signed URL can name a public field. Its query is scrubbed from the
+  // name itself; query parameters do not describe the field's value.
+  const field = literal.split(/[?#]/, 1)[0].trim();
+  const normalized = normalizeFieldName(field);
+  if (carriesSchemaCredential(field)) {
+    // "Token Secret" can both carry a value and describe a credential.
+    // Check the joined label so an auth scheme alone doesn't mark its field.
+    return (
+      isSecretField(field) || (!/[:=]/.test(field) && isSecretParameter(normalized, undefined))
+    );
+  }
+  if (normalized === 'key' || SCHEMA_TOKEN_METRIC.test(normalized)) {
+    return false;
+  }
+  return (
+    normalized === 'headers' ||
+    isSecretParameter(field, undefined) ||
+    (/^x[-_]/i.test(field) && isCredentialHeader(field, ''))
+  );
+}
+
+const SCHEMA_URL_TAIL = /\/[a-z][a-z0-9+.-]*:\/\//i;
+const UNPAIRED_SURROGATE = /\p{Surrogate}/u;
+
+// AJV accepts octets that are not UTF-8. A failed decode can conceal a
+// credential behind escaped delimiters. Literal keys can also contain bare %.
+function validSchemaEncoding(text: string, literal = false): boolean {
+  if (UNPAIRED_SURROGATE.test(text)) {
+    return false;
+  }
+  if (text.includes('%')) {
+    try {
+      decodeURIComponent(literal ? text.replace(/%(?![\da-f]{2})/gi, '%25') : text);
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+function splitSchemaUri(uri: string): [string, string] {
+  const hash = uri.indexOf('#');
+  const path = hash < 0 ? uri : uri.slice(0, hash);
+  let fragment = hash < 0 ? '' : uri.slice(hash);
+  const pointer = /^#(?:\/|%2f)/i.test(fragment);
+  // localSchemaPointer validates pointer tokens after escaping literal URL keys.
+  if (!validSchemaEncoding(pointer ? path : uri)) {
+    return ['', REDACTED];
+  }
+  // AJV strips an extra trailing delimiter from pointers and named anchors.
+  // Normalize both lookup and output, except inside a literal URL key.
+  const suffix = fragment.search(/#\/?$/);
+  if (suffix > 0 && !SCHEMA_URL_TAIL.test(fragment)) {
+    fragment = fragment.slice(0, suffix);
+  }
+  // AJV decodes unreserved characters in named anchors. JSON Pointer
+  // tokens use their own escaping and must only be decoded once.
+  if (!pointer && fragment.includes('%')) {
+    fragment = schemaResourceId(fragment, '');
+  }
+  return [path, fragment];
+}
+
+// Only a whole # or #/ fragment names the resource itself. A trailing
+// fragment inside a literal URL pointer belongs to the referenced key.
+function splitResourceUri(uri: string): [string, string] {
+  const [path, fragment] = splitSchemaUri(uri);
+  return [path, /^#(?:\/|%2f)?$/i.test(fragment) ? '' : fragment];
+}
+
+// Resolve only in-memory IDs, with the same URI rules as validation (including URNs).
+let schemaResolver: Ajv['opts']['uriResolver'] | undefined;
+function schemaResourceId(path: string, base: string): string {
+  if (!path) {
+    return base;
+  }
+  schemaResolver ??= new Ajv({ meta: false }).opts.uriResolver;
+  try {
+    return schemaResolver.resolve(base, path);
+  } catch {
+    // An invalid URI cannot safely distinguish embedded and external resources.
+    return REDACTED;
+  }
+}
+
+function escapePointerToken(name: string): string {
+  return name.replace(/~/g, '~0').replace(/\//g, '~1');
+}
+
+function pointerToken(name: string): string {
+  return encodeURIComponent(escapePointerToken(name));
+}
+
+// Return both the source spelling and decoded key so unchanged tokens stay intact.
+type SchemaPointer = { raw: string; name: string }[];
+
+// An absent pointer may be an anchor. A malformed pointer has no safe target.
+function localSchemaPointer(ref: string): SchemaPointer | undefined | null {
+  // After normalizing AJV's single delimiter, another raw hash outside
+  // a URL is ambiguous. An encoded %23 is still a valid part of a key.
+  if (
+    ref === REDACTED ||
+    UNPAIRED_SURROGATE.test(ref) ||
+    (ref.includes('#', 1) && !SCHEMA_URL_TAIL.test(ref))
+  ) {
+    return null;
+  }
+  try {
+    const encoded = /^#%2f/i.test(ref);
+    if (encoded) {
+      ref = decodeURIComponent(ref);
+    }
+    if (ref === '#') {
+      return [];
+    }
+    if (!ref.startsWith('#/')) {
+      return undefined;
+    }
+    // Older exports used this pointer for an unknown key. It cannot safely
+    // identify a target, even if the resource has a member with that name.
+    if (ref === '#/' + REDACTED) {
+      return null;
+    }
+    // A literal URL is a single trailing key. Locate only the scheme so a
+    // malformed suffix cannot trigger another scan at each embedded scheme.
+    const scheme = ref.search(SCHEMA_URL_TAIL);
+    const head = scheme < 0 ? ref.slice(2) : ref.slice(2, scheme + 1);
+    const tail = scheme < 0 ? '' : pointerToken(ref.slice(scheme + 1));
+    // Percent signs and hashes from a decoded fragment are literal data.
+    const body = (encoded ? head.replace(/[%#]/g, encodeURIComponent) : head) + tail;
+    return body.split('/').map((raw) => ({
+      raw,
+      name: decodeURIComponent(raw).replace(/~1/g, '/').replace(/~0/g, '~'),
+    }));
+  } catch {
+    // An undecodable key may hide credentials behind encoded delimiters.
+    return null;
+  }
+}
+
+// Distinct resource IDs can become identical after scrubbing a query. Reserve
+// existing IDs first, and suffix the document URI (never its pointer or anchor).
+function sanitizedResourceQueries(ids: Iterable<string>) {
+  const reserved = new Set(Array.from(ids, (id) => splitSchemaUri(id)[0]));
+  const queries = new Map<string, string>();
+  let next = 0;
+  for (const id of Array.from(reserved)) {
+    const safe = schemaResourceId(sanitizeUrl(id), DUMMY_BASE);
+    if (safe === id) {
+      continue;
+    }
+    let suffix = '';
+    while (reserved.has(safe + suffix)) {
+      suffix = `${safe.includes('?') ? '&' : '?'}id=${++next}`;
+    }
+    reserved.add(safe + suffix);
+    // Relative paths and URLSearchParams can use different spellings for
+    // spaces and repeated keys. Every spelling of this resource shares one query.
+    const query = safe.includes('?') ? safe.slice(safe.indexOf('?')) : '';
+    queries.set(id, query + suffix);
+  }
+  return queries;
+}
+
+// Headers, authorization schemes and key=value assignments can themselves
+// be names or literals. Use the same gateway policy as provider credentials.
+function carriesSchemaCredential(text: string): boolean {
+  if (SCHEMA_TOKEN_METRIC.test(text)) {
+    return false;
+  }
+  // Short Basic credentials encode a user:password pair. A label such as
+  // "Basic plan" also starts with the scheme but carries no credentials.
+  if (/^basic\s/i.test(text) && !looksLikeSecret(text)) {
+    try {
+      return atob(text.slice(6)).includes(':');
+    } catch {
+      return false;
+    }
+  }
+  if (
+    isCredentialHeader('', text) ||
+    (looksLikeUrlEncodedFormData(text) && hasSecretFormSegment(text))
+  ) {
+    return true;
+  }
+  const separator = text.search(/[:=]/);
+  if (separator < 1) {
+    return false;
+  }
+  const name = text.slice(0, separator).trim();
+  const value = text.slice(separator + 1).trim();
+  return !!value && /^[a-z0-9._-]+$/i.test(name) && isCredentialHeader(name, value);
+}
+
+// Parsing JSON discards earlier duplicate keys. Keep authored whitespace only
+// if the inspected representation accounts for the entire original spelling.
+function projectedJsonText(text: string, parsed: unknown, safe: string): string {
+  if (text === safe || JSON.stringify(parsed) !== safe) {
+    return safe;
+  }
+  return text.replace(/\s/g, '') === safe.replace(/\s/g, '') ? text : safe;
+}
+
+// Names are identifiers, even when they look like encoded data. Preserve
+// their spelling unless sanitization removes an actual credential.
+function safeSchemaName(name: string): string {
+  if (!validSchemaEncoding(name, true)) {
+    return REDACTED;
+  }
+  const trimmed = name.trim();
+  if (trimmed !== name) {
+    const safe = safeSchemaName(trimmed);
+    return safe === trimmed ? name : safe;
+  }
+  if (name.startsWith('//')) {
+    return sanitizeUrlForLogging('https:' + name).replace(/^https:/, '');
+  }
+  if (name.startsWith('/') || URL_REFERENCE.test(name)) {
+    return sanitizeUrlForLogging(name);
+  }
+  if (carriesSchemaCredential(name)) {
+    return REDACTED;
+  }
+  const parsed = jsonData(name);
+  if (parsed) {
+    // An encoded name is one identifier. If inspecting it as data masks
+    // anything, rename it as a whole and let the name map settle collisions.
+    const safe = JSON.stringify(projectStandaloneData(parsed));
+    return projectedJsonText(name, parsed, safe) === name ? name : REDACTED;
+  }
+  // A relative URL or query can carry credentials without a scheme or slash.
+  // Authored regular expressions are checked through their decoded literal names.
+  return /[?#]/.test(name) && !name.startsWith('^') ? sanitizeTemplatedUrl(name) : name;
+}
+
+function renamedPattern(pattern: string, names: Map<string, string>): string | undefined {
+  const members = patternMembers(pattern);
+  if (!members.some((name) => names.has(name))) {
+    return undefined;
+  }
+  const alternatives = members.map((name) => escapeRegExp(names.get(name) ?? safeSchemaName(name)));
+  return alternatives.length === 1 ? `^${alternatives[0]}$` : `^(?:${alternatives.join('|')})$`;
+}
+
+function schemaPatternLiteral(pattern: string): string {
+  return pattern
+    .replace(/^\^|\$$/g, '')
+    .replace(
+      /\\(?:x([\da-fA-F]{2})|u([\da-fA-F]{4})|u\{([\da-fA-F]+)\}|([.*+?^${}()|[\]\\/-]))/g,
+      (raw, hex, unicode, codePoint, punctuation) => {
+        if (punctuation) {
+          return punctuation;
+        }
+        const code = Number.parseInt(hex ?? unicode ?? codePoint, 16);
+        return code <= 0x10ffff ? String.fromCodePoint(code) : raw;
+      },
+    );
+}
+
+function jsonData(value: unknown): unknown {
+  if (typeof value === 'string' && /^\s*[[{]/.test(value)) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      // Ordinary text and patterns can also start with a bracket.
+    }
+  }
+  return undefined;
+}
+
+// Reserve literal member names too. Two individually sanitized examples can
+// otherwise assign different keys to the same properties, or lose a collision.
+function collectDataNames(root: unknown, names: Set<string>): void {
+  const pending = [root];
+  const visited = new WeakSet<object>();
+  while (pending.length) {
+    const value = pending.pop();
+    const node = jsonData(value) ?? value;
+    if (!node || typeof node !== 'object' || visited.has(node)) {
+      continue;
+    }
+    visited.add(node);
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        pending.push(child);
+      }
+      continue;
+    }
+    for (const [key, child] of Object.entries(node)) {
+      names.add(key);
+      pending.push(child);
+    }
+  }
+}
+
+function decodeSchemaName(name: string): string {
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
+  }
+}
+
+// Keep generated identifiers short enough to remain public on credential routes.
+const REDACTED_ID = 'id';
+
+// Every spelling of a resource (absolute, relative or percent-encoded)
+// shares the same path names. Queries and fragments have their own syntax.
+function projectPath(path: string, project: (name: string, sensitive: boolean) => string): string {
+  const query = path.indexOf('?');
+  const prefix = query < 0 ? path : path.slice(0, query);
+  let previous = '';
+  const safe = prefix.replace(/[^/:]+/g, (token) => {
+    const name = decodeSchemaName(token);
+    const replacement = project(name, isCredentialPathSegment(token, previous));
+    previous = token;
+    return replacement === name ? token : encodeURIComponent(replacement);
+  });
+  return safe + path.slice(prefix.length);
+}
+
+function schemaIdentifiers(uris: Iterable<string>) {
+  const identifiers = new Set<string>();
+  const sensitive = new Set<string>();
+  for (const uri of uris) {
+    const [path, fragment] = splitSchemaUri(uri);
+    projectPath(path, (name, credential) => {
+      identifiers.add(name);
+      if (credential) {
+        sensitive.add(name);
+      }
+      return name;
+    });
+    if (fragment && localSchemaPointer(fragment) === undefined) {
+      identifiers.add(decodeSchemaName(fragment.slice(1)));
+    }
+  }
+  return { identifiers, sensitive };
+}
+
+function schemaNames(
+  root: unknown,
+  ids: Iterable<string>,
+  names: Set<string>,
+  patternKeys: Set<string>,
+  diagnostics?: SchemaDiagnostics,
+) {
+  collectDataNames(root, names);
+  for (const pattern of patternKeys) {
+    for (const name of patternMembers(pattern)) {
+      names.add(name);
+    }
+  }
+  // Path segments and anchors require names valid in a URI, even if the
+  // same name also occurs in a property or example.
+  const { identifiers, sensitive } = schemaIdentifiers(ids);
+  for (const name of identifiers) {
+    names.add(name);
+  }
+  const renamed = new Map<string, string>();
+  let suffix = 0;
+  for (const name of Array.from(names)) {
+    const safe = sensitive.has(name) ? REDACTED_ID : safeSchemaName(name);
+    if (safe === name) {
+      continue;
+    }
+    const identifier = identifiers.has(name);
+    let unique = identifier ? REDACTED_ID : safe;
+    while (names.has(unique)) {
+      unique = (identifier ? REDACTED_ID : `${safe}#`) + ++suffix;
+    }
+    names.add(unique);
+    renamed.set(name, unique);
+    diagnostics?.names.set(name, unique);
+  }
+  // A regex key must match the renamed literal, never a character class.
+  // Keep its pointer spelling separate from a property with the same raw key.
+  const patterns = new Map<string, string>();
+  for (const pattern of patternKeys) {
+    let safe = renamedPattern(pattern, renamed);
+    if (safe === undefined) {
+      continue;
+    }
+    while (names.has(safe)) {
+      safe = `(?:${safe})`;
+    }
+    names.add(safe);
+    patterns.set(pattern, safe);
+    diagnostics?.recordPattern(pattern, safe);
+    if (!renamed.has(pattern)) {
+      renamed.set(pattern, safe);
+      diagnostics?.names.set(pattern, safe);
+    }
+  }
+  return { renamed, patterns };
+}
+
+function indexSchema(root: unknown, diagnostics?: SchemaDiagnostics) {
+  const names = new Set<string>();
+  const patternKeys = new Set<string>();
+  const annotations = new Set<object>();
+  const environments = new Set<Record<string, unknown>>();
+  const booleanTargets = new Map<object, Set<string>>();
+  const references: { value: string; base: string; schema: object; keyword: string }[] = [];
+  const ids = new Map<string, object | null>();
+  const documents = new Set<string>();
+  const uris = new Set<string>();
+  const scopes = new WeakMap<object, string>();
+  const pending: unknown[] = [];
+
+  function register(id: string, schema: object) {
+    // Don't pick one of several conflicting IDs or anchors.
+    uris.add(id);
+    ids.set(id, ids.has(id) && ids.get(id) !== schema ? null : schema);
+  }
+
+  function collectNames(value: unknown) {
+    if (Array.isArray(value)) {
+      for (const name of value) {
+        if (typeof name === 'string') {
+          names.add(name);
+        }
+      }
+    }
+  }
+
+  function indexResource(schema: Record<string, unknown>, base: string): string {
+    if (typeof schema.$id === 'string') {
+      const [path, fragment] = splitResourceUri(schema.$id);
+      base = schemaResourceId(path, base);
+      documents.add(base);
+      if (base === REDACTED || schema.$id === REDACTED || localSchemaPointer(fragment) === null) {
+        pending.push(REDACTED);
+      }
+      register(base + fragment, schema);
+    }
+    if (schema === root) {
+      register(base, schema);
+    }
+    for (const anchor of [schema.$anchor, schema.$dynamicAnchor]) {
+      if (typeof anchor === 'string') {
+        register(`${base}#${anchor}`, schema);
+      }
+    }
+    collectNames(schema.required);
+    scopes.set(schema, base);
+    diagnostics?.includeSchema();
+    return base;
+  }
+
+  // AJV also discovers resource declarations under extension keywords. Plain
+  // annotation data remains data unless an ID or pointer designates a schema.
+  function collectExtension(value: unknown, base: string, credential: boolean): void {
+    if (!isSchemaObject(value) || scopes.has(value)) {
+      return;
+    }
+    if (value.$id || value.$anchor || value.$dynamicAnchor) {
+      annotations.add(value);
+      if (credential) {
+        pending.push(value);
+      }
+      collect(value, base);
+      return;
+    }
+    for (const [key, child] of Object.entries(value)) {
+      collectExtension(child, base, credential || credentialSchemaName(key));
+    }
+  }
+
+  // Index subschemas before following references, so declaration order doesn't matter.
+  function collect(schema: unknown, parent: string): void {
+    if (!isSchemaObject(schema) || scopes.has(schema)) {
+      return;
+    }
+    const base = indexResource(schema, parent);
+    for (const [keyword, value] of Object.entries(schema)) {
+      if (SCHEMA_REFS.has(keyword) && typeof value === 'string') {
+        references.push({ value, base, schema, keyword });
+      } else if (JSON_SCHEMA_CHILD_KEYWORDS.has(keyword)) {
+        for (const child of Array.isArray(value) ? value : [value]) {
+          collect(child, base);
+        }
+      } else if (JSON_SCHEMA_MAP_KEYWORDS.has(keyword) && isSchemaObject(value)) {
+        collectMap(value, keyword, base);
+      } else if (keyword !== 'const' && keyword !== 'default') {
+        collectExtension(value, base, credentialSchemaName(keyword));
+      }
+    }
+  }
+
+  function collectMap(
+    map: Record<string, unknown>,
+    keyword: string,
+    base: string,
+    env = false,
+  ): void {
+    for (const [name, child] of Object.entries(map)) {
+      names.add(name);
+      if (keyword === 'patternProperties') {
+        patternKeys.add(name);
+      }
+      if (keyword === 'dependencies' || keyword === 'dependentRequired') {
+        collectNames(child);
+      }
+      if (credentialSchemaName(name, keyword, env)) {
+        pending.push(child);
+      }
+      if (
+        (keyword === 'properties' && name === 'env') ||
+        (keyword === 'patternProperties' && patternMembers(name).includes('env'))
+      ) {
+        addEnvironment(child);
+      }
+      collect(child, base);
+    }
+  }
+  collect(root, `${DUMMY_BASE}/`);
+
+  function referenceTarget(ref: string, base: string): unknown {
+    if (ref === REDACTED) {
+      return REDACTED;
+    }
+    const [path, fragment] = splitResourceUri(ref);
+    const pointer = localSchemaPointer(fragment);
+    if (pointer === null) {
+      return REDACTED;
+    }
+    const id = schemaResourceId(path, base);
+    // A relative reference may inherit a credential route from its base.
+    uris.add(ref);
+    uris.add(id);
+    const resource = ids.get(id);
+    const anchor = ids.get(id + fragment);
+    if (id === REDACTED || resource === null || anchor === null) {
+      return REDACTED;
+    }
+    if (anchor) {
+      return anchor;
+    }
+    if (!resource) {
+      // A base introduced by an anchored $id may lack a root declaration.
+      // Distinguish that lost local target from an unavailable external URI.
+      return documents.has(id) ? REDACTED : undefined;
+    }
+    return pointer ? pointerTarget(pointer, resource, id) : REDACTED;
+  }
+
+  // AJV honors IDs along the pointer, even under examples or default.
+  // Promote those ancestors before indexing any descendant references.
+  function pointerScope(
+    schema: Record<string, unknown>,
+    token: string,
+    scope: string,
+    last: boolean,
+    credential: boolean,
+  ): string {
+    const id = !POINTER_CONTAINERS.has(token) && typeof schema.$id === 'string' ? schema.$id : '';
+    if (id || last) {
+      if (!scopes.has(schema)) {
+        annotations.add(schema);
+        collect(schema, scope);
+      }
+      if (credential) {
+        pending.push(schema);
+      }
+    }
+    return id ? schemaResourceId(splitResourceUri(id)[0], scope) : scope;
+  }
+
+  // Never substitute the root for an unknown fragment. Walking the root as
+  // an environment would skip possible credentials in its definitions.
+  function pointerTarget(pointer: SchemaPointer, resource: object, scope: string): unknown {
+    let node: unknown = resource;
+    let credential = false;
+    let env = false;
+    for (const [i, { raw, name }] of pointer.entries()) {
+      if (!node || typeof node !== 'object' || !Object.prototype.hasOwnProperty.call(node, name)) {
+        return REDACTED;
+      }
+      credential ||= credentialSchemaName(name, undefined, env);
+      env = name === 'env' || (env && Array.isArray(node));
+      const child: unknown = (node as Record<string, unknown>)[name];
+      const last = i === pointer.length - 1;
+      if (isSchemaObject(child)) {
+        scope = pointerScope(child, raw, scope, last, credential);
+        if (last && scope !== scopes.get(child)) {
+          // The same schema has two possible bases. Do not guess a target.
+          return REDACTED;
+        }
+      } else if (typeof child === 'boolean' && last) {
+        // Booleans have no object identity. Preserve only the referenced slot.
+        const keys = booleanTargets.get(node) ?? new Set<string>();
+        keys.add(name);
+        booleanTargets.set(node, keys);
+      }
+      node = child;
+    }
+    return isSchemaObject(node) || typeof node === 'boolean' ? node : REDACTED;
+  }
+
+  // Even an ordinary reference can reach an annotation containing credential
+  // properties. Promoted schemas append their own references to this queue.
+  for (const { value, base } of references) {
+    if (referenceTarget(value, base) === REDACTED) {
+      pending.push(REDACTED);
+    }
+  }
+
+  function addEnvironment(value: unknown) {
+    if (isSchemaObject(value)) {
+      environments.add(value);
+    } else if (value === REDACTED) {
+      // The lost target could contain credential-bearing environment members.
+      pending.push(value);
+    }
+  }
+
+  // A pointer can promote a schema inside a credential's default or example
+  // before we learn that the enclosing item describes an environment.
+  function inspectEnvironmentLiteral(value: unknown) {
+    if (Array.isArray(value)) {
+      value.forEach(inspectEnvironmentLiteral);
+    } else if (isSchemaObject(value)) {
+      for (const [name, child] of Object.entries(value)) {
+        if (child && typeof child === 'object' && isSecretEnvVarName(name)) {
+          pending.push(child);
+        }
+      }
+    }
+  }
+
+  // Follow references and applicators that still describe environment values.
+  // Only credential members enter the ordinary sensitivity traversal.
+  function inspectEnvironment(schema: Record<string, unknown>) {
+    const base = scopes.get(schema)!;
+    for (const [keyword, value] of Object.entries(schema)) {
+      if (SCHEMA_REFS.has(keyword) && typeof value === 'string') {
+        addEnvironment(referenceTarget(value, base));
+      } else if (annotations.size && SCHEMA_LITERALS.has(keyword)) {
+        inspectEnvironmentLiteral(value);
+      } else if (ENV_SCHEMA_APPLICATORS.has(keyword)) {
+        (Array.isArray(value) ? value : [value]).forEach(addEnvironment);
+      } else if (isSchemaObject(value)) {
+        if (keyword === 'dependentSchemas' || keyword === 'dependencies') {
+          Object.values(value).forEach(addEnvironment);
+        } else if (PROPERTY_MAPS.has(keyword)) {
+          collectMap(value, keyword, base, true);
+        }
+      }
+    }
+  }
+  for (const schema of environments) {
+    inspectEnvironment(schema);
+  }
+
+  const sensitive = new WeakSet<object>();
+  while (pending.length) {
+    // Older saved rows can have the entire credential schema (including its $ref)
+    // replaced by this marker. Any definition could then contain its constraints.
+    const target = pending.pop();
+    if (target === REDACTED) {
+      diagnostics?.addSensitivePattern();
+    }
+    const node = target === REDACTED ? root : target;
+    if (!node || typeof node !== 'object' || sensitive.has(node)) {
+      continue;
+    }
+    sensitive.add(node);
+    if (isSchemaObject(node) && typeof node.pattern === 'string') {
+      diagnostics?.addSensitivePattern(node.pattern);
+    }
+    const base = scopes.get(node);
+    for (const [key, child] of Object.entries(node)) {
+      if (base && SCHEMA_REFS.has(key) && typeof child === 'string') {
+        const target = referenceTarget(child, base);
+        if (target === undefined) {
+          // An external resource is unavailable. Protect historical diagnostics
+          // without fetching it or masking unrelated local definitions.
+          diagnostics?.addSensitivePattern();
+        } else {
+          pending.push(target);
+        }
+      } else if (child && typeof child === 'object') {
+        pending.push(child);
+      }
+    }
+  }
+
+  const { renamed, patterns } = schemaNames(root, uris, names, patternKeys, diagnostics);
+  return {
+    renamed,
+    patterns,
+    sensitive,
+    scopes,
+    annotations,
+    environments,
+    booleanTargets,
+    references,
+    ids,
+    queries: sanitizedResourceQueries(ids.keys()),
+  };
+}
+
+function sanitizeSchemaUri(
+  value: string,
+  index: ReturnType<typeof schemaNames> & { queries?: Map<string, string> },
+  keyword?: string,
+  base?: string,
+): string {
+  const [path, fragment] = splitSchemaUri(value);
+  const pointer = localSchemaPointer(fragment);
+  if (pointer === null) {
+    return REDACTED;
+  }
+  // Preserve relative paths and scrub their queries without resolving them against a base.
+  let safePath = path.startsWith('//')
+    ? sanitizeUrl(`https:${path}`).replace(/^https:/, '')
+    : URL_REFERENCE.test(path)
+      ? sanitizeUrl(path)
+      : sanitizeTemplatedUrl(path);
+  if (path && base && keyword !== '$schema') {
+    const id = keyword === '$id' ? base : schemaResourceId(path, base);
+    const query = index.queries?.get(id);
+    if (query !== undefined) {
+      safePath = safePath.split('?', 1)[0] + query;
+    }
+  }
+  const identifier = (name: string, sensitive = false) =>
+    index.renamed.get(name) ?? (sensitive || safeSchemaName(name) !== name ? REDACTED_ID : name);
+  safePath = projectPath(safePath, identifier);
+  if (!pointer) {
+    const name = decodeSchemaName(fragment.slice(1));
+    const safe = identifier(name);
+    return safePath + (name === safe ? sanitizeTemplatedUrl(fragment) : '#' + safe);
+  }
+  const tokens = pointer.map(({ raw, name }, i) => {
+    const pattern = pointer[i - 1]?.name === 'patternProperties';
+    const safe = pattern
+      ? (index.patterns.get(name) ?? safeSchemaPattern(name))
+      : (index.renamed.get(name) ?? safeSchemaName(name));
+    return safe === name ? raw : pointerToken(safe);
+  });
+  return safePath + ['#', ...tokens].join('/');
+}
+
+const REDACTED_PATTERN = String.raw`^\[REDACTED\]$`;
+
+// Never use a bare [REDACTED] as a regex: it would be a character class.
+// Recognize anchored literals without executing an authored pattern.
+function safeSchemaPattern(pattern: string, projected: unknown = pattern): string {
+  const secret = patternMembers(pattern).some((name) => safeSchemaName(name) !== name);
+  return projected !== pattern || pattern === REDACTED || secret ? REDACTED_PATTERN : pattern;
+}
+
+// YAML exceptions embed an excerpt and can also quote source text in the
+// reason. Only the numeric location is safe to carry into logs or artifacts.
+export function schemaParseFailure(message: string): string {
+  const location = /\((\d{1,9}):(\d{1,9})\)(?:\r?\n|$)/.exec(message);
+  return location
+    ? `Invalid inline assertion schema at line ${location[1]}, column ${location[2]}`
+    : 'Invalid inline assertion schema';
+}
+
+// AJV interpolates unescaped operands into compiler errors. Quotes, line
+// breaks and even the delimiters can come from a private name or reference.
+// Keep the failure category without trying to parse values from an old row.
+const SCHEMA_COMPILATION_ERRORS = [
+  ['invalid anchor "', 'Invalid JSON Schema anchor'],
+  ["can't resolve reference ", 'Unresolved JSON Schema reference'],
+  ['schema with key or ref ', 'Unresolved JSON Schema reference'],
+  ['schema with key or id ', 'Duplicate JSON Schema ID'],
+  ['reference "', 'Ambiguous JSON Schema reference'],
+  ['unknown format "', 'Unknown JSON Schema format'],
+  ['strict mode: unknown keyword', 'Unknown JSON Schema keyword'],
+  ['strict mode:', 'Invalid JSON Schema in strict mode'],
+  ['schema at path "', 'Invalid JSON Schema'],
+  ['schema is invalid:', 'Invalid JSON Schema'],
+  ['Invalid regular expression:', 'Invalid JSON Schema regular expression'],
+] as const;
+
+// AJV includes literal patterns, required names and JSON Pointer paths in
+// diagnostics. Share masks across a row but never apply them to provider output.
+export class SchemaDiagnostics {
+  private readonly patterns = new Map<string, string>();
+  readonly names = new Map<string, string>();
+  private hasSchema = false;
+  private incompletePatterns = false;
+
+  // Derive diagnostic visibility from the actual exported pattern, including
+  // value-based redaction in fields with ordinary names.
+  recordPattern(original: string, projected: string): void {
+    if (projected === REDACTED_PATTERN) {
+      this.addSensitivePattern(original);
+    } else if (!this.patterns.has(original) || this.patterns.get(original) === original) {
+      this.patterns.set(original, projected);
+    }
+  }
+
+  private pattern(value: string): string {
+    return (
+      this.patterns.get(value) ??
+      (this.incompletePatterns ? REDACTED_PATTERN : safeSchemaPattern(value))
+    );
+  }
+
+  addSensitivePattern(pattern?: string): void {
+    this.hasSchema = true;
+    if (pattern !== undefined) {
+      this.patterns.set(pattern, REDACTED_PATTERN);
+    }
+    // The original pattern can be missing even when no pattern keyword survived.
+    this.incompletePatterns ||=
+      pattern === undefined ||
+      pattern === REDACTED ||
+      pattern === REDACTED_PATTERN ||
+      pattern.includes('{{') ||
+      pattern.includes('%5BREDACTED%5D');
+  }
+
+  includeSchema(): void {
+    this.hasSchema = true;
+  }
+
+  sanitize(message: string): string {
+    if (!this.hasSchema) {
+      return message;
+    }
+    if (message.includes('YAMLException:') || /\(\d+:\d+\)\r?\n\r?\n\s*\d+ \|/.test(message)) {
+      return schemaParseFailure(message);
+    }
+    for (const [prefix, reason] of SCHEMA_COMPILATION_ERRORS) {
+      if (message.includes(prefix)) {
+        return reason;
+      }
+    }
+    const prefix = 'must match pattern "';
+    if (message.includes(prefix)) {
+      for (const [pattern, safe] of this.patterns) {
+        if (pattern !== safe) {
+          message = message.split(`${prefix}${pattern}"`).join(`${prefix}${safe}"`);
+        }
+      }
+      // Older records may have retained a diagnostic after losing the schema.
+      message = message.replace(
+        /must match pattern "(.*?)"(?=, data|\n|$)/gs,
+        (_, pattern) => `${prefix}${this.pattern(pattern)}"`,
+      );
+    }
+    for (const [name, safe] of [...this.names].sort(([a], [b]) => b.length - a.length)) {
+      message = message.split(name).join(safe);
+      message = message.split(escapePointerToken(name)).join(escapePointerToken(safe));
+    }
+    return sanitizeDiagnosticNames(message);
+  }
+}
+
+// When older rows have lost the original names, AJV still spells them out in
+// required/dependency errors and instance paths. Apply the same naming policy.
+function sanitizeDiagnosticNames(message: string): string {
+  return message
+    .replace(
+      /must have required property '([^'\n]*)'/g,
+      (_, name) => `must have required property '${safeSchemaName(name)}'`,
+    )
+    .replace(
+      /(must have propert(?:y|ies) )(.+?) when property (.+?) is present/g,
+      (_, prefix, list: string, key) =>
+        `${prefix}${list.split(', ').map(safeSchemaName).join(', ')} when property ${safeSchemaName(key)} is present`,
+    )
+    .replace(
+      /\bdata\/([^\n]+?)(?= must |\n|$)/g,
+      (_, path: string) =>
+        'data/' +
+        path
+          .split('/')
+          .map((token) => {
+            const name = token.replace(/~1/g, '/').replace(/~0/g, '~');
+            const safe = safeSchemaName(name);
+            return safe === name ? token : escapePointerToken(safe);
+          })
+          .join('/'),
+    );
+}
+
+export function sanitizeSchemaValidationMessage(message: string, schema: unknown): string {
+  const diagnostics = new SchemaDiagnostics();
+  sanitizeAssertionJsonSchema(schema, diagnostics);
+  return diagnostics.sanitize(message);
+}
+
+// Enum values must be unique by JSON equality. Retain first occurrences and
+// track shifted indexes for JSON Pointers into an enum.
+function uniqueEnum(values: unknown[]) {
+  const positions: number[] = [];
+  const indexes = new Map<string, number>();
+  const unique: unknown[] = [];
+  for (const value of values) {
+    const key = safeStringify.stable(value);
+    let index = indexes.get(key);
+    if (index === undefined) {
+      index = unique.length;
+      indexes.set(key, index);
+      unique.push(value);
+    }
+    positions.push(index);
+  }
+  return { positions, unique };
+}
+
+// Walk the original resource, updating only the indexes of the sanitized URI.
+function remapEnumPointer(
+  source: string,
+  output: string,
+  resource: unknown,
+  positions: Map<object, number[]>,
+): string {
+  const pointer = localSchemaPointer(source);
+  const [path, fragment] = splitSchemaUri(output);
+  const safe = localSchemaPointer(fragment);
+  if (!pointer || !safe || pointer.length !== safe.length) {
+    return output;
+  }
+  let node = resource;
+  for (const [i, { name }] of pointer.entries()) {
+    if (!node || typeof node !== 'object' || !Object.prototype.hasOwnProperty.call(node, name)) {
+      return output;
+    }
+    const index = positions.get(node)?.[Number(name)];
+    if (index !== undefined) {
+      safe[i].raw = String(index);
+    }
+    node = (node as Record<string, unknown>)[name];
+  }
+  return path + ['#', ...safe.map(({ raw }) => raw)].join('/');
+}
+
+const SCHEMA_OPTIONS = {
+  sanitizeUrls: true,
+  throwOnError: true,
+  maxDepth: Number.POSITIVE_INFINITY,
+};
+
+// Structural names and literal values can both contain encoded data. The
+// schema context additionally preserves reference targets and allocated names.
+function schemaDataProjector(context?: {
+  names: Map<string, string>;
+  annotations: Set<object>;
+  visit: (schema: unknown, env: boolean) => unknown;
+  redactLiteral: (value: unknown, key: string, parent: object) => unknown;
+}) {
+  function projectString(value: string, key: string, env: boolean): string {
+    // Check the source before host and URL handling can normalize or reclassify
+    // an opaque credential. Literal references to map keys share their names.
+    const renamed = context?.names.get(value);
+    if (renamed !== undefined) {
+      return renamed;
+    }
+    const parsed = jsonData(value);
+    if (parsed) {
+      const safe = JSON.stringify(projectData(parsed, key));
+      return projectedJsonText(value, parsed, safe);
+    }
+    // A Windows placeholder can look like an encoded byte. Preserve its
+    // spelling while still applying field-level sanitization below.
+    const safeName = /^%[a-z_]\w*%$/i.test(value) ? value : safeSchemaName(value);
+    if (safeName !== value) {
+      return safeName;
+    }
+    const field = { [key]: value };
+    const safe = env
+      ? sanitizeObject({ env: field }, SCHEMA_OPTIONS).env
+      : sanitizeObject(field, SCHEMA_OPTIONS);
+    return Object.prototype.hasOwnProperty.call(safe, key) ? safe[key] : REDACTED;
+  }
+
+  // Walk data once, preserving designated subschemas and applying ordinary
+  // field sanitization only to literals, never to structural names or URIs.
+  function projectData(value: unknown, key = '', env = false): unknown {
+    if (Array.isArray(value)) {
+      return value.map((item) => projectData(item, key === 'env' ? key : ''));
+    }
+    if (!isSchemaObject(value)) {
+      return typeof value === 'string' ? projectString(value, key, env) : value;
+    }
+    if (context?.annotations.has(value)) {
+      // A referenced default or example is still literal data. Preserve the
+      // sensitivity of its members even when retaining schema keywords.
+      return context.visit(value, key === 'env');
+    }
+    return Object.fromEntries(
+      Object.entries(value).map(([name, item]) => {
+        const field = context ? (context.names.get(name) ?? name) : safeSchemaName(name);
+        const secret = credentialSchemaName(name, undefined, key === 'env');
+        return [
+          field,
+          secret
+            ? (context?.redactLiteral(item, name, value) ?? REDACTED)
+            : projectData(item, field, key === 'env'),
+        ];
+      }),
+    );
+  }
+
+  return projectData;
+}
+
+const projectStandaloneData = schemaDataProjector();
+
+/** Schema property names describe data. Their literal constraints can carry credentials. */
+function sanitizeAssertionJsonSchema(root: unknown, diagnostics?: SchemaDiagnostics): unknown {
+  const index = indexSchema(root, diagnostics);
+  const { renamed: names, sensitive, scopes, annotations, booleanTargets } = index;
+  const enumPositions = new Map<object, number[]>();
+  const projected = new WeakMap<object, Record<string, unknown>>();
+  // A credential literal can itself contain a referenced schema. Keep only
+  // paths to those targets, whose constraints are masked by visit().
+  function redactLiteral(value: unknown, key: string | number, parent: object): unknown {
+    if (typeof value === 'boolean' && booleanTargets.get(parent)?.has(String(key))) {
+      return value;
+    }
+    if ((!annotations.size && !booleanTargets.size) || !value || typeof value !== 'object') {
+      return REDACTED;
+    }
+    if (annotations.has(value) && sensitive.has(value)) {
+      return visit(value);
+    }
+    if (Array.isArray(value)) {
+      const items = value.map(redactLiteral);
+      return items.some((item) => item !== REDACTED) ? items : REDACTED;
+    }
+    const entries = Object.entries(value).flatMap(([key, item]) => {
+      const child = redactLiteral(item, key, value);
+      return child === REDACTED ? [] : [[sanitizeName(key), child]];
+    });
+    return entries.length ? Object.fromEntries(entries) : REDACTED;
+  }
+
+  const sanitizeName = (name: unknown) =>
+    typeof name === 'string' ? (names.get(name) ?? name) : REDACTED;
+
+  const projectData = schemaDataProjector({ names, annotations, visit, redactLiteral });
+
+  function visitMap(
+    keyword: string,
+    map: Record<string, unknown>,
+    credential: boolean,
+    env: boolean,
+  ) {
+    return Object.fromEntries(
+      Object.entries(map).map(([name, child]) => {
+        const key = (keyword === 'patternProperties' ? index.patterns : names).get(name) ?? name;
+        if (isSchemaObject(child) || typeof child === 'boolean') {
+          return [key, visit(child)];
+        }
+        if (
+          (keyword === 'dependencies' || keyword === 'dependentRequired') &&
+          Array.isArray(child)
+        ) {
+          return [key, child.map(sanitizeName)];
+        }
+        return [
+          key,
+          credential || credentialSchemaName(name, keyword, env) ? REDACTED : projectData(child),
+        ];
+      }),
+    );
+  }
+
+  function visitEnum(values: unknown[], credential: boolean, env: boolean) {
+    const { unique, positions } = uniqueEnum(
+      credential
+        ? values.map(redactLiteral)
+        : values.map((item) => projectData(item, env ? 'env' : '')),
+    );
+    if (unique.length < values.length) {
+      enumPositions.set(values, positions);
+    }
+    return unique;
+  }
+
+  function visitKeyword(
+    schema: Record<string, unknown>,
+    keyword: string,
+    value: unknown,
+    env: boolean,
+  ) {
+    const credential = sensitive.has(schema);
+    if (JSON_SCHEMA_MAP_KEYWORDS.has(keyword) && isSchemaObject(value)) {
+      return [keyword, visitMap(keyword, value, credential, env)];
+    }
+    if (JSON_SCHEMA_CHILD_KEYWORDS.has(keyword)) {
+      return [keyword, Array.isArray(value) ? value.map((child) => visit(child)) : visit(value)];
+    }
+    if (keyword === 'enum' && Array.isArray(value)) {
+      return [keyword, visitEnum(value, credential, env)];
+    }
+    if (credential && !JSON_SCHEMA_STRUCTURAL_KEYWORDS.has(keyword)) {
+      const redacted =
+        keyword === 'pattern'
+          ? REDACTED_PATTERN
+          : Array.isArray(value)
+            ? value.map(redactLiteral)
+            : redactLiteral(value, keyword, schema);
+      return [names.get(keyword) ?? keyword, redacted];
+    }
+    if (typeof value === 'string' && SCHEMA_URIS.has(keyword)) {
+      const uri = sanitizeSchemaUri(value, index, keyword, scopes.get(schema));
+      if (uri !== value) {
+        diagnostics?.names.set(value, uri);
+      }
+      return [keyword, uri];
+    }
+    return visitData(schema, keyword, value, env);
+  }
+
+  function visitData(
+    schema: Record<string, unknown>,
+    keyword: string,
+    value: unknown,
+    env: boolean,
+  ) {
+    if (keyword === 'required' && Array.isArray(value)) {
+      return [keyword, value.map(sanitizeName)];
+    }
+    const key = sanitizeName(keyword);
+    if (credentialSchemaName(keyword, undefined, env)) {
+      return [key, redactLiteral(value, keyword, schema)];
+    }
+    return [key, projectData(value, env && SCHEMA_LITERALS.has(key) ? 'env' : key, env)];
+  }
+
+  function visit(schema: unknown, envLiteral = false): unknown {
+    if (!isSchemaObject(schema)) {
+      return sanitizeObject(schema, SCHEMA_OPTIONS);
+    }
+    const env = envLiteral || index.environments.has(schema);
+    const result = Object.fromEntries(
+      Object.entries(schema).map(([keyword, value]) => visitKeyword(schema, keyword, value, env)),
+    );
+    if (typeof schema.pattern === 'string') {
+      result.pattern = sensitive.has(schema)
+        ? REDACTED_PATTERN
+        : (renamedPattern(schema.pattern, names) ??
+          safeSchemaPattern(schema.pattern, result.pattern));
+      diagnostics?.recordPattern(schema.pattern, result.pattern);
+    }
+    if (typeof schema.format === 'string' && result.format !== schema.format) {
+      diagnostics?.names.set(schema.format, result.format);
+    }
+    projected.set(schema, result);
+    return result;
+  }
+  const result = visit(root);
+  if (enumPositions.size) {
+    for (const { schema, keyword, value, base } of index.references) {
+      const output = projected.get(schema);
+      if (output && typeof output[keyword] === 'string') {
+        const [path, fragment] = splitSchemaUri(value);
+        const resource = index.ids.get(schemaResourceId(path, base));
+        output[keyword] = remapEnumPointer(fragment, output[keyword], resource, enumPositions);
+      }
+    }
+  }
+  return result;
+}
+
+/** Restore only JSON schemas from the original assertions, keeping other output fields sanitized. */
+export function projectAssertionSchemas<T>(
+  output: T,
+  source: unknown = output,
+  diagnostics?: SchemaDiagnostics,
+): T {
+  if (Array.isArray(output) && Array.isArray(source)) {
+    return output.map((assertion, index) =>
+      projectAssertionSchemas(assertion, source[index], diagnostics),
+    ) as T;
+  }
+  if (!isSchemaObject(output) || !isSchemaObject(source)) {
+    return output;
+  }
+  if (source.type === 'assert-set' && Array.isArray(output.assert)) {
+    return {
+      ...output,
+      assert: projectAssertionSchemas(output.assert, source.assert, diagnostics),
+    };
+  }
+  if (
+    !['is-json', 'not-is-json', 'contains-json', 'not-contains-json'].includes(
+      source.type as string,
+    )
+  ) {
+    return output;
+  }
+  const schema = source.value;
+  if (schema === REDACTED || (typeof schema === 'string' && schema.startsWith('file://'))) {
+    diagnostics?.addSensitivePattern();
+    return output;
+  }
+  if (isSchemaObject(schema)) {
+    // Match sanitizeObject's JSON snapshot, including its handling of circular values.
+    return {
+      ...output,
+      value: sanitizeAssertionJsonSchema(JSON.parse(safeStringify(schema)), diagnostics),
+    };
+  }
+  if (typeof schema === 'string') {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(schema);
+    } catch {
+      // Assertion handlers also accept inline YAML. Never resolve external
+      // sources or expand aliases while projecting untrusted saved rows.
+      try {
+        parsed = loadYaml(schema, { maxAliases: 0 });
+      } catch {
+        diagnostics?.addSensitivePattern();
+        return schema.includes(':') ? { ...output, value: REDACTED } : output;
+      }
+    }
+    if (isSchemaObject(parsed)) {
+      return { ...output, value: JSON.stringify(sanitizeAssertionJsonSchema(parsed, diagnostics)) };
+    }
+  }
+  return output;
+}
+
 /** Project direct providers and provider/type maps without changing their local configuration. */
 export function stripProviderPromptSelectors<T>(providers: T): T {
   if (Array.isArray(providers)) {
@@ -853,6 +2178,14 @@ export function sanitizeConfigForOutput(
       continue;
     }
     const sourceTest = sourceTests[index];
+    if (
+      sourceTest &&
+      typeof sourceTest === 'object' &&
+      'assert' in sourceTest &&
+      'assert' in test
+    ) {
+      test.assert = projectAssertionSchemas(test.assert, sourceTest.assert);
+    }
     const sourceMetadata =
       sourceTest && typeof sourceTest === 'object' && 'metadata' in sourceTest
         ? sourceTest.metadata?.__promptfoo
@@ -1694,6 +3027,24 @@ export function sanitizeUrl(url: string): string {
   }
 }
 
+function isCredentialPathSegment(segment: string, previous: string): boolean {
+  const route = isSecretField(decodeFormComponent(previous) ?? '');
+  try {
+    const decoded = decodeURIComponent(segment);
+    // Credential routes can also contain ordinary words such as /auth/proxy.
+    return (
+      (route &&
+        /^[a-z0-9._~+-]{12,}$/i.test(decoded) &&
+        /[a-z]/i.test(decoded) &&
+        /[0-9]/.test(decoded)) ||
+      OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
+      looksLikeSecret(decoded)
+    );
+  } catch {
+    return route;
+  }
+}
+
 /**
  * Sanitize a URL specifically for diagnostic output. Opaque path segments can be
  * legitimate resource IDs in persisted provider results, so only logging paths
@@ -1706,25 +3057,9 @@ export function sanitizeUrlForLogging(url: string): string {
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
     const sanitizedPathname = parsed.pathname
       .split('/')
-      .map((segment, index, segments) => {
-        const previous = decodeFormComponent(segments[index - 1] ?? '') ?? '';
-        try {
-          const decoded = decodeURIComponent(segment);
-          // Credential routes can also contain ordinary words such as /auth/proxy.
-          const opaqueValue =
-            isSecretField(previous) &&
-            /^[a-z0-9._~+-]{12,}$/i.test(decoded) &&
-            /[a-z]/i.test(decoded) &&
-            /[0-9]/.test(decoded);
-          return opaqueValue ||
-            OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
-            looksLikeSecret(decoded)
-            ? '%5BREDACTED%5D'
-            : segment;
-        } catch {
-          return isSecretField(previous) ? '%5BREDACTED%5D' : segment;
-        }
-      })
+      .map((segment, index, segments) =>
+        isCredentialPathSegment(segment, segments[index - 1] ?? '') ? '%5BREDACTED%5D' : segment,
+      )
       .join('/');
     if (sanitizedPathname === parsed.pathname) {
       return sanitized;

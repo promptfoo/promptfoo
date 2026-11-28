@@ -12,6 +12,7 @@ import {
   promptsTable,
   tagsTable,
 } from '../database/tables';
+import { projectLegacyTableSchemas, projectResultSchemas } from '../evaluator/resultProcessing';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
@@ -734,7 +735,9 @@ export default class Eval {
 
   async getTable(): Promise<EvaluateTable> {
     if (this.useOldResults()) {
-      return this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] };
+      return projectLegacyTableSchemas(
+        this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] },
+      );
     }
     return convertResultsToTable(await this.toResultsFile());
   }
@@ -1513,8 +1516,8 @@ export default class Eval {
       return {
         version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
-        results: this.oldResults.results,
-        table: this.oldResults.table,
+        results: this.oldResults.results.map((row) => projectResultSchemas(row)),
+        table: await this.getTable(),
         stats: this.oldResults.stats,
       };
     }
