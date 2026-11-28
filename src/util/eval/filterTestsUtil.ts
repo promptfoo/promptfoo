@@ -1,3 +1,4 @@
+import { getDbIfExists } from '../../database';
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
@@ -55,15 +56,13 @@ export async function filterTestsByResults(
 
   let results: { results: EvaluateResult[] };
   try {
-    if (pathOrId.endsWith('.json')) {
-      const output = await readOutput(pathOrId);
-      results = output.results;
-    } else {
-      const eval_ = await Eval.findById(pathOrId);
-      if (!eval_) {
-        logger.warn(`[filterTestsByResults] Evaluation not found: ${pathOrId}`);
-        return [];
-      }
+    const isJson = pathOrId.toLowerCase().endsWith('.json');
+    // Imported IDs may include directories. Preserve their precedence for mixed-case suffixes.
+    const checkStoredId =
+      !isJson || (!pathOrId.endsWith('.json') && (await getDbIfExists()) !== null);
+    const eval_ = checkStoredId ? await Eval.findById(pathOrId) : undefined;
+
+    if (eval_) {
       const summary = await eval_.toEvaluateSummary();
       if ('results' in summary) {
         results = { results: summary.results };
@@ -71,6 +70,11 @@ export async function filterTestsByResults(
         logger.debug('[filterTestsByResults] No results in evaluation summary');
         return [];
       }
+    } else if (isJson) {
+      results = (await readOutput(pathOrId)).results;
+    } else {
+      logger.warn(`[filterTestsByResults] Evaluation not found: ${pathOrId}`);
+      return [];
     }
   } catch (error) {
     logger.warn(`[filterTestsByResults] Error loading results: ${error}`);
