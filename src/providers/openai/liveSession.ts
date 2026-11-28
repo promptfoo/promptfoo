@@ -54,7 +54,7 @@ interface SessionOptions {
   input: LiveInputMessage[];
   audio: Buffer;
   responseWindowMs: number;
-  maxAudioBytes: number;
+  bytesPerSecond: number;
   websocketTimeout: number;
   closeTimeoutMs: number;
   requestTimeoutMs: number;
@@ -64,6 +64,8 @@ interface SessionOptions {
 }
 
 export const LIVE_FRAME_MS = 20;
+/** Output audio arrives in chunks that can run slightly ahead of the input frames sent. */
+const OUTPUT_AUDIO_LEAD_MS = 1_000;
 
 const OPENING_INSTRUCTION_ID = 'promptfoo_start';
 const OPENING_COMMENTARY_ID = 'promptfoo_opening';
@@ -516,11 +518,15 @@ export class LiveSession {
         if (this.closing) {
           return;
         }
-        // Reject oversized base64 before allocating decoded audio or converting it to WAV.
+        // Live streams output audio, including silence, in step with the input frames, so bound it
+        // by the timeline streamed so far, including any wait before a text prompt's response
+        // window. Reject oversized base64 before allocating decoded audio or converting it to WAV.
+        const maxAudioBytes =
+          (this.options.bytesPerSecond * (this.framesSent * LIVE_FRAME_MS + OUTPUT_AUDIO_LEAD_MS)) /
+          1000;
         if (
           (typeof event.delta === 'string' &&
-            this.audioBytes + Buffer.byteLength(event.delta, 'base64') >
-              this.options.maxAudioBytes) ||
+            this.audioBytes + Buffer.byteLength(event.delta, 'base64') > maxAudioBytes) ||
           this.audioChunks.length >= MAX_AUDIO_CHUNKS
         ) {
           this.fail('GPT-Live audio exceeded the capture limit.');
