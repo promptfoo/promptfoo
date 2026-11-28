@@ -50,6 +50,6 @@ This will:
 
 ## Related Resources
 
-- [Red Team Documentation](https://www.promptfoo.dev/docs/usage/red-teaming/)
-- [Red Team Strategies](https://www.promptfoo.dev/docs/usage/red-teaming/strategies/)
-- [Other Red Team Examples](https://www.promptfoo.dev/docs/usage/red-teaming/examples/)
+- [Red Team Documentation](https://www.promptfoo.dev/docs/red-team/)
+- [Red Team Strategies](https://www.promptfoo.dev/docs/red-team/strategies/)
+- [Other Red Team Examples](https://github.com/promptfoo/promptfoo/tree/main/examples)
