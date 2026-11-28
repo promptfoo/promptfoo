@@ -1,6 +1,3 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-
 import { and, eq } from 'drizzle-orm';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -8,41 +5,20 @@ import { getDb } from '../../database/index';
 import { configsTable } from '../../database/tables';
 import logger from '../../logger';
 import { ConfigSchemas } from '../../types/api/configs';
-import { normalizeConfigDraft, UnifiedConfigDraftSchema } from '../../types/configDraft';
-import { DEFAULT_CONFIG_EXTENSIONS } from '../../util/config/extensions';
-import { sanitizeConfigForOutput } from '../../util/sanitizer';
-import { loadYaml } from '../../util/yamlLoad';
+import { readDefaultEvalDraft } from '../../util/config/defaultEvalDraft';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const configsRouter = Router();
 
+// The local server reads only its conventional eval YAML from the operator's
+// working directory. Requests cannot supply paths or trigger an eval, so this
+// route follows the local server's unthrottled routing policy.
 configsRouter.get('/eval/default/draft', async (_req: Request, res: Response): Promise<void> => {
   res.set('Cache-Control', 'no-store');
   try {
-    for (const extension of DEFAULT_CONFIG_EXTENSIONS) {
-      if (extension !== 'yaml' && extension !== 'yml') {
-        continue;
-      }
-
-      let content: string;
-      try {
-        content = await readFile(path.resolve(`promptfooconfig.${extension}`), 'utf8');
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          continue;
-        }
-        throw error;
-      }
-
-      // Keep environment references intact and sanitize before sending data to the browser.
-      const config = normalizeConfigDraft(UnifiedConfigDraftSchema.parse(loadYaml(content)));
-      const { basePath: _basePath, env: _env, ...draft } = sanitizeConfigForOutput(config);
-      res.json(ConfigSchemas.DefaultEval.Response.parse({ config: draft }));
-      return;
-    }
-
-    res.json(ConfigSchemas.DefaultEval.Response.parse({ config: null }));
+    const config = await readDefaultEvalDraft();
+    res.json(ConfigSchemas.DefaultEval.Response.parse({ config }));
   } catch (error) {
     sendError(res, 500, 'Failed to load the default eval draft', error);
   }
