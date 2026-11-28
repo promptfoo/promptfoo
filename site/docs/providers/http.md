@@ -1331,6 +1331,8 @@ providers:
 
 The token endpoint must return a JSON response with an `access_token` field. If `expires_in` (lifetime in seconds) is included, the provider uses it to schedule refresh. Otherwise, a 1-hour default is used.
 
+An explicit `expires_in: 0` expires immediately and is not reused for subsequent requests.
+
 ### File-Based Authentication
 
 Use file-based authentication when your token needs custom logic that doesn't fit the built-in auth flows.

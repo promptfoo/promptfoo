@@ -493,6 +493,53 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
     tokenRefreshCallCount = 0;
   });
 
+  it.each([
+    { expiresIn: 0, expectedRefreshes: 2 },
+    { expiresIn: '0', expectedRefreshes: 2 },
+    { expiresIn: 3600, expectedRefreshes: 1 },
+    { expiresIn: undefined, expectedRefreshes: 1 },
+  ])('respects OAuth token lifetime $expiresIn', async ({ expiresIn, expectedRefreshes }) => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: createBearerTokenHeaders(),
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'fixture-client',
+          clientSecret: 'fixture-secret',
+        },
+      },
+    });
+    const sentTokens: string[] = [];
+    vi.mocked(fetchWithCache).mockImplementation(async (url, options) => {
+      if (url === tokenUrl) {
+        tokenRefreshCallCount++;
+        return {
+          data: JSON.stringify({
+            access_token: `token-${tokenRefreshCallCount}`,
+            expires_in: expiresIn,
+          }),
+          status: 200,
+          statusText: 'OK',
+          cached: false,
+        };
+      }
+      sentTokens.push(new Headers(options?.headers).get('authorization')!);
+      return {
+        data: JSON.stringify({ result: 'ok' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+    });
+    await provider.callApi('first');
+    await provider.callApi('second');
+    expect(tokenRefreshCallCount).toBe(expectedRefreshes);
+    expect(sentTokens).toEqual(['Bearer token-1', `Bearer token-${expectedRefreshes}`]);
+  });
+
   it('should deduplicate concurrent token refresh requests', async () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
