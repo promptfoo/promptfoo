@@ -1,5 +1,4 @@
-// provider-simple-traced.js
-// RAG/Agent provider with intricate OpenTelemetry tracing
+// Simulated RAG provider with OpenTelemetry spans for each operation.
 
 const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
 const { BatchSpanProcessor, TracerProvider } = require('@opentelemetry/sdk-trace');
@@ -11,12 +10,11 @@ const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/sema
 
 // Configure OTLP exporter
 const exporterUrl = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces';
-console.log('[Provider] Configuring OTLP exporter with URL:', exporterUrl);
 const exporter = new OTLPTraceExporter({
   url: exporterUrl,
 });
 
-// Use BatchSpanProcessor for better timing handling
+// Batch completed spans before exporting.
 const spanProcessor = new BatchSpanProcessor({
   exporter,
   maxQueueSize: 100,
@@ -40,28 +38,9 @@ propagation.setGlobalPropagator(new W3CTraceContextPropagator());
 // Get a tracer
 const tracer = trace.getTracer('simple-traced-provider', '1.0.0');
 
-// Fixed helper function that properly manages span lifecycle
-async function runInSpan(spanOrName, attributesOrFn, maybeFn) {
-  let span;
-  let fn;
-  let attributes = {};
-
-  // Handle overloaded parameters
-  if (typeof spanOrName === 'string') {
-    // Called with (name, attributes, fn) or (name, fn)
-    if (typeof attributesOrFn === 'function') {
-      fn = attributesOrFn;
-    } else {
-      attributes = attributesOrFn || {};
-      fn = maybeFn;
-    }
-    span = tracer.startSpan(spanOrName, { attributes });
-  } else {
-    // Called with (span, fn) - original pattern
-    span = spanOrName;
-    fn = attributesOrFn;
-  }
-
+// Run a callback in a span and record its result.
+async function runInSpan(name, attributes, fn) {
+  const span = tracer.startSpan(name, { attributes });
   const ctx = trace.setSpan(context.active(), span);
 
   try {
@@ -122,8 +101,7 @@ class SimpleTracedProvider {
   }
 
   async _tracedCallApi(prompt, promptfooContext) {
-    // Use the improved runInSpan for the main workflow
-    return runInSpan(
+    const result = await runInSpan(
       'rag_agent_workflow',
       {
         'promptfoo.evaluation_id': promptfooContext.evaluationId,
@@ -281,7 +259,7 @@ class SimpleTracedProvider {
             ];
 
             for (const step of reasoningSteps) {
-              await runInSpan(`reasoning_${step.step}`, async () => {
+              await runInSpan(`reasoning_${step.step}`, {}, async () => {
                 const stepSpan = trace.getSpan(context.active());
                 await new Promise((resolve) => setTimeout(resolve, step.duration));
 
@@ -373,15 +351,6 @@ class SimpleTracedProvider {
           reasoning_steps: 3,
         });
 
-        // Force flush to ensure spans are sent
-        try {
-          console.log('[Provider] Flushing spans...');
-          await spanProcessor.forceFlush();
-          console.log('[Provider] Spans exported successfully');
-        } catch (error) {
-          console.error('[Provider] Failed to flush spans:', error.message);
-        }
-
         return {
           output: response.text,
           tokenUsage: {
@@ -397,6 +366,10 @@ class SimpleTracedProvider {
         };
       },
     );
+
+    // End the workflow span before exporting it for trace assertions.
+    await spanProcessor.forceFlush();
+    return result;
   }
 
   async _untracedCallApi(prompt, promptfooContext) {

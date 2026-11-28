@@ -1,6 +1,5 @@
-import matchers from '../../dist/src/assertions';
-
-import type { GradingConfig } from '../../dist/src/types';
+import { assertions as matchers } from 'promptfoo';
+import type { GradingConfig } from 'promptfoo';
 
 declare global {
   namespace jest {
