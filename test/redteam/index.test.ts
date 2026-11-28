@@ -4250,6 +4250,7 @@ describe('Language configuration', () => {
       'aegis',
       'cca',
       'cross-session-leak',
+      'data-structure-injection',
       'contracts',
       'special-token-injection',
       'system-prompt-override',
@@ -4292,7 +4293,7 @@ describe('Language configuration', () => {
       },
       {
         name: 'plugins without multi-input support',
-        requested: ['cca', 'cross-session-leak', 'contracts'],
+        requested: ['cca', 'cross-session-leak', 'data-structure-injection', 'contracts'],
         inputs: { query: 'user query', context: 'additional context' },
         retained: ['contracts'],
       },

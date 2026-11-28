@@ -7,6 +7,10 @@ import {
   getTargetConversation,
   withGradingUsage,
 } from '../redteam/grading/storedResult';
+import {
+  RedteamEvidenceUnavailableError,
+  type RedteamGradingContext,
+} from '../redteam/grading/types';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { checkExfilTracking, getWebPageTrackingIds } from '../redteam/strategies/indirectWebPwn';
 import { isApiProvider, isProviderOptions } from '../types/providers';
@@ -14,7 +18,6 @@ import invariant from '../util/invariant';
 import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
-import type { RedteamGradingContext } from '../redteam/grading/types';
 import type {
   ApiProvider,
   Assertion,
@@ -373,8 +376,9 @@ export const handleRedteam = async (
       },
     };
   } catch (error) {
-    // Required final grading must not turn a Meta, Hydra or Goblin vulnerability into a pass.
+    // Required final grading and missing evidence must reach the evaluator.
     if (
+      error instanceof RedteamEvidenceUnavailableError ||
       providerId === 'promptfoo:redteam:iterative:meta' ||
       providerId === 'promptfoo:redteam:hydra' ||
       providerId === 'promptfoo:redteam:goblin'

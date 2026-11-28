@@ -339,7 +339,7 @@ metadata:
 
 Promptfoo automatically skips plugins that require a single string payload or dataset-backed prompt sets when multi-input mode is enabled. This currently includes:
 
-- `ascii-smuggling`, `cca`, `cross-session-leak`, `special-token-injection`, and `system-prompt-override`
+- `ascii-smuggling`, `cca`, `cross-session-leak`, `data-structure-injection`, `special-token-injection`, and `system-prompt-override`
 - Dataset-backed plugins such as `beavertails`, `harmbench`, and `xstest`
 
 These plugins are skipped because their current implementations do not support multi-input mode yet.

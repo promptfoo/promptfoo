@@ -491,6 +491,36 @@ describe('addLayerTestCases', () => {
       expect(result[0].metadata?.strategyId).toContain('hydra');
     });
 
+    it('should enforce each plugin exclusion before configuring per-turn layers', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { input: 'dsi test' },
+          metadata: {
+            pluginId: 'data-structure-injection',
+            pluginConfig: { excludeStrategies: ['base64'] },
+          },
+        },
+        {
+          vars: { input: 'ordinary test' },
+          metadata: { pluginId: 'test-plugin', pluginConfig: {} },
+        },
+      ];
+
+      const result = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['jailbreak:hydra', 'base64'] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result).toHaveLength(2);
+      expect((result[0].provider as any)?.config).not.toHaveProperty('_perTurnLayers');
+      expect((result[0].metadata?.strategyId as string) ?? '').not.toContain('base64');
+      expect((result[1].provider as any)?.config?._perTurnLayers).toEqual(['base64']);
+      expect(result[1].metadata?.strategyId).toContain('base64');
+    });
+
     it('should detect crescendo as attack provider', async () => {
       const testCases: TestCaseWithPlugin[] = [
         {
