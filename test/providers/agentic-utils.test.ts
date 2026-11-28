@@ -53,6 +53,8 @@ describe('agentic-utils', () => {
       'openinterpreter:gpt-5.4',
       'opencode',
       'opencode:sdk',
+      'pi',
+      'pi:fixture/model',
     ])('recognizes %s as a coding-agent provider', (id) => {
       expect(isAgenticProvider(provider(id))).toBe(true);
     });
@@ -63,6 +65,8 @@ describe('agentic-utils', () => {
     });
 
     it('recognizes coding-agent runtimes that can return rubric grading verdicts', () => {
+      expect(isAgenticGradingProvider(provider('pi:fixture/model'))).toBe(false);
+      expect(isAgenticProvider(provider('pinecone:index'))).toBe(false);
       expect(isAgenticGradingProvider(provider('openai:codex-sdk'))).toBe(true);
       expect(isAgenticGradingProvider(provider('anthropic:claude-agent-sdk'))).toBe(true);
       expect(isAgenticGradingProvider(provider('openai:responses:gpt-5.5'))).toBe(false);

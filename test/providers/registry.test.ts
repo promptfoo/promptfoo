@@ -3453,4 +3453,63 @@ describe('Provider Registry', () => {
       },
     );
   });
+
+  describe('pi: prefix routing', () => {
+    const bareOptions: ProviderOptions = { config: {} };
+    const bareContext: LoadApiProviderContext = {
+      basePath: '/test',
+      options: bareOptions,
+    };
+
+    it.each(['pi', 'pi:anthropic/claude-sonnet-4-5'])(
+      'routes %s to the Pi provider',
+      async (providerPath) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
+        const provider = await factory!.create(providerPath, bareOptions, bareContext);
+        const { PiProvider } = await import('../../src/providers/pi');
+        expect(provider).toBeInstanceOf(PiProvider);
+        expect(provider.id()).toBe(providerPath);
+      },
+    );
+
+    it('passes the provider path model pattern into config', async () => {
+      const providerPath = 'pi:openai/gpt-4o-mini:high';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      expect((provider as any).config.model).toBe('openai/gpt-4o-mini:high');
+    });
+
+    it.each(['pi:', 'pi:   '])('rejects an empty model in %j', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        'requires a model after pi:',
+      );
+    });
+
+    it('does not let bare pi set a model pattern', async () => {
+      const factory = (await getProviderFactories('pi')).find((f) => f.test('pi'));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create('pi', bareOptions, bareContext);
+      expect((provider as any).config.model).toBeUndefined();
+    });
+
+    it('does not match other pi-prefixed provider names', async () => {
+      const factory = (await getProviderFactories('pi')).find((f) => f.test('pi'));
+      expect(factory).toBeDefined();
+      expect(factory!.test('pinecone:index')).toBe(false);
+      expect(factory!.test('pipeline')).toBe(false);
+    });
+
+    it('rejects a provider-level key even when it masks the process key', async () => {
+      const id = 'pi:openai/fixture';
+      const factory = (await getProviderFactories(id)).find((f) => f.test(id));
+      await expect(
+        factory!.create(id, { env: { OPENAI_API_KEY: '' } }, bareContext),
+      ).rejects.toThrow('process environment');
+    });
+  });
 });

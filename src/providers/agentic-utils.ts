@@ -45,11 +45,12 @@ export function isAgenticProvider(provider: ApiProvider | null | undefined): boo
     'openinterpreter',
     'opencode',
     'opencode:sdk',
+    'pi',
   ].some((agenticId) => providerId === agenticId || providerId.startsWith(`${agenticId}:`));
 }
 
 /**
- * Security scanners run agentic workflows but cannot return rubric grading verdicts.
+ * Some agentic targets do not support rubric grading.
  */
 export function isAgenticGradingProvider(provider: ApiProvider | null | undefined): boolean {
   if (!provider || !isAgenticProvider(provider)) {
@@ -57,7 +58,9 @@ export function isAgenticGradingProvider(provider: ApiProvider | null | undefine
   }
 
   const providerId = provider.id();
-  return providerId !== 'openai:codex-security' && !providerId.startsWith('openai:codex-security:');
+  return !['openai:codex-security', 'pi'].some(
+    (id) => providerId === id || providerId.startsWith(`${id}:`),
+  );
 }
 
 /**

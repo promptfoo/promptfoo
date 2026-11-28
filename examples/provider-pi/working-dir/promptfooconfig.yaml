@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Pi coding agent working directory with tools disabled'
+
+prompts:
+  - 'Name the function defined by this code in one sentence: {{source}}'
+
+providers:
+  - id: pi:openai/gpt-5.5
+    config:
+      # The working directory is this example folder, which ships with sample.txt,
+      # so the example is self-contained when initialized on its own.
+      working_dir: .
+
+tests:
+  - vars:
+      source: file://sample.txt
+    assert:
+      - type: icontains
+        value: 'greet'
