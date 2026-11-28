@@ -383,24 +383,16 @@ export default function ResultsView({
     (recentEval) => recentEval.evalId === currentEvalId,
   )?.datasetId;
 
-  const handleShareButtonClick = async () => {
-    if (IS_RUNNING_LOCALLY) {
-      setShareLoading(true);
-      setShareModalOpen(true);
-    } else {
-      // For non-local instances, just show the modal
-      setShareModalOpen(true);
+  // Keep this stable: ShareModal re-runs its share effect whenever `onShare` changes.
+  const handleShare = React.useCallback(async (id: string): Promise<string> => {
+    if (!IS_RUNNING_LOCALLY) {
+      // For non-local instances, include base path in the URL
+      const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+      return `${window.location.host}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
     }
-  };
 
-  const handleShare = async (id: string): Promise<string> => {
+    setShareLoading(true);
     try {
-      if (!IS_RUNNING_LOCALLY) {
-        // For non-local instances, include base path in the URL
-        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
-        return `${window.location.host}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
-      }
-
       const response = await callApi('/results/share', {
         method: 'POST',
         body: JSON.stringify({ id }),
@@ -408,18 +400,15 @@ export default function ResultsView({
           'Content-Type': 'application/json',
         },
       });
-      if (!response.ok) {
-        throw new Error('Failed to generate share URL');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.url) {
+        throw new Error(data.error || 'Failed to generate share URL');
       }
-      const { url } = await response.json();
-      return url;
-    } catch (error) {
-      console.error('Failed to generate share URL:', error);
-      throw error;
+      return data.url;
     } finally {
       setShareLoading(false);
     }
-  };
+  }, []);
 
   const handleComparisonEvalSelected = async (compareEvalId: string) => {
     // Prevent self-comparison
@@ -799,7 +788,7 @@ export default function ResultsView({
         <Copy className="size-4 mr-2" />
         Copy
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+      <DropdownMenuItem onClick={() => setShareModalOpen(true)} disabled={shareLoading}>
         {shareLoading ? <Spinner className="size-4 mr-2" /> : <Share className="size-4 mr-2" />}
         Share
       </DropdownMenuItem>
