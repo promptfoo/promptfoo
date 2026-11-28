@@ -26,7 +26,6 @@ import {
 } from '../../src/providers/openai/codexDefaults';
 import {
   DefaultModerationProvider,
-  DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
@@ -254,7 +253,7 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders();
 
-    expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
+    expect(providers.embeddingProvider.id()).toBe('mistral:embedding:mistral-embed');
     expect(providers.gradingJsonProvider).toBe(MistralGradingJsonProvider);
     expect(providers.gradingProvider).toBe(MistralGradingProvider);
     expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
@@ -266,8 +265,7 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders();
 
-    // xAI has no public embeddings/moderation API, so we fall back to OpenAI for those.
-    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+    expect(providers.embeddingProvider.id()).toBe('embedding:unconfigured');
     expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.3');
     expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
     expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
@@ -287,7 +285,7 @@ describe('Provider override tests', () => {
     expect(providers.synthesizeProvider.id()).toBe('openai:codex-sdk');
     expect(providers.webSearchProvider?.id()).toBe('openai:codex-sdk');
     expect(providers.webSearchProvider?.config?.web_search_mode).toBe('live');
-    expect(providers.embeddingProvider.id()).toBe('openai:text-embedding-3-large');
+    expect(providers.embeddingProvider.id()).toBe('embedding:unconfigured');
     expect(providers.moderationProvider).toBe(DefaultModerationProvider);
   });
 
@@ -322,7 +320,7 @@ describe('Provider override tests', () => {
     const providers = await getDefaultProviders();
 
     expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
-    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+    expect(providers.embeddingProvider.id()).toBe('embedding:unconfigured');
   });
 
   it('should probe Google default credentials once per provider resolution', async () => {
@@ -430,7 +428,7 @@ describe('Provider override tests', () => {
     it('skips a masked Voyage embedding key', async () => {
       mockProcessEnv({ VOYAGE_API_KEY: 'ambient-key' });
       const providers = await getDefaultProviders({ ...azureEnv, VOYAGE_API_KEY: '' });
-      expect(providers.embeddingProvider.id()).toBe(OpenAiEmbeddingProvider.id());
+      expect(providers.embeddingProvider.id()).toBe('embedding:unconfigured');
     });
 
     it('uses process embedding credentials without reusing the chat deployment', async () => {
@@ -450,15 +448,13 @@ describe('Provider override tests', () => {
       expect(hasGoogleDefaultCredentials).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps the existing OpenAI fallback when no embedding credentials are available', async () => {
+    it('reports missing embedding credentials without routing to another API', async () => {
       const providers = await getDefaultProviders(azureEnv);
-      expect(providers.embeddingProvider).toBeInstanceOf(OpenAiEmbeddingProvider.constructor);
+      expect(providers.embeddingProvider.id()).toBe('embedding:unconfigured');
       expect(providers.embeddingProvider).not.toBeInstanceOf(AzureEmbeddingProvider);
       expect(hasGoogleDefaultCredentials).toHaveBeenCalledTimes(1);
-      const response = await (
-        providers.embeddingProvider as typeof OpenAiEmbeddingProvider
-      ).callEmbeddingApi('hello');
-      expect(response.error).toMatch(/API key/i);
+      const response = await providers.embeddingProvider.callEmbeddingApi!('hello');
+      expect(response.error).toMatch(/No embedding provider is configured/);
       expect(response.embedding).toBeUndefined();
     });
 
@@ -508,8 +504,7 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders(envOverrides);
 
-    expect(providers.embeddingProvider.id()).toBe(OpenAiEmbeddingProvider.id());
-    expect(providers.embeddingProvider).toHaveProperty('env', envOverrides);
+    expect(providers.embeddingProvider.id()).toBe('embedding:unconfigured');
     expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.3');
     expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
     expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
@@ -523,7 +518,7 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders();
 
-    expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
+    expect(providers.embeddingProvider.id()).toBe('mistral:embedding:mistral-embed');
     expect(providers.gradingProvider).toBe(MistralGradingProvider);
     expect(providers.gradingProvider.id()).not.toBe('xai:grok-4.3');
   });
@@ -541,13 +536,13 @@ describe('Provider override tests', () => {
     expect(providers.synthesizeProvider).not.toBe(MistralSynthesizeProvider);
   });
 
-  it('should not use Mistral providers when Anthropic credentials exist', async () => {
+  it('keeps Mistral embeddings when Anthropic is selected for grading', async () => {
     mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
     mockProcessEnv({ ANTHROPIC_API_KEY: 'test-key' });
 
     const providers = await getDefaultProviders();
 
-    expect(providers.embeddingProvider).not.toBe(MistralEmbeddingProvider);
+    expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
     expect(providers.gradingJsonProvider).not.toBe(MistralGradingJsonProvider);
     expect(providers.gradingProvider).not.toBe(MistralGradingProvider);
     expect(providers.suggestionsProvider).not.toBe(MistralSuggestionsProvider);
@@ -565,7 +560,7 @@ describe('Provider override tests', () => {
       expect(providers.llmRubricProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
-      expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
+      expect(providers.embeddingProvider).toBeInstanceOf(AIStudioEmbeddingProvider);
     });
 
     it('should use Google AI Studio providers when GOOGLE_API_KEY is set', async () => {
@@ -578,7 +573,7 @@ describe('Provider override tests', () => {
       expect(providers.llmRubricProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
-      expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
+      expect(providers.embeddingProvider).toBeInstanceOf(AIStudioEmbeddingProvider);
     });
 
     it('should use Google AI Studio providers when PALM_API_KEY is set', async () => {
@@ -591,7 +586,7 @@ describe('Provider override tests', () => {
       expect(providers.llmRubricProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
-      expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
+      expect(providers.embeddingProvider).toBeInstanceOf(AIStudioEmbeddingProvider);
     });
 
     it('should use Google AI Studio providers when provided via env overrides', async () => {
@@ -606,7 +601,7 @@ describe('Provider override tests', () => {
       expect(providers.llmRubricProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
-      expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
+      expect(providers.embeddingProvider).toBeInstanceOf(AIStudioEmbeddingProvider);
     });
 
     it('should not use Google AI Studio providers when OpenAI credentials exist', async () => {

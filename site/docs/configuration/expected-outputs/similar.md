@@ -13,7 +13,8 @@ Thresholds use the raw metric value. For cosine similarity and dot product, the 
 
 A non-finite result (`NaN` or infinity) fails the assertion with score 0.
 
-By default, embeddings are computed via OpenAI's `text-embedding-3-large` model.
+The default embedding provider follows the [configured credentials](/docs/configuration/expected-outputs/model-graded/#multiple-graders).
+OpenAI's `text-embedding-3-large` takes precedence when an OpenAI API key is available.
 
 Example:
 
@@ -105,7 +106,7 @@ The named metric retains the signed cosine value. Use [custom assertion scoring]
 
 ## Overriding the provider
 
-By default `similar` will use OpenAI. To specify the model that creates the embeddings, do one of the following:
+To keep the embedding model fixed across environments, set an explicit provider:
 
 1. Use `test.options` or `defaultTest.options` to override the provider across the entire test suite. For example:
 
