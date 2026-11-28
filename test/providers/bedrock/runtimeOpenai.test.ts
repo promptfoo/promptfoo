@@ -225,6 +225,7 @@ describe.each([
       ['us.openai.gpt-6-astra', 'priority'],
       ['us.zai.glm-5.3', 'ultrafast'],
       ['us.moonshotai.kimi-k3', 'ultrafast'],
+      ['us.moonshotai.kimi-k3.1', 'ultrafast'],
     ])('does not invent rates for unsupported %s tier %s', async (model, tier) => {
       for (const [rates, expected] of [
         [{}, undefined],
@@ -286,6 +287,8 @@ describe.each([
     'arn:aws:bedrock:us-east-1::foundation-model/xai.grok-4.7',
     'moonshotai.kimi-k3',
     'arn:aws:bedrock:us-east-1::foundation-model/moonshotai.kimi-k3',
+    'moonshotai.kimi-k3.1',
+    'arn:aws:bedrock:us-east-1::foundation-model/moonshotai.kimi-k3.1',
   ])('rejects profile-only model %s in the effective request', async (model) => {
     for (const scope of ['model', 'provider', 'prompt']) {
       const provider = new Provider(scope === 'model' ? model : 'us.xai.grok-4.6', {
@@ -312,28 +315,36 @@ describe.each([
     factory.test('bedrock:runtime:chat:us.moonshotai.kimi-k3'),
   )!;
 
-  it.each(['moonshotai.kimi-k3', 'arn:aws:bedrock:us-east-1::foundation-model/moonshotai.kimi-k3'])(
-    'rejects Kimi K3 factory selector or override %s before dispatch',
-    async (model) => {
-      for (const scope of ['selector', 'provider']) {
-        await expect(
-          bedrockFactory.create(
-            `bedrock:runtime:${mode}:${scope === 'selector' ? model : 'us.moonshotai.kimi-k3'}`,
-            {
-              config: {
-                apiKey: 'fixture',
-                ...(scope === 'provider' ? { passthrough: { model } } : {}),
-              },
+  it.each([
+    ['moonshotai.kimi-k3', 'K3'],
+    ['arn:aws:bedrock:us-east-1::foundation-model/moonshotai.kimi-k3', 'K3'],
+    ['moonshotai.kimi-k3.1', 'K3.1'],
+    ['arn:aws:bedrock:us-east-1::foundation-model/moonshotai.kimi-k3.1', 'K3.1'],
+  ])('rejects Kimi factory selector or override %s before dispatch', async (model, version) => {
+    const profile = `us.moonshotai.kimi-${version.toLowerCase()}`;
+    for (const scope of ['selector', 'provider']) {
+      await expect(
+        bedrockFactory.create(
+          `bedrock:runtime:${mode}:${scope === 'selector' ? model : profile}`,
+          {
+            config: {
+              apiKey: 'fixture',
+              ...(scope === 'provider' ? { passthrough: { model } } : {}),
             },
-            {},
-          ),
-        ).rejects.toThrow('Kimi K3 on Bedrock Runtime requires a system inference profile');
-        expect(fetchWithCache).not.toHaveBeenCalled();
-      }
-    },
-  );
+          },
+          {},
+        ),
+      ).rejects.toThrow(`Kimi ${version} on Bedrock Runtime requires a system inference profile`);
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    }
+  });
 
-  it.each(['us', 'global', 'in'])('forwards Kimi K3 %s IDs and reasoning', async (prefix) => {
+  it.each(
+    ['us', 'global', 'in'].flatMap((prefix) => [
+      [prefix, 'kimi-k3'],
+      [prefix, 'kimi-k3.1'],
+    ]),
+  )('forwards %s Kimi %s IDs and reasoning', async (prefix, kimi) => {
     const region = prefix === 'in' ? 'ap-south-1' : 'us-east-1';
     const controls = mode === 'chat' ? { max_tokens: 64 } : {};
     const expected =
@@ -347,8 +358,8 @@ describe.each([
       cached: false,
     });
     for (const model of [
-      `${prefix}.moonshotai.kimi-k3`,
-      `arn:aws:bedrock:${region}:123456789012:inference-profile/${prefix}.moonshotai.kimi-k3`,
+      `${prefix}.moonshotai.${kimi}`,
+      `arn:aws:bedrock:${region}:123456789012:inference-profile/${prefix}.moonshotai.${kimi}`,
     ]) {
       for (const scope of ['selector', 'provider', 'prompt']) {
         const provider = await bedrockFactory.create(
@@ -381,7 +392,7 @@ describe.each([
     }
   });
 
-  it.each(['moonshotai.kimi-k2.5', 'moonshotai.kimi-k3-custom'])(
+  it.each(['moonshotai.kimi-k2.5', 'moonshotai.kimi-k3-custom', 'moonshotai.kimi-k3.1-custom'])(
     'does not apply the Kimi K3 profile requirement to similar Kimi model %s',
     (model) => {
       expect(getBedrockRuntimeModelError(`runtime-${mode}`, model)).toBeUndefined();
@@ -670,6 +681,21 @@ describe.each([
       undefined,
       undefined,
     ],
+    ['global.moonshotai.kimi-k3.1', 0.02334, 0.040845, 0.01167],
+    ['us.moonshotai.kimi-k3.1', 0.025674, 0.0449295, 0.012837],
+    ['in.moonshotai.kimi-k3.1', 0.025674, undefined, undefined],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.moonshotai.kimi-k3.1',
+      0.02334,
+      0.040845,
+      0.01167,
+    ],
+    [
+      'arn:aws:bedrock:ap-south-1:123456789012:inference-profile/in.moonshotai.kimi-k3.1',
+      0.025674,
+      undefined,
+      undefined,
+    ],
   ] as const)(
     'prices only documented Runtime HTTP tiers for %s',
     async (model, standard, priority, flex) => {
@@ -719,6 +745,10 @@ describe.each([
     ['in.moonshotai.kimi-k3', 'priority', { cost: 0 }, 0],
     ['in.moonshotai.kimi-k3', 'priority', { inputCost: 0 }, undefined],
     ['in.moonshotai.kimi-k3', 'flex', { outputCost: 0 }, undefined],
+    ['global.moonshotai.kimi-k3.1', 'priority', { inputCost: 0.01 }, 10.035],
+    ['global.moonshotai.kimi-k3.1', 'priority', { outputCost: 0.02 }, 20.005845],
+    ['global.moonshotai.kimi-k3.1', 'flex', { inputCost: 0.01 }, 10.01],
+    ['in.moonshotai.kimi-k3.1', 'priority', { inputCost: 0 }, undefined],
   ] as const)(
     'keeps Runtime manual rates authoritative for %s %s %j',
     async (model, tier, costs, expected) => {
@@ -742,6 +772,7 @@ describe.each([
 
   it.each([
     ['global.moonshotai.kimi-k3', 100, 0.0087675],
+    ['global.moonshotai.kimi-k3.1', 100, 0.01167],
     ['global.xai.grok-4.6', 0, 0.00385],
   ] as const)('prices the reported tier for %s from India', async (model, cacheWrite, expected) => {
     mockPricingResponse(200, cacheWrite, 'flex');

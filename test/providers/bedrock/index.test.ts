@@ -4183,6 +4183,35 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(mockInvokeModel).not.toHaveBeenCalled();
   });
 
+  it('names Kimi K3.1 when rejecting an unsupported InvokeModel tier', async () => {
+    const config = { region: 'ap-south-1', service_tier: 'reserved' };
+    const provider = new AwsBedrockCompletionProvider('in.moonshotai.kimi-k3.1', { config });
+    await expect(provider.callApi('hello')).rejects.toThrow(
+      new Error('Kimi K3.1 supports default, priority, and flex service_tier values.'),
+    );
+    expect(mockInvokeModel).not.toHaveBeenCalled();
+  });
+
+  it('sends the Kimi K3.1 InvokeModel tier and reports usage without cost', async () => {
+    const config = { region: 'us-east-1', service_tier: 'flex' };
+    const provider = new AwsBedrockCompletionProvider('global.moonshotai.kimi-k3.1', { config });
+    const json = JSON.stringify({
+      choices: [{ message: { content: 'ok' } }],
+      service_tier: 'flex',
+      usage: { prompt_tokens: 23, completion_tokens: 10, total_tokens: 33 },
+    });
+    mockInvokeModel.mockResolvedValueOnce({
+      body: Object.assign(new TextEncoder().encode(json), { transformToString: () => json }),
+    });
+    const result = await provider.callApi('hello');
+    const request = mockInvokeModel.mock.calls[0][0];
+    expect(request.modelId).toBe('global.moonshotai.kimi-k3.1');
+    expect(JSON.parse(request.body).service_tier).toBe('flex');
+    expect(result.output).toBe('ok');
+    expect(result.tokenUsage).toMatchObject({ prompt: 23, completion: 10, total: 33 });
+    expect(result.cost).toBeUndefined();
+  });
+
   it.each(['default', 'priority', 'flex'])(
     'sends the %s tier in the Kimi K3 InvokeModel body',
     async (service_tier) => {
