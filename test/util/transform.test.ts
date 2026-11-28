@@ -173,6 +173,13 @@ describe('util', () => {
       expect(transformedOutput).toBe('HELLO WORLD');
     });
 
+    it('handles single-line transform starting with return', async () => {
+      const output = 'hello';
+      const context = { vars: {}, prompt: {} };
+      const result = await transform('return output.toUpperCase()', output, context);
+      expect(result).toBe('HELLO');
+    });
+
     it('transforms output using a default export function from a file', async () => {
       const output = 'hello';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
