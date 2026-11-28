@@ -481,6 +481,10 @@ assert:
 
 If the function returns a plain `boolean` or `number`, the standard failure message (`Custom function returned true/false`) is used when the assertion fails.
 
+## Examples
+
+- [Currency and validity boundaries](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-currency-and-validity-boundaries): Deterministic evaluation of exact money using integer cents, ISO 4217 currency codes, and temporal UTC cutoff boundaries.
+
 ## Other assertion types
 
 For more info on assertions, see [Test assertions](/docs/configuration/expected-outputs).

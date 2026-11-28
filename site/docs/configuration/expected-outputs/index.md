@@ -668,6 +668,7 @@ See also:
 
 - [Named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-named-metrics) - Basic named metrics usage
 - [F-score example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-f-score) - Complete F1 score implementation
+- [Currency and validity boundaries](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-currency-and-validity-boundaries) - Exact money and validity boundary evaluation
 
 ## Running assertions directly on outputs
 
