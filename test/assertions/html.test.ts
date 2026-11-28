@@ -399,6 +399,178 @@ describe('handleIsHtml', () => {
     fragments.forEach(verifyValidHtml);
   });
 
+  it('should fail for unclosed elements, as the docs describe for incomplete HTML', () => {
+    const unclosedExamples = [
+      '<div>Unclosed div',
+      '<!DOCTYPE html><html><body><main><h1>Title</h1><p>Truncated',
+      '<span>unclosed inline',
+      '<div />',
+      '<p />',
+      '<ul><li /></ul>',
+      '<body/>',
+      // Tag names colliding with Object.prototype members must not be exempted
+      // by an inherited "rule".
+      '<constructor><div></div>',
+      '<tostring><div></div>',
+    ];
+
+    unclosedExamples.forEach((html) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: html,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toMatch(/not closed/);
+    });
+  });
+
+  it('should still pass void elements, optional end tags and SVG self-closing syntax', () => {
+    const stillValid = [
+      '<p>one<p>two',
+      '<ul><li>a<li>b</ul>',
+      '<table><tr><td>a<td>b</table>',
+      '<table><thead><tr><th>x</th><tbody><tr><td>y</td></table>',
+      '<p>x<div>y</div><span>z</span>',
+      '<br>',
+      '<img src="x.png">',
+      '<svg><circle r="1"/></svg>',
+      '<div>' + '<p>x'.repeat(20000) + '</div>',
+    ];
+
+    stillValid.forEach(verifyValidHtml);
+  });
+
+  it('should fail for unclosed foreign-content elements without self-closing syntax', () => {
+    // Foreign content permits `/>` but not a missing end tag.
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'is-html' },
+      outputString: '<svg><circle></svg>',
+      inverse: false,
+    };
+
+    const result = handleIsHtml(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toMatch(/not closed/);
+  });
+
+  it('should fail for unclosed elements inside a closed template', () => {
+    // parse5 stores template descendants in its content fragment, so the walker
+    // must follow it instead of only childNodes.
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'is-html' },
+      outputString: '<template><div>truncated</template>',
+      inverse: false,
+    };
+
+    const result = handleIsHtml(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toMatch(/not closed/);
+  });
+
+  it('should match the spec tag-omission rules across systematic contexts', () => {
+    // Each case: [html, expectedValid, note]. Contexts where parse5's insertion
+    // modes normalize the omission away (e.g. a span nests inside an open <p>)
+    // are asserted as valid on purpose, documenting the boundary.
+    const cases: Array<[string, boolean, string]> = [
+      // p: omissible before a block element or at end of parent.
+      ['<div><p>a<div>b</div></div>', true, 'p before block'],
+      ['<div><p>a</div>', true, 'p at end of parent'],
+      ['<div><p>a</p><span>b</span></div>', true, 'explicit p'],
+      ['<div><p>one<span>two</span></div>', true, 'span nests inside open p'],
+      ['<p>x<div>y</div><span>z</span>', true, 'p followed by block, other element later'],
+      ['<p>x<dialog>y</dialog>', true, 'p before dialog (in the spec list)'],
+      ['<p>x<search>y</search>', true, 'p before search (in the spec list)'],
+      // li: omissible before li or at end of parent.
+      ['<ul><li>a<li>b</ul>', true, 'li before li'],
+      ['<ul><li>a</ul>', true, 'li at end of parent'],
+      ['<ul><li>a</li><li>b</li></ul>', true, 'explicit li'],
+      // dt/dd: omissible before dt/dd or at end of parent.
+      ['<dl><dt>a<dd>b</dl>', true, 'dt before dd'],
+      ['<dl><dt>a</dl>', false, 'final dt requires an explicit end tag'],
+      ['<del><p>x</del>', false, 'p at end of del'],
+      ['<del><p>x</p></del>', true, 'explicit p at end of del'],
+      ['<dl><dt>a</dt><dd>b</dd></dl>', true, 'explicit dt/dd'],
+      // rt/rp: omissible before rt/rp or at end of parent.
+      ['<ruby>x<rt>a<rp>b</ruby>', true, 'rt before rp'],
+      ['<ruby>x<rt>a</rt><rp>b</rp></ruby>', true, 'explicit rt/rp'],
+      // option/optgroup: omissible before option/optgroup or at end of parent.
+      ['<select><option>a<option>b</select>', true, 'option before option'],
+      ['<select><optgroup><option>a</select>', true, 'option/optgroup at end'],
+      ['<select><option>a</option></select>', true, 'explicit option'],
+      ['<select><option>a<hr><option>b</select>', true, 'option before hr'],
+      [
+        '<select><optgroup label="x"><option>a</option><hr><option>b</select>',
+        true,
+        'optgroup before hr',
+      ],
+      // thead: omissible only before tbody/tfoot.
+      ['<table><thead><tr><th>x</th><tbody><tr><td>y</td></table>', true, 'thead before tbody'],
+      ['<table><thead><tr><th>x</th></tr></table>', false, 'thead at end of table'],
+      ['<table><thead><tr><th>x</th></tr></thead></table>', true, 'explicit thead'],
+      // tbody: omissible before tbody/tfoot or at end of parent.
+      [
+        '<table><tbody><tr><td>a</td></tr><tbody><tr><td>b</td></tr></table>',
+        true,
+        'tbody before tbody',
+      ],
+      // tfoot: omissible only at end of parent.
+      [
+        '<table><tbody><tr><td>a</td></tr></tbody><tfoot><tr><td>b</td></tr></table>',
+        true,
+        'tfoot at end of table',
+      ],
+      // tr/td/th: omissible before same-family sibling or at end of parent.
+      ['<table><tr><td>a<td>b</table>', true, 'td before td'],
+      ['<table><thead><tr><th>a<th>b</thead></table>', true, 'th before th'],
+      ['<table><tr><td>a</td></tr></table>', true, 'explicit tr/td'],
+      // colgroup/caption: omissible when not followed by whitespace or a comment
+      // (approximated as: followed by an element, or nothing follows).
+      ['<table><colgroup><col><tr><td>x</td></tr></table>', true, 'colgroup before tr'],
+      ['<table><colgroup><col></table>', true, 'colgroup at end'],
+      ['<table><caption>cap<tr><td>x</td></tr></table>', true, 'caption before tr'],
+      ['<table><caption>cap</table>', true, 'caption at end of table'],
+      ['<table><caption>cap</caption><tr><td>x</td></tr></table>', true, 'explicit caption'],
+      // template contents are traversed.
+      ['<template><div>ok</div></template>', true, 'closed div in template'],
+      // body end tag is omissible whenever not followed by a comment, even for
+      // an explicitly started empty body (spec locks this boundary).
+      ['<body>', true, 'empty explicit body'],
+      ['<html><body>', true, 'empty explicit html and body'],
+    ];
+
+    cases.forEach(([html, expectedValid, note]) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: html,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass, `${note}: ${html}`).toBe(expectedValid);
+    });
+  });
+
+  it('should fail when an optional end tag is omitted where the spec disallows it', () => {
+    // A thead end tag is only omissible before tbody/tfoot, not before </table>.
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'is-html' },
+      outputString: '<table><thead><tr><th>x</th></tr></table>',
+      inverse: false,
+    };
+
+    const result = handleIsHtml(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toMatch(/not closed/);
+  });
+
   it('should reject doctype-only input', () => {
     const params: AssertionParams = {
       ...defaultParams,
@@ -453,9 +625,11 @@ describe('handleIsHtml', () => {
   });
 
   it('should still accept body variants regardless of trailing chars', () => {
-    // Control cases for the wrapper detection fix — body followed by `>`,
-    // whitespace, or `/` must continue to count as user-declared body.
-    const bodyVariants = ['<body>x</body>', '<body attr="val">x</body>', '<body/>'];
+    // Control cases for the wrapper detection fix — body followed by `>` or
+    // whitespace must continue to count as user-declared body. `<body/>` is no
+    // longer accepted: the self-closing slash is not permitted on non-void
+    // elements, so it fails as unclosed like `<div />`.
+    const bodyVariants = ['<body>x</body>', '<body attr="val">x</body>'];
 
     bodyVariants.forEach((input) => {
       const params: AssertionParams = {
@@ -510,5 +684,20 @@ describe('handleIsHtml', () => {
 
     const result = handleIsHtml(params);
     expect(result.pass).toBe(true);
+  });
+  it.each([
+    ['<div><a href="/"><p>x</a></div>', false],
+    ['<div><a href="/"><p>x</p></a></div>', true],
+    ['<div><p>x<a href="/">y</a></div>', true],
+    ['<div><svg><circle r=1/></svg></div>', false],
+    ['<div><svg><circle r="1"/></svg></div>', true],
+  ])('validates source end tags for %s', (input, pass) => {
+    const result = handleIsHtml({
+      ...defaultParams,
+      assertion: { type: 'is-html' },
+      outputString: input,
+      inverse: false,
+    });
+    expect(result.pass).toBe(pass);
   });
 });
