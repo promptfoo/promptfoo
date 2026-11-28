@@ -9,6 +9,7 @@ import {
   MODEL_GRADED_ASSERTION_TYPES,
   runCompareAssertion,
 } from '../assertions/index';
+import { validateAssertions } from '../assertions/validateAssertions';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
@@ -3872,6 +3873,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite = { ...testSuite, prompts: recovery.hookPrompts };
     }
     testSuite = await runBeforeAllExtensions(testSuite);
+    validateAssertions(testSuite.tests || [], getDefaultTest(testSuite), testSuite.scenarios);
     const derivedMetrics = prepareDerivedMetrics(testSuite.derivedMetrics);
     if (
       !restorePromptColumns &&

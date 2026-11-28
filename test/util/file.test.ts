@@ -879,6 +879,17 @@ describe('file utilities', () => {
     });
 
     describe('maybeLoadConfigFromExternalFile with assertion detection', () => {
+      it('preserves fallback literals only inside a test assertion list', () => {
+        vi.mocked(fs.readFileSync).mockReturnValue('loaded');
+        const source = { type: 'equals', fallback: 'next', value: 'file://payload.txt' };
+        const row = { assert: [{ type: 'assert-set', assert: [source] }], metadata: source };
+        expect(maybeLoadConfigFromExternalFile(row, 'test')).toEqual({
+          assert: row.assert,
+          metadata: { ...source, value: 'loaded' },
+        });
+        expect(maybeLoadConfigFromExternalFile(row).assert[0].assert[0].value).toBe('loaded');
+      });
+
       it('should preserve Python assertion file references', () => {
         const config = {
           assert: [
