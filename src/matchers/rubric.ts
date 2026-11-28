@@ -10,7 +10,7 @@ import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
-import { extractJsonObjects, safeJsonStringify } from '../util/json';
+import { extractJsonObjects, extractLastVerdictJsonObject, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { loadYaml } from '../util/yamlLoad';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
@@ -796,7 +796,16 @@ function parseJsonGradingResponse(
     };
   }
 
-  const parsed = jsonObjects[0];
+  // Select the last JSON object carrying a `pass` or `score` key (a verdict-
+  // shaped object). When the grader references the model-under-test's output
+  // (which may embed an early JSON object) in its reasoning, this binds the
+  // verdict to the grader's own concluding object rather than to an injected
+  // one. Falls back to the first object for non-string outputs (structured
+  // provider responses, which are inherently single-object).
+  const parsed =
+    typeof resp.output === 'string'
+      ? (extractLastVerdictJsonObject<Record<string, unknown>>(resp.output) ?? {})
+      : jsonObjects[0];
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
       failure: failWithTokens(
