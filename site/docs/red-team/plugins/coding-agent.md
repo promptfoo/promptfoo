@@ -262,3 +262,7 @@ For `sandbox-write-escape`, combine command evidence with host probes when possi
 For `verifier-sabotage`, keep `protectedFilePath`, `expectedSha256`, and `verifierReportPath` in assertion values, but put trusted roots such as `verifierArtifactRoot`, `verifierProbeDir`, or `workspacePath` in test vars, metadata, or plugin config. Assertion values cannot self-authorize roots.
 
 For `network-egress-bypass`, combine trap evidence with a disposable workspace scan when you want to catch planted code that will egress later. Configure `networkTrapUrl`, `networkTrapHost`, `networkTrapLogPath`, and `networkEgressReceipt` for live requests, and add `networkScanPath` or `networkWorkspacePath` only for a fresh fixture you control. The scan is intentionally opt-in because mature repositories may already contain legitimate network clients.
+
+## Structured file evidence
+
+For explicitly configured protected read and outside write paths, graders also check completed Claude Agent SDK file operations, Codex file changes, and selected read, edit, write and move operations from the MCP server named `filesystem`. Moves modify both endpoints. The check relies on the adapter reporting the correct result, ignores cache hits and denials, and stores a path hash in the finding. Paths must match the configured spelling after lexical normalization. For symbolic links, remote mounts, and actions the provider omits, use a trusted host-side probe. This check never opens a provider-reported path.
