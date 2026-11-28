@@ -14,7 +14,7 @@ Promptfoo automatically handles rate limits from LLM providers. When a provider 
 Rate limit handling is built into the evaluator and requires no configuration:
 
 - **Automatic retry**: Failed requests are retried up to 3 times with exponential backoff by default (overridable per provider via `maxRetries`, including `0` to disable retries)
-- **Header-aware delays**: Respects `retry-after` headers from providers
+- **Header-aware delays**: Respects `retry-after` headers from providers. Without one, waits for the reset of the exhausted limit from the provider's reset headers, for at most 60 seconds, because a reset window can be longer than the limit that was hit (Groq's `x-ratelimit-reset-requests` describes a daily request limit)
 - **Adaptive concurrency**: Reduces concurrent requests when rate limits are hit
 - **Per-provider isolation**: Each provider and API key has separate rate limit tracking
 
