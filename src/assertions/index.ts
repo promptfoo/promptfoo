@@ -449,7 +449,7 @@ async function runAssertionInternal({
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
 
-  invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
+  invariant(assertion.type, 'Assertion must have a type');
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
