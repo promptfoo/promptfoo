@@ -306,7 +306,7 @@ This has the effect of including the conversation history _within_ the prompt co
 
 ## Using `storeOutputAs`
 
-The `storeOutputAs` option makes it possible to reference previous outputs in multi-turn conversations. When set, it records the LLM output as a variable that can be used in subsequent chats.
+Use `storeOutputAs` to save a provider output for later turns. It preserves the original value, including `0`, `false`, and the empty string. A missing or null output leaves the previous value in place.
 
 Here's an example:
 
