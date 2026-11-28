@@ -93,6 +93,8 @@ import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
   key: string;
+  canGenerateRemote?: boolean;
+  requiresRemoteGeneration?: boolean;
   validate?: (config: PluginConfig) => void;
   action: (params: PluginActionParams) => Promise<TestCase[]>;
 }
@@ -455,6 +457,7 @@ function createPluginFactory<T extends PluginConfig>(
 ): PluginFactory {
   return {
     key,
+    canGenerateRemote: (PluginClass as any).canGenerateRemote !== false,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({
       provider,
@@ -576,6 +579,8 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(VLSUPlugin, 'vlsu'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
+    canGenerateRemote: true,
+    requiresRemoteGeneration: true,
     action: async (params: PluginActionParams) => {
       if (neverGenerateRemote()) {
         logger.error(getRemoteGenerationExplicitlyDisabledError(`${category} plugin`));
@@ -594,6 +599,7 @@ const pluginFactories: PluginFactory[] = [
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
   key: category,
+  canGenerateRemote: true,
   action: async (params: PluginActionParams) => {
     if (shouldGenerateRemote()) {
       const pluginId = getShortPluginId(category);
@@ -622,6 +628,8 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
 
 const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
   key: category,
+  canGenerateRemote: true,
+  requiresRemoteGeneration: true,
   action: async (params: PluginActionParams) => {
     if (neverGenerateRemote()) {
       logger.error(getRemoteGenerationExplicitlyDisabledError(`${category} plugin`));
@@ -648,6 +656,8 @@ function createRemotePlugin<T extends PluginConfig>(
 ): PluginFactory {
   return {
     key,
+    canGenerateRemote: true,
+    requiresRemoteGeneration: true,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({
       provider,

@@ -2,11 +2,16 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { doValidate, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
+import { shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 
 import type { UnifiedConfig } from '../../src/types/index';
 
 vi.mock('../../src/logger');
+vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/redteam/remoteGeneration')>()),
+  shouldGenerateRemote: vi.fn(() => false),
+}));
 vi.mock('../../src/util/config/load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/config/load')>()),
   resolveConfigs: vi.fn(),
@@ -162,6 +167,85 @@ describe('Validate Command Exit Codes', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'Failed to validate configuration: You must provide at least 1 prompt',
       );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should set exit code 1 when a remote redteam plugin config exceeds 30000 UTF-8 bytes', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValueOnce(true);
+      const oversizedSystemPrompt = 'a'.repeat(30_000);
+      const mockConfig = {
+        prompts: ['test prompt'],
+        providers: ['test-provider'],
+        redteam: {
+          plugins: [
+            {
+              id: 'prompt-extraction',
+              config: {
+                systemPrompt: oversizedSystemPrompt,
+              },
+            },
+          ],
+        },
+      };
+
+      const mockValidTestSuite = {
+        prompts: [{ raw: 'test prompt', label: 'test' }],
+        providers: [{ id: () => 'test-provider', callApi: () => Promise.resolve({}) }],
+      };
+
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: mockConfig as any,
+        testSuite: mockValidTestSuite as any,
+        basePath: '/test',
+      });
+
+      await doValidate({ config: ['redteam-config.yaml'] }, defaultConfig, defaultConfigPath);
+
+      const expectedBytes = Buffer.byteLength(
+        JSON.stringify({ systemPrompt: oversizedSystemPrompt }),
+        'utf8',
+      );
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('prompt-extraction'));
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining(`${expectedBytes}`));
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('30000'));
+      expect(logger.info).not.toHaveBeenCalledWith(
+        expect.stringContaining('Configuration is valid'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should preserve testGenerationInstructions and target inputs when validating remote plugin size', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValueOnce(true);
+      const mockConfig = {
+        prompts: ['test prompt'],
+        providers: ['test-provider'],
+        redteam: {
+          testGenerationInstructions: 'g'.repeat(30_000),
+          plugins: [
+            {
+              id: 'prompt-extraction',
+              config: {
+                systemPrompt: 'short',
+              },
+            },
+          ],
+        },
+      };
+
+      const mockValidTestSuite = {
+        prompts: [{ raw: 'test prompt', label: 'test' }],
+        providers: [{ id: () => 'test-provider', callApi: () => Promise.resolve({}) }],
+      };
+
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: mockConfig as any,
+        testSuite: mockValidTestSuite as any,
+        basePath: '/test',
+      });
+
+      await doValidate({ config: ['redteam-config.yaml'] }, defaultConfig, defaultConfigPath);
+
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('prompt-extraction'));
       expect(process.exitCode).toBe(1);
     });
   });
