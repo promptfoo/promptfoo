@@ -22,7 +22,7 @@ describe('MCP HTTP transport', () => {
     vi.resetAllMocks();
   });
 
-  it('rejects oversized HTTP batches before tool dispatch and keeps the session usable', async () => {
+  it('blocks executable providers and oversized HTTP batches while keeping the session usable', async () => {
     const restoreEnv = mockProcessEnv({ MCP_TRANSPORT: undefined });
     const runAssertions = vi.spyOn(assertions, 'runAssertions');
     const listening = createDeferred<Server>();
@@ -93,6 +93,21 @@ describe('MCP HTTP transport', () => {
       const ready = await post({ jsonrpc: '2.0', method: 'notifications/initialized' });
       expect(ready.status).toBe(202);
       await ready.text();
+
+      const blocked = await post({
+        jsonrpc: '2.0',
+        id: nextId++,
+        method: 'tools/call',
+        params: { name: 'test_provider', arguments: { provider: 'exec:inert-fixture' } },
+      });
+      expect(await readMessages(blocked)).toMatchObject([
+        {
+          result: {
+            isError: true,
+            content: [{ text: expect.stringContaining('disabled over HTTP') }],
+          },
+        },
+      ]);
 
       for (const size of [2, 100]) {
         const requests = batch(size);

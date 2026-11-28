@@ -6,14 +6,13 @@ import cliProgress from 'cli-progress';
 import { type Command } from 'commander';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { VERSION } from '../../constants';
+import { CLOUD_PROVIDER_PREFIX, VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { HttpProvider } from '../../providers/http';
 import { loadApiProvider, loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
-import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { pathExists } from '../../util/file';
@@ -442,9 +441,7 @@ export function discoverCommand(
       }
       // If the target flag is provided, load it from Cloud:
       else if (args.target) {
-        // Let the internal error handling bubble up:
-        const providerOptions = await getProviderFromCloud(args.target, {});
-        target = await loadApiProvider(providerOptions.id, { options: providerOptions });
+        target = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}${args.target}`);
         cloudTargetId = args.target;
       }
       // Check the current working directory for a promptfooconfig.yaml file:

@@ -34,7 +34,12 @@ import {
   readResult,
 } from '../util/database';
 import { redactAzureBlobSasTokens } from '../util/sanitizer';
-import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
+import {
+  BrowserBehavior,
+  BrowserBehaviorNames,
+  blockExecutableScripts,
+  openBrowser,
+} from '../util/server';
 import { csrfProtection } from './middleware/csrfProtection';
 import { blobsRouter } from './routes/blobs';
 import { configsRouter } from './routes/configs';
@@ -126,6 +131,8 @@ export function createApp() {
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
+  // Enter the scope after body parsing so detached jobs inherit it as well.
+  app.use(blockExecutableScripts);
   app.get('/api/openapi.json', async (_req, res) => {
     const { default: spec } = await import('../../site/static/openapi.json', {
       with: { type: 'json' },

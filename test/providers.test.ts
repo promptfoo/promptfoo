@@ -17,7 +17,7 @@ import { OpenAiTtsProvider } from '../src/providers/openai/tts';
 import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
-import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
+import { getProviderFromCloud } from '../src/util/cloud';
 import * as fileUtil from '../src/util/file';
 import { loadYaml } from '../src/util/yamlLoad';
 import { mockProcessEnv } from './util/utils';
@@ -38,7 +38,11 @@ vi.mock('../src/providers/openai/tts');
 vi.mock('../src/providers/pythonCompletion');
 vi.mock('../src/providers/scriptCompletion');
 vi.mock('../src/providers/websocket');
-vi.mock('../src/util/cloud');
+vi.mock('../src/util/cloud', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/util/cloud')>()),
+  getProviderFromCloud: vi.fn(),
+  validateLinkedTargetId: vi.fn(),
+}));
 vi.mock('../src/util/file', async () => {
   const actual = await vi.importActual<typeof import('../src/util/file')>('../src/util/file');
   return {
@@ -51,14 +55,6 @@ describe('loadApiProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
-
-    // Mock the cloud utility functions
-    vi.mocked(isCloudProvider).mockImplementation((path: string) =>
-      path.startsWith('promptfoo://provider/'),
-    );
-    vi.mocked(getCloudDatabaseId).mockImplementation((path: string) =>
-      path.slice('promptfoo://provider/'.length),
-    );
 
     // Reset maybeLoadConfigFromExternalFile mock to default implementation
     vi.mocked(fileUtil.maybeLoadConfigFromExternalFile).mockImplementation((input: any) => input);

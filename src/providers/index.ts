@@ -9,6 +9,7 @@ import {
   getProviderFromCloud,
   isCloudProvider,
   validateLinkedTargetId,
+  withCloudScriptPolicy,
 } from '../util/cloud';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
@@ -187,6 +188,10 @@ async function createApiProvider(
       renderEnvOnlyInObject(cloudProvider.id, cloudTemplateEnv),
     );
 
+    if (resolvedCloudPath.startsWith('exec:')) {
+      throw new Error('Cloud targets cannot select exec providers');
+    }
+
     // Merge local config overrides with cloud provider config
     // Local config takes precedence to allow per-eval customization
     const mergedOptions: ProviderOptions = {
@@ -220,9 +225,14 @@ async function createApiProvider(
       env: mergedOptions.env,
     };
 
-    const provider = await cliState.withEnv(mergedOptions.env, () =>
-      createApiProvider(cloudProvider.id, mergedContext, cloudTemplateEnv),
+    const provider = await withCloudScriptPolicy(() =>
+      cliState.withEnv(mergedOptions.env, () =>
+        createApiProvider(cloudProvider.id, mergedContext, cloudTemplateEnv),
+      ),
     );
+    // A target may load nested providers on its first call, after resolution returns.
+    const callApi = provider.callApi.bind(provider);
+    provider.callApi = (...args) => withCloudScriptPolicy(() => callApi(...args));
     // Preserve the target already fetched above for per-evaluation grading context.
     provider.config ??= {};
     provider.config.linkedTargetId ??= renderedProviderPath;
