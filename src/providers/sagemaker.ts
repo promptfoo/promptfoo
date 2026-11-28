@@ -118,9 +118,8 @@ abstract class SageMakerGenericProvider {
     try {
       SageMakerConfigSchema.parse(config);
     } catch (error) {
-      logger.warn(
-        `Error validating SageMaker config\nConfig: ${JSON.stringify(config)}\n${error instanceof z.ZodError ? z.prettifyError(error) : error}`,
-      );
+      const detail = error instanceof z.ZodError ? `\n${z.prettifyError(error)}` : '';
+      logger.warn(`Error validating SageMaker config${detail}`);
     }
 
     this.config = config ?? {};
