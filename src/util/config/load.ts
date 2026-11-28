@@ -15,7 +15,11 @@ import { getEnvBool, isCI, isTemplateProcessEnvDisabled } from '../../envars';
 import { clearCjsModuleCache, ensureTypescriptLoader, importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts } from '../../prompts/index';
-import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
+import {
+  loadApiProviders,
+  renderProviderIdentity,
+  resolveProviderConfigs,
+} from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
@@ -151,6 +155,7 @@ function firstTargetHasInputs(providers: UnifiedConfig['providers'] | undefined)
 export function resolveCliProvidersWithConfig(
   cliProviders: string[],
   configProviders: UnifiedConfig['providers'],
+  env?: UnifiedConfig['env'],
 ): UnifiedConfig['providers'] {
   if (!configProviders || !Array.isArray(configProviders)) {
     return cliProviders;
@@ -160,7 +165,7 @@ export function resolveCliProvidersWithConfig(
   // re-calling getProviderIdAndLabel on every find() iteration.
   const indexed = configProviders.map((cp, i) => ({
     provider: cp,
-    ...getProviderIdAndLabel(cp, i),
+    ...getProviderIdAndLabel(cp, i, (ref) => renderProviderIdentity(ref, env)),
   }));
 
   return cliProviders.map((cliProvider) => {
@@ -1148,13 +1153,26 @@ async function resolveLoadedConfig(
   // (after file:// expansion) so that file-based provider configs are also matched.
   const cliFilteredProviderConfigs =
     (cmdObj.providers
-      ? resolveCliProvidersWithConfig(cmdObj.providers, resolvedProviderConfigs)
+      ? resolveCliProvidersWithConfig(cmdObj.providers, resolvedProviderConfigs, runtimeEnv)
       : resolvedProviderConfigs) ?? [];
 
   // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
   // Filtering on resolved configs allows matching by provider id/label from file-based providers.
   const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
-  const filteredProviderConfigs = filterProviderConfigs(cliFilteredProviderConfigs, filterOption);
+  const renderIdentity = (ref: Parameters<typeof renderProviderIdentity>[0]) =>
+    renderProviderIdentity(ref, runtimeEnv);
+  const filteredProviderConfigs = filterProviderConfigs(
+    cliFilteredProviderConfigs,
+    filterOption,
+    renderIdentity,
+  );
+  const selected = new Set(Array.isArray(filteredProviderConfigs) ? filteredProviderConfigs : []);
+  const excludedProviders =
+    (cmdObj.providers || filterOption) && Array.isArray(resolvedProviderConfigs)
+      ? resolvedProviderConfigs.flatMap((provider, index) =>
+          selected.has(provider) ? [] : [getProviderIdAndLabel(provider, index, renderIdentity)],
+        )
+      : [];
 
   if (
     filterOption &&
@@ -1312,12 +1330,13 @@ async function resolveLoadedConfig(
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
 
-  // Validate provider references in tests and scenarios
+  // Excluded providers remain valid references but are never instantiated.
   validateTestProviderReferences(
     testSuite.tests || [],
     testSuite.providers,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
+    excludedProviders,
   );
 
   // Validate that all prompt references in tests exist

@@ -1,4 +1,5 @@
-import { normalizeProviderRef } from '../../util/providerRef';
+import { isApiProvider } from '../../types/providers';
+import { normalizeProviderRef, type ProviderRefDescriptor } from '../../util/providerRef';
 
 import type { ApiProvider, CommandLineOptions, TestSuiteConfig } from '../../types/index';
 import type { ProviderOptions, ProviderOptionsMap } from '../../types/providers';
@@ -38,15 +39,27 @@ export function getProviderFilterRegexError(filter: string): string | undefined 
   }
 }
 
+type RenderIdentity = (ref: ProviderRefDescriptor) => { id: string; label?: string };
+
 /**
  * Extracts the id and label from a raw provider config without instantiating it.
  * Handles all provider config formats: string, function, ProviderOptions, ProviderOptionsMap.
  */
 export function getProviderIdAndLabel(
-  provider: string | ProviderOptions | ProviderOptionsMap | ((...args: unknown[]) => unknown),
-  index: number,
+  provider:
+    | string
+    | ApiProvider
+    | ProviderOptions
+    | ProviderOptionsMap
+    | ((...args: unknown[]) => unknown),
+  index?: number,
+  renderIdentity?: RenderIdentity,
 ): { id: string; label?: string } {
-  return normalizeProviderRef(provider, { index });
+  if (isApiProvider(provider)) {
+    return { id: provider.id(), label: provider.label };
+  }
+  const ref = normalizeProviderRef(provider, { index });
+  return renderIdentity ? renderIdentity(ref) : ref;
 }
 
 /**
@@ -57,37 +70,29 @@ export function getProviderIdAndLabel(
 export function filterProviderConfigs(
   providers: TestSuiteConfig['providers'],
   filterOption?: string,
+  renderIdentity?: RenderIdentity,
 ): TestSuiteConfig['providers'] {
   if (!filterOption) {
     return providers;
   }
-
-  // Handle non-array cases
-  if (typeof providers === 'string') {
-    const filterRegex = new RegExp(filterOption);
-    return filterRegex.test(providers) ? providers : [];
+  const regex = new RegExp(filterOption);
+  function matches({ id, label }: { id: string; label?: string }): boolean {
+    return regex.test(id) || (label !== undefined && regex.test(label));
   }
 
-  if (typeof providers === 'function') {
-    const filterRegex = new RegExp(filterOption);
-    const label = (providers as { label?: string }).label;
-    const id = label ?? 'custom-function';
-    if (filterRegex.test(id) || (label && filterRegex.test(label))) {
-      return providers;
-    }
-    return [];
+  if (Array.isArray(providers)) {
+    return providers.filter((provider, index) =>
+      matches(getProviderIdAndLabel(provider, index, renderIdentity)),
+    );
   }
-
-  if (!Array.isArray(providers)) {
-    return providers;
+  if (
+    typeof providers === 'string' ||
+    typeof providers === 'function' ||
+    isApiProvider(providers)
+  ) {
+    return matches(getProviderIdAndLabel(providers, undefined, renderIdentity)) ? providers : [];
   }
-
-  const filterRegex = new RegExp(filterOption);
-
-  return providers.filter((provider, index) => {
-    const { id, label } = getProviderIdAndLabel(provider, index);
-    return filterRegex.test(id) || (label && filterRegex.test(label));
-  });
+  return providers;
 }
 
 /**

@@ -94,6 +94,44 @@ describe('validateTestProviderReferences', () => {
     expect(() => validateTestProviderReferences(tests, providers)).toThrow(/Test #2/);
   });
 
+  it('matches raw IDs but redacts credentials in error descriptions and references', () => {
+    const id =
+      'webhook:https://example-private-user:example-private-pass@host.test/example-private-route';
+    const label = 'https://host.test/opaque-example-private-path?token=example-private-token';
+    const available = [
+      { id, label },
+      {
+        id: 'exec:run --key=example-private-argv',
+        label: 'sk-proj-example-private-fixture-1234567890',
+      },
+    ];
+    expect(() =>
+      validateTestProviderReferences([{ providers: [id, label] }], available),
+    ).not.toThrow();
+    const validate = () =>
+      validateTestProviderReferences(
+        [{ providers: ['https://other.test/example-private-ref?api_key=example-private-query'] }],
+        available,
+      );
+    expect(validate).toThrow(/which does not exist.*host\.test/);
+    expect(validate).not.toThrow(/example-private/);
+  });
+
+  it('matches excluded IDs and labels without listing them in diagnostics', () => {
+    const excluded = [{ id: 'gemini:private-endpoint', label: 'private-label' }];
+    const validate = (refs: string[]) =>
+      validateTestProviderReferences(
+        [{ providers: refs }],
+        providers,
+        undefined,
+        undefined,
+        excluded,
+      );
+    expect(() => validate(['gemini:*', 'private-label'])).not.toThrow();
+    expect(() => validate(['typo'])).toThrow(/Available providers:.*Excluded by filter: 1/);
+    expect(() => validate(['typo'])).not.toThrow(/private/);
+  });
+
   describe('scenario validation', () => {
     it('passes with valid scenario tests', () => {
       const tests: TestCase[] = [];
