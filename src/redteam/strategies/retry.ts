@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../../database/index';
 import { evalResultsTable } from '../../database/tables';
@@ -5,18 +7,17 @@ import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { makeRequest } from '../../util/cloud';
 import invariant from '../../util/invariant';
-import { AGENTIC_STRATEGIES, MULTI_TURN_STRATEGIES } from '../constants/strategies';
+import {
+  AGENTIC_STRATEGIES_SET,
+  ALL_STRATEGIES,
+  isMultiTurnStrategy,
+  MULTI_MODAL_STRATEGIES_SET,
+} from '../constants/strategies';
 
 import type { ProviderResponse, TestCase, TestCaseWithPlugin } from '../../types/index';
 
-// Single-turn strategies = AGENTIC but NOT MULTI_TURN
-// These strategies iterate to find successful attacks but each attempt is a single turn
-const SINGLE_TURN_STRATEGIES = AGENTIC_STRATEGIES.filter(
-  (s) => !MULTI_TURN_STRATEGIES.includes(s as any),
-);
-
-function isSingleTurnStrategy(strategyId: string | undefined): boolean {
-  return strategyId ? SINGLE_TURN_STRATEGIES.includes(strategyId as any) : false;
+function isSingleTurnStrategy(id: string | undefined): boolean {
+  return !!id && AGENTIC_STRATEGIES_SET.has(id) && !isMultiTurnStrategy(id);
 }
 
 /**
@@ -81,11 +82,145 @@ export function deduplicateTests(tests: TestCase[]): TestCase[] {
   });
 }
 
-async function getFailedTestCases(
-  pluginId: string,
+// Cloud history supplies input, never the provider, grading rules or other executable settings.
+function cloudTemplate(tests: TestCaseWithPlugin[], injectVar: string) {
+  let template: TestCaseWithPlugin | undefined;
+  const goals = new Set<string>();
+  for (const { description: _description, ...test } of tests) {
+    const { [injectVar]: input, ...vars } = test.vars ?? {};
+    const { goal, ...metadata } = test.metadata;
+    if (goal !== undefined) {
+      goals.add(goal);
+    }
+    if (
+      typeof input !== 'string' ||
+      metadata.pluginConfig?.inputs ||
+      metadata.inputVars ||
+      metadata.inputMaterialization ||
+      test.providerOutput !== undefined
+    ) {
+      return;
+    }
+    const candidate = { ...test, vars, metadata };
+    if (template && !isDeepStrictEqual(template, candidate)) {
+      return;
+    }
+    template = candidate;
+  }
+  return template && { template, goals };
+}
+
+interface CloudResult {
+  testCase: TestCase;
+  response?: ProviderResponse;
+  evalId: string;
+  targetId?: string;
+  provider?: string | { id: string };
+  success?: boolean;
+}
+
+// Compare plugin-specific markers and companion inputs without importing any of them from Cloud.
+function matchingGradingInputs(previous: TestCase, current: TestCase) {
+  const assertions = (test: TestCase) =>
+    test.assert?.map((a) => ({ ...a, metric: undefined })) ?? [];
+  const metadata = (test: TestCase) => {
+    const result = { ...test.metadata };
+    for (const key of [
+      'goal',
+      'strategyId',
+      'strategyConfig',
+      'originalText',
+      'originalEvalId',
+      'retry',
+      'testCaseId',
+      '__promptfoo',
+    ]) {
+      delete result[key];
+    }
+    // The suite supplies these defaults after generation.
+    for (const key of ['purpose', 'entities']) {
+      if (current.metadata?.[key] === undefined) {
+        delete result[key];
+      }
+    }
+    return Object.fromEntries(Object.entries(result).filter(([, value]) => value !== undefined));
+  };
+  return (
+    Array.isArray(previous.assert ?? []) &&
+    isDeepStrictEqual(assertions(previous), assertions(current)) &&
+    isDeepStrictEqual(metadata(previous), metadata(current)) &&
+    Object.entries(current.vars ?? {}).every(([key, value]) =>
+      isDeepStrictEqual(previous.vars?.[key], value),
+    )
+  );
+}
+
+// Structured inputs can materialize other variables. References and templates can read local files.
+function isPlainText(input: unknown): input is string {
+  return (
+    typeof input === 'string' &&
+    !!input.trim() &&
+    !/^\s*(?:\[|\{|data:)|file:\/\/|package:|\{[{%#]/i.test(input)
+  );
+}
+
+function cloudRetry(
+  row: CloudResult,
+  { template, goals }: NonNullable<ReturnType<typeof cloudTemplate>>,
   targetId: string,
-  limit: number = 100,
+  injectVar: string,
+): TestCase | undefined {
+  const test = row?.testCase;
+  const strategyId = test?.metadata?.strategyId;
+  const providerId = typeof row?.provider === 'string' ? row.provider : row?.provider?.id;
+  if (
+    test?.metadata?.pluginId !== template.metadata.pluginId ||
+    row.success ||
+    (row.targetId !== undefined && row.targetId !== targetId) ||
+    (row.provider !== undefined && providerId !== targetId) ||
+    typeof row.evalId !== 'string' ||
+    row.evalId.length > 200 ||
+    !/^[\w-]+(?::\d\d:\d\d)?$/.test(row.evalId) ||
+    !matchingGradingInputs(test, template) ||
+    (strategyId !== undefined &&
+      (!ALL_STRATEGIES.includes(strategyId) ||
+        isMultiTurnStrategy(strategyId) ||
+        strategyId === 'layer' ||
+        strategyId === 'authoritative-markup-injection' ||
+        MULTI_MODAL_STRATEGIES_SET.has(strategyId)))
+  ) {
+    return;
+  }
+
+  const input =
+    isSingleTurnStrategy(strategyId) || strategyId === 'best-of-n'
+      ? row.response?.metadata?.redteamFinalPrompt
+      : test.vars?.[injectVar];
+  const needsGoal =
+    goals.size > 0 || /^(?:promptfoo:redteam:)?intent$/.test(template.metadata.pluginId);
+  const goal = needsGoal ? test.metadata?.goal : undefined;
+  if (!isPlainText(input) || (needsGoal && (!isPlainText(goal) || !goals.has(goal)))) {
+    return;
+  }
+  return {
+    ...template,
+    vars: { ...template.vars, [injectVar]: input },
+    metadata: {
+      ...template.metadata,
+      ...(goal && { goal }),
+      strategyId,
+      originalEvalId: row.evalId,
+    },
+  };
+}
+
+async function getFailedTestCases(
+  tests: TestCaseWithPlugin[],
+  injectVar: string,
+  targetId: string,
+  limit: number,
 ): Promise<TestCase[]> {
+  const pluginId = tests[0].metadata.pluginId;
   const allTestCases: TestCase[] = [];
 
   try {
@@ -102,15 +237,19 @@ async function getFailedTestCases(
         const response = await makeRequest(`results/failed-tests?${queryParams.toString()}`, 'GET');
 
         if (response.ok) {
-          const data = await response.json();
-          // Cloud API returns raw results with response field for transformation
-          const cloudResults = data.results || [];
-          const cloudTestCases = cloudResults
-            .map((r: { testCase: TestCase; response: ProviderResponse | null; evalId: string }) =>
-              transformResult(r.testCase, r.response, r.evalId),
-            )
-            .filter((tc: TestCase | null): tc is TestCase => tc !== null);
-          allTestCases.push(...cloudTestCases);
+          const { results = [] } = await response.json();
+          const template = cloudTemplate(tests, injectVar);
+          for (const row of results.slice(0, limit)) {
+            const retry = template && cloudRetry(row, template, targetId, injectVar);
+            if (retry) {
+              allTestCases.push(retry);
+            }
+          }
+          if (allTestCases.length < Math.min(limit, results.length)) {
+            logger.warn(
+              'Skipped incompatible Cloud retry cases. A matching local test and plain-text input are required.',
+            );
+          }
         } else {
           logger.error(
             `Failed to fetch failed test cases from cloud API: ${response.status} ${response.statusText}`,
@@ -123,23 +262,6 @@ async function getFailedTestCases(
 
     // Always also check local SQLite database
     const db = await getDb();
-
-    const targetResults = await db
-      .select()
-      .from(evalResultsTable)
-      .where(
-        and(
-          eq(evalResultsTable.success, 0 as any),
-          sql`json_valid(provider)`,
-          sql`json_extract(provider, '$.id') = ${targetId}`,
-        ),
-      )
-      .orderBy(desc(evalResultsTable.updatedAt))
-      .limit(1);
-
-    if (targetResults.length === 0) {
-      return [];
-    }
 
     const results = await db
       .select()
@@ -172,29 +294,27 @@ async function getFailedTestCases(
       .filter((tc): tc is NonNullable<typeof tc> => tc !== null);
 
     allTestCases.push(...localTestCases);
-
-    // Deduplicate combined results from both cloud and local
-    return deduplicateTests(allTestCases);
   } catch (error) {
     logger.error(`Error retrieving failed test cases: ${error}`);
-    return [];
   }
+  return allTestCases;
 }
 
 export async function addRetryTestCases(
   testCases: TestCaseWithPlugin[],
-  _injectVar: string, // Unused - provider config (including injectVar) comes from stored test cases
+  injectVar: string,
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
-  // Count test cases by plugin ID
-  const testsByPlugin = new Map<string, number>();
+  const testsByPlugin = new Map<string, TestCaseWithPlugin[]>();
   for (const test of testCases) {
     const pluginId = test.metadata?.pluginId;
     if (!pluginId) {
       continue;
     }
 
-    testsByPlugin.set(pluginId, (testsByPlugin.get(pluginId) ?? 0) + 1);
+    const group = testsByPlugin.get(pluginId) ?? [];
+    group.push(test);
+    testsByPlugin.set(pluginId, group);
   }
 
   const targetIds: string[] = (config?.targetIds ?? []) as string[];
@@ -207,12 +327,12 @@ export async function addRetryTestCases(
   // For each plugin, get its failed test cases
   const retryTestCases: TestCase[] = [];
   for (const targetId of targetIds) {
-    for (const [pluginId, count] of testsByPlugin.entries()) {
+    for (const tests of testsByPlugin.values()) {
       // Use configured numTests if available, otherwise use original test count
-      const maxTests = typeof config.numTests === 'number' ? config.numTests : count;
+      const maxTests = typeof config.numTests === 'number' ? config.numTests : tests.length;
 
       // Fetch only the number of tests we need for efficiency
-      const failedTests = await getFailedTestCases(pluginId, targetId, maxTests);
+      const failedTests = await getFailedTestCases(tests, injectVar, targetId, maxTests);
 
       // Use the stored provider from the database if it exists and has injectVar
       // Only add injectVar if it's missing from an agentic strategy test

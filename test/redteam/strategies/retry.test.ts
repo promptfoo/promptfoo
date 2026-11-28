@@ -3,13 +3,23 @@ const { createWarningLoggerModule } = await vi.hoisted(
 );
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cloudConfig } from '../../../src/globalConfig/cloud';
+import logger from '../../../src/logger';
 import { addRetryTestCases, deduplicateTests } from '../../../src/redteam/strategies/retry';
+import { makeRequest } from '../../../src/util/cloud';
 
 import type { TestCase, TestCaseWithPlugin } from '../../../src/types/index';
 
-// Mock dependencies
+const limit = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../src/database/index', () => ({
-  getDb: vi.fn(),
+  getDb: () => ({
+    select: vi.fn().mockReturnThis(),
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    orderBy: vi.fn().mockReturnThis(),
+    limit,
+  }),
 }));
 
 vi.mock('../../../src/globalConfig/cloud', () => ({
@@ -152,20 +162,14 @@ describe('deduplicateTests', () => {
 });
 
 describe('addRetryTestCases', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    const { cloudConfig } = await import('../../../src/globalConfig/cloud');
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
   });
 
   afterEach(() => {
     vi.resetAllMocks();
   });
-
-  async function getMockDb() {
-    const { getDb } = await import('../../../src/database/index');
-    return vi.mocked(getDb);
-  }
 
   it('should throw error when no targetIds provided', async () => {
     const testCases: TestCaseWithPlugin[] = [
@@ -182,15 +186,7 @@ describe('addRetryTestCases', () => {
   });
 
   it('should return empty array when no failed tests found', async () => {
-    const mockDb = {
-      select: vi.fn().mockReturnThis(),
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue([]),
-    };
-    const getDb = await getMockDb();
-    getDb.mockReturnValue(mockDb as any);
+    limit.mockResolvedValue([]);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -207,6 +203,245 @@ describe('addRetryTestCases', () => {
     expect(result).toHaveLength(0);
   });
 
+  it.each(['empty', 'unavailable'])('returns cloud failures when SQLite is %s', async (state) => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(makeRequest).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          results: [
+            {
+              testCase: {
+                vars: { prompt: 'cloud failure', companion: 'local', extra: 'file://ignored.txt' },
+                assert: [{ type: 'equals', value: 'expected', metric: 'Bias/base64' }],
+                metadata: {
+                  pluginId: 'bias:age',
+                  strategyId: 'base64',
+                  strategyConfig: { oldConfig: true },
+                },
+                provider: { id: 'file://ignored.ts', config: { injectVar: 'prompt' } },
+                options: { transform: 'file://ignored.ts' },
+                assertScoringFunction: 'file://ignored.ts',
+              },
+              response: {},
+              evalId: 'cloud-eval',
+            },
+          ],
+        }),
+      ),
+    );
+    limit.mockResolvedValue([]);
+    if (state === 'unavailable') {
+      limit.mockRejectedValueOnce(new Error('SQLite unavailable'));
+    }
+
+    const test: TestCaseWithPlugin = {
+      vars: { prompt: 'seed', companion: 'local' },
+      assert: [{ type: 'equals', value: 'expected', metric: 'Bias' }],
+      metadata: { pluginId: 'bias:age' },
+    };
+    const result = await addRetryTestCases([test], 'prompt', {
+      targetIds: ['new-target'],
+      numTests: 3,
+    });
+
+    expect(makeRequest).toHaveBeenCalledWith(
+      'results/failed-tests?pluginId=bias%3Aage&targetId=new-target&limit=3',
+      'GET',
+    );
+    expect(result).toEqual([
+      {
+        vars: { prompt: 'cloud failure', companion: 'local' },
+        assert: [{ type: 'equals', value: 'expected', metric: 'Bias' }],
+        metadata: {
+          pluginId: 'bias:age',
+          strategyId: 'base64',
+          strategyConfig: undefined,
+          originalEvalId: 'cloud-eval',
+          retry: true,
+        },
+      },
+    ]);
+  });
+
+  it('replays only a compatible Cloud text input on the current plugin template', async () => {
+    const test = { metadata: { pluginId: 'bias:age' }, vars: { message: 'seed' } };
+    const row = { testCase: test, evalId: 'eval-abc-2026-10-01T12:34:56' };
+    const agent = {
+      ...row,
+      testCase: { ...test, metadata: { ...test.metadata, strategyId: 'jailbreak:meta' } },
+    };
+    const results = [
+      null,
+      { ...row, targetId: 'different' },
+      { ...row, provider: { id: 'different' } },
+      { ...row, success: true },
+      { ...row, evalId: 'file://ignored' },
+      { ...row, testCase: { ...test, metadata: { pluginId: 'other' } } },
+      { ...row, testCase: { ...test, assert: [{ type: 'javascript', value: 'true' }] } },
+      ...['unknown', 'goat', 'image', 'layer', 'authoritative-markup-injection'].map(
+        (strategyId) => ({
+          ...row,
+          testCase: { ...test, metadata: { ...test.metadata, strategyId } },
+        }),
+      ),
+      ...[
+        'FILE://ignored',
+        'package:ignored',
+        'x {{ env.X }}',
+        ' ["input"]',
+        '{"k":1}',
+        '',
+        [],
+      ].map((message) => ({
+        ...row,
+        testCase: { ...test, vars: { message } },
+      })),
+      agent,
+      { ...agent, response: { metadata: { redteamFinalPrompt: 'file://ignored' } } },
+      { ...agent, response: { metadata: { redteamFinalPrompt: 'final prompt' } } },
+    ];
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(makeRequest).mockResolvedValue(Response.json({ results }));
+    limit.mockResolvedValue([]);
+
+    const retries = await addRetryTestCases([test], 'message', {
+      targetIds: ['target'],
+      numTests: results.length,
+    });
+    expect(retries).toEqual([
+      {
+        vars: { message: 'final prompt' },
+        metadata: {
+          ...test.metadata,
+          originalEvalId: row.evalId,
+          strategyId: 'jailbreak:meta',
+          retry: true,
+        },
+      },
+    ]);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Skipped incompatible Cloud'));
+  });
+
+  it('requires an approved intent and the actual Best-of-N candidate', async () => {
+    const seeds = ['first', 'second'].map((goal) => ({
+      vars: { prompt: 'seed' },
+      metadata: { pluginId: 'intent', goal },
+    }));
+    const row = (goal?: string, redteamFinalPrompt?: string) => ({
+      evalId: 'cloud-eval',
+      testCase: { ...seeds[0], metadata: { ...seeds[0].metadata, goal, strategyId: 'best-of-n' } },
+      response: { metadata: { redteamFinalPrompt } },
+    });
+    const results = [
+      row(undefined, 'missing goal'),
+      row('unknown', 'bad goal'),
+      row('first'),
+      row('first', 'file://ignored'),
+      row('second', 'final candidate'),
+    ];
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(makeRequest).mockResolvedValue(Response.json({ results }));
+    limit.mockResolvedValue([]);
+    const retries = await addRetryTestCases(seeds, 'prompt', {
+      targetIds: ['target'],
+      numTests: results.length,
+    });
+    expect(retries).toMatchObject([
+      {
+        vars: { prompt: 'final candidate' },
+        metadata: { goal: 'second', strategyId: 'best-of-n' },
+      },
+    ]);
+  });
+
+  it('skips stale or missing grading markers and changed companion inputs', async () => {
+    const seed = {
+      vars: { prompt: 'seed', subject: 'one' },
+      metadata: { pluginId: 'ascii-smuggling', asciiSmugglingTestString: 'current' },
+    };
+    const row = (prompt: string, marker?: string, subject = 'one') => ({
+      evalId: 'cloud-eval',
+      testCase: {
+        vars: { prompt, subject },
+        metadata: { ...seed.metadata, asciiSmugglingTestString: marker, purpose: 'suite default' },
+      },
+    });
+    const results = [
+      row('missing'),
+      row('stale', 'old'),
+      row('changed', 'current', 'two'),
+      row('matching', 'current'),
+    ];
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(makeRequest).mockResolvedValue(Response.json({ results }));
+    limit.mockResolvedValue([]);
+    const retries = await addRetryTestCases([seed], 'prompt', {
+      targetIds: ['target'],
+      numTests: results.length,
+    });
+    expect(retries).toMatchObject([{ vars: { prompt: 'matching' }, metadata: seed.metadata }]);
+  });
+
+  it('skips ambiguous Cloud templates without suppressing local cases', async () => {
+    const test = { metadata: { pluginId: 'bias:age' }, vars: { prompt: 'seed' } };
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(makeRequest).mockResolvedValue(
+      Response.json({ results: [{ testCase: test, evalId: 'cloud' }] }),
+    );
+    limit.mockResolvedValue([{ testCase: test, evalId: 'local' }]);
+    const retries = await addRetryTestCases([test, { ...test, options: { repeat: 2 } }], 'prompt', {
+      targetIds: ['target'],
+    });
+    expect(retries.map((retry) => retry.metadata?.originalEvalId)).toEqual(['local']);
+  });
+
+  it.each(['duplicate', 'empty', 'http-error', 'network-error'])(
+    'should retain local failures when cloud returns %s',
+    async (cloudResult) => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      const storedTestCase = {
+        vars: { prompt: 'stored failure' },
+        metadata: { pluginId: 'bias:age' },
+      };
+      if (cloudResult === 'network-error') {
+        vi.mocked(makeRequest).mockRejectedValue(new Error('Cloud unavailable'));
+      } else {
+        vi.mocked(makeRequest).mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              results:
+                cloudResult === 'duplicate'
+                  ? [{ testCase: storedTestCase, response: {}, evalId: 'cloud-eval' }]
+                  : [],
+            }),
+            { status: cloudResult === 'http-error' ? 503 : 200 },
+          ),
+        );
+      }
+      limit.mockResolvedValue([
+        {
+          testCase: JSON.stringify(storedTestCase),
+          response: JSON.stringify({}),
+          evalId: 'local-eval',
+        },
+      ]);
+
+      const result = await addRetryTestCases(
+        [{ vars: { prompt: 'seed' }, metadata: { pluginId: 'bias:age' } }],
+        'prompt',
+        { targetIds: ['target'] },
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual(storedTestCase.vars);
+      expect(result[0].metadata).toMatchObject({
+        pluginId: 'bias:age',
+        originalEvalId: cloudResult === 'duplicate' ? 'cloud-eval' : 'local-eval',
+        retry: true,
+      });
+    },
+  );
+
   it('should preserve provider with injectVar from stored test case', async () => {
     const storedTestCase = {
       vars: { prompt: 'test prompt' },
@@ -221,24 +456,13 @@ describe('addRetryTestCases', () => {
       },
     };
 
-    const mockDb = {
-      select: vi.fn().mockReturnThis(),
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }]) // targetResults
-        .mockResolvedValueOnce([
-          {
-            testCase: JSON.stringify(storedTestCase),
-            response: JSON.stringify({}),
-            evalId: 'eval-123',
-          },
-        ]),
-    };
-    const getDb = await getMockDb();
-    getDb.mockReturnValue(mockDb as any);
+    limit.mockResolvedValueOnce([
+      {
+        testCase: JSON.stringify(storedTestCase),
+        response: JSON.stringify({}),
+        evalId: 'eval-123',
+      },
+    ]);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -253,7 +477,7 @@ describe('addRetryTestCases', () => {
       numTests: 7,
     });
 
-    expect(mockDb.limit).toHaveBeenLastCalledWith(7);
+    expect(limit).toHaveBeenLastCalledWith(7);
     expect(result).toHaveLength(1);
     expect(result[0].provider).toEqual({
       id: 'promptfoo:redteam:goat',
@@ -273,24 +497,13 @@ describe('addRetryTestCases', () => {
       // No provider - plugin-only test
     };
 
-    const mockDb = {
-      select: vi.fn().mockReturnThis(),
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }])
-        .mockResolvedValueOnce([
-          {
-            testCase: JSON.stringify(storedTestCase),
-            response: JSON.stringify({}),
-            evalId: 'eval-123',
-          },
-        ]),
-    };
-    const getDb = await getMockDb();
-    getDb.mockReturnValue(mockDb as any);
+    limit.mockResolvedValueOnce([
+      {
+        testCase: JSON.stringify(storedTestCase),
+        response: JSON.stringify({}),
+        evalId: 'eval-123',
+      },
+    ]);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -331,24 +544,13 @@ describe('addRetryTestCases', () => {
       },
     };
 
-    const mockDb = {
-      select: vi.fn().mockReturnThis(),
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }])
-        .mockResolvedValueOnce([
-          {
-            testCase: JSON.stringify(storedTestCase),
-            response: JSON.stringify(storedResponse),
-            evalId: 'eval-123',
-          },
-        ]),
-    };
-    const getDb = await getMockDb();
-    getDb.mockReturnValue(mockDb as any);
+    limit.mockResolvedValueOnce([
+      {
+        testCase: JSON.stringify(storedTestCase),
+        response: JSON.stringify(storedResponse),
+        evalId: 'eval-123',
+      },
+    ]);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -391,24 +593,13 @@ describe('addRetryTestCases', () => {
       },
     };
 
-    const mockDb = {
-      select: vi.fn().mockReturnThis(),
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }])
-        .mockResolvedValueOnce([
-          {
-            testCase: JSON.stringify(storedTestCase),
-            response: JSON.stringify(storedResponse),
-            evalId: 'eval-123',
-          },
-        ]),
-    };
-    const getDb = await getMockDb();
-    getDb.mockReturnValue(mockDb as any);
+    limit.mockResolvedValueOnce([
+      {
+        testCase: JSON.stringify(storedTestCase),
+        response: JSON.stringify(storedResponse),
+        evalId: 'eval-123',
+      },
+    ]);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -434,24 +625,13 @@ describe('addRetryTestCases', () => {
       metadata: { pluginId: 'bias:age' },
     };
 
-    const mockDb = {
-      select: vi.fn().mockReturnThis(),
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }])
-        .mockResolvedValueOnce([
-          {
-            testCase: JSON.stringify(storedTestCase),
-            response: JSON.stringify({}),
-            evalId: 'eval-123',
-          },
-        ]),
-    };
-    const getDb = await getMockDb();
-    getDb.mockReturnValue(mockDb as any);
+    limit.mockResolvedValueOnce([
+      {
+        testCase: JSON.stringify(storedTestCase),
+        response: JSON.stringify({}),
+        evalId: 'eval-123',
+      },
+    ]);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -477,34 +657,10 @@ describe('addRetryTestCases', () => {
       metadata: { pluginId: 'bias:age' },
     };
 
-    const mockDb = {
-      select: vi.fn().mockReturnThis(),
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      orderBy: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        // First target
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }])
-        .mockResolvedValueOnce([
-          {
-            testCase: JSON.stringify(storedTestCase),
-            response: JSON.stringify({}),
-            evalId: 'eval-123',
-          },
-        ])
-        // Second target - returns the same test case
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o' }) }])
-        .mockResolvedValueOnce([
-          {
-            testCase: JSON.stringify(storedTestCase),
-            response: JSON.stringify({}),
-            evalId: 'eval-456',
-          },
-        ]),
-    };
-    const getDb = await getMockDb();
-    getDb.mockReturnValue(mockDb as any);
+    const stored = { testCase: JSON.stringify(storedTestCase), response: '{}' };
+    limit
+      .mockResolvedValueOnce([{ ...stored, evalId: 'eval-123' }])
+      .mockResolvedValueOnce([{ ...stored, evalId: 'eval-456' }]);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -519,8 +675,8 @@ describe('addRetryTestCases', () => {
       targetIds: ['openai:gpt-4o-mini', 'openai:gpt-4o'],
     });
 
-    expect(mockDb.limit.mock.calls).toEqual([[1], [2], [1], [2]]);
-    // Should be deduplicated to 1 test case
+    expect(limit.mock.calls).toEqual([[2], [2]]);
     expect(result).toHaveLength(1);
+    expect(result[0].metadata?.originalEvalId).toBe('eval-123');
   });
 });
