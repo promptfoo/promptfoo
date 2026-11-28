@@ -163,6 +163,54 @@ describe('redteam strategy result grading', () => {
     expect(result.pass).toBe(true);
   });
 
+  it('applies the weight: 0 override to a failing stored redteam grade', async () => {
+    const recordedAssertion = { ...piiAssertion, weight: 0 };
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test: { ...test, assert: [recordedAssertion] },
+      providerResponse: {
+        output,
+        metadata: {
+          redteamFinalPrompt: attackPrompt,
+          storedGraderResult: {
+            ...storedResult,
+            pass: false,
+            score: 0.25,
+            metadata: {
+              ...storedResult.metadata,
+              redteamGradingAssertionHash: getGradingAssertionHash(recordedAssertion),
+            },
+          },
+        },
+      },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.componentResults?.[0]).toMatchObject({
+      pass: true,
+      score: 0.25,
+      reason: storedResult.reason,
+    });
+    // The recorded metric keeps its measured value instead of being dropped.
+    expect(result.namedScores?.['PIILeak/Crescendo']).toBe(0.25);
+  });
+
+  it('applies the weight: 0 override to a live redteam grade', async () => {
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: false, score: 0, reason: 'Fresh verdict' },
+      rubric: 'New rubric',
+    });
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test: { ...test, assert: [{ ...piiAssertion, weight: 0 }] },
+      providerResponse: { output, metadata: { redteamFinalPrompt: attackPrompt } },
+    });
+
+    expect(getResult).toHaveBeenCalledTimes(1);
+    expect(result.pass).toBe(true);
+    expect(result.componentResults?.[0]).toMatchObject({ pass: true, score: 0 });
+  });
+
   it.each([
     { value: { expectedFiles: ['second.txt'] } },
     { config: { policy: 'second policy' } },
