@@ -17,6 +17,7 @@ import EvalResult from '../../src/models/evalResult';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
 import {
+  type ApiProvider,
   type EvaluateResult,
   type EvaluateSummaryV3,
   type Prompt,
@@ -938,6 +939,42 @@ describe('evaluator', () => {
       expect(evaluation.author).toBe(mockAuthor);
       const persistedEval = await Eval.findById(evaluation.id);
       expect(persistedEval?.author).toBe(mockAuthor);
+    });
+
+    it('persists instantiated providers with replayable ids without storing trace credentials', async () => {
+      const provider = {
+        id: () => 'echo',
+        label: 'Echo target',
+        delay: 0,
+        callApi: async () => ({ output: 'ok' }),
+      } satisfies ApiProvider;
+
+      const evaluation = await Eval.create(
+        {
+          prompts: ['Hello'],
+          providers: [provider] as any,
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com/traces',
+              auth: { token: 'fixture-trace-token' },
+            },
+          },
+        },
+        [{ raw: 'Hello', display: 'Hello', label: 'Hello' } as Prompt],
+      );
+
+      const persistedEval = await Eval.findById(evaluation.id);
+      expect(persistedEval?.config.providers).toEqual([
+        {
+          id: 'echo',
+          label: 'Echo target',
+          delay: 0,
+        },
+      ]);
+      expect(evaluation.config.tracing?.provider?.auth?.token).toBe('fixture-trace-token');
+      expect(persistedEval?.config.tracing?.provider?.auth?.token).toBeUndefined();
     });
 
     it('preserves trace linkage when results are inserted during eval creation', async () => {

@@ -10,6 +10,7 @@ import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import { ConfigResolutionError, resolveConfigs } from '../util/config/load';
+import { normalizePersistedConfigForResume } from '../util/config/persistence';
 import {
   filterProviders,
   getPersistedProviderFilterOptions,
@@ -78,7 +79,12 @@ async function resolveRetryConfigs(
 
   const configs = cmdObj.config
     ? await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {})
-    : await resolveConfigs(providerFilterOptions, originalEval.config);
+    : await resolveConfigs(
+        providerFilterOptions,
+        await normalizePersistedConfigForResume(originalEval.config, () =>
+          originalEval.getProvidersFromResults(),
+        ),
+      );
 
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label in doEval. Replay both stages so the retried provider

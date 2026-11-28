@@ -41,6 +41,7 @@ import {
   renderConfigEnvTemplates,
   resolveConfigs,
 } from '../util/config/load';
+import { normalizePersistedConfigForResume } from '../util/config/persistence';
 import {
   filterProviders,
   getPersistedProviderFilterOptions,
@@ -122,7 +123,9 @@ async function resolveReplayConfigs(
     );
   }
 
-  let replayConfig = evalRecord.config;
+  let replayConfig = await normalizePersistedConfigForResume(evalRecord.config, () =>
+    evalRecord.getProvidersFromResults(),
+  );
   if (replayConfig.tracing?.provider) {
     const renderedReplayConfig = renderConfigEnvTemplates(replayConfig);
     replayConfig = {
