@@ -92,6 +92,8 @@ Or via environment variable:
 PROMPTFOO_DELAY_MS=1000 promptfoo eval
 ```
 
+To override the global delay for one red team target, set `delay` in milliseconds on that entry in `targets`.
+
 ### Backoff Configuration
 
 Promptfoo has two retry layers:

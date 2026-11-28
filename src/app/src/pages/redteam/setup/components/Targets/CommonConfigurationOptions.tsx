@@ -179,7 +179,7 @@ const CommonConfigurationOptions = ({
           <p className="mb-4">
             Add a delay (ms) between requests to simulate a real user. See{' '}
             <a
-              href="https://www.promptfoo.dev/docs/providers/http/#delay"
+              href="https://www.promptfoo.dev/docs/configuration/rate-limits/#fixed-delay"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"

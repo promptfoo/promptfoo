@@ -280,6 +280,15 @@ describe('InputsEditor', () => {
 
       expect(screen.getByText(/\(2 configured\)/)).toBeInTheDocument();
     });
+
+    it('should link to the multi-input docs in non-compact mode', () => {
+      renderWithProviders(<InputsEditor {...defaultProps} inputs={{ var1: 'desc1' }} />);
+
+      expect(screen.getByRole('link', { name: 'documentation' })).toHaveAttribute(
+        'href',
+        'https://www.promptfoo.dev/docs/red-team/multi-input/',
+      );
+    });
   });
 
   describe('disabled state', () => {
