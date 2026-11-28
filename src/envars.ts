@@ -88,6 +88,13 @@ type EnvVars = {
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_TRACING_ENABLED?: boolean;
   PROMPTFOO_ENABLE_UNBLOCKING?: boolean;
+  /**
+   * When `true`, disables all non-eval network egress: version checks, license
+   * consent submission, and analytics/telemetry. Intended for air-gapped runs
+   * or restricted CI where no outbound traffic is acceptable. Eval-time
+   * provider calls are unaffected.
+   */
+  PROMPTFOO_NO_NETWORK?: boolean;
 
   //=========================================================================
   // OpenTelemetry tracing configuration
@@ -565,6 +572,16 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
  * @returns The boolean value of the environment variable, or the default value if provided.
  */
 export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
+  // The no-network switch is additive: a provider or suite may opt in but
+  // cannot turn off restrictions requested by the operator or enclosing suite.
+  if (
+    key === 'PROMPTFOO_NO_NETWORK' &&
+    (parseEnvBool(process.env[key]) ||
+      parseEnvBool(getEnvOverrides('file')?.[key]) ||
+      parseEnvBool(getEnvOverrides('suite')?.[key]))
+  ) {
+    return true;
+  }
   return parseEnvBool(getEnvString(key), defaultValue);
 }
 

@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   browserModuleReplacements,
   browserModulesPlugin,
@@ -70,5 +70,28 @@ describe('vendorCodeSplittingGroups', () => {
     expect(
       vendorCodeSplittingGroups.some((group) => group.test.test('/node_modules/prismjs/prism.js')),
     ).toBe(false);
+  });
+});
+
+describe('no-network build setting', () => {
+  it.each([
+    ['1', 'true'],
+    ['TRUE', 'true'],
+    ['yes', 'true'],
+    ['yup', 'true'],
+    ['YePpErS', 'true'],
+    ['0', 'false'],
+    ['false', 'false'],
+  ])('embeds %s as %s', async (value, expected) => {
+    vi.stubEnv('PROMPTFOO_NO_NETWORK', value);
+    try {
+      vi.resetModules();
+      const { default: config } = await import('./vite.config');
+      expect(config.define['import.meta.env.VITE_PROMPTFOO_NO_NETWORK']).toBe(
+        JSON.stringify(expected),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

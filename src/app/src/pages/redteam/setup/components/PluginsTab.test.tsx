@@ -63,7 +63,8 @@ vi.mock('@app/hooks/useToast', () => ({
   }),
 }));
 
-vi.mock('@app/hooks/useApiHealth', () => ({
+vi.mock('@app/hooks/useApiHealth', async (importOriginal) => ({
+  ...(await importOriginal()),
   useApiHealth: vi.fn(
     () =>
       ({

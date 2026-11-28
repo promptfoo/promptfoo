@@ -5,7 +5,7 @@ import { Button } from '@app/components/ui/button';
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Input } from '@app/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { isApiHealthAvailable, useApiHealth } from '@app/hooks/useApiHealth';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -677,14 +677,14 @@ export default function PluginsTab({
                         onClick={() => handleGenerateTestCase(plugin)}
                         disabled={
                           pluginDisabled ||
-                          apiHealthStatus !== 'connected' ||
+                          !isApiHealthAvailable(apiHealthStatus) ||
                           (generatingTestCase && generatingPlugin === plugin)
                         }
                         isGenerating={generatingTestCase && generatingPlugin === plugin}
                         tooltipTitle={
                           pluginDisabled
                             ? 'This plugin requires remote generation'
-                            : apiHealthStatus === 'connected'
+                            : isApiHealthAvailable(apiHealthStatus)
                               ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
                               : 'Promptfoo Cloud connection is required for test generation'
                         }

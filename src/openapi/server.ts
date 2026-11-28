@@ -222,6 +222,8 @@ export function createServerOpenApiRegistry() {
     operationId: 'getRemoteHealth',
     tags: ['Health'],
     summary: 'Check remote generation health',
+    description:
+      'When PROMPTFOO_NO_NETWORK is set on its own, the health check is skipped and this route answers locally with status SKIPPED instead of contacting api.promptfoo.app; local and self-hosted generation remain available. It returns DISABLED when remote generation is explicitly disabled, and that answer wins when both flags are set.',
     responses: {
       200: jsonResponse(ServerSchemas.RemoteHealth.Response),
     },
@@ -1183,6 +1185,8 @@ export function createServerOpenApiRegistry() {
     operationId: 'getVersion',
     tags: ['Version'],
     summary: 'Check Promptfoo version and update commands',
+    description:
+      'When PROMPTFOO_NO_NETWORK (or PROMPTFOO_DISABLE_UPDATE) is set, the remote latest-version lookup is skipped and latestVersion equals the current version.',
     responses: {
       200: jsonResponse(VersionSchemas.Response),
       500: jsonResponse(ErrorResponseSchema, 'Server error'),

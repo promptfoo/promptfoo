@@ -15,7 +15,8 @@ const renderWithTooltipProvider = (ui: React.ReactElement) => {
 // Alias for tests that use renderWithTheme
 const renderWithTheme = renderWithTooltipProvider;
 
-vi.mock('@app/hooks/useApiHealth', () => ({
+vi.mock('@app/hooks/useApiHealth', async (importOriginal) => ({
+  ...(await importOriginal()),
   useApiHealth: vi.fn(
     () =>
       ({
@@ -129,6 +130,27 @@ describe('TestCaseGenerateButton', () => {
           'Requires Promptfoo Cloud connection',
         );
       });
+    });
+
+    it('should stay enabled with the default tooltip when the health check is skipped', async () => {
+      const user = userEvent.setup();
+      mockUseApiHealth.mockReturnValue({
+        data: {
+          status: 'skipped',
+          message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+        },
+        refetch: vi.fn(),
+        isLoading: false,
+      });
+
+      renderWithTooltipProvider(<TestCaseGenerateButton onClick={mockOnClick} />);
+
+      const iconButton = screen.getByRole('button');
+      expect(iconButton).toBeEnabled();
+
+      await user.hover(iconButton);
+
+      expect(screen.getByRole('tooltip')).toHaveTextContent('Generate test case');
     });
 
     it('disables test generation and shows the target config error in the tooltip', async () => {

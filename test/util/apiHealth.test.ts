@@ -64,6 +64,19 @@ describe('API Health Utilities', () => {
   });
 
   describe('checkRemoteHealth', () => {
+    it('skips automatic preflights and answers direct checks locally in no-network mode', async () => {
+      const restore = mockProcessEnv({ PROMPTFOO_NO_NETWORK: 'true' });
+      try {
+        expect(getRemoteHealthUrl()).toBeNull();
+        expect(await checkRemoteHealth('https://test.api/health')).toMatchObject({
+          status: 'DISABLED',
+        });
+        expect(mockedFetchWithTimeout).not.toHaveBeenCalled();
+      } finally {
+        restore();
+      }
+    });
+
     it('should return OK status when API is healthy', async () => {
       mockIsEnabled.mockReturnValue(false);
       mockedFetchWithTimeout.mockResolvedValueOnce({

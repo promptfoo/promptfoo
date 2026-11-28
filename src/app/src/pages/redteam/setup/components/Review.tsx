@@ -23,7 +23,7 @@ import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { type ApiHealthStatus, useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
@@ -154,6 +154,57 @@ function removeIntentEntry(
       ? { ...p, config: { ...p.config, intent: newIntents } }
       : p,
   );
+}
+
+const NO_NETWORK_HEALTH_NOTE =
+  'Network egress is disabled (PROMPTFOO_NO_NETWORK). The Promptfoo Cloud health check is skipped; local generation is still available.';
+
+// A 'disabled' health status always blocks Run Now: the server answers
+// DISABLED only for a genuine remote-generation disable, which wins over
+// the no-network skip. The skipped poll has its own 'skipped' status, so
+// no client-side no-network exemption is needed or correct here.
+function isHealthStatusBlocking(apiHealthStatus: ApiHealthStatus): boolean {
+  return ['blocked', 'unknown', 'disabled'].includes(apiHealthStatus);
+}
+
+function getRunNowTooltipMessage(
+  isRunning: boolean,
+  targetConfigError: string | null,
+  apiHealthStatus: ApiHealthStatus,
+): string | undefined {
+  if (isRunning) {
+    return undefined;
+  }
+
+  if (targetConfigError) {
+    return targetConfigError;
+  }
+
+  switch (apiHealthStatus) {
+    case 'blocked':
+      return 'Cannot connect to Promptfoo Cloud. Please check your network connection or API settings.';
+    case 'disabled':
+      return 'Remote generation is disabled. Running red team evaluations requires connection to Promptfoo Cloud.';
+    case 'skipped':
+      return NO_NETWORK_HEALTH_NOTE;
+    case 'unknown':
+      return 'Checking connection to Promptfoo Cloud...';
+    default:
+      return undefined;
+  }
+}
+
+function getApiHealthAlertMessage(apiHealthStatus: ApiHealthStatus): string {
+  switch (apiHealthStatus) {
+    case 'blocked':
+      return 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.';
+    case 'disabled':
+      return 'Remote generation is disabled. The "Run Now" option is not available.';
+    case 'skipped':
+      return NO_NETWORK_HEALTH_NOTE;
+    default:
+      return 'Checking connection status...';
+  }
 }
 
 export default function Review({
@@ -448,33 +499,13 @@ export default function Review({
   }, [config.strategies]);
 
   const isRunNowDisabled = useMemo(() => {
-    return (
-      isRunning ||
-      Boolean(targetConfigError) ||
-      ['blocked', 'disabled', 'unknown'].includes(apiHealthStatus)
-    );
+    return isRunning || Boolean(targetConfigError) || isHealthStatusBlocking(apiHealthStatus);
   }, [isRunning, apiHealthStatus, targetConfigError]);
 
-  const runNowTooltipMessage = useMemo((): string | undefined => {
-    if (isRunning) {
-      return undefined;
-    }
-
-    if (targetConfigError) {
-      return targetConfigError;
-    }
-
-    switch (apiHealthStatus) {
-      case 'blocked':
-        return 'Cannot connect to Promptfoo Cloud. Please check your network connection or API settings.';
-      case 'disabled':
-        return 'Remote generation is disabled. Running red team evaluations requires connection to Promptfoo Cloud.';
-      case 'unknown':
-        return 'Checking connection to Promptfoo Cloud...';
-      default:
-        return undefined;
-    }
-  }, [isRunning, apiHealthStatus, targetConfigError]);
+  const runNowTooltipMessage = useMemo(
+    () => getRunNowTooltipMessage(isRunning, targetConfigError, apiHealthStatus),
+    [isRunning, apiHealthStatus, targetConfigError],
+  );
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
     try {
@@ -1263,13 +1294,7 @@ export default function Review({
             {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
               <Alert variant="warning" className="mb-4">
                 <AlertContent>
-                  <AlertDescription>
-                    {apiHealthStatus === 'blocked'
-                      ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
-                      : apiHealthStatus === 'disabled'
-                        ? 'Remote generation is disabled. The "Run Now" option is not available.'
-                        : 'Checking connection status...'}
-                  </AlertDescription>
+                  <AlertDescription>{getApiHealthAlertMessage(apiHealthStatus)}</AlertDescription>
                 </AlertContent>
               </Alert>
             )}

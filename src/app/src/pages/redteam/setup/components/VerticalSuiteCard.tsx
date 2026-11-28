@@ -6,7 +6,7 @@ import { Card } from '@app/components/ui/card';
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Collapsible, CollapsibleContent } from '@app/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { isApiHealthAvailable, useApiHealth } from '@app/hooks/useApiHealth';
 import { cn } from '@app/lib/utils';
 import {
   displayNameOverrides,
@@ -402,7 +402,7 @@ export default function VerticalSuiteCard({
                               disabled={
                                 pluginDisabled ||
                                 isLocked ||
-                                apiHealthStatus !== 'connected' ||
+                                !isApiHealthAvailable(apiHealthStatus) ||
                                 (generatingTestCase && generatingPlugin === plugin)
                               }
                               isGenerating={generatingTestCase && generatingPlugin === plugin}
@@ -411,7 +411,7 @@ export default function VerticalSuiteCard({
                                   ? 'This feature requires Promptfoo Enterprise'
                                   : pluginDisabled
                                     ? 'This plugin requires remote generation'
-                                    : apiHealthStatus === 'connected'
+                                    : isApiHealthAvailable(apiHealthStatus)
                                       ? `Generate a test case for ${displayNameOverrides[plugin] || plugin}`
                                       : 'Promptfoo Cloud connection is required for test generation'
                               }
