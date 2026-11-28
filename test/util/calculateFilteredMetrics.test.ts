@@ -9,6 +9,7 @@ import { clearEvalTables } from '../util/evalDb';
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
+import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { ResultFailureReason } from '../../src/types/index';
@@ -27,6 +28,7 @@ describe('calculateFilteredMetrics', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('basic metrics aggregation', () => {
@@ -764,24 +766,42 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('OOM protection', () => {
-    it('should throw error when result count exceeds limit', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success'],
+    it('returns empty metrics without aggregating when the count exceeds the limit', async () => {
+      const db = await getDb();
+      const countQuery = vi.spyOn(db, 'get').mockResolvedValueOnce({ count: 50001 });
+      const aggregationQuery = vi.spyOn(db, 'all');
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: 'oversized-eval',
+        numPrompts: 2,
+        whereSql: sql`eval_id = ${'oversized-eval'}`,
       });
 
-      // Mock a WHERE clause that would return too many results
-      // We can't actually create 50k+ results in the test, but we can test the check
-      const whereSql = sql`eval_id = ${eval_.id}`;
-
-      // This should succeed (10 results < 50000)
-      await expect(
-        calculateFilteredMetrics({
-          evalId: eval_.id,
-          numPrompts: 1,
-          whereSql,
-        }),
-      ).resolves.toBeDefined();
+      expect(metrics).toEqual(
+        Array.from({ length: 2 }, () => ({
+          score: 0,
+          testPassCount: 0,
+          testFailCount: 0,
+          testErrorCount: 0,
+          testCacheHitCount: 0,
+          assertPassCount: 0,
+          assertFailCount: 0,
+          totalLatencyMs: 0,
+          tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+          namedScores: {},
+          namedScoresCount: {},
+          namedScoreWeights: {},
+          cost: 0,
+        })),
+      );
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        'Filtered result count 50001 exceeds limit 50000',
+        { evalId: 'oversized-eval' },
+      );
+      expect(countQuery).toHaveBeenCalledTimes(1);
+      expect(aggregationQuery).not.toHaveBeenCalled();
     });
   });
 

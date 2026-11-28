@@ -3,11 +3,8 @@ import { createRequiredTestSchema } from '../../factories/literalFixtures';
 
 import type { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 
-export function registerAzureConfigTests(
-  getProvider: () => AzureChatCompletionProvider,
-  explicitUndefined = false,
-) {
-  const verifyAzureProviderConfig = async () => {
+export function registerAzureConfigTests(getProvider: () => AzureChatCompletionProvider) {
+  it('should use provider config when no prompt config exists', async () => {
     const context = {
       prompt: { label: 'test prompt', raw: 'test prompt' },
       vars: {},
@@ -18,8 +15,7 @@ export function registerAzureConfigTests(
       max_tokens: 100,
       temperature: 0.5,
     });
-  };
-  it('should use provider config when no prompt config exists', verifyAzureProviderConfig);
+  });
 
   it('should merge prompt config with provider config', async () => {
     const context = {
@@ -41,23 +37,18 @@ export function registerAzureConfigTests(
     });
   });
 
-  it(
-    'should handle undefined prompt config',
-    explicitUndefined
-      ? async () => {
-          const context = {
-            prompt: { config: undefined, label: 'test prompt', raw: 'test prompt' },
-            vars: {},
-          };
-          const { body } = await getProvider().getOpenAiBody('test prompt', context);
-          expect(body).toMatchObject({
-            functions: [{ name: 'provider_func', parameters: {} }],
-            max_tokens: 100,
-            temperature: 0.5,
-          });
-        }
-      : verifyAzureProviderConfig,
-  );
+  it('should handle explicitly undefined prompt config', async () => {
+    const context = {
+      prompt: { config: undefined, label: 'test prompt', raw: 'test prompt' },
+      vars: {},
+    };
+    const { body } = await getProvider().getOpenAiBody('test prompt', context);
+    expect(body).toMatchObject({
+      functions: [{ name: 'provider_func', parameters: {} }],
+      max_tokens: 100,
+      temperature: 0.5,
+    });
+  });
 
   it('should handle empty prompt config', async () => {
     const context = {

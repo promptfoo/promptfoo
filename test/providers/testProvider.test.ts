@@ -1092,11 +1092,24 @@ describe('Provider Test Functions', () => {
     });
 
     describe('session configuration', () => {
-      it('should update provider config with session settings', () => {
-        // This will be called internally during testProviderSession
+      it('should update provider config with session settings', async () => {
         mockProvider.config = createSessionHeaderOptions();
+        mockProvider.getSessionId = vi.fn(() => 'server-session-id');
+        vi.mocked(mockProvider.callApi).mockResolvedValue({ output: 'Remembered response' });
 
-        expect(mockProvider.config).toBeDefined();
+        const result = await testProviderSession({
+          provider: mockProvider,
+          sessionConfig: { sessionSource: 'server', sessionParser: 'response.sessionId' },
+        });
+
+        expect(mockProvider.config).toEqual({
+          headers: { 'X-Session-ID': '{{sessionId}}' },
+          sessionSource: 'server',
+          sessionParser: 'response.sessionId',
+        });
+        expect(result.success).toBe(true);
+        expect(result.details?.sessionSource).toBe('server');
+        expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
       });
 
       it('should detect server session from sessionParser in provider config', async () => {

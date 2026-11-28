@@ -174,17 +174,15 @@ describe('checkForUpdates', () => {
     );
   });
 
-  it.each([
-    'should log an update message if a newer version is available - minor ver',
-    'should log an update message if a newer version is available - major ver',
-  ])('%s', async () => {
+  it.each(['0.12.0', '1.0.0'])('logs an update for newer version %s', async (latestVersion) => {
+    const loggerInfoSpy = vi.spyOn(logger, 'info');
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ latestVersion: '1.1.0' }),
+      json: async () => ({ latestVersion }),
     } as never);
 
-    const result = await checkForUpdates();
-    expect(result).toBeTruthy();
+    await expect(checkForUpdates()).resolves.toBe(true);
+    expect(loggerInfoSpy).toHaveBeenCalledWith(expect.stringContaining(latestVersion));
   });
 
   it('should not log an update message if the current version is up to date', async () => {

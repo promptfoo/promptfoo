@@ -334,17 +334,16 @@ describe('util', () => {
 
     describe('file path handling', () => {
       it.each([
-        'handles absolute paths in transform files',
-        'handles file URLs in transform files',
-      ])('%s', async () => {
+        ['absolute path', '/tmp/promptfoo-transform.js'],
+        ['relative path', 'transform.js'],
+      ])('loads a file transform with an %s', async (_name, filePath) => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-
         mockedImportModule.mockResolvedValueOnce((output: string) => output.toUpperCase());
 
-        const transformFunctionPath = 'file://transform.js';
-        const transformedOutput = await transform(transformFunctionPath, output, context);
+        const transformedOutput = await transform(`file://${filePath}`, output, context);
         expect(transformedOutput).toBe('HELLO');
+        expect(mockedImportModule).toHaveBeenCalledExactlyOnceWith(filePath);
       });
 
       it('handles Python files with absolute paths', async () => {
