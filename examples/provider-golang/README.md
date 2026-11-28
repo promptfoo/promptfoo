@@ -7,36 +7,29 @@ npx promptfoo@latest init --example provider-golang
 cd provider-golang
 ```
 
-This example demonstrates how to structure a Go-based provider for promptfoo. For detailed documentation, see [Go Provider](https://www.promptfoo.dev/docs/providers/go/) documentation.
-
-To get started with this example:
-
-```sh
-promptfoo init --example provider-golang
-```
+This example compares two Go providers that share an OpenAI client. See the
+[Go provider docs](https://www.promptfoo.dev/docs/providers/go/) for the provider interface.
 
 ## Directory Structure
 
-This example shows two implementations of the same provider interface:
-
 ```text
 provider-golang/
-├── go.mod            # Root module definition
-├── main.go           # Root provider implementation
-├── core/             # Supporting code
-│   └── openai.go     # OpenAI client wrapper
-├── pkg1/             # Shared utilities
-│   └── utils.go      # Configuration
-├── evaluation/       # Alternative implementation
-│   └── main.go      # Provider with same interface
-└── promptfooconfig.yml  # Config comparing both implementations
+├── go.mod               # Root module definition
+├── provider.go          # Root provider implementation (package provider)
+├── core/                # Supporting code
+│   └── openai.go        # OpenAI client wrapper
+├── pkg1/                # Shared utilities
+│   └── utils.go         # Configuration
+├── evaluation/          # Alternative implementation
+│   └── provider.go      # Provider with same interface (package evaluation)
+└── promptfooconfig.yaml # Config comparing both implementations
 ```
 
-The structure demonstrates how to:
+Both providers use named packages and support standard Go builds:
 
-1. Keep shared Go code in a single module
-2. Implement the same provider interface in different ways
-3. Compare multiple implementations in one config
+```sh
+go build ./...
+```
 
 ## Prerequisites
 
@@ -73,10 +66,10 @@ The config compares both implementations:
 
 ```yaml
 providers:
-  - id: 'file://evaluation/main.go:CallApi'
+  - id: 'file://evaluation/provider.go:CallApi'
     label: 'Provider in evaluation/'
 
-  - id: 'file://main.go:CallApi'
+  - id: 'file://provider.go:CallApi'
     label: 'Provider in root'
     config:
       reasoning_effort: 'high'
@@ -84,10 +77,10 @@ providers:
 
 ## Provider Implementations
 
-Both `main.go` and `evaluation/main.go` implement the same interface:
+Both `provider.go` and `evaluation/provider.go` implement the same interface:
 
 ```go
-func CallApi(prompt string, options map[string]interface{}) (string, error)
+func CallApi(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error)
 ```
 
 They share the same OpenAI client code but can be configured differently through the config file.
