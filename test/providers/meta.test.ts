@@ -84,24 +84,24 @@ describe('createMetaProvider routing', () => {
   });
 
   it('falls back to the default model for a bare prefix', () => {
-    expect(asChat(createMetaProvider('meta:')).modelName).toBe('muse-spark-1.1');
-    expect(createMetaProvider('meta:').id()).toBe('meta:responses:muse-spark-1.1');
-    expect(asChat(createMetaProvider('meta:chat')).modelName).toBe('muse-spark-1.1');
-    expect(asChat(createMetaProvider('meta:chat:')).modelName).toBe('muse-spark-1.1');
+    expect(asChat(createMetaProvider('meta:')).modelName).toBe('muse-spark-1.3');
+    expect(createMetaProvider('meta:').id()).toBe('meta:responses:muse-spark-1.3');
+    expect(asChat(createMetaProvider('meta:chat')).modelName).toBe('muse-spark-1.3');
+    expect(asChat(createMetaProvider('meta:chat:')).modelName).toBe('muse-spark-1.3');
   });
 
   it('routes meta:responses:<model> to the Responses API provider', () => {
     const provider = createMetaProvider('meta:responses:muse-spark-1.1');
     expect(provider).toBeInstanceOf(MetaResponsesProvider);
     expect(provider.id()).toBe('meta:responses:muse-spark-1.1');
-    expect(createMetaProvider('meta:responses').id()).toBe('meta:responses:muse-spark-1.1');
+    expect(createMetaProvider('meta:responses').id()).toBe('meta:responses:muse-spark-1.3');
   });
 
   it('routes meta:messages:<model> to the Anthropic-compatible Messages provider', () => {
     const provider = createMetaProvider('meta:messages:muse-spark-1.1');
     expect(provider).toBeInstanceOf(MetaMessagesProvider);
     expect(provider.id()).toBe('meta:messages:muse-spark-1.1');
-    expect(createMetaProvider('meta:messages').id()).toBe('meta:messages:muse-spark-1.1');
+    expect(createMetaProvider('meta:messages').id()).toBe('meta:messages:muse-spark-1.3');
   });
 
   it.each([
@@ -312,6 +312,20 @@ describe('MetaProvider request body shaping', () => {
     const { body } = await provider.getOpenAiBody('Hello');
     expect(body.reasoning_effort).toBe('xhigh');
   });
+
+  it.each(['muse-wonder-1.0', 'muse-ember-1.0', 'muse-spark-1.3'])(
+    "forwards reasoning_effort 'max' for %s",
+    async (modelName) => {
+      const provider = asChat(
+        createMetaProvider(`meta:chat:${modelName}`, {
+          config: { reasoning_effort: 'max' as any },
+        }),
+      );
+      const { body } = await provider.getOpenAiBody('Hello');
+      expect(body.model).toBe(modelName);
+      expect(body.reasoning_effort).toBe('max');
+    },
+  );
 
   it('renders templated reasoning_effort before validating it', async () => {
     const provider = asChat(
@@ -568,22 +582,63 @@ describe('Meta Chat effective-model request consistency', () => {
 });
 
 // Cost for 1,000 input tokens (400 cached) and 500 output tokens.
-const museSparkPricingCases = [
+// 1000 prompt tokens (400 of them cached) and 500 completion tokens.
+const musePricingCases = [
+  // 600 * $4/M + 400 * $0.20/M + 500 * $20/M
+  { modelName: 'muse-wonder-1.0', expectedCost: 0.01248 },
+  // 600 * $0.10/M + 400 * $0.004/M + 500 * $0.50/M (under the 200K tier)
+  { modelName: 'muse-ember-1.0', expectedCost: 0.0003116 },
   { modelName: 'muse-spark-1.1', expectedCost: 0.002935 },
+  { modelName: 'muse-spark-1.2', expectedCost: 0.002935 },
+  { modelName: 'muse-spark-1.2-contributor', expectedCost: 0.0001608 },
   { modelName: 'muse-spark-1.3', expectedCost: 0.002935 },
   { modelName: 'muse-spark-1.3-contributor', expectedCost: 0.0001608 },
 ];
 
 describe('calculateMetaCost', () => {
-  it.each(['muse-spark-1.1', 'muse-spark-1.3'])('uses standard pricing for %s', (modelName) => {
-    // 1000 input at $1.25/M + 500 output at $4.25/M
-    expect(calculateMetaCost(modelName, {}, 1000, 500)).toBeCloseTo(
-      (1000 * 1.25 + 500 * 4.25) / 1e6,
+  it.each(['muse-spark-1.1', 'muse-spark-1.2', 'muse-spark-1.3'])(
+    'uses standard pricing for %s',
+    (modelName) => {
+      // 1000 input at $1.25/M + 500 output at $4.25/M
+      expect(calculateMetaCost(modelName, {}, 1000, 500)).toBeCloseTo(
+        (1000 * 1.25 + 500 * 4.25) / 1e6,
+        12,
+      );
+    },
+  );
+
+  it('bills Muse Ember at standard rates up to 200K input tokens', () => {
+    // 150,000 uncached * $0.10/M + 50,000 cached * $0.004/M + 1,000 * $0.50/M
+    expect(calculateMetaCost('muse-ember-1.0', {}, 200_000, 1000, 50_000)).toBeCloseTo(0.0157, 12);
+  });
+
+  it('bills a Muse Ember request over 200K input tokens at long-context rates in full', () => {
+    // 150,001 uncached * $0.30/M + 50,000 cached * $0.012/M + 1,000 * $1.50/M
+    expect(calculateMetaCost('muse-ember-1.0', {}, 200_001, 1000, 50_000)).toBeCloseTo(
+      0.0471003,
       12,
     );
   });
 
-  it.each(museSparkPricingCases)(
+  it('counts cached tokens toward the Muse Ember long-context threshold', () => {
+    // 210,000 input, 190,000 cached: 20,000 * $0.30/M + 190,000 * $0.012/M
+    expect(calculateMetaCost('muse-ember-1.0', {}, 210_000, 0, 190_000)).toBeCloseTo(0.00828, 12);
+  });
+
+  it('combines a partial override with the Muse Ember long-context rates', () => {
+    // 250,000 * $0.30/M input from the tier + 1,000 * $1/M caller output rate
+    expect(calculateMetaCost('muse-ember-1.0', { outputCost: 1 / 1e6 }, 250_000, 1000)).toBeCloseTo(
+      0.076,
+      12,
+    );
+  });
+
+  it('applies no long-context tier to Muse Wonder', () => {
+    // 1,000,000 * $4/M + 1,000 * $20/M
+    expect(calculateMetaCost('muse-wonder-1.0', {}, 1_000_000, 1000)).toBeCloseTo(4.02, 12);
+  });
+
+  it.each(musePricingCases)(
     'bills cached prompt tokens at the correct rate for $modelName',
     ({ modelName, expectedCost }) => {
       expect(calculateMetaCost(modelName, {}, 1000, 500, 400)).toBeCloseTo(expectedCost, 12);
@@ -644,7 +699,7 @@ describe('MetaProvider callApi cost', () => {
     },
   });
 
-  it.each(museSparkPricingCases)(
+  it.each(musePricingCases)(
     'calculates Chat Completions cost including cached tokens for $modelName',
     async ({ modelName, expectedCost }) => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
@@ -653,6 +708,24 @@ describe('MetaProvider callApi cost', () => {
       expect(result.cost).toBeCloseTo(expectedCost, 12);
     },
   );
+
+  it('bills a long-context Muse Ember chat request at the higher tier', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(
+      createMockFetchResponse({
+        choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
+        usage: {
+          total_tokens: 252_000,
+          prompt_tokens: 250_000,
+          completion_tokens: 2000,
+          prompt_tokens_details: { cached_tokens: 100_000 },
+        },
+      }) as any,
+    );
+    const provider = createMetaProvider('meta:chat:muse-ember-1.0', createApiKeyOptions('LLM|1|k'));
+    const result = await provider.callApi('Say hi');
+    // 150,000 * $0.30/M + 100,000 * $0.012/M + 2,000 * $1.50/M
+    expect(result.cost).toBeCloseTo(0.0492, 12);
+  });
 
   it('leaves cost undefined for unknown models without user pricing', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
@@ -684,12 +757,15 @@ describe('MetaProvider callApi cost', () => {
     expect(result.cost).toBeUndefined();
   });
 
-  it('does not fill cost for cached responses', async () => {
+  it('keeps the reported cost on cached responses', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce({ ...okResponse, cached: true } as any);
     const provider = createMetaProvider('meta:chat:muse-spark-1.1', createApiKeyOptions('LLM|1|k'));
     const result = await provider.callApi('Say hi');
     expect(result.cached).toBe(true);
-    expect(result.cost).toBeUndefined();
+    // Cached usage omits the prompt/completion split, so cost comes from the
+    // raw usage; the evaluator derives zero incurred cost from `cached`.
+    expect(result.tokenUsage?.prompt).toBeUndefined();
+    expect(result.cost).toBeCloseTo(0.002935, 12);
   });
 });
 
@@ -723,7 +799,7 @@ describe('MetaResponsesProvider', () => {
     expect(JSON.stringify(json)).not.toContain('LLM|123|secret');
   });
 
-  it.each(museSparkPricingCases)(
+  it.each(musePricingCases)(
     'calculates Responses API cost including cached tokens for $modelName',
     ({ modelName, expectedCost }) => {
       const provider = createMetaProvider(`meta:responses:${modelName}`) as MetaResponsesProvider;
@@ -743,15 +819,34 @@ describe('MetaResponsesProvider', () => {
     },
   );
 
-  it('reports zero-cost for cached responses via the base billing path', () => {
-    const provider = createMetaProvider('meta:responses:muse-spark-1.1') as MetaResponsesProvider;
+  it('bills a long-context Muse Ember Responses request at the higher tier', () => {
+    const provider = createMetaProvider('meta:responses:muse-ember-1.0') as MetaResponsesProvider;
     const billed = (provider as any).applyBilling(
       { output: 'hi' },
+      {
+        usage: {
+          input_tokens: 250_000,
+          output_tokens: 2000,
+          input_tokens_details: { cached_tokens: 100_000 },
+        },
+      },
+      provider.config,
+      false,
+    );
+    // 150,000 * $0.30/M + 100,000 * $0.012/M + 2,000 * $1.50/M
+    expect(billed.cost).toBeCloseTo(0.0492, 12);
+  });
+
+  it('keeps the reported cost on cached responses', () => {
+    const provider = createMetaProvider('meta:responses:muse-spark-1.1') as MetaResponsesProvider;
+    const billed = (provider as any).applyBilling(
+      { output: 'hi', cached: true },
       { usage: { input_tokens: 1000, output_tokens: 500 } },
       provider.config,
       true,
     );
-    expect(billed.cost).toBeUndefined();
+    // 1000 * $1.25/M + 500 * $4.25/M
+    expect(billed.cost).toBeCloseTo(0.003375, 12);
   });
 });
 
@@ -856,6 +951,15 @@ describe('MetaResponsesProvider request body shaping', () => {
     });
     const { body } = await (provider as any).getOpenAiBody('Hello');
     expect(body.reasoning?.effort).toBe('xhigh');
+  });
+
+  it("forwards reasoning_effort 'max' as reasoning.effort for Muse Wonder", async () => {
+    const provider = createMetaProvider('meta:responses:muse-wonder-1.0', {
+      config: { reasoning_effort: 'max' as any },
+    });
+    const { body } = await (provider as any).getOpenAiBody('Hello');
+    expect(body.model).toBe('muse-wonder-1.0');
+    expect(body.reasoning?.effort).toBe('max');
   });
 
   it("rejects reasoning_effort 'none' with a clear error", async () => {
@@ -1027,7 +1131,7 @@ describe.each(['chat', 'responses'] as const)('Meta %s effective-model billing',
     const cachedExplicit = await invoke('muse-spark-1.1', { ...config, cost: 0 }, undefined, true);
     expect(explicit.result.cost).toBe(0);
     expect(cached.result.cached).toBe(true);
-    expect(cached.result.cost).toBeUndefined();
+    expect(cached.result.cost).toBeCloseTo(0.0001608, 12);
     expect(cachedExplicit.result.cost).toBe(0);
   });
 
@@ -1069,10 +1173,48 @@ describe('MetaMessagesProvider', () => {
       expect(first.cached).not.toBe(true);
       expect(second.cached).toBe(true);
       expect(create).toHaveBeenCalledTimes(1);
+      // 2 input * $1.25/M + 1 output * $4.25/M. The cache hit keeps its
+      // reported cost; the evaluator derives zero incurred cost from `cached`.
+      expect(first.cost).toBeCloseTo(6.75e-6, 12);
+      expect(second.cost).toBeCloseTo(6.75e-6, 12);
     } finally {
       await clearCache();
       restore();
     }
+  });
+
+  it('picks the Muse Ember price tier per request when a paused turn resumes', async () => {
+    const provider = createMetaProvider('meta:messages:muse-ember-1.0', {
+      config: { apiKey: 'LLM|1|k', stream: false },
+    }) as MetaMessagesProvider;
+    const usage = { input_tokens: 150_000, output_tokens: 1000, cache_read_input_tokens: 0 };
+    const paused = {
+      id: 'msg-paused',
+      type: 'message',
+      role: 'assistant',
+      model: 'muse-ember-1.0',
+      content: [{ type: 'text', text: 'Working on it.' }],
+      stop_reason: 'pause_turn',
+      stop_sequence: null,
+      usage,
+    };
+    const create = vi
+      .spyOn(provider.anthropic.messages, 'create')
+      .mockResolvedValueOnce(paused as any)
+      .mockResolvedValueOnce({
+        ...paused,
+        id: 'msg-done',
+        content: [{ type: 'text', text: 'Done.' }],
+        stop_reason: 'end_turn',
+      } as any);
+
+    const result = await provider.callApi('Summarize the attached records');
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(result.tokenUsage?.prompt).toBe(300_000);
+    // Two requests under 200K input each: 2 * (150,000 * $0.10/M + 1,000 * $0.50/M).
+    // Pricing the combined 300K would wrongly apply the long-context tier ($0.093).
+    expect(result.cost).toBeCloseTo(0.031, 12);
   });
 
   it('points the Anthropic SDK client at the bare Meta host with bearer auth', () => {
@@ -1335,7 +1477,7 @@ describe('MetaMessagesProvider', () => {
     expect(JSON.stringify(json)).not.toContain('LLM|123|secret');
   });
 
-  it.each(museSparkPricingCases)(
+  it.each(musePricingCases)(
     'calculates Messages API cost including cached tokens for $modelName',
     async ({ modelName, expectedCost }) => {
       const spy = vi.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValueOnce({
