@@ -1,7 +1,13 @@
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
+import { isCallerAbortError } from '../util/fetch/requestSignal';
 
-import type { ApiProvider, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../types/index';
 
 interface ManualInputProviderOptions {
   id?: string;
@@ -22,7 +28,13 @@ export class ManualInputProvider implements ApiProvider {
     return 'promptfoo:manual-input';
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
+    signal?.throwIfAborted();
     console.log('='.repeat(80));
     console.log('Manual Input Provider');
     console.log('Prompt:');
@@ -30,10 +42,19 @@ export class ManualInputProvider implements ApiProvider {
     console.log(prompt);
     console.log('*'.repeat(40));
     console.log('\nPlease enter the output:');
-    const output: string = await (this.config?.multiline ? editor : input)({ message: 'Output:' });
-    console.log('='.repeat(80));
-    return {
-      output,
-    };
+    try {
+      const output = await (this.config?.multiline ? editor : input)(
+        { message: 'Output:' },
+        { signal },
+      );
+      console.log('='.repeat(80));
+      return { output };
+    } catch (error) {
+      // Inquirer wraps the abort reason. Preserve it for evaluation pause handling.
+      if (isCallerAbortError(error, signal, { requireReasonMatch: true })) {
+        signal?.throwIfAborted();
+      }
+      throw error;
+    }
   }
 }
