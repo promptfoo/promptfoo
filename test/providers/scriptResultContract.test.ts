@@ -104,6 +104,37 @@ describe.each([
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
+  it('misses when only the test description changes', async () => {
+    execute.mockResolvedValue({ output: 'ok' });
+    const context = { prompt: { raw: 'same', label: 'same' }, vars: {} };
+    for (const description of ['A', 'B', 'B']) {
+      await provider.callApi('same', { ...context, test: { description } });
+    }
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(mocks.get.mock.calls[0][0]).not.toBe(mocks.get.mock.calls[1][0]);
+    expect(mocks.get.mock.calls[1][0]).toBe(mocks.get.mock.calls[2][0]);
+  });
+
+  it('misses when script-visible vars have different key order', async () => {
+    execute.mockResolvedValue({ output: 'first order' });
+    const prompt = { raw: 'same', label: 'same' };
+    const a = await provider.callApi('same', { prompt, vars: { a: 1, b: 2 } });
+    execute.mockResolvedValue({ output: 'second order' });
+    const b = await provider.callApi('same', { prompt, vars: { b: 2, a: 1 } });
+    expect(a).toMatchObject({ output: 'first order', cached: false });
+    expect(b).toMatchObject({ output: 'second order', cached: false });
+  });
+
+  it('never reads or writes a cache key for secret-bearing context', async () => {
+    execute.mockResolvedValue({ output: 'ok' });
+    for (const apiKey of ['account-a', 'account-b', 'account-b']) {
+      await provider.callApi('same', { prompt: { raw: 'same', label: 'same' }, vars: { apiKey } });
+    }
+    expect(execute).toHaveBeenCalledTimes(3);
+    expect(mocks.get).not.toHaveBeenCalled();
+    expect(mocks.set).not.toHaveBeenCalled();
+  });
+
   it.each(['', null])('caches a successful result with error %s', async (error) => {
     execute.mockResolvedValue({ output: 'ok', error });
 

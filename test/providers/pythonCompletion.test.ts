@@ -345,9 +345,7 @@ describe('PythonProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(mockCache.get).toHaveBeenCalledWith(
-        expect.stringContaining('python:undefined:default:call_api:'),
-      );
+      expect(mockCache.get).toHaveBeenCalledWith(expect.stringMatching(/^python:v2:call_api:/));
       expect(mockPoolInstance.execute).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
     });
@@ -365,9 +363,40 @@ describe('PythonProvider', () => {
       await provider.callApi('test prompt');
 
       expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringContaining('python:undefined:default:call_api:'),
+        expect.stringMatching(/^python:v2:call_api:/),
         '{"output":"new result"}',
       );
+    });
+
+    it('keeps the cache key stable across eval runs so a rerun hits the cache', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const store = new Map<string, string>();
+      const mockCache = {
+        get: vi.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
+        set: vi.fn((key: string, value: string) => {
+          store.set(key, value);
+          return Promise.resolve();
+        }),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockPoolInstance.execute.mockResolvedValue({ output: 'fresh result' });
+
+      // The evaluator merges reserved __eval* runtime vars into context.vars;
+      // only __evalId differs between two runs of the same test.
+      const first = await provider.callApi('test prompt', {
+        vars: { name: 'world', __evalId: 'eval-first' },
+      } as any);
+      const second = await provider.callApi('test prompt', {
+        vars: { name: 'world', __evalId: 'eval-second' },
+      } as any);
+
+      expect(first).toEqual({ output: 'fresh result', cached: false });
+      expect(second).toEqual({ output: 'fresh result', cached: true });
+      expect(mockPoolInstance.execute).toHaveBeenCalledTimes(1);
+      for (const [key] of mockCache.get.mock.calls) {
+        expect(key).not.toContain('__evalId');
+      }
     });
 
     it('should properly transform token usage in cached results', async () => {
@@ -518,7 +547,7 @@ describe('PythonProvider', () => {
         cached: false,
       });
       expect(mockCache.set).toHaveBeenCalledWith(
-        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        expect.stringMatching(/^python:v2:call_api:[a-f0-9]{64}:[a-f0-9]{64}$/),
         '{"output":"fresh result"}',
       );
     });
@@ -544,11 +573,7 @@ describe('PythonProvider', () => {
       const cacheSetCalls = mockCache.set.mock.calls;
       expect(cacheSetCalls).toHaveLength(2);
 
-      // The first call should contain 'default' in the cache key
-      expect(cacheSetCalls[0][0]).toContain(':default:');
-
-      // The second call should contain the custom function name
-      expect(cacheSetCalls[1][0]).toContain(':custom_function:');
+      expect(cacheSetCalls[0][0]).not.toBe(cacheSetCalls[1][0]);
     });
 
     it('should not apply cached metadata to embedding results', async () => {
