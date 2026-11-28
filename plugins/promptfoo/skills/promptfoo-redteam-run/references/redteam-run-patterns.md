@@ -10,8 +10,8 @@ Keep a configured self-hosted endpoint unchanged.
 
 ## Evaluate Generated Tests
 
-Use the project's installed `promptfoo`; inside its repository, align Node with
-`source ~/.nvm/nvm.sh && nvm use` and substitute `npm run local --`.
+Use the CLI invocation verified by the calling skill's shared prerequisite check
+in place of `npx promptfoo` below.
 
 ```bash
 npx promptfoo validate config -c redteam.yaml

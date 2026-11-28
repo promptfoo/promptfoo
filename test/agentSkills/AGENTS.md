@@ -5,8 +5,8 @@ Promptfoo plugin bundle (shared across Codex and Claude Code).
 
 ## What To Protect
 
-- The shared `plugins/promptfoo` bundle has exactly four skills: evals, provider
-  setup, redteam setup, and redteam run.
+- The shared `plugins/promptfoo` bundle has exactly five skills: Enterprise setup, evals,
+  provider setup, redteam setup, and redteam run.
 - The bundle ships both a `.codex-plugin/plugin.json` and a
   `.claude-plugin/plugin.json`, and is exposed by both
   `.agents/plugins/marketplace.json` (Codex) and the repo-root

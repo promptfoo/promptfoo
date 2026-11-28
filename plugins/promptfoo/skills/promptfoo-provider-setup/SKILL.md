@@ -12,6 +12,10 @@ description: >
 Connect the real system with the smallest reliable provider and a smoke test.
 Read `references/provider-patterns.md` for HTTP and JS/Python wrapper examples.
 
+Before running a Node.js helper or CLI command, follow the
+[shared prerequisite check](references/local-prerequisites.md) for Node/npm and
+Promptfoo. Reuse an already verified environment and its CLI invocation.
+
 ## 1. Discover the contract
 
 Inspect existing configs, route handlers, OpenAPI specs, tests, or API clients.
@@ -70,9 +74,8 @@ Anchor nearby imports to `Path(__file__).resolve().parent`.
 
 ## 4. Validate and smoke-test
 
-Use `npx promptfoo` to resolve the installed CLI, including project-local installs. In the Promptfoo repository, align Node
-with `source ~/.nvm/nvm.sh && nvm use` and substitute `npm run local --`.
-Install or upgrade with `npx promptfoo@latest` only when needed.
+Use the CLI invocation verified by the shared prerequisite check in place of
+`npx promptfoo` below.
 
 ```bash
 npx promptfoo validate config -c path/to/promptfooconfig.yaml
