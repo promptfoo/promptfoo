@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: The Grid AI capability tiers via the OpenAI-compatible provider
+
+prompts:
+  - 'Answer concisely: {{question}}'
+
+providers:
+  - id: openai:chat:text-standard
+    label: The Grid AI text-standard
+    config: &grid
+      apiBaseUrl: https://api.thegrid.ai/v1
+      apiKeyEnvar: THEGRID_API_KEY
+      temperature: 0
+      max_tokens: 1024
+      showThinking: false
+
+  - id: openai:chat:text-prime
+    label: The Grid AI text-prime
+    config: *grid
+
+tests:
+  - vars:
+      question: >-
+        A warehouse holds 1,248 units. Monday ships 3 pallets of 96 units each,
+        Tuesday receives a return of 45 units, and Wednesday ships 2 pallets of
+        96. How many units remain? Reply with the number only.
+    assert:
+      - type: regex
+        value: '^\s*813\.?\s*$'
+
+  # Check the format and word choice of the answer.
+  - vars:
+      question: >-
+        Summarise why HTTP 429 differs from HTTP 503, in exactly two sentences.
+        Do not use the words "rate" or "limit".
+    assert:
+      - type: javascript
+        value: |
+          const text = output.trim();
+          const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+          const banned = /\b(rate|limit)\b/i.test(text);
+          return sentences.length === 2 && !banned;
+
+  - vars:
+      question: >-
+        Extract the order id, the total in USD, and the status from this line as
+        JSON with keys id, total_usd, status, and nothing else:
+        "Order A-4471 settled for $128.40 on 2026-03-02."
+    assert:
+      - type: is-json
+        value:
+          type: object
+          required: [id, total_usd, status]
+          additionalProperties: false
+          properties:
+            id:
+              const: A-4471
+            total_usd:
+              type: number
+              const: 128.4
+            status:
+              const: settled
