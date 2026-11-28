@@ -104,6 +104,7 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   foundation: BASE_DOCS_URL,
   'guardrails-eval': BASE_DOCS_URL,
   harmbench: `${BASE_DOCS_URL}/harmbench/`,
+  'openai-guardrails': `${BASE_DOCS_URL}/openai-guardrails/`,
   'toxic-chat': `${BASE_DOCS_URL}/toxic-chat/`,
   harmful: `${BASE_DOCS_URL}/harmful/`,
   bias: `${BASE_DOCS_URL}/bias/`,

@@ -63,6 +63,7 @@ export const DATASET_PLUGINS = [
   'cyberseceval',
   'donotanswer',
   'harmbench',
+  'openai-guardrails',
   'toxic-chat',
   'aegis',
   'pliny',
