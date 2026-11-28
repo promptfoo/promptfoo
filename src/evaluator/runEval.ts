@@ -989,6 +989,21 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
   TokenUsageTracker.getInstance().trackResponseUsage(trackingId, response);
 }
 
+/**
+ * Builds the error for a provider response without output. Keeps the "No output" prefix and
+ * adds the provider's finish reason, if any, so a token-limit stop (for example a reasoning
+ * model that spends `max_tokens` thinking) is distinguishable from an integration error.
+ */
+function getMissingOutputError(finishReason: ProviderResponse['finishReason']): string {
+  if (!finishReason) {
+    return 'No output';
+  }
+  if (finishReason === 'length') {
+    return 'No output (finish reason: length). The provider hit its token limit before returning output; increase max_tokens or reduce reasoning effort.';
+  }
+  return `No output (finish reason: ${finishReason})`;
+}
+
 async function applyRunEvalResponseOutcome({
   abortSignal,
   deferGrading,
@@ -1040,7 +1055,7 @@ async function applyRunEvalResponseOutcome({
     // scans. An intentional empty string still proceeds to the assertions.
     ret.success = false;
     ret.score = 0;
-    ret.error = 'No output';
+    ret.error = getMissingOutputError(response.finishReason);
     ret.failureReason = ResultFailureReason.ERROR;
     return;
   }

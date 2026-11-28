@@ -877,6 +877,39 @@ describe('runEval', () => {
   );
 
   it.each([
+    {
+      finishReason: 'length',
+      expected:
+        'No output (finish reason: length). The provider hit its token limit before returning output; increase max_tokens or reduce reasoning effort.',
+    },
+    { finishReason: 'content_filter', expected: 'No output (finish reason: content_filter)' },
+    { finishReason: '', expected: 'No output' },
+  ])(
+    'includes finish reason $finishReason in the missing output error',
+    async ({ finishReason, expected }) => {
+      const provider: ApiProvider = {
+        id: () => 'missing-output-provider',
+        callApi: vi.fn().mockResolvedValue({ output: null, finishReason }),
+      };
+      const assertion = vi.fn(() => true);
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: { assert: [{ type: 'javascript', value: assertion }] },
+        conversations: {},
+        registers: {},
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.error).toBe(expected);
+      expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(assertion).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
     { output: '' },
     { output: 'null' },
     { output: 'undefined' },
