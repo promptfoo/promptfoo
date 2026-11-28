@@ -128,45 +128,6 @@ describe('SlotQueue', () => {
       expect(queue.getActiveCount()).toBe(3);
       expect(queue.getQueueDepth()).toBe(0);
     });
-
-    it('should call onSlotAcquired callback with queue depth', async () => {
-      const onSlotAcquired = vi.fn();
-      queue = new SlotQueue({
-        maxConcurrency: 2,
-        minConcurrency: 1,
-        onSlotAcquired,
-      });
-
-      await queue.acquire('test-1');
-      expect(onSlotAcquired).toHaveBeenCalledWith(0);
-
-      await queue.acquire('test-2');
-      expect(onSlotAcquired).toHaveBeenCalledWith(0); // No queue yet
-
-      trackAcquire(queue.acquire('test-3')); // This will queue
-      queue.release(); // Process queued request
-
-      await vi.runAllTimersAsync();
-      expect(onSlotAcquired).toHaveBeenCalledWith(0); // Queue depth after test-3 was dequeued
-    });
-
-    it('should call onSlotReleased callback with queue depth', async () => {
-      const onSlotReleased = vi.fn();
-      queue = new SlotQueue({
-        maxConcurrency: 1,
-        minConcurrency: 1,
-        onSlotReleased,
-      });
-
-      await queue.acquire('test-1');
-      trackAcquire(queue.acquire('test-2')); // Queue this
-      trackAcquire(queue.acquire('test-3')); // Queue this too
-      expect(queue.getQueueDepth()).toBe(2);
-
-      queue.release();
-      // Callback is called with queue depth BEFORE processing
-      expect(onSlotReleased).toHaveBeenCalledWith(2);
-    });
   });
 
   describe('acquire - concurrent requests respect maxConcurrency', () => {

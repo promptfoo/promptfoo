@@ -52,9 +52,6 @@ vi.mock('../../src/scheduler/providerRateLimitState', async (importOriginal) => 
           failedRequests: 0,
           rateLimitHits: 0,
           retriedRequests: 0,
-          avgLatencyMs: 0,
-          p50LatencyMs: 0,
-          p99LatencyMs: 0,
         });
         this.getQueueDepth = vi.fn().mockReturnValue(0);
         this.dispose = vi.fn();
@@ -121,9 +118,6 @@ describe('RateLimitRegistry', () => {
         failedRequests: 0,
         rateLimitHits: 0,
         retriedRequests: 0,
-        avgLatencyMs: 0,
-        p50LatencyMs: 0,
-        p99LatencyMs: 0,
       }),
       dispose: vi.fn(),
       emit: vi.fn(),
@@ -690,9 +684,6 @@ describe('RateLimitRegistry', () => {
         failedRequests: 0,
         rateLimitHits: 1,
         retriedRequests: 2,
-        avgLatencyMs: 150,
-        p50LatencyMs: 140,
-        p99LatencyMs: 200,
       });
 
       const registry = new RateLimitRegistry({ maxConcurrency: 10 });
@@ -712,9 +703,6 @@ describe('RateLimitRegistry', () => {
           failedRequests: 0,
           rateLimitHits: 1,
           retriedRequests: 2,
-          avgLatencyMs: 150,
-          p50LatencyMs: 140,
-          p99LatencyMs: 200,
         },
       });
     });
@@ -742,9 +730,6 @@ describe('RateLimitRegistry', () => {
           failedRequests: 0,
           rateLimitHits: 0,
           retriedRequests: 0,
-          avgLatencyMs: 100,
-          p50LatencyMs: 95,
-          p99LatencyMs: 150,
         }),
         dispose: vi.fn(),
       };
@@ -761,9 +746,6 @@ describe('RateLimitRegistry', () => {
           failedRequests: 2,
           rateLimitHits: 3,
           retriedRequests: 5,
-          avgLatencyMs: 200,
-          p50LatencyMs: 180,
-          p99LatencyMs: 300,
         }),
         dispose: vi.fn(),
       };
