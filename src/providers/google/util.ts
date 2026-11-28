@@ -32,6 +32,7 @@ import { InvalidToolSchemaError } from '../toolSchemaError';
 import { loadCredentials } from './auth';
 import {
   GEMINI_4_MODELS,
+  GEMINI_4_XHIGH_MODELS,
   GEMINI_FLASH_MODELS,
   GOOGLE_MODELS,
   type GoogleModel,
@@ -458,7 +459,7 @@ export function removeDeprecatedGeminiGenerationParams<T>(
     modelName.startsWith('gemini-3.7-flash') ||
     modelName === 'gemini-flash-latest'
   ) {
-    const supportedThinkingLevels = modelName.startsWith('gemini-4-hydrogen')
+    const supportedThinkingLevels = GEMINI_4_XHIGH_MODELS.some((id) => modelName.startsWith(id))
       ? 'LOW, MEDIUM, HIGH, or XHIGH'
       : 'LOW, MEDIUM, or HIGH';
     for (const config of [sanitized.thinkingConfig, sanitized.thinking_config]) {

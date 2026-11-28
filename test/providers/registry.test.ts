@@ -2886,6 +2886,14 @@ describe('Provider Registry', () => {
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
       [
+        'google:gemini-4-carbon',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-4-neon',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
         'google:gemini-4-argon',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
@@ -2924,6 +2932,18 @@ describe('Provider Registry', () => {
       [
         'palm:chat-bison',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'vertex:gemini-4-carbon',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-4-carbon-cyber-permissive',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-4-neon',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
       [
         'vertex:gemini-4-argon',
@@ -3171,6 +3191,8 @@ describe('Provider Registry', () => {
     );
 
     it.each([
+      ['google:interactions:gemini-4-carbon', true],
+      ['google:interactions:gemini-4-neon', true],
       ['google:interactions:gemini-4-argon', true],
       ['google:interactions:gemini-4-hydrogen', true],
       ['google:interactions:gemini-omni-flash-preview', true],
@@ -3202,6 +3224,8 @@ describe('Provider Registry', () => {
     );
 
     it.each([
+      'google:interactions:gemini-4-carbon',
+      'google:interactions:gemini-4-neon',
       'google:interactions:gemini-4-argon',
       'google:interactions:gemini-4-hydrogen',
       'google:interactions:gemini-robotics-er-2-preview',
@@ -3237,6 +3261,8 @@ describe('Provider Registry', () => {
     it.each([
       'google:interactions:gemini-3.5-flash',
       'palm:interactions:gemini-3.5-flash',
+      'vertex:interactions:gemini-4-carbon',
+      'vertex:interactions:gemini-4-neon',
       'vertex:interactions:gemini-4-argon',
       'vertex:interactions:gemini-4-hydrogen',
       'vertex:interactions:gemini-robotics-er-2-preview',

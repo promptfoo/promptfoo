@@ -10,7 +10,12 @@ const NATIVE_INTERACTIONS_MODELS = new Set([
 ]);
 
 // Chat models that also accept google:interactions: but default to generateContent.
-const INTERACTIONS_OPT_IN_MODELS = new Set(['gemini-4-argon', 'gemini-4-hydrogen']);
+const INTERACTIONS_OPT_IN_MODELS = new Set([
+  'gemini-4-carbon',
+  'gemini-4-neon',
+  'gemini-4-hydrogen',
+  'gemini-4-argon',
+]);
 
 function isLiveOnlyModel(modelName: string): boolean {
   return (

@@ -45,19 +45,29 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'claude-opus-4-6', label: 'Anthropic Claude 4.6 Opus' },
   { value: 'claude-sonnet-4-5', label: 'Anthropic Claude 4.5 Sonnet' },
   { value: 'claude-haiku-4-5', label: 'Anthropic Claude 4.5 Haiku' },
-  { value: 'google:gemini-4-argon', label: 'Google Gemini 4 Argon' },
+  { value: 'google:gemini-4-carbon', label: 'Google Gemini 4 Carbon' },
+  { value: 'google:gemini-4-neon', label: 'Google Gemini 4 Neon' },
   { value: 'google:gemini-4-hydrogen', label: 'Google Gemini 4 Hydrogen' },
+  { value: 'google:gemini-4-argon', label: 'Google Gemini 4 Argon' },
   { value: DEFAULT_GOOGLE_TARGET_ID, label: 'Google Gemini 3.8 Flash' },
   { value: 'google:gemini-3.7-flash', label: 'Google Gemini 3.7 Flash' },
   { value: 'google:gemini-3.6-flash', label: 'Google Gemini 3.6 Flash' },
   { value: 'google:gemini-3.5-flash-lite', label: 'Google Gemini 3.5 Flash-Lite' },
   {
-    value: 'vertex:gemini-4-argon',
-    label: 'Google Vertex AI Gemini 4 Argon',
+    value: 'vertex:gemini-4-carbon',
+    label: 'Google Vertex AI Gemini 4 Carbon',
+  },
+  {
+    value: 'vertex:gemini-4-neon',
+    label: 'Google Vertex AI Gemini 4 Neon',
   },
   {
     value: 'vertex:gemini-4-hydrogen',
     label: 'Google Vertex AI Gemini 4 Hydrogen',
+  },
+  {
+    value: 'vertex:gemini-4-argon',
+    label: 'Google Vertex AI Gemini 4 Argon',
   },
   {
     value: DEFAULT_VERTEX_TARGET_ID,
