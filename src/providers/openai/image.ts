@@ -1,3 +1,4 @@
+import { BLOB_MAX_SIZE } from '../../blobs/constants';
 import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
@@ -5,6 +6,7 @@ import { ellipsize } from '../../util/text';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
+import { downloadExternalImage } from './imageDownload';
 import { type ImageEditOptions, validateImageEditConfig } from './imageEdit';
 import {
   appendOpenAiApiPath,
@@ -50,6 +52,7 @@ const GPT_IMAGE2_MIN_PIXELS = 655_360;
 const GPT_IMAGE2_MAX_PIXELS = 8_294_400;
 const DATED_GPT_IMAGE2_MODEL_PATTERN = /^gpt-image-2-\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_SIZE = '1024x1024';
+const MAX_IMAGE_BATCH_SIZE = 10;
 
 export const DALLE2_COSTS: Record<DallE2Size, number> = {
   '256x256': 0.016,
@@ -651,54 +654,138 @@ function getMimeTypeForOutputFormat(outputFormat?: string): string {
   }
 }
 
-function inferMimeTypeFromUrl(url: string): string | undefined {
-  try {
-    const pathname = new URL(url).pathname.toLowerCase();
-    if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) {
-      return 'image/jpeg';
-    }
-    if (pathname.endsWith('.webp')) {
-      return 'image/webp';
-    }
-    if (pathname.endsWith('.gif')) {
-      return 'image/gif';
-    }
-    if (pathname.endsWith('.svg')) {
-      return 'image/svg+xml';
-    }
-    if (pathname.endsWith('.png')) {
-      return 'image/png';
-    }
-  } catch {
-    // Ignore invalid URLs and fall back to undefined mime type.
-  }
+function isExternalImageUrl(url: string): boolean {
+  return url === url.trim() && URL.parse(url)?.protocol === 'https:';
+}
 
-  return undefined;
+function formatImageMarkdown(prompt: string, imageSrc: string): string {
+  const sanitizedPrompt = prompt
+    .replace(/\r?\n|\r/g, ' ')
+    .replace(/\[/g, '(')
+    .replace(/\]/g, ')');
+  const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+
+  return `![${ellipsizedPrompt}](${imageSrc})`;
+}
+
+const INLINE_IMAGE =
+  /^data:image\/(?:png|jpe?g|gif|webp|avif|svg\+xml);base64,[A-Za-z0-9+/]+={0,2}$/i;
+
+function getInlineImage(
+  item: { b64_json?: unknown; url?: unknown } | null,
+  outputFormat?: string,
+): ImageOutput | null {
+  if (typeof item?.b64_json === 'string' && /^[A-Za-z0-9+/]+={0,2}$/.test(item.b64_json)) {
+    const mimeType = getMimeTypeForOutputFormat(outputFormat);
+    return { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
+  }
+  if (typeof item?.url === 'string' && INLINE_IMAGE.test(item.url)) {
+    return { data: item.url };
+  }
+  return null;
 }
 
 export function buildStructuredImageOutputs(
   data: any,
   outputFormat?: string,
 ): ImageOutput[] | undefined {
-  if (!Array.isArray(data.data) || data.data.length === 0) {
+  if (!Array.isArray(data?.data) || !data.data.length || data.data.length > MAX_IMAGE_BATCH_SIZE) {
+    return undefined;
+  }
+  const images: ImageOutput[] = [];
+  for (const item of data.data) {
+    const image = getInlineImage(item, outputFormat);
+    if (!image) {
+      return undefined;
+    }
+    images.push(image);
+  }
+  return images;
+}
+
+export async function buildSafeStructuredImageOutputs(
+  data: any,
+  outputFormat?: string,
+  responseFormat?: string,
+  abortSignal?: AbortSignal,
+): Promise<ImageOutput[] | undefined> {
+  if (
+    !Array.isArray(data?.data) ||
+    data.data.length === 0 ||
+    data.data.length > MAX_IMAGE_BATCH_SIZE
+  ) {
     return undefined;
   }
 
-  return data.data
-    .map((item: any): ImageOutput | null => {
-      if (item.b64_json) {
-        const mimeType = getMimeTypeForOutputFormat(outputFormat);
-        return { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), getRequestTimeoutMs());
+  const signal = abortSignal
+    ? AbortSignal.any([controller.signal, abortSignal])
+    : controller.signal;
+  const images: ImageOutput[] = [];
+  let remainingBytes = BLOB_MAX_SIZE;
+  try {
+    for (const item of data.data) {
+      if (signal.aborted || remainingBytes <= 0) {
+        return undefined;
       }
-
-      if (item.url) {
-        const mimeType = inferMimeTypeFromUrl(item.url);
-        return mimeType ? { data: item.url, mimeType } : { data: item.url };
+      if (responseFormat === 'b64_json' && !item?.b64_json) {
+        return undefined;
       }
+      let image = getInlineImage(item, outputFormat);
+      if (
+        !image &&
+        responseFormat !== 'b64_json' &&
+        typeof item?.url === 'string' &&
+        isExternalImageUrl(item.url)
+      ) {
+        image = await downloadExternalImage(item.url, signal, remainingBytes);
+      }
+      if (!image?.data || signal.aborted) {
+        return undefined;
+      }
+      remainingBytes -= Buffer.byteLength(
+        image.data.slice(image.data.indexOf(',') + 1),
+        image.data.includes(';base64,') ? 'base64' : 'utf8',
+      );
+      if (remainingBytes < 0) {
+        return undefined;
+      }
+      images.push(image);
+    }
+    return images;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
-      return null;
-    })
-    .filter((item: ImageOutput | null): item is ImageOutput => item !== null);
+export function formatStructuredImageOutput(
+  data: any,
+  prompt: string,
+  responseFormat?: string,
+  _outputFormat?: string,
+  images?: ImageOutput[],
+): string | { error: string } {
+  const items = Array.isArray(data?.data) ? data.data : [];
+  if (!images && items.length > 1) {
+    return { error: 'One or more generated images could not be downloaded safely.' };
+  }
+  const first = items[0];
+  if (responseFormat === 'b64_json' && (typeof first?.b64_json !== 'string' || !first.b64_json)) {
+    return { error: 'No base64 image data found in response' };
+  }
+  const image = images?.[0];
+  if (image?.data && INLINE_IMAGE.test(image.data)) {
+    return image.data;
+  }
+  const uri = image?.blobRef?.uri;
+  if (responseFormat !== 'b64_json' && uri && /^promptfoo:\/\/blob\/[a-f0-9]{64}$/i.test(uri)) {
+    return formatImageMarkdown(prompt, uri);
+  }
+  if (responseFormat !== 'b64_json' && (typeof first?.url !== 'string' || !first.url)) {
+    return { error: 'No image URL found in response' };
+  }
+  return { error: 'No usable image data: the generated image could not be downloaded safely.' };
 }
 
 export function formatOutput(
@@ -707,29 +794,8 @@ export function formatOutput(
   responseFormat?: string,
   outputFormat?: string,
 ): string | { error: string } {
-  const image = Array.isArray(data?.data) ? data.data[0] : undefined;
-
-  if (responseFormat === 'b64_json') {
-    const b64Json = image?.b64_json;
-    if (typeof b64Json !== 'string' || !b64Json) {
-      return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
-    }
-
-    return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;
-  } else {
-    const url = image?.url;
-    if (typeof url !== 'string' || !url) {
-      return { error: `No image URL found in response: ${JSON.stringify(data)}` };
-    }
-
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-
-    return `![${ellipsizedPrompt}](${url})`;
-  }
+  const images = buildStructuredImageOutputs(data, outputFormat);
+  return formatStructuredImageOutput(data, prompt, responseFormat, outputFormat, images);
 }
 
 export function prepareRequestBody(
@@ -915,41 +981,72 @@ export async function processApiResponse(
   n: number = 1,
   outputFormat?: string,
   billingConfig: OpenAiImageOptions = {},
+  deleteFromCache?: () => Promise<void>,
+  abortSignal?: AbortSignal,
 ): Promise<ProviderResponse> {
+  const evictFromCache = async () => {
+    if (!abortSignal?.aborted) {
+      try {
+        await deleteFromCache?.();
+      } catch {
+        logger.warn('[OpenAI Image] Failed to evict invalid response from cache');
+      }
+    }
+  };
+
   if (data?.error) {
+    await evictFromCache();
     return {
       error: formatOpenAiError(data),
     };
   }
 
-  try {
-    const formattedOutput = formatOutput(data, prompt, responseFormat, outputFormat);
-    if (typeof formattedOutput === 'object') {
-      return formattedOutput;
-    }
+  // SVG also bills an authoring model whose usage is not itemized in the image ledger.
+  const exactUsageCost =
+    isGptImage26(model) && outputFormat === 'svg'
+      ? undefined
+      : calculateOpenAIUsageCost(model, billingConfig, data?.usage, { cachedResponse: cached });
+  const cost = exactUsageCost ?? (cached ? 0 : calculateImageCost(model, size, quality, n));
+  const tokenUsage = getImageTokenUsage(data ?? {}, cached);
 
-    // SVG also bills an authoring model whose usage is not itemized in the image ledger.
-    const exactUsageCost =
-      isGptImage26(model) && outputFormat === 'svg'
-        ? undefined
-        : calculateOpenAIUsageCost(model, billingConfig, data.usage, { cachedResponse: cached });
-    const cost = exactUsageCost ?? (cached ? 0 : calculateImageCost(model, size, quality, n));
-    const tokenUsage = getImageTokenUsage(data, cached);
-    const images = buildStructuredImageOutputs(data, outputFormat);
+  const generation: ProviderResponse = {
+    cached,
+    latencyMs,
+    ...(cost === undefined ? {} : { cost }),
+    ...(tokenUsage ? { tokenUsage } : {}),
+    ...(data?.usage ? { metadata: { usage: data.usage } } : {}),
+  };
+
+  try {
+    const images = await buildSafeStructuredImageOutputs(
+      data,
+      outputFormat,
+      responseFormat,
+      abortSignal,
+    );
+    const formattedOutput = formatStructuredImageOutput(
+      data,
+      prompt,
+      responseFormat,
+      outputFormat,
+      images,
+    );
+    if (typeof formattedOutput === 'object') {
+      await evictFromCache();
+      return { ...generation, ...formattedOutput };
+    }
 
     return {
       output: formattedOutput,
       images,
-      cached,
-      latencyMs,
-      ...(cost === undefined ? {} : { cost }),
-      ...(tokenUsage ? { tokenUsage } : {}),
-      ...(data.usage ? { metadata: { usage: data.usage } } : {}),
+      ...generation,
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
-  } catch (err) {
+  } catch {
+    await evictFromCache();
     return {
-      error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
+      ...generation,
+      error: 'Invalid generated image data',
     };
   }
 }
@@ -968,7 +1065,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
@@ -1050,11 +1147,31 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       config.n ?? 1,
       outputFormat,
       config,
+      response.deleteFromCache,
+      callApiOptions?.abortSignal,
     );
-    if (result.error) {
-      await response.deleteFromCache?.().catch((error) => {
-        logger.warn('[OpenAI Image] Failed to evict invalid response from cache', { error });
-      });
+    const images = result.images;
+    if (
+      images &&
+      data.data.some(
+        (item: { url?: string }) => typeof item.url === 'string' && isExternalImageUrl(item.url),
+      )
+    ) {
+      try {
+        await response.updateCache?.(
+          {
+            ...data,
+            data: data.data.map((item: object, index: number) => ({
+              ...item,
+              url: images[index].data,
+            })),
+          },
+          status,
+          statusText,
+        );
+      } catch (error) {
+        logger.warn('[OpenAI Image] Failed to cache image data', { error: String(error) });
+      }
     }
     return result;
   }

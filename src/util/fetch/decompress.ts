@@ -1,7 +1,9 @@
 import { type Dispatcher, interceptors } from 'undici';
 
 /** Create the required decoder without exposing undici's internal API notice to CLI users. */
-export function createDecompressionInterceptor(): Dispatcher.DispatchInterceptor {
+export function createDecompressionInterceptor(
+  maxSize = 64 * 1024 * 1024,
+): Dispatcher.DispatchInterceptor {
   const originalEmitWarning = process.emitWarning;
   // undici emits this notice synchronously when its factory is first called.
   // Keep the filter scoped to that call so unrelated runtime warnings still surface.
@@ -19,7 +21,7 @@ export function createDecompressionInterceptor(): Dispatcher.DispatchInterceptor
 
   try {
     // Keep the 64 MiB response limit explicit: undici 7.30 defaults to unlimited.
-    return interceptors.decompress({ skipErrorResponses: false, maxSize: 64 * 1024 * 1024 });
+    return interceptors.decompress({ skipErrorResponses: false, maxSize });
   } finally {
     if (process.emitWarning === wrappedEmitWarning) {
       process.emitWarning = originalEmitWarning;

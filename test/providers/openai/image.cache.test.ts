@@ -59,11 +59,7 @@ describe.each(['url', 'b64_json'] as const)('image response recovery (%s)', (res
         const recovered = await provider.callApi('draw a capybara');
         expect(recovered.error).toBeUndefined();
         expect(recovered.cached).toBe(false);
-        expect(recovered.output).toBe(
-          responseFormat === 'url'
-            ? '![draw a capybara](https://example.com/image.png)'
-            : 'data:image/png;base64,aW1hZ2U=',
-        );
+        expect(recovered.output).toBe('data:image/png;base64,aW1hZ2U=');
         const cached = await provider.callApi('draw a capybara');
         expect(cached.output).toBe(recovered.output);
         expect(cached.cached).toBe(true);

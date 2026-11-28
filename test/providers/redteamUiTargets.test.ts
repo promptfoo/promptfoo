@@ -685,14 +685,14 @@ describe('redteam UI initial target runtime contracts', () => {
   });
 
   it('routes Fal to image generation and returns the image response', async () => {
-    subscribe.mockResolvedValue({
-      data: { images: [{ url: 'https://fixture.invalid/image.png' }] },
-    });
+    const image = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+    subscribe.mockResolvedValue({ data: { images: [{ url: image }] } });
     const target = initialConfig('fal');
     const provider = await loadApiProvider(target.id, { options: target });
     expect(provider.constructor.name).toBe('FalImageGenerationProvider');
     expect(await provider.callApi('A blue circle')).toMatchObject({
-      output: '![A blue circle](https://fixture.invalid/image.png)',
+      output: image,
+      images: [{ data: image }],
     });
     expect(subscribe).toHaveBeenCalledWith('fal-ai/flux/dev', {
       input: expect.objectContaining({ prompt: 'A blue circle' }),

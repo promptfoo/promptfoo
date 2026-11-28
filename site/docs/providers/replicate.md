@@ -136,15 +136,13 @@ Supported environment variables for images:
 - `REPLICATE_API_TOKEN` - Your Replicate API key.
 - `REPLICATE_API_KEY` - An alternative to `REPLICATE_API_TOKEN` for your API key.
 
-:::warning
-**Important:** Replicate image URLs are temporary and typically expire after 24 hours. If you need to preserve generated images, download them immediately or use the automated download hook described below.
-:::
-
 ## Downloading Generated Images
 
-Since Replicate image URLs expire, you may want to automatically download and save images during evaluation. You can use an `afterEach` hook for this purpose:
+Promptfoo downloads generated images from public HTTPS URLs before saving evaluation results. Downloads use the configured proxy and TLS settings, reject redirects, and enforce image type and size limits. A failed download produces a provider error.
 
-Create a file `save-images.js`:
+Image batches accept up to ten images and 50 MiB of decoded data. URL downloads run one at a time within a shared request timeout, and their bytes must match a supported raster image type.
+
+Image bytes use Promptfoo's existing media storage. Results contain inline data or stored blob references, so the viewer does not depend on temporary Replicate URLs. A separate download hook is no longer needed.
 
 ```javascript
 const fs = require('fs');

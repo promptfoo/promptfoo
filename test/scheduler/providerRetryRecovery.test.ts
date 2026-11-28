@@ -30,6 +30,8 @@ vi.mock('ai', async (importOriginal) => ({
 }));
 
 const failed = { error: { message: 'Rate limit exceeded', code: 'rate_limit_exceeded' } };
+const imageBase64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aT8UAAAAASUVORK5CYII=';
 const chatSuccess = { choices: [{ finish_reason: 'stop', message: { content: 'recovered' } }] };
 const responseSuccess = {
   id: 'resp_fixture',
@@ -85,7 +87,7 @@ describe('scheduler recovery outside provider transport retries', () => {
     [
       'image',
       (config: any) => new OpenAiImageProvider('gpt-image-2.5-flare', { config }),
-      { data: [{ b64_json: 'recovered' }] },
+      { data: [{ b64_json: imageBase64 }] },
     ],
     [
       'Responses',
@@ -113,7 +115,7 @@ describe('scheduler recovery outside provider transport retries', () => {
       vi.stubGlobal('fetch', fetch);
       const result = await invoke(create({ apiKey: 'fixture', maxRetries }));
       expect(result.error).toBeUndefined();
-      expect(result.output).toContain('recovered');
+      expect(result.output).toContain(_name === 'image' ? imageBase64 : 'recovered');
       expect(fetch).toHaveBeenCalledTimes(maxRetries + 1);
     });
   });

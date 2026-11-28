@@ -2,9 +2,9 @@ import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { resolveProviderApiKey } from '../credentials';
 import {
-  buildStructuredImageOutputs,
+  buildSafeStructuredImageOutputs,
   callOpenAiImageApi,
-  formatOutput,
+  formatStructuredImageOutput,
   OpenAiImageProvider,
 } from '../openai/image';
 import { getRequestTimeoutMs } from '../shared';
@@ -167,7 +167,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(
@@ -222,8 +222,14 @@ export class XAIImageProvider extends OpenAiImageProvider {
     let data: any, status: number, statusText: string;
     let cached = false;
     let latencyMs: number | undefined;
+    let deleteFromCache: (() => Promise<void>) | undefined;
+    const evictFromCache = async () => {
+      if (!callApiOptions?.abortSignal?.aborted) {
+        await (deleteFromCache ?? data?.deleteFromCache)?.();
+      }
+    };
     try {
-      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache } = await callOpenAiImageApi(
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
@@ -236,50 +242,62 @@ export class XAIImageProvider extends OpenAiImageProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
+      await evictFromCache();
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
     if (data.error) {
-      await data?.deleteFromCache?.();
+      await evictFromCache();
       return {
         error: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
       };
     }
 
-    try {
-      const formattedOutput = formatOutput(data, prompt, responseFormat);
-      if (typeof formattedOutput === 'object') {
-        return formattedOutput;
-      }
+    const reportedCost = getXAICostInUsd(data.usage);
+    const cost = cached
+      ? 0
+      : (reportedCost ??
+        this.calculateImageCost(
+          model,
+          config.n || 1,
+          config.resolution,
+          this.countSourceImages(config),
+          config.quality,
+          isEdit,
+        ));
+    const generation = { cached, latencyMs, cost };
 
-      const reportedCost = getXAICostInUsd(data.usage);
-      const cost = cached
-        ? 0
-        : (reportedCost ??
-          this.calculateImageCost(
-            model,
-            config.n || 1,
-            config.resolution,
-            this.countSourceImages(config),
-            config.quality,
-            isEdit,
-          ));
-      const images = buildStructuredImageOutputs(data);
+    try {
+      const images = await buildSafeStructuredImageOutputs(
+        data,
+        undefined,
+        responseFormat,
+        callApiOptions?.abortSignal,
+      );
+      const formattedOutput = formatStructuredImageOutput(
+        data,
+        prompt,
+        responseFormat,
+        undefined,
+        images,
+      );
+      if (typeof formattedOutput === 'object') {
+        await evictFromCache();
+        return { ...generation, ...formattedOutput };
+      }
 
       return {
         output: formattedOutput,
         images,
-        cached,
-        latencyMs,
-        cost,
+        ...generation,
         ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };
     } catch (err) {
-      await data?.deleteFromCache?.();
+      await evictFromCache();
       return {
+        ...generation,
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
