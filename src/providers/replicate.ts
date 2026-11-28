@@ -657,14 +657,14 @@ export class ReplicateImageProvider extends ReplicateProvider {
 
     if (!response) {
       const input: any = {
-        prompt,
+        prompt: `${this.config.prompt?.prefix ?? ''}${prompt}${this.config.prompt?.suffix ?? ''}`,
         width: this.config.width || 768,
         height: this.config.height || 768,
       };
 
       // Add other config options, excluding internal ones
       Object.keys(this.config).forEach((key) => {
-        if (!['apiKey', 'width', 'height'].includes(key)) {
+        if (!['apiKey', 'width', 'height', 'prompt'].includes(key)) {
           input[key] = this.config[key];
         }
       });
