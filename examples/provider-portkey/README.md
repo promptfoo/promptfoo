@@ -1,21 +1,26 @@
 # provider-portkey (Portkey Test)
 
-You can run this example with:
+Install the example:
 
 ```bash
 npx promptfoo@latest init --example provider-portkey
 cd provider-portkey
 ```
 
-There are two examples:
+Choose a config and set its required environment variables:
 
-- prompt_example.yaml shows how to pull from portkey's prompt management platform. It requires you to set PORTKEY_API_KEY and OPENAI_API_KEY environment variables. Replace the portkey prompt with your own portkey prompt id.
-- provider_example.yaml shows how to use portkey's gateway. It requires the PORTKEY_API_KEY environment variable.
+| Config                       | Purpose                                                                                               | Required environment variables      |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `prompt_example.yaml`        | Load a saved Portkey prompt and call OpenAI. Replace the prompt ID with your own.                     | `PORTKEY_API_KEY`, `OPENAI_API_KEY` |
+| `provider_example.yaml`      | Call OpenAI through the Portkey gateway.                                                              | `PORTKEY_API_KEY`, `OPENAI_API_KEY` |
+| `model_catalog_example.yaml` | Use credentials stored in Portkey's model catalog. Replace the provider slug and model with your own. | `PORTKEY_API_KEY`                   |
 
-Then run:
+Run the selected config:
 
 ```bash
-promptfoo eval
+promptfoo eval -c prompt_example.yaml
+promptfoo eval -c provider_example.yaml
+promptfoo eval -c model_catalog_example.yaml
 ```
 
-Afterwards, you can view the results by running `promptfoo view`
+Run `promptfoo view` to inspect the results.
