@@ -424,8 +424,37 @@ export class MCPClient {
     }
   }
 
+  private getToolRoutes(): { serverKey: string; tool: MCPTool; exposedName: string }[] {
+    const routes = Array.from(this.tools.entries()).flatMap(([serverKey, tools], index) =>
+      tools.map((tool) => ({ serverKey, serverOrdinal: index + 1, tool, exposedName: tool.name })),
+    );
+    const counts = new Map<string, number>();
+    for (const { tool } of routes) {
+      counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
+    }
+
+    // Keep names from non-colliding servers unchanged, and avoid aliasing a real tool.
+    const occupied = new Set(routes.map(({ tool }) => tool.name));
+    for (const route of routes) {
+      if (counts.get(route.tool.name) === 1) {
+        continue;
+      }
+      // The internal server key can be a signed URL or a private filesystem path.
+      const prefix = `mcp_${route.serverOrdinal}__`;
+      const toolName = route.tool.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+      let exposedName = prefix + toolName.slice(0, 64 - prefix.length);
+      for (let suffix = 2; occupied.has(exposedName); suffix++) {
+        const ending = `_${suffix}`;
+        exposedName = prefix + toolName.slice(0, 64 - prefix.length - ending.length) + ending;
+      }
+      route.exposedName = exposedName;
+      occupied.add(exposedName);
+    }
+    return routes;
+  }
+
   getAllTools(): MCPTool[] {
-    return Array.from(this.tools.values()).flat();
+    return this.getToolRoutes().map(({ tool, exposedName }) => ({ ...tool, name: exposedName }));
   }
 
   async callTool(
@@ -447,89 +476,80 @@ export class MCPClient {
   ): Promise<MCPToolResult> {
     const timeoutOptions = getEffectiveRequestOptions(this.config);
     const requestOptions = signal ? { ...timeoutOptions, signal } : timeoutOptions;
-    const disconnectedServers: string[] = [];
+    const routes = this.getToolRoutes();
+    // Preserve existing direct callers' first-match behavior for unqualified names.
+    const route =
+      routes.find(({ exposedName }) => exposedName === name) ??
+      routes.find(({ tool }) => tool.name === name);
+    if (!route) {
+      throw new Error(`Tool ${name} not found in any connected MCP server`);
+    }
 
-    // Find which server has this tool
-    for (const [serverKey, serverTools] of this.tools.entries()) {
-      signal?.throwIfAborted();
-      if (!serverTools.some((tool) => tool.name === name)) {
-        continue;
-      }
-      const client = this.clients.get(serverKey);
-      if (!client) {
-        disconnectedServers.push(serverKey);
-        continue;
-      }
+    const client = this.clients.get(route.serverKey);
+    if (!client) {
+      throw new Error(`Tool ${name} is known but its MCP server disconnected`);
+    }
+    signal?.throwIfAborted();
+    try {
+      const finished = new AbortController();
+      const requestSignal = signal ? AbortSignal.any([signal, finished.signal]) : finished.signal;
+      let result;
       try {
-        const finished = new AbortController();
-        const requestSignal = signal ? AbortSignal.any([signal, finished.signal]) : finished.signal;
-        let result;
-        try {
-          result = await waitForPromiseWithAbort(
-            oauthRequestSignal.run(requestSignal, () =>
-              client.callTool(
-                { name, arguments: args },
-                undefined, // use default result schema
-                requestOptions,
-              ),
+        result = await waitForPromiseWithAbort(
+          oauthRequestSignal.run(requestSignal, () =>
+            client.callTool(
+              { name: route.tool.name, arguments: args },
+              undefined, // use default result schema
+              requestOptions,
             ),
-            signal,
-          );
-        } finally {
-          // A timeout can reject the SDK request while a shared token refresh is still pending.
-          // Stop that request's eventual send without cancelling other callers' refreshes.
-          finished.abort();
-        }
-        if (!result.isError) {
-          signal?.throwIfAborted();
-        }
-
-        // Handle different content types appropriately
-        let content = '';
-        if (result?.content) {
-          if (typeof result.content === 'string') {
-            // Try to parse JSON first, fall back to raw string
-            try {
-              const parsed = JSON.parse(result.content);
-              content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
-            } catch {
-              content = result.content;
-            }
-          } else if (Buffer.isBuffer(result.content)) {
-            content = result.content.toString();
-          } else {
-            content = JSON.stringify(result.content);
-          }
-        }
-
-        return {
-          content,
-          ...(result.isError ? { isError: true } : {}),
-          raw: result,
-        };
-      } catch (error) {
-        if (isCallerAbortError(error, signal, { requireReasonMatch: true })) {
-          throw signal!.reason;
-        }
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (this.isDebugEnabled) {
-          logger.error(`Error calling tool ${name}: ${errorMessage}`);
-        }
-        return {
-          content: '',
-          error: errorMessage,
-        };
+          ),
+          signal,
+        );
+      } finally {
+        // A timeout can reject the SDK request while a shared token refresh is still pending.
+        // Stop that request's eventual send without cancelling other callers' refreshes.
+        finished.abort();
       }
-    }
+      if (!result.isError) {
+        signal?.throwIfAborted();
+      }
 
-    if (disconnectedServers.length > 0) {
-      const plural = disconnectedServers.length > 1 ? 's are' : ' is';
-      throw new Error(
-        `Tool ${name} is known but MCP server${plural} disconnected: ${disconnectedServers.join(', ')}`,
-      );
-    }
+      // Handle different content types appropriately
+      let content = '';
+      if (result?.content) {
+        if (typeof result.content === 'string') {
+          // Try to parse JSON first, fall back to raw string
+          try {
+            const parsed = JSON.parse(result.content);
+            content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+          } catch {
+            content = result.content;
+          }
+        } else if (Buffer.isBuffer(result.content)) {
+          content = result.content.toString();
+        } else {
+          content = JSON.stringify(result.content);
+        }
+      }
 
-    throw new Error(`Tool ${name} not found in any connected MCP server`);
+      return {
+        content,
+        ...(result.isError ? { isError: true } : {}),
+        raw: result,
+      };
+    } catch (error) {
+      if (isCallerAbortError(error, signal, { requireReasonMatch: true })) {
+        throw signal!.reason;
+      }
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (this.isDebugEnabled) {
+        logger.error(`Error calling tool ${name}: ${errorMessage}`);
+      }
+      return {
+        content: '',
+        error: errorMessage,
+      };
+    }
   }
 
   async cleanup(): Promise<void> {
