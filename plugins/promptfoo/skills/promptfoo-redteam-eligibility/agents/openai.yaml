@@ -1,0 +1,7 @@
+interface:
+  display_name: 'Promptfoo Redteam Eligibility'
+  short_description: 'Assess repositories for AI red teaming'
+  default_prompt: 'Use $promptfoo-redteam-eligibility to assess this repository and report candidates, evidence, and scan readiness.'
+
+policy:
+  allow_implicit_invocation: true

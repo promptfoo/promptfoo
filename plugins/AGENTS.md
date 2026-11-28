@@ -3,13 +3,16 @@
 This directory contains the Promptfoo agent plugin bundle. Read this file before
 editing `plugins/promptfoo` or adding another plugin bundle.
 
-## Promptfoo Plugin (shared Codex + Claude Code bundle)
+## Promptfoo Plugin (shared Codex, Claude Code, and Copilot bundle)
 
 `plugins/promptfoo` is a single bundle published to BOTH marketplaces:
 
 - Codex, via `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json`.
 - Claude Code, via `.claude-plugin/plugin.json` and the repo-root
   `.claude-plugin/marketplace.json`.
+
+Copilot CLI and VS Code also support the Claude plugin and marketplace format;
+reuse that bundle rather than maintaining a separate copy.
 
 One folder serves both because the manifest sidecar directories are disjoint and
 both platforms auto-discover skills from `skills/`. The Codex-only
@@ -19,11 +22,12 @@ Keep both manifests' `version` fields equal, and bump them together whenever the
 published bundle content changes. When a plugin declares an explicit version,
 Claude Code only delivers changed plugin content after that version changes.
 
-Keep the public surface to the four focused skills unless the product decision
+Keep the public surface to the five focused skills unless the product decision
 changes:
 
 - `promptfoo-evals`
 - `promptfoo-provider-setup`
+- `promptfoo-redteam-eligibility`
 - `promptfoo-redteam-setup`
 - `promptfoo-redteam-run`
 
@@ -40,7 +44,7 @@ Each skill should keep:
 
 - `SKILL.md` for concise workflow instructions and routing boundaries
 - `agents/openai.yaml` for UI metadata
-- `references/*.md` for concrete examples and longer patterns
+- `references/*.md` when concrete examples or longer patterns are needed
 - `scripts/*` only when deterministic helper code is useful
 
 Keep examples one reference hop away from `SKILL.md`; avoid README-style files
@@ -66,6 +70,7 @@ From the repo root:
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 python3 "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" plugins/promptfoo/skills/promptfoo-evals
 python3 "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" plugins/promptfoo/skills/promptfoo-provider-setup
+python3 "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" plugins/promptfoo/skills/promptfoo-redteam-eligibility
 python3 "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" plugins/promptfoo/skills/promptfoo-redteam-setup
 python3 "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" plugins/promptfoo/skills/promptfoo-redteam-run
 npx vitest test/agentSkills/promptfooPlugin.test.ts --run
