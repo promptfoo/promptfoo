@@ -45,6 +45,7 @@ export {
   AzureSharedConfigInputJsonSchema,
   AzureSharedConfigInputSchema,
 } from './providerConfig/azure.js';
+export * from './providerConfig/bedrock.js';
 export {
   type HttpProviderConfigInput,
   HttpProviderConfigInputJsonSchema,
