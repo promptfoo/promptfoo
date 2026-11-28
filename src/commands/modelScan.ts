@@ -533,15 +533,18 @@ async function saveAuditRecord(
     },
   };
 
-  const matchedAudit =
-    existingAudit ??
-    (revisionInfo.modelId
-      ? await ModelAudit.findByRevision(
-          revisionInfo.modelId,
-          revisionInfo.revisionSha,
-          revisionInfo.contentHash,
-        )
-      : null);
+  let matchedAudit = existingAudit;
+  const contentHash = revisionInfo.contentHash ?? existingAudit?.contentHash ?? undefined;
+  // Clearing a revision moves the row under the unversioned content index.
+  // Reuse its owner first so another scan of that content cannot collide.
+  if (revisionInfo.modelId && (!matchedAudit || (!revisionInfo.revisionSha && contentHash))) {
+    matchedAudit =
+      (await ModelAudit.findByRevision(
+        revisionInfo.modelId,
+        revisionInfo.revisionSha ?? null,
+        contentHash,
+      )) ?? existingAudit;
+  }
 
   const shouldCreateNewAudit =
     matchedAudit?.contentHash &&
@@ -562,9 +565,7 @@ async function saveAuditRecord(
     matchedAudit.updatedAt = Date.now();
     if (revisionInfo.modelId) {
       matchedAudit.modelId = revisionInfo.modelId;
-    }
-    if (revisionInfo.revisionSha) {
-      matchedAudit.revisionSha = revisionInfo.revisionSha;
+      matchedAudit.revisionSha = revisionInfo.revisionSha ?? null;
     }
     if (revisionInfo.contentHash) {
       matchedAudit.contentHash = revisionInfo.contentHash;

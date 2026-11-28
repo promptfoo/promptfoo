@@ -536,8 +536,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
 
       executedMcpToolCalls += toolUses.length;
+      const inputs = new Map<Anthropic.Messages.ToolUseBlock, Record<string, unknown>>();
       const toolResultBlocks = await Promise.all(
-        toolUses.map((toolUse) => this.callMcpToolForAnthropic(toolUse)),
+        toolUses.map((toolUse) => this.callMcpToolForAnthropic(toolUse, inputs)),
       );
 
       toolUses.forEach((toolUse, index) => {
@@ -545,7 +546,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         toolCalls.push({
           id: toolUse.id,
           name: toolUse.name,
-          input: coerceMcpToolInput(toolUse.input),
+          // Preserve malformed input as evidence, while sending valid input objects below.
+          input: inputs.get(toolUse) ?? toolUse.input,
           output: resultBlock.content,
           is_error: resultBlock.is_error ?? false,
         });
@@ -555,7 +557,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         ...messages,
         {
           role: 'assistant',
-          content: response.content as Anthropic.Messages.ContentBlockParam[],
+          content: response.content.map((block) =>
+            block.type === 'tool_use' ? { ...block, input: inputs.get(block) ?? {} } : block,
+          ) as Anthropic.Messages.ContentBlockParam[],
         },
         {
           role: 'user',
@@ -590,12 +594,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   private async callMcpToolForAnthropic(
     toolUse: Anthropic.Messages.ToolUseBlock,
+    inputs: Map<Anthropic.Messages.ToolUseBlock, Record<string, unknown>>,
   ): Promise<Anthropic.Messages.ToolResultBlockParam> {
     try {
-      const result = await this.mcpClient!.callTool(
-        toolUse.name,
-        coerceMcpToolInput(toolUse.input),
-      );
+      const input = coerceMcpToolInput(toolUse.input);
+      inputs.set(toolUse, input);
+      const result = await this.mcpClient!.callTool(toolUse.name, input);
 
       if (isMcpErrorResult(result)) {
         return {
