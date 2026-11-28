@@ -1,7 +1,8 @@
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
+import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
-import { evalResultsTable } from '../database/tables';
+import { evalResultsTable, evalsTable } from '../database/tables';
 import {
   getStripFlags,
   persistRepeatMetadata,
@@ -37,7 +38,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
-import { invalidateEvaluationCache } from './evalMutation';
+import { invalidateEvaluationCache, notifyEvaluationChanged } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
 export default class EvalResult {
@@ -184,6 +185,73 @@ export default class EvalResult {
     });
     clearCountCache(evalId);
     return returnResults;
+  }
+
+  /** Commit a manual rating and its prompt totals together, then refresh cached views. */
+  static async updateRating(evalId: string, id: string, update: GradingResult) {
+    const db = await getDb();
+    const saved = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .select({ result: evalResultsTable, prompts: evalsTable.prompts })
+        .from(evalResultsTable)
+        .innerJoin(evalsTable, eq(evalsTable.id, evalResultsTable.evalId))
+        .where(and(eq(evalResultsTable.id, id), eq(evalsTable.id, evalId)));
+      if (!row) {
+        return 'missing-result' as const;
+      }
+      const { result, prompts } = row;
+      const metrics = prompts?.[result.promptIdx]?.metrics;
+      if (!metrics) {
+        return 'missing-metrics' as const;
+      }
+
+      const gradingResult = { ...update };
+      const passChange = Number(gradingResult.pass) - Number(result.success);
+      const scoreChange = gradingResult.score - result.score;
+      const stored = result.gradingResult?.componentResults;
+      const previous = Array.isArray(stored)
+        ? stored.filter((component) => component !== null && typeof component === 'object')
+        : [];
+      if (gradingResult.componentResults === undefined) {
+        gradingResult.componentResults = previous.map((component) =>
+          (passChange || scoreChange) && component.assertion?.type === HUMAN_ASSERTION_TYPE
+            ? {
+                ...component,
+                pass: gradingResult.pass,
+                score: gradingResult.score,
+                reason:
+                  typeof gradingResult.reason === 'string'
+                    ? gradingResult.reason
+                    : 'Manual result (overrides all other grading results)',
+              }
+            : component,
+        );
+      }
+      const updated = gradingResult.componentResults ?? [];
+      // Historical counters used truthiness, even for non-boolean legacy verdicts.
+      const assertPassChange =
+        updated.filter((component) => component.pass).length -
+        previous.filter((component) => component.pass).length;
+      metrics.testPassCount += passChange;
+      metrics.testFailCount -= passChange;
+      metrics.score += scoreChange;
+      metrics.assertPassCount += assertPassChange;
+      metrics.assertFailCount += updated.length - previous.length - assertPassChange;
+
+      const rating = {
+        gradingResult: sanitizeGradingResultForDb(gradingResult),
+        success: gradingResult.pass,
+        score: gradingResult.score,
+        updatedAt: getCurrentTimestamp(),
+      };
+      await tx.update(evalResultsTable).set(rating).where(eq(evalResultsTable.id, id));
+      await tx.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, evalId));
+      return new EvalResult({ ...result, ...rating, persisted: true });
+    });
+    if (saved instanceof EvalResult) {
+      notifyEvaluationChanged(evalId);
+    }
+    return saved;
   }
 
   static async findById(id: string) {
