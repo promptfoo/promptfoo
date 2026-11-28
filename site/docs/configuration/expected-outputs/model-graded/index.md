@@ -295,16 +295,19 @@ defaultTest:
   `search-rubric` use capability-specific provider selection and are not affected.
   **Red-team runs (`promptfoo redteam run`):** `RedteamProviderManager` selects `defaultTest.provider`
   _before_ `defaultTest.options.provider`, so setting `defaultTest.options.provider` alone does not
-  override the judge. The reliable pattern is to move the target to the top-level `providers` list
-  and reserve `defaultTest.options.provider` for the judge:
+  override the judge. In this configuration, each role has its own provider.
 
 ```yaml
 providers:
-  - openai:gpt-4.1 # target — no longer in defaultTest.provider
+  - openai:gpt-4.1 # target
 defaultTest:
   options:
-    provider: openai:gpt-6-sol # judge — now effective in both standard and red-team grading
+    provider: openai:gpt-6-astra # judge
+redteam:
+  provider: openai:gpt-6-sol # local attack generator
 ```
+
+For local generation, omitting `redteam.provider` here makes the generator fall back to the judge. When you're signed in to Promptfoo Cloud, supported plugins can use remote generation, which does not use the model set here. To require local generation, set `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`. Plugins that require remote generation will be unavailable.
 
 :::
 
