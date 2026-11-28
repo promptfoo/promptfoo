@@ -365,6 +365,22 @@ describe('cloud utils', () => {
       );
     });
 
+    it.each(['saved-key', ''])(
+      'preserves the named HTTP credential, including a mask (%j)',
+      async (key) => {
+        mockFetchWithProxy.mockResolvedValueOnce(
+          Response.json({
+            config: {
+              id: 'voyage:voyage-4',
+              config: { apiKeyEnvar: 'PRIVATE_VOYAGE_KEY' },
+              env: { PRIVATE_VOYAGE_KEY: key, UNRELATED_KEY: 'ignored' },
+            },
+          }),
+        );
+        expect((await getProviderFromCloud('saved')).env).toEqual({ PRIVATE_VOYAGE_KEY: key });
+      },
+    );
+
     it('keeps the existing HTTP environment normalization', async () => {
       mockFetchWithProxy.mockResolvedValueOnce({
         json: async () => ({

@@ -512,13 +512,11 @@ function renderStructuredImages({
     return node;
   }
 
-  return node ? (
+  return (
     <>
-      {node}
+      {node ?? normalizedText}
       {imageElements}
     </>
-  ) : (
-    imageElements
   );
 }
 
@@ -1561,10 +1559,9 @@ function EvalOutputCell({
         <TruncatedText
           text={node || normalizedText}
           maxLength={
-            renderMarkdown &&
-            (output.images?.length ||
-              isImageProvider(output.provider) ||
-              isVideoProvider(output.provider))
+            output.images?.some((image) => resolveEvalImageOutputSource(image)) ||
+            (renderMarkdown &&
+              (isImageProvider(output.provider) || isVideoProvider(output.provider)))
               ? 0
               : maxTextLength
           }

@@ -5,7 +5,7 @@ import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { resolveProviderApiKey } from '../credentials';
+import { resolveSelectedApiKey } from '../credentials';
 import { loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
 import { encodePcmToWav } from '../pcm';
 import { withGenAIToolSpan } from '../tracing';
@@ -446,7 +446,7 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 };
 
 export class GoogleLiveProvider implements ApiProvider {
-  config: GoogleProviderConfig;
+  config: GoogleProviderConfig & { apiKeyEnvar?: string };
   modelName: string;
   readonly env?: ProviderOptions['env'];
   protected readonly isVertex: boolean = false;
@@ -456,6 +456,10 @@ export class GoogleLiveProvider implements ApiProvider {
     this.modelName = modelName;
     this.config = options.config || {};
     this.env = options.env;
+    const id = options.id;
+    if (id) {
+      this.id = () => id;
+    }
   }
 
   validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
@@ -472,10 +476,7 @@ export class GoogleLiveProvider implements ApiProvider {
 
   getApiKey(): string | undefined {
     // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
-    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
-      'GOOGLE_API_KEY',
-      'GEMINI_API_KEY',
-    ]);
+    return resolveSelectedApiKey(this.config, this.env, ['GOOGLE_API_KEY', 'GEMINI_API_KEY']);
   }
 
   private async getAccessToken(config: CompletionOptions): Promise<string | undefined> {
@@ -492,7 +493,14 @@ export class GoogleLiveProvider implements ApiProvider {
     // Cloud ADC often lacks Gemini API scopes. Do not let an incidental gcloud
     // login override an API key; explicit OAuth credentials still take priority
     // over environment API keys. Vertex overrides this method and uses only OAuth.
-    const apiKey = config.apiKey || (config.credentials ? undefined : this.getApiKey());
+    const apiKey = config.apiKey ?? (config.credentials ? undefined : this.getApiKey());
+    if (
+      (config.apiKey !== undefined ||
+        (!config.credentials && this.config.apiKeyEnvar !== undefined)) &&
+      !apiKey?.trim()
+    ) {
+      throw new Error('The selected Google Live API key is empty or missing.');
+    }
     const accessToken = apiKey ? undefined : await this.getAccessToken(config);
     if (!accessToken && !apiKey) {
       throw new Error(
@@ -883,12 +891,16 @@ export class GoogleLiveProvider implements ApiProvider {
         }
       };
 
-      // Extract transcription config for use in message handler
-      const hasOutputTranscription =
-        !!config.generationConfig?.outputAudioTranscription ||
-        isGemini38Live ||
-        this.isVertex ||
-        (usesRealtimeTextInput && !supportsTextResponse && requestedText);
+      const isRubricGrading = context?.isGrading && context.prompt.label === 'llm-rubric';
+      const outputAudioTranscription =
+        config.generationConfig?.outputAudioTranscription ??
+        (isGemini38Live ||
+        (this.isVertex && !isLiveTranscribe) ||
+        (isRubricGrading && isAudioExpected) ||
+        (usesRealtimeTextInput && !supportsTextResponse && requestedText)
+          ? {}
+          : undefined);
+      const hasOutputTranscription = Boolean(outputAudioTranscription);
 
       const videoFrameCount = contents.reduce(
         (total, content) =>
@@ -1054,12 +1066,14 @@ export class GoogleLiveProvider implements ApiProvider {
         }
 
         const result: ProviderResponse = {
-          output: {
-            text: outputText,
-            toolCall: { functionCalls: function_calls_total },
-            statefulApiState,
-            ...(thinking && { thinking }),
-          },
+          output: isRubricGrading
+            ? outputText
+            : {
+                text: outputText,
+                toolCall: { functionCalls: function_calls_total },
+                statefulApiState,
+                ...(thinking && { thinking }),
+              },
           metadata: {},
         };
 
@@ -1337,20 +1351,13 @@ export class GoogleLiveProvider implements ApiProvider {
           speechConfig: generationSpeechConfig,
           response_modalities: _responseModalities,
           responseModalities: _camelResponseModalities,
-          outputAudioTranscription: configuredOutputAudioTranscription,
+          outputAudioTranscription: _outputAudioTranscription,
           inputAudioTranscription = isLiveTranscribe ? {} : undefined,
           enableAffectiveDialog,
           proactivity,
           ...restGenerationConfig
         } = config.generationConfig || {};
         const speechConfig = generationSpeechConfig ?? config.speechConfig;
-        const outputAudioTranscription =
-          configuredOutputAudioTranscription ??
-          (isGemini38Live ||
-          (this.isVertex && !isLiveTranscribe) ||
-          (usesRealtimeTextInput && !supportsTextResponse && requestedText)
-            ? {}
-            : undefined);
 
         let formattedSpeechConfig;
         if (speechConfig) {

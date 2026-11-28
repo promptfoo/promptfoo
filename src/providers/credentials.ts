@@ -20,6 +20,20 @@ export function resolveProviderApiKey(
   return resolveProviderEnv(env, envars, config?.apiKeyEnvar ? envars : ambientEnvars)?.value;
 }
 
+/** Treat explicitly blank saved credentials and selectors as masks. */
+export function resolveSelectedApiKey(
+  config: CredentialOptions,
+  env: Readonly<Record<string, string | undefined>> | undefined,
+  defaultEnvars: readonly string[],
+): string | undefined {
+  const selected = config.apiKey ?? config.apiKeyEnvar;
+  if (selected !== undefined && !selected.trim()) {
+    return undefined;
+  }
+  const key = resolveProviderApiKey(config, env, defaultEnvars);
+  return key?.trim() ? key : undefined;
+}
+
 export function resolveConfiguredApiKey(provider: {
   config: CredentialOptions;
   env?: Readonly<Record<string, string | undefined>>;
