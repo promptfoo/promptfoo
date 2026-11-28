@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 
 import {
   createResponseHeadersObserver,
+  headerReceiptTimes,
   isResponseHeadersObserverError,
   isResponseHeadersObserverErrorResponse,
   type ResponseHeadersObserver,
@@ -366,7 +367,16 @@ export class ProviderRateLimitState extends EventEmitter {
     isRateLimited: boolean,
     selectedResetAt?: number,
   ): void {
-    const parsed = parseRateLimitHeaders(headers);
+    const parsed = parseRateLimitHeaders(headers, headerReceiptTimes.get(headers));
+    if (
+      !isRateLimited &&
+      selectedResetAt === undefined &&
+      parsed.resetAt !== undefined &&
+      parsed.resetAt <= Date.now()
+    ) {
+      // A slow body or coalesced subscriber can outlive the quota window.
+      return;
+    }
     if (selectedResetAt !== undefined) {
       const existingResetAt = this.slotQueue.getResetAt();
       // A selected backoff must not shorten quota learned by a concurrent call.
