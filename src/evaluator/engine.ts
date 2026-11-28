@@ -2125,19 +2125,35 @@ function usesExampleProvider(testSuite: TestSuite) {
   });
 }
 
+// Node schedules delays larger than a signed 32-bit integer almost immediately.
+// Recompute the remaining time after each full chunk so late callbacks don't add drift.
+function scheduleEvaluationTimeout(callback: () => void, timeoutMs: number) {
+  const maxDelay = 2_147_483_647;
+  const deadline = performance.now() + timeoutMs;
+  let timer: NodeJS.Timeout;
+  const schedule = (remaining: number) => {
+    timer =
+      remaining > maxDelay
+        ? setTimeout(() => schedule(deadline - performance.now()), maxDelay)
+        : setTimeout(callback, Math.max(1, Math.ceil(remaining)));
+  };
+  schedule(timeoutMs);
+  return () => clearTimeout(timer);
+}
+
 interface EvaluationDeadline {
   startTime: number;
   maxEvalTimeMs: number;
   providerAbortSignal?: AbortSignal;
   deferredGradingAbortSignal?: AbortSignal;
-  globalTimeout?: NodeJS.Timeout;
+  timeoutController?: AbortController;
   isTimedOut: () => boolean;
 }
 
 class Evaluator<TEvaluation extends EvaluationRecord, TResult extends EvaluationStoreResult> {
   store: EvaluationStore<TEvaluation, TResult>;
   testSuite: TestSuite;
-  options: InternalEvaluateOptions;
+  private cancelEvalTimeout?: () => void;
   stats: EvaluateStats;
   conversations: EvalConversations;
   registers: EvalRegisters;
@@ -2151,12 +2167,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
-    options: InternalEvaluateOptions,
+    readonly options: InternalEvaluateOptions & { timeoutMs: number; maxEvalTimeMs: number },
     runtime: EvaluatorRuntime<TEvaluation, TResult>,
   ) {
     this.testSuite = testSuite;
     this.store = store;
-    this.options = options;
     this.stats = {
       successes: 0,
       failures: 0,
@@ -2591,7 +2606,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     context: EvalProcessingContext,
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
-    const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
+    const { timeoutMs } = this.options;
 
     if (timeoutMs <= 0) {
       return await this.processEvalStep(
@@ -2610,13 +2625,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         : abortController.signal,
     };
 
-    let timeoutId: NodeJS.Timeout | undefined;
+    let cancelTimeout: (() => void) | undefined;
     let didTimeout = false;
     const clearEvalStepTimeout = () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = undefined;
-      }
+      cancelTimeout?.();
+      cancelTimeout = undefined;
     };
 
     try {
@@ -2633,7 +2646,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           context,
         ),
         new Promise<void>((_, reject) => {
-          timeoutId = setTimeout(() => {
+          cancelTimeout = scheduleEvaluationTimeout(() => {
             didTimeout = true;
             abortController.abort();
             reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
@@ -2693,7 +2706,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     combinedAbortSignal,
     concurrentRunEvalOptions,
     evalStepIndexMap,
-    globalTimeout,
     groupedRunEvalOptions,
     isEvalTimedOut,
     isWebUI,
@@ -2710,7 +2722,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     combinedAbortSignal: AbortSignal;
     concurrentRunEvalOptions: RunEvalOptions[];
     evalStepIndexMap: Map<RunEvalOptions, number>;
-    globalTimeout?: NodeJS.Timeout;
     groupedRunEvalOptions: RunEvalOptions[];
     isEvalTimedOut: () => boolean;
     isWebUI: boolean;
@@ -2764,7 +2775,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       } else if (!processingContext.targetUnavailable) {
         return this.saveInterruptedEval({
           ciProgressReporter,
-          globalTimeout,
           processingContext,
           progressBarManager,
           prompts,
@@ -2774,7 +2784,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     return this.saveTargetUnavailableEvalIfNeeded({
       ciProgressReporter,
-      globalTimeout,
       processingContext,
       progressBarManager,
       prompts,
@@ -2990,21 +2999,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   private async saveInterruptedEval({
     ciProgressReporter,
-    globalTimeout,
     processingContext,
     progressBarManager,
     prompts,
   }: {
     ciProgressReporter: CIProgressReporter | null;
-    globalTimeout?: NodeJS.Timeout;
     processingContext: EvalProcessingContext;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
   }) {
     logger.info('Evaluation interrupted, saving progress...');
-    if (globalTimeout) {
-      clearTimeout(globalTimeout);
-    }
+    this.cancelEvalTimeout?.();
     progressBarManager?.removeLogInterceptor();
     progressBarManager?.stop();
     ciProgressReporter?.finish();
@@ -3015,13 +3020,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   private async saveTargetUnavailableEvalIfNeeded({
     ciProgressReporter,
-    globalTimeout,
     processingContext,
     progressBarManager,
     prompts,
   }: {
     ciProgressReporter: CIProgressReporter | null;
-    globalTimeout?: NodeJS.Timeout;
     processingContext: EvalProcessingContext;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
@@ -3029,9 +3032,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (!processingContext.targetUnavailable) {
       return undefined;
     }
-    if (globalTimeout) {
-      clearTimeout(globalTimeout);
-    }
+    this.cancelEvalTimeout?.();
     progressBarManager?.stop();
     ciProgressReporter?.error(`Target unavailable (HTTP ${processingContext.targetErrorStatus})`);
     this.store.setVars(Array.from(processingContext.vars));
@@ -3628,7 +3629,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     ciProgressReporter,
     concurrency,
     evalTimedOut,
-    globalTimeout,
     maxEvalTimeMs,
     options,
     processedIndices,
@@ -3646,7 +3646,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     ciProgressReporter: CIProgressReporter | null;
     concurrency: number;
     evalTimedOut: boolean;
-    globalTimeout?: NodeJS.Timeout;
     maxEvalTimeMs: number;
     options: InternalEvaluateOptions;
     processedIndices: Set<number>;
@@ -3663,9 +3662,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     await this.store.appendPrompts(prompts);
     cleanupProgressReporters(progressBarManager, ciProgressReporter);
 
-    if (globalTimeout) {
-      clearTimeout(globalTimeout);
-    }
+    this.cancelEvalTimeout?.();
     if (evalTimedOut) {
       await this.addMaxDurationTimeoutResults({
         maxEvalTimeMs,
@@ -3821,7 +3818,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     maxEvalTimeMs,
     providerAbortSignal,
     deferredGradingAbortSignal,
-    globalTimeout,
     isTimedOut,
   }: EvaluationDeadline): Promise<TEvaluation> {
     const { options } = this;
@@ -4008,7 +4004,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         concurrentRunEvalOptions.push(evalOption);
       }
     }
-    const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
+    const hasEvalStepTimeout = options.timeoutMs > 0;
     const shouldGroupGradingByProvider =
       concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
 
@@ -4044,7 +4040,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       combinedAbortSignal,
       concurrentRunEvalOptions,
       evalStepIndexMap,
-      globalTimeout,
       groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
       isEvalTimedOut: isTimedOut,
       isWebUI,
@@ -4076,7 +4071,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     ) {
       return this.saveInterruptedEval({
         ciProgressReporter,
-        globalTimeout,
         processingContext,
         progressBarManager,
         prompts,
@@ -4088,7 +4082,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       ciProgressReporter,
       concurrency,
       evalTimedOut: isTimedOut(),
-      globalTimeout,
       maxEvalTimeMs,
       options,
       processedIndices,
@@ -4108,7 +4101,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   async evaluate(): Promise<TEvaluation> {
     return providerRegistry.withEvaluation(async () => {
       const startTime = Date.now();
-      const maxEvalTimeMs = this.options.maxEvalTimeMs ?? getMaxEvalTimeMs();
+      const { maxEvalTimeMs } = this.options;
       const timeoutController = maxEvalTimeMs > 0 ? new AbortController() : undefined;
       let providerAbortSignal = this.options.abortSignal;
       if (timeoutController) {
@@ -4125,27 +4118,21 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           : this.options.pauseSignal;
       }
       let timedOut = false;
-      const globalTimeout = timeoutController
-        ? setTimeout(() => {
+      this.cancelEvalTimeout = timeoutController
+        ? scheduleEvaluationTimeout(() => {
             // Preserve the first cause if the caller cancelled while rows were being saved.
             timedOut = !providerAbortSignal?.aborted;
             timeoutController.abort();
           }, maxEvalTimeMs)
         : undefined;
-      try {
-        return await this.evaluateWithResources({
-          startTime,
-          maxEvalTimeMs,
-          providerAbortSignal,
-          deferredGradingAbortSignal,
-          globalTimeout,
-          isTimedOut: () => timedOut,
-        });
-      } finally {
-        if (globalTimeout) {
-          clearTimeout(globalTimeout);
-        }
-      }
+      return this.evaluateWithResources({
+        startTime,
+        maxEvalTimeMs,
+        providerAbortSignal,
+        deferredGradingAbortSignal,
+        timeoutController,
+        isTimedOut: () => timedOut,
+      });
     });
   }
 
@@ -4213,8 +4200,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return await this._runEvaluation(deadline);
     } catch (error) {
       evaluationError = error;
+      deadline.timeoutController?.abort();
       throw error;
     } finally {
+      this.cancelEvalTimeout?.();
       // Close the JSONL writers first, before the (possibly multi-second) OTEL / provider
       // teardown below, so the streamed file is fully flushed before the post-run rewrite
       // reads it back and the file handle is released promptly. allSettled so one writer's
@@ -4338,12 +4327,20 @@ export function evaluate<
           redteam: testSuite.redteam ?? evalRecord.config.redteam,
         },
         () => {
+          const { timeoutMs = getEvalTimeoutMs(), maxEvalTimeMs = getMaxEvalTimeMs() } = options;
+          for (const [name, value] of Object.entries({ timeoutMs, maxEvalTimeMs })) {
+            if (!Number.isFinite(value) || value < 0) {
+              return Promise.reject(
+                new Error(`${name} must be a finite, nonnegative number of milliseconds`),
+              );
+            }
+          }
           const runtimeTestSuite = runtime.resolveRuntimeTestSuite?.(testSuite) ?? testSuite;
           const store = runtime.createEvaluationStore(evalRecord);
           const ev = new Evaluator(
             withTracingInputDefaults(runtimeTestSuite),
             store,
-            options,
+            { ...options, timeoutMs, maxEvalTimeMs },
             runtime,
           );
           // Capture this entry point's policy for providers and graders loaded

@@ -2986,10 +2986,12 @@
           "type": "boolean"
         },
         "timeoutMs": {
-          "type": "number"
+          "type": "number",
+          "minimum": 0
         },
         "maxEvalTimeMs": {
-          "type": "number"
+          "type": "number",
+          "minimum": 0
         },
         "isRedteam": {
           "type": "boolean"
