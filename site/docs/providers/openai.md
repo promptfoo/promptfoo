@@ -328,6 +328,8 @@ GPT-6.2 Astra and Sol Ultrafast cost three times their Standard token rates thro
 
 <Link id="using-with-azure" />
 
+For Promptfoo Enterprise On-Prem, see [tracking OpenAI spend by team](/docs/enterprise/teams/#track-openai-spend-by-team-on-prem) for team credentials, generation and grading overrides, and project alerts.
+
 The default base URL is `https://api.openai.com/v1`. Set `apiBaseUrl` for an OpenAI-compatible gateway and `apiKeyEnvar` to select its credential:
 
 ```yaml
