@@ -29,6 +29,22 @@ export interface TaxonomyFinding {
   evidence: { start: number; end: number }[];
 }
 
+/** A validated failing category makes the overall result fail. Preserve other judge failures. */
+export function enforceTaxonomyVerdict<
+  T extends { pass: boolean; score: number; reason: string; findings?: TaxonomyFinding[] },
+>(grade: T): T {
+  const failed = grade.findings?.filter((finding) => !finding.pass);
+  if (!grade.pass || !failed?.length) {
+    return grade;
+  }
+  return {
+    ...grade,
+    pass: false,
+    score: 0,
+    reason: `Failed taxonomy categories: ${failed.map((finding) => finding.label).join(', ')}`,
+  };
+}
+
 const findingFields = z.object({
   label: z.string(),
   observed: z.boolean(),

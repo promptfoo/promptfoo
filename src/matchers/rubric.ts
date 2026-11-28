@@ -3,7 +3,7 @@ import path from 'path';
 
 import { loadFromJavaScriptFile } from '../assertions/utils';
 import cliState from '../cliState';
-import { parseTaxonomyFindings } from '../contracts/gradingTaxonomy';
+import { enforceTaxonomyVerdict, parseTaxonomyFindings } from '../contracts/gradingTaxonomy';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
@@ -956,7 +956,7 @@ export async function runJsonGradingPrompt({
     taxonomy && evidenceOutput !== undefined
       ? parseTaxonomyFindings(parsed.findings, taxonomy, evidenceOutput)
       : undefined;
-  if (taxonomy && !findings) {
+  if (taxonomy && evidenceOutput !== undefined && !findings) {
     logger.warn(
       `Omitting invalid or incomplete findings for taxonomy ${taxonomy.id} v${taxonomy.version}`,
     );
@@ -978,7 +978,7 @@ export async function runJsonGradingPrompt({
     ...trustedResponseMetadata
   } = responseMetadata;
 
-  return {
+  return enforceTaxonomyVerdict({
     assertion,
     pass,
     score,
@@ -997,5 +997,5 @@ export async function runJsonGradingPrompt({
       ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),
       ...(resp.cached ? { cachedResponse: true } : {}),
     },
-  };
+  });
 }

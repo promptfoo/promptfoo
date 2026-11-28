@@ -16,6 +16,7 @@ import {
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse, redteamProviderManager } from '../../../src/redteam/providers/shared';
 import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
+import * as runtimeTransform from '../../../src/redteam/shared/runtimeTransform';
 import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import { isResponseHeadersObserverErrorResponse } from '../../../src/util/fetch/responseHeadersObserver';
 import { getNunjucksEngine } from '../../../src/util/templates';
@@ -270,6 +271,18 @@ describe('RedteamIterativeProvider', () => {
       expect(explanation).toBe('Poor response');
     });
 
+    it.each(['10', -1, 11, null])(
+      'uses the existing fallback for an invalid search rating %s',
+      async (rating) => {
+        mockRedteamProvider.callApi.mockResolvedValue({
+          output: JSON.stringify({ currentResponse: { rating } }),
+        });
+        await expect(
+          evaluateResponse(mockRedteamProvider, 'Judge prompt', 'response', '', false),
+        ).resolves.toMatchObject({ score: 1 });
+      },
+    );
+
     it('should handle missing previous response', async () => {
       mockRedteamProvider.callApi.mockResolvedValue({
         output: JSON.stringify({
@@ -492,8 +505,11 @@ describe('RedteamIterativeProvider', () => {
           });
         const targetProvider = createMockProvider({ id: 'target' });
         targetProvider.callApi
-          .mockResolvedValueOnce({ output: 'first response' })
-          .mockResolvedValueOnce({ output: identicalText ? 'first response' : 'second response' });
+          .mockResolvedValueOnce({ output: 'first response', guardrails: { flagged: true } })
+          .mockResolvedValueOnce({
+            output: identicalText ? 'first response' : 'second response',
+            guardrails: { flagged: false },
+          });
         const graders = await import('../../../src/redteam/graders');
         const getResult = vi
           .fn()
@@ -544,6 +560,8 @@ describe('RedteamIterativeProvider', () => {
           });
           expect(getResult).toHaveBeenCalledTimes(2);
           expect(result.output).toBe('first response');
+          expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+          expect(result.guardrails).toEqual({ flagged: true });
           expect(result.metadata.storedGraderResult).toMatchObject({
             reason: 'first verdict',
             tokensUsed: { total: 4, cached: 2, numRequests: 1 },
@@ -571,7 +589,7 @@ describe('RedteamIterativeProvider', () => {
               },
               {
                 prompt: identicalText ? 'first attack' : 'second attack',
-                output: 'first response',
+                output: identicalText ? 'first response' : 'second response',
                 score: 3,
                 depth: 0,
                 graderPassed: true,
@@ -585,7 +603,7 @@ describe('RedteamIterativeProvider', () => {
           expect(history.map((row) => row.id)).toEqual(Array(2).fill(expect.stringMatching(/\S/)));
           expect(getResult.mock.calls[0][4]).toBe('original rubric');
           expect(getResult.mock.calls[0][5]).toContain('iterative tree jailbreak attack');
-          expect(getResult.mock.calls[0][5]).toContain('"test objective"');
+          expect(getResult.mock.calls[0][5]).toContain('<AttackGoal>test objective</AttackGoal>');
           expect(getResult.mock.calls[0][5]).toContain('one node in a tree');
         } finally {
           remote.mockRestore();
@@ -595,6 +613,52 @@ describe('RedteamIterativeProvider', () => {
         }
       },
     );
+
+    it('stops at the attempt budget even when the last target call errors', async () => {
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ prompt: 'try this', improvement: 'test' }),
+      });
+      const target = createMockProvider({ id: 'target' });
+      target.callApi.mockResolvedValue({
+        output: 'Tool diagnostic',
+        error: 'Tool failed',
+        metadata: { errorOrigin: 'tool' },
+      });
+      const judge = createMockProvider({ id: 'judge' });
+      const remote = vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(false);
+      const attacker = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(mockRedteamProvider);
+      const grading = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(judge);
+      try {
+        const provider = new RedteamIterativeTreeProvider({
+          injectVar: 'goal',
+          maxDepth: 3,
+          branchingFactor: 4,
+          maxAttempts: 1,
+        });
+        const result = await provider.callApi('', {
+          originalProvider: target,
+          vars: { goal: 'test' },
+          prompt: { raw: '{{goal}}', label: 'test' },
+        });
+        expect(target.callApi).toHaveBeenCalledOnce();
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+        expect(judge.callApi).not.toHaveBeenCalled();
+        expect(result).toMatchObject({
+          output: 'Tool diagnostic',
+          error: 'Tool failed',
+          metadata: { attempts: 1, stopReason: 'MAX_ATTEMPTS', errorOrigin: 'tool' },
+        });
+        expect(result.metadata.redteamTreeHistory).toHaveLength(1);
+      } finally {
+        remote.mockRestore();
+        attacker.mockRestore();
+        grading.mockRestore();
+      }
+    });
 
     it.each([false, true, undefined])(
       'keeps judge score10 separate from grader verdict %s',
@@ -678,6 +742,219 @@ describe('RedteamIterativeProvider', () => {
       },
     );
 
+    async function runTreeFixture(
+      attacker: MockApiProvider,
+      target: MockApiProvider,
+      judge: MockApiProvider,
+      config: ConstructorParameters<typeof RedteamIterativeTreeProvider>[0],
+      test?: AtomicTestCase,
+      options?: CallApiOptionsParams,
+    ) {
+      const remote = vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(false);
+      const attackerSpy = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(attacker);
+      const judgeSpy = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(judge);
+      try {
+        return await new RedteamIterativeTreeProvider({ injectVar: 'goal', ...config }).callApi(
+          '',
+          {
+            originalProvider: target,
+            vars: { goal: 'test objective' },
+            prompt: { raw: '{{goal}}', label: 'test' },
+            test,
+          },
+          options,
+        );
+      } finally {
+        remote.mockRestore();
+        attackerSpy.mockRestore();
+        judgeSpy.mockRestore();
+      }
+    }
+
+    it('returns the policy failure even when a different branch has a higher search score', async () => {
+      const attacker = createMockProvider({
+        response: { output: JSON.stringify({ prompt: 'attack', improvement: '' }) },
+      });
+      const target = createMockProvider();
+      target.callApi
+        .mockResolvedValueOnce({ output: 'high scoring, passing response' })
+        .mockResolvedValueOnce({ output: 'lower scoring violation' });
+      const judge = createMockProvider();
+      for (const rating of [9, 2]) {
+        judge.callApi.mockResolvedValueOnce({
+          output: JSON.stringify({ currentResponse: { rating } }),
+        });
+      }
+      const graders = await import('../../../src/redteam/graders');
+      const getResult = vi
+        .fn()
+        .mockResolvedValueOnce({
+          grade: { pass: true, score: 1, reason: 'pass' },
+          rubric: 'policy',
+        })
+        .mockResolvedValueOnce({
+          grade: { pass: false, score: 0, reason: 'violation' },
+          rubric: 'policy',
+        });
+      vi.mocked(graders.getGraderById).mockReturnValue({ getResult } as any);
+      try {
+        const result = await runTreeFixture(
+          attacker,
+          target,
+          judge,
+          { maxDepth: 1, branchingFactor: 2, maxAttempts: 2 },
+          {
+            assert: [{ type: 'promptfoo:redteam:pii' }],
+            metadata: { pluginId: 'pii:social' },
+          } as AtomicTestCase,
+        );
+        expect(result.output).toBe('lower scoring violation');
+        expect(result.metadata).toMatchObject({
+          highestScore: 9,
+          stopReason: 'GRADER_FAILED',
+          storedGraderResult: { pass: false, reason: 'violation' },
+        });
+        expect(result.metadata.redteamTreeHistory.map(({ wasSelected }) => wasSelected)).toEqual([
+          false,
+          true,
+        ]);
+      } finally {
+        vi.mocked(graders.getGraderById).mockReset();
+      }
+    });
+
+    it('resets the stagnation count each time the best search score improves', async () => {
+      const attacker = createMockProvider({
+        response: { output: JSON.stringify({ prompt: 'attack', improvement: '' }) },
+      });
+      const target = createMockProvider({ response: { output: 'response' } });
+      const judge = createMockProvider();
+      for (const rating of [5, 4, 6, 5, 4]) {
+        judge.callApi.mockResolvedValueOnce({
+          output: JSON.stringify({ currentResponse: { rating } }),
+        });
+      }
+      const result = await runTreeFixture(attacker, target, judge, {
+        maxDepth: 4,
+        branchingFactor: 2,
+        maxWidth: 1,
+        maxAttempts: 6,
+        maxNoImprovement: 2,
+      });
+      expect(result.metadata).toMatchObject({
+        attempts: 5,
+        highestScore: 6,
+        stopReason: 'NO_IMPROVEMENT',
+      });
+      expect(target.callApi).toHaveBeenCalledTimes(5);
+    });
+
+    it('selects the first completed response when all search scores are zero', async () => {
+      const attacker = createMockProvider({
+        response: { output: JSON.stringify({ prompt: 'attack', improvement: '' }) },
+      });
+      const target = createMockProvider();
+      target.callApi
+        .mockResolvedValueOnce({ output: 'first completed response' })
+        .mockResolvedValueOnce({ output: 'second completed response' });
+      const judge = createMockProvider({
+        response: { output: JSON.stringify({ currentResponse: { rating: 0 } }) },
+      });
+      const result = await runTreeFixture(attacker, target, judge, {
+        maxDepth: 1,
+        branchingFactor: 2,
+        maxAttempts: 2,
+      });
+      expect(result).toMatchObject({
+        output: 'first completed response',
+        metadata: { highestScore: 0 },
+      });
+    });
+
+    it('counts invalid and failed transformed candidates without sending or replaying them to the target', async () => {
+      const attacker = createMockProvider();
+      attacker.callApi
+        .mockResolvedValueOnce({ output: 'invalid JSON' })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ prompt: 'first attack', improvement: '' }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ prompt: 'last attack', improvement: '' }),
+        });
+      const target = createMockProvider({ response: { output: 'observed response' } });
+      const judge = createMockProvider({
+        response: { output: JSON.stringify({ currentResponse: { rating: 5 } }) },
+      });
+      const transform = vi
+        .spyOn(runtimeTransform, 'applyRuntimeTransforms')
+        .mockResolvedValueOnce({ prompt: 'encoded first attack', originalPrompt: 'first attack' })
+        .mockResolvedValueOnce({
+          prompt: '',
+          originalPrompt: 'last attack',
+          error: 'transform failed',
+        });
+      try {
+        const result = await runTreeFixture(attacker, target, judge, {
+          maxDepth: 2,
+          branchingFactor: 2,
+          maxAttempts: 3,
+          _perTurnLayers: ['base64'],
+        });
+        expect(attacker.callApi).toHaveBeenCalledTimes(3);
+        expect(transform).toHaveBeenCalledTimes(2);
+        expect(target.callApi).toHaveBeenCalledOnce();
+        expect(target.callApi.mock.calls[0][0]).toBe('encoded first attack');
+        expect(result).toMatchObject({
+          output: 'observed response',
+          metadata: {
+            attempts: 3,
+            redteamFinalPrompt: 'encoded first attack',
+            stopReason: 'MAX_ATTEMPTS',
+          },
+        });
+        expect(result.metadata.redteamTreeHistory).toHaveLength(1);
+      } finally {
+        transform.mockRestore();
+      }
+    });
+
+    it('returns an error if the budget expires without a usable attack', async () => {
+      const attacker = createMockProvider({ response: { output: 'invalid JSON' } });
+      const target = createMockProvider();
+      const judge = createMockProvider();
+      const result = await runTreeFixture(attacker, target, judge, { maxDepth: 1, maxAttempts: 1 });
+      expect(result).toMatchObject({
+        error: 'Tree attacker did not generate a usable prompt',
+        metadata: { attempts: 1, stopReason: 'MAX_ATTEMPTS' },
+      });
+      expect(target.callApi).not.toHaveBeenCalled();
+      expect(judge.callApi).not.toHaveBeenCalled();
+    });
+
+    it('does not call either judge after cancellation during a successful target request', async () => {
+      const attacker = createMockProvider({
+        response: { output: JSON.stringify({ prompt: 'attack', improvement: '' }) },
+      });
+      const controller = new AbortController();
+      const target = createMockProvider();
+      target.callApi.mockImplementation(async () => {
+        controller.abort();
+        return { output: 'completed response' };
+      });
+      const judge = createMockProvider();
+      await expect(
+        runTreeFixture(attacker, target, judge, { maxAttempts: 2 }, undefined, {
+          abortSignal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(target.callApi).toHaveBeenCalledOnce();
+      expect(judge.callApi).not.toHaveBeenCalled();
+    });
+
     it('emits actual multidepth history and fresh transformed sessions', async () => {
       let attempt = 0;
       const attacker = createMockProvider();
@@ -732,9 +1009,8 @@ describe('RedteamIterativeProvider', () => {
         const history = result.metadata.redteamTreeHistory;
         expect(history.map(({ depth, wasSelected }) => [depth, wasSelected])).toEqual([
           [0, true],
-          [0, true],
-          [1, true],
-          [1, true],
+          [0, false],
+          [1, false],
           [1, false],
         ]);
         expect(history.slice(0, 4).map(({ improvement }) => improvement)).toEqual([
@@ -745,7 +1021,7 @@ describe('RedteamIterativeProvider', () => {
         ]);
         expect(history[0].parentId).toBe(history[1].parentId);
         expect(history[2].parentId).toBe(history[3].parentId);
-        expect(history[2].parentId).not.toBe(history[0].parentId);
+        expect(history[2].parentId).toBe(history[0].id);
         expect(
           attacker.callApi.mock.calls.map(([prompt]) => JSON.parse(prompt).at(-1).content),
         ).toEqual(['test goal', 'test goal', 'attack1', 'attack1']);
@@ -759,7 +1035,7 @@ describe('RedteamIterativeProvider', () => {
       }
     });
 
-    it('counts the final target probe even when the target reports no token usage', async () => {
+    it('does not create a target probe when no exploration depth remains', async () => {
       const gradingProvider = createMockProvider({ id: 'mock-grader' });
       const targetProvider = createMockProvider({ id: 'mock-target' });
       targetProvider.callApi.mockResolvedValue({ output: 'final response' });
@@ -782,8 +1058,9 @@ describe('RedteamIterativeProvider', () => {
           prompt: { raw: '{{goal}}', label: 'test' },
         });
 
-        expect(targetProvider.callApi).toHaveBeenCalledOnce();
-        expect(result.tokenUsage?.numRequests).toBe(1);
+        expect(targetProvider.callApi).not.toHaveBeenCalled();
+        expect(result.tokenUsage?.numRequests).toBe(0);
+        expect(result.error).toContain('without a target response');
       } finally {
         remoteGenerationSpy.mockRestore();
         attackerProviderSpy.mockRestore();
@@ -919,7 +1196,7 @@ describe('RedteamIterativeProvider', () => {
           const provider = new RedteamIterativeTreeProvider({
             injectVar: 'goal',
             maxDepth: 1,
-            branchingFactor: 1,
+            branchingFactor: 2,
             maxAttempts: 2,
           });
           const result: ProviderResponse = await provider.callApi('Say hello', {
@@ -929,17 +1206,19 @@ describe('RedteamIterativeProvider', () => {
           });
 
           expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
-          expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
-          expect(gradingProvider.callApi).toHaveBeenCalledTimes(earlierError ? 0 : 1);
+          expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(2);
+          expect(gradingProvider.callApi).toHaveBeenCalledTimes(
+            Number(!earlierError) + Number(!finalError),
+          );
           expect(result.output).toBe(earlierError ? 'Final greeting' : 'Earlier greeting');
-          expect(result.error).toBe(finalError);
+          expect(result.error).toBe(earlierError ? finalError : undefined);
           expect(result.metadata?.errorOrigin).toBe(
-            finalError && finalOrigin === 'tool' ? 'tool' : undefined,
+            earlierError && finalError && finalOrigin === 'tool' ? 'tool' : undefined,
           );
           expect(result.metadata).not.toHaveProperty('http');
           expect(result.metadata).not.toHaveProperty('rateLimit');
           expect(result.metadata).not.toHaveProperty('targetOnly');
-          expect(result.metadata).toMatchObject({ attempts: 1, stopReason: 'MAX_DEPTH' });
+          expect(result.metadata).toMatchObject({ attempts: 2, stopReason: 'MAX_ATTEMPTS' });
           expect(result.metadata?.redteamTreeHistory).toHaveLength(2);
           expect(result.tokenUsage).toMatchObject({
             prompt: 9,
@@ -1026,7 +1305,7 @@ describe('RedteamIterativeProvider', () => {
           const provider = new RedteamIterativeTreeProvider({
             injectVar: 'goal',
             maxDepth: 1,
-            branchingFactor: 1,
+            branchingFactor: 2,
             maxAttempts: 2,
           });
           const result: ProviderResponse = await provider.callApi('Say hello', {
@@ -1036,19 +1315,23 @@ describe('RedteamIterativeProvider', () => {
           });
 
           expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
-          expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
-          expect(gradingProvider.callApi).toHaveBeenCalledTimes(earlierObserver ? 0 : 1);
+          expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(2);
+          expect(gradingProvider.callApi).toHaveBeenCalledTimes(
+            Number(!earlierObserver) + Number(!finalObserver && !finalError),
+          );
           expect(result.output).toBe(earlierObserver ? 'Final greeting' : 'Earlier greeting');
-          expect(result.error).toBe(finalError);
-          expect(isResponseHeadersObserverErrorResponse(result)).toBe(finalObserver);
+          expect(result.error).toBe(earlierObserver ? finalError : undefined);
+          expect(isResponseHeadersObserverErrorResponse(result)).toBe(
+            earlierObserver && finalObserver,
+          );
           expect(isProviderResponseRateLimited(result, undefined)).toBe(
-            !finalObserver && finalError !== undefined,
+            earlierObserver && !finalObserver && finalError !== undefined,
           );
           expect(result.metadata).not.toHaveProperty('errorOrigin');
           expect(result.metadata).not.toHaveProperty('http');
           expect(result.metadata).not.toHaveProperty('rateLimit');
           expect(result.metadata).not.toHaveProperty('targetOnly');
-          expect(result.metadata).toMatchObject({ attempts: 1, stopReason: 'MAX_DEPTH' });
+          expect(result.metadata).toMatchObject({ attempts: 2, stopReason: 'MAX_ATTEMPTS' });
           expect(result.metadata?.redteamTreeHistory).toHaveLength(2);
           expect(result.tokenUsage).toMatchObject({
             prompt: 9,
@@ -1436,32 +1719,6 @@ describe('TreeNode', () => {
       const customId = crypto.randomUUID();
       const node = createTreeNode('prompt', 5, 0, customId);
       expect(node.id).toBe(customId);
-    });
-
-    it('should preserve remote materialization fields on nodes', () => {
-      const node = createTreeNode('prompt', 5, 0, 'node-id', {
-        inputMaterialization: {
-          document: {
-            injectionPlacement: 'comment',
-          },
-        },
-        materializationHandled: true,
-        materializedVars: {
-          document:
-            'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
-        },
-      });
-
-      expect(node.inputMaterialization).toEqual({
-        document: {
-          injectionPlacement: 'comment',
-        },
-      });
-      expect(node.materializationHandled).toBe(true);
-      expect(node.materializedVars).toEqual({
-        document:
-          'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
-      });
     });
   });
 });

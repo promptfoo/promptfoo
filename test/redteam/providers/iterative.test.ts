@@ -612,7 +612,7 @@ describe('RedteamIterativeProvider', () => {
         }),
         mockRedteamProvider,
         undefined,
-        expect.stringContaining('iterative jailbreak attack with the following goal: "test goal"'),
+        expect.stringContaining('<AttackGoal>test goal</AttackGoal>'),
         undefined, // skipRefusalCheck
         expect.objectContaining({
           providerResponse: expect.objectContaining({ output: 'mock target response' }),

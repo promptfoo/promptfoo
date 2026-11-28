@@ -212,8 +212,9 @@ export async function matchesLlmRubric(
     getGradingOutputForAudio(llmOutput, audio),
     imageOutputs,
   );
-  // Evidence offsets refer to the original target text, never a media placeholder.
-  const structuredRubric = gradingOutput === llmOutput ? grading.structuredRubric : undefined;
+  const structuredRubric = grading.structuredRubric;
+  // A media placeholder or transcript cannot provide offsets into the original target output.
+  const canValidateFindings = gradingOutput === llmOutput;
   if (
     !grading.rubricPrompt &&
     shouldPreferRemote &&
@@ -223,15 +224,18 @@ export async function matchesLlmRubric(
   ) {
     try {
       return {
-        ...(await doRemoteGrading({
-          task: 'llm-rubric',
-          rubric,
-          ...structuredRubric,
-          output: gradingOutput,
-          vars: vars || {},
-          ...(imageOutputs.length ? { images: imageOutputs } : {}),
-          ...getRemoteGradingContext(),
-        })),
+        ...(await doRemoteGrading(
+          {
+            task: 'llm-rubric',
+            rubric,
+            ...structuredRubric,
+            output: gradingOutput,
+            vars: vars || {},
+            ...(imageOutputs.length ? { images: imageOutputs } : {}),
+            ...getRemoteGradingContext(),
+          },
+          ...(structuredRubric && !canValidateFindings ? [{ validateFindings: false }] : []),
+        )),
         assertion,
       };
     } catch (error) {
@@ -262,7 +266,7 @@ export async function matchesLlmRubric(
       checkName: 'llm-rubric check',
       defaultPrompt: structuredRubric ? TAXONOMY_GRADING_PROMPT : DEFAULT_GRADING_PROMPT,
       taxonomy: structuredRubric?.taxonomy,
-      evidenceOutput: llmOutput,
+      evidenceOutput: canValidateFindings ? llmOutput : undefined,
       grading,
       label: 'llm-rubric',
       providerCallContext,

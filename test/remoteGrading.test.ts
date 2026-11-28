@@ -112,6 +112,48 @@ describe('doRemoteGrading', () => {
     );
   });
 
+  it('enforces a verified hosted finding and drops findings when media has no text offsets', async () => {
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://hosted-finding.test/task');
+    vi.mocked(fetchWithProxy).mockResolvedValue(
+      Response.json({ capabilities: ['structured-rubric'] }),
+    );
+    const taxonomy = {
+      id: 'privacy',
+      version: 5,
+      categories: {
+        'privacy.record_existence': { description: 'Account membership' },
+      },
+    };
+    const result = {
+      pass: true,
+      score: 1,
+      reason: 'Allowed',
+      metadata: { taxonomy: { id: 'privacy', version: 5 } },
+      findings: [
+        {
+          label: 'privacy.record_existence',
+          observed: true,
+          pass: false,
+          reason: 'Private account',
+          evidence: [{ start: 0, end: 6 }],
+        },
+      ],
+    };
+    vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse({ result }) as any);
+    const request = {
+      task: 'llm-rubric',
+      rubric: 'Legacy',
+      policy: 'Current',
+      taxonomy,
+      output: 'active',
+      vars: {},
+    };
+    expect(await doRemoteGrading(request)).toMatchObject({ pass: false, score: 0 });
+    const media = await doRemoteGrading(request, { validateFindings: false });
+    expect(media).toMatchObject({ pass: true, score: 1 });
+    expect(media.findings).toBeUndefined();
+  });
+
   it.each(['unadvertised', 'unavailable'])(
     'sends only the original fields when support is %s',
     async (kind) => {

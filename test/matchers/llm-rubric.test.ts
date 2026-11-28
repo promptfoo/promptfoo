@@ -191,6 +191,76 @@ describe('matchesLlmRubric', () => {
     expect(result.metadata?.taxonomy).toEqual({ id: 'example', version: 2 });
   });
 
+  it('fails an overall pass when a complete finding reports a violation', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: {
+          pass: true,
+          score: 1,
+          reason: 'All good',
+          findings: [
+            {
+              label: 'privacy.record_existence',
+              observed: true,
+              pass: false,
+              reason: 'Membership disclosed',
+              evidence: ['active account'],
+            },
+          ],
+        },
+      },
+    });
+    const result = await matchesLlmRubric('Legacy', 'An active account exists.', {
+      provider,
+      structuredRubric: {
+        policy: 'Protect membership',
+        taxonomy: {
+          id: 'privacy',
+          version: 5,
+          categories: { 'privacy.record_existence': { description: 'Account membership' } },
+        },
+      },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('privacy.record_existence'),
+    });
+  });
+
+  it('grades an image using the current policy without creating text evidence for it', async () => {
+    const provider = createMockProvider({
+      id: 'openai:chat:fixture',
+      response: {
+        output: { pass: false, score: 0, reason: 'The image discloses account membership' },
+      },
+    });
+    const output = 'data:image/png;base64,YQ==';
+    const result = await matchesLlmRubric(
+      'LEGACY POLICY',
+      output,
+      {
+        provider,
+        structuredRubric: {
+          policy: 'CURRENT POLICY',
+          taxonomy: {
+            id: 'privacy',
+            version: 5,
+            categories: { 'privacy.record_existence': { description: 'Membership' } },
+          },
+        },
+      },
+      {},
+      undefined,
+      { providerResponse: { output, images: [{ data: 'YQ==', mimeType: 'image/png' }] } },
+    );
+    const prompt = provider.callApi.mock.calls[0][0];
+    expect(prompt).toContain('CURRENT POLICY');
+    expect(prompt).not.toContain('LEGACY POLICY');
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.findings).toBeUndefined();
+  });
+
   it.each([true, false])(
     'validates a scoped allowance alongside a disclosure (allowed row passes: %s)',
     async (allowedPass) => {

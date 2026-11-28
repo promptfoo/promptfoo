@@ -1,6 +1,6 @@
 import { LRUCache } from 'lru-cache';
 import { fetchWithCache } from './cache';
-import { hasMatchingTaxonomy } from './contracts/gradingTaxonomy';
+import { enforceTaxonomyVerdict, hasMatchingTaxonomy } from './contracts/gradingTaxonomy';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
@@ -78,6 +78,7 @@ function redactImagePayloads(value: unknown): unknown {
 
 export async function doRemoteGrading(
   payload: RemoteGradingPayload,
+  options?: { validateFindings?: boolean },
 ): Promise<Omit<GradingResult, 'assertion'>> {
   try {
     const url = getRemoteGenerationUrl();
@@ -116,13 +117,14 @@ export async function doRemoteGrading(
     const metadata = { ...result.metadata };
     const verifiedFindings =
       supported &&
+      options?.validateFindings !== false &&
       taxonomy &&
       typeof payload.output === 'string' &&
       hasMatchingTaxonomy(result, taxonomy, payload.output);
     if (!verifiedFindings) {
       delete metadata.taxonomy;
     }
-    return {
+    return enforceTaxonomyVerdict({
       pass: result.pass,
       score: result.score,
       reason: result.reason,
@@ -143,7 +145,7 @@ export async function doRemoteGrading(
             }
           : undefined,
       metadata: cached ? { ...metadata, cachedResponse: true } : result.metadata && metadata,
-    };
+    });
   } catch (error) {
     throw new Error(`Could not perform remote grading: ${error}`);
   }

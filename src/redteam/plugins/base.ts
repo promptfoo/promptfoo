@@ -402,20 +402,21 @@ export abstract class RedteamGraderBase {
   abstract rubric: string;
   readonly structuredRubric?: StructuredGradingRubric;
 
-  /** Invalidate saved decisions when the policy or its configured permissions change. */
-  getStructuredRubricHash(test: AtomicTestCase, additionalRubric?: string): string | undefined {
-    return (
-      this.structuredRubric &&
-      getGradingAssertionHash([
-        this.structuredRubric,
-        test.metadata?.purpose,
-        test.metadata?.entities,
-        test.metadata?.pluginConfig,
-        test.options?.redteamGraderExamples,
-        test.vars,
-        additionalRubric,
-      ])
-    );
+  usesRawGradingEvidence(): boolean {
+    return this.getResult !== RedteamGraderBase.prototype.getResult;
+  }
+
+  /** Identify the grading instructions, excluding the per-call timestamp and target turn. */
+  getGradingRubricHash(test: AtomicTestCase, additionalRubric?: string): string | undefined {
+    return getGradingAssertionHash([
+      this.id,
+      this.rubric,
+      this.structuredRubric,
+      test.metadata ?? {},
+      test.vars ?? {},
+      test.options ?? {},
+      additionalRubric || '',
+    ]);
   }
 
   renderRubric(vars: Record<string, any>): string {
@@ -625,22 +626,17 @@ export abstract class RedteamGraderBase {
       logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
     const grade = (
-      imagesForGrading?.length
+      imagesForGrading?.length || gradingProviderResponse?.audio?.data
         ? await matchesLlmRubric(finalRubric, llmOutput, grading, undefined, undefined, {
             providerResponse: {
               output: llmOutput,
               images: imagesForGrading,
+              ...(gradingProviderResponse?.audio && { audio: gradingProviderResponse.audio }),
             },
           })
         : await matchesLlmRubric(finalRubric, llmOutput, grading)
     ) as GradingResult;
 
-    if (this.structuredRubric && grade.findings) {
-      grade.metadata = {
-        ...grade.metadata,
-        redteamGradingRubricHash: this.getStructuredRubricHash(test, additionalRubric),
-      };
-    }
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 
     let suggestions: ResultSuggestion[] | undefined;

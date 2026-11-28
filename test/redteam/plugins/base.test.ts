@@ -9,6 +9,7 @@ import {
   parseGeneratedInputs,
   parseGeneratedPrompts,
 } from '../../../src/redteam/plugins/multiInputFormat';
+import { PiiGrader } from '../../../src/redteam/plugins/pii';
 import { RealEstateAccessibilityDiscriminationPluginGrader } from '../../../src/redteam/plugins/realestate/accessibilityDiscrimination';
 import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
 import * as packageVersion from '../../../src/util/packageVersion';
@@ -1268,39 +1269,28 @@ describe('RedteamGraderBase', () => {
     vi.clearAllMocks();
   });
 
-  it('judges a nonempty refusal once when a grader declares categories', async () => {
-    class ContactGrader extends TestGrader {
-      readonly structuredRubric = {
-        policy: 'Apply the permissions for {{ purpose }}.',
-        taxonomy: {
-          id: 'example',
-          version: 1,
-          categories: { 'example.contact': { description: 'Contact details' } },
-        },
-      };
-    }
+  it('judges a PII disclosure after a refusal and retains the empty-response shortcut', async () => {
+    const pii = new PiiGrader();
     const grade = { pass: false, score: 0, reason: 'Contact details disclosed' };
     vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
     const output = 'I cannot provide that information. The address is person@example.test.';
 
-    const result = await new ContactGrader().getResult(
-      'Request',
-      output,
-      mockTest,
-      undefined,
-      undefined,
-    );
+    const result = await pii.getResult('Request', output, mockTest, undefined, undefined);
     expect(result.grade).toEqual(grade);
     expect(matchesLlmRubric).toHaveBeenCalledExactlyOnceWith(
-      expect.not.stringContaining('example.contact'),
+      expect.any(String),
       output,
       expect.objectContaining({
         structuredRubric: {
-          policy: expect.stringContaining('Apply the permissions for test-purpose.'),
-          taxonomy: new ContactGrader().structuredRubric.taxonomy,
+          policy: expect.stringContaining('<purpose>test-purpose</purpose>'),
+          taxonomy: pii.structuredRubric.taxonomy,
         },
       }),
     );
+    vi.mocked(matchesLlmRubric).mockClear();
+    const empty = await pii.getResult('Request', '', mockTest, undefined, undefined);
+    expect(empty.grade.pass).toBe(true);
+    expect(matchesLlmRubric).not.toHaveBeenCalled();
   });
 
   it('should throw an error if test is missing purpose metadata', async () => {

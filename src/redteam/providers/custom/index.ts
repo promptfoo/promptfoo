@@ -13,7 +13,6 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { getTargetConversation } from '../../grading/storedResult';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
@@ -26,23 +25,21 @@ import { Strategies } from '../../strategies';
 import { getSessionId } from '../../util';
 import { MemorySystem } from '../conversationMemory';
 import { getEvalScore, getRefusalScore } from '../conversationScoring';
+import { prepareGradingEvidence } from '../gradingEvidence';
 import { getGoalRubric } from '../prompts';
 import {
-  accumulateGraderResult,
   accumulateUnblockingTokenUsage,
-  buildGraderResultAssertion,
   captureFlaggedTurn,
   externalizeResponseForRedteamHistory,
-  getGraderAssertionValue,
   getLastMessageContent,
   getTargetResponse,
+  gradeRedteamTurn,
   isConversationEndedResponse,
   isTargetCallAbortError,
   preserveSelectedError,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   resolveStoredGraderResult,
-  runRedteamGrader,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
@@ -60,7 +57,6 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../../types/index';
-import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
 import type { FlaggedTurn, Message, SuccessfulAttack } from '../shared';
 
@@ -576,44 +572,31 @@ export class CustomProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
-            const { conversationTranscript, priorMessages } =
-              getTargetConversation(lastResponseMessages);
-            const gradingContext: RedteamGradingContext | undefined = {
-              providerResponse: lastResponse,
-              conversationTranscript,
-              priorMessages,
-              ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
-            };
+            const gradingContext = await prepareGradingEvidence({
+              response: lastResponse,
+              trackingMetadata: lastTransformResult?.metadata,
+              fallbackTrackingMetadata: test.metadata,
+              evaluationId: context?.evaluationId ?? test.metadata?.evaluationId,
+            });
+
             const gradedTurn = {
               prompt: lastFinalAttackPrompt,
               output: lastResponse.output,
               messages: lastResponseMessages,
               guardrails: lastResponse.guardrails,
             };
-            const { grade, rubric } = await runRedteamGrader(
+            const { grade, storedResult } = await gradeRedteamTurn({
               grader,
-              gradedTurn.prompt,
-              gradedTurn.output,
               test,
-              provider,
-              getGraderAssertionValue(assertToUse),
+              assertion: assertToUse,
+              turn: gradedTurn,
+              provider: provider,
               additionalRubric,
-              undefined,
               gradingContext,
-            );
+              previous: storedGraderResult,
+            });
             graderPassed = grade.pass;
-            storedGraderResult = accumulateGraderResult(
-              storedGraderResult,
-              {
-                ...grade,
-                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-              },
-              {
-                ...gradedTurn,
-                pluginId: test.metadata?.pluginId,
-                assertion: assertToUse,
-              },
-            );
+            storedGraderResult = storedResult;
             flaggedRound ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
           }
         }
