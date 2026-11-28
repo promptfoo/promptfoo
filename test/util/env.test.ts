@@ -113,6 +113,41 @@ describe('setupEnv', () => {
     expect(process.env.PROMPTFOO_ENV_TEST_VALUE).toBe('explicit');
   });
 
+  it.each(['false', ''])('keeps the host sharing restriction when a file sets %j', (value) => {
+    mockProcessEnv({
+      PROMPTFOO_DISABLE_SHARING: '1',
+      PROMPTFOO_ENV_TEST_VALUE: 'host',
+    });
+    const file = writeEnv(
+      'override.env',
+      `PROMPTFOO_DISABLE_SHARING=${value}\nPROMPTFOO_ENV_TEST_VALUE=file\n`,
+    );
+
+    setupEnv(file);
+
+    expect(process.env.PROMPTFOO_DISABLE_SHARING).toBe('1');
+    expect(process.env.PROMPTFOO_ENV_TEST_VALUE).toBe('file');
+  });
+
+  it('preserves sharing restrictions across files only in their own invocation', () => {
+    mockProcessEnv({ PROMPTFOO_DISABLE_SHARING: undefined });
+    const disable = writeEnv(
+      'disable.env',
+      'PROMPTFOO_DISABLE_SHARING=YES\nPROMPTFOO_DISABLE_SHARING=false\n',
+    );
+    const clear = writeEnv('clear.env', 'PROMPTFOO_DISABLE_SHARING=0\n');
+    const first: NodeJS.ProcessEnv = {};
+    const second: NodeJS.ProcessEnv = {};
+
+    setupEnv([disable, clear], { processEnv: first });
+    setupEnv(clear, { processEnv: first });
+    setupEnv(clear, { processEnv: second });
+
+    expect(first.PROMPTFOO_DISABLE_SHARING).toBe('YES');
+    expect(second.PROMPTFOO_DISABLE_SHARING).toBe('0');
+    expect(process.env.PROMPTFOO_DISABLE_SHARING).toBeUndefined();
+  });
+
   it('keeps configured implicit overrides isolated and preserves host-only values', () => {
     mockProcessEnv({
       DOTENV_PATH: writeEnv(

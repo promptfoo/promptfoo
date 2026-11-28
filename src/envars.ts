@@ -3,7 +3,7 @@ import {
   getExplicitProviderEnv,
   getProviderEnvOverrides,
 } from './envOverrides';
-import { loadEnvFiles } from './util/envFile';
+import { isTruthyEnvValue, loadEnvFiles } from './util/envFile';
 
 import type { EnvOverrides } from './types/env';
 
@@ -530,6 +530,9 @@ export function getProcessEnv(): NodeJS.ProcessEnv {
     ? {
         ...process.env,
         ...Object.fromEntries(Object.entries(fileEnv).filter(([, value]) => value !== undefined)),
+        ...(parseEnvBool(process.env.PROMPTFOO_DISABLE_SHARING) && {
+          PROMPTFOO_DISABLE_SHARING: process.env.PROMPTFOO_DISABLE_SHARING,
+        }),
       }
     : process.env;
 }
@@ -543,6 +546,17 @@ export function getProcessEnv(): NodeJS.ProcessEnv {
 export function getEnvString(key: EnvVarKey): string | undefined;
 export function getEnvString(key: EnvVarKey, defaultValue: string): string;
 export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
+  // Any layer can disable sharing. A more specific override cannot re-enable it.
+  if (key === 'PROMPTFOO_DISABLE_SHARING') {
+    const disabled = [
+      process.env[key],
+      getEnvOverrides('file')?.[key],
+      getEnvOverrides()?.[key],
+    ].find((value) => parseEnvBool(value));
+    if (disabled) {
+      return String(disabled);
+    }
+  }
   // Keep provider values out of the template and subprocess environment layers.
   for (const layer of ['provider', 'suite'] as const) {
     const envValue = getEnvOverrides(layer)?.[key as string];
@@ -574,7 +588,7 @@ export function parseEnvBool(input: string | undefined, defaultValue?: boolean):
     return value;
   }
   if (typeof value === 'string') {
-    return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
+    return isTruthyEnvValue(value);
   }
   return Boolean(defaultValue);
 }

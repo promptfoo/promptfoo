@@ -32,6 +32,8 @@ If your system maintains a conversation history and only expects the latest mess
 
 GOAT uses an attacker LLM that engages in multi-turn conversations with a target model.
 
+For sensitive targets, review [target output data handling](/docs/red-team/configuration#target-output-data-handling).
+
 The attacker pursues multiple adversarial techniques: output manipulation, safe response distractors, and fictional scenarios. Unlike simpler approaches, GOAT adapts its strategy based on the target model's responses, similar to how human red teamers operate.
 
 Each conversation turn follows a structured three-step reasoning process:
