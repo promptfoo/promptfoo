@@ -1,6 +1,15 @@
 import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
+const SCRIPT_ASSERTION_TYPES = new Set<AssertionType>([
+  'javascript',
+  'not-javascript',
+  'python',
+  'not-python',
+  'ruby',
+  'not-ruby',
+]);
+
 const BASE_ASSERTION_TYPE_SET = new Set<string>(BaseAssertionTypesSchema.options);
 const SPECIAL_ASSERTION_TYPES = new Set<string>(['max-score', 'select-best']);
 
@@ -429,6 +438,9 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
 }
 
 function getRequiredStringValueError(assertion: Assertion): string | undefined {
+  if (SCRIPT_ASSERTION_TYPES.has(assertion.type) && assertion.script !== undefined) {
+    return undefined;
+  }
   if (!REQUIRED_STRING_ASSERTION_TYPES.has(assertion.type) || hasNonBlankString(assertion.value)) {
     return undefined;
   }
@@ -583,6 +595,15 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
 export function getRunnableAssertionValueError(assertion: Assertion): string | undefined {
   if (!isSupportedAssertionType(assertion.type)) {
     return 'Select a supported assertion type before running.';
+  }
+
+  if (assertion.script !== undefined) {
+    if (!SCRIPT_ASSERTION_TYPES.has(assertion.type)) {
+      return 'Script files are only supported for JavaScript, Python, and Ruby checks.';
+    }
+    if (typeof assertion.script !== 'string' || !assertion.script.startsWith('file://')) {
+      return 'Enter a script file reference starting with file://.';
+    }
   }
 
   return (
