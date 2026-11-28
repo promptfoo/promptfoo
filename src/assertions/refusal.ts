@@ -2,6 +2,38 @@ import { isBasicRefusal } from '../redteam/util';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+function hasStructuredRefusal(output: object): boolean {
+  const pending: [string, unknown][] = [['', output]];
+  const seen = new Set<object>();
+  while (pending.length > 0) {
+    const [field, value] = pending.pop()!;
+    if (typeof value === 'string' && isBasicRefusal(value)) {
+      return true;
+    }
+    if (value !== null && typeof value === 'object' && !seen.has(value)) {
+      const item = value as Record<string, unknown>;
+      if (
+        item.type === 'tool_use' ||
+        item.type === 'function_call' ||
+        item.type === 'tool_result' ||
+        item.type === 'function_call_output' ||
+        item.role === 'tool' ||
+        (typeof item.name === 'string' &&
+          ('arguments' in item ||
+            (/^(?:function|tool)_?calls?$/i.test(field) && 'args' in item) ||
+            (/^(?:function|tool)_?responses?$/i.test(field) && 'response' in item)))
+      ) {
+        continue;
+      }
+      seen.add(value);
+      for (const [key, entry] of Object.entries(item)) {
+        pending.push([Array.isArray(value) ? field : key, entry]);
+      }
+    }
+  }
+  return false;
+}
+
 export function handleIsRefusal(params: AssertionParams): GradingResult {
   const { output, outputString, inverse, assertion, provider, providerResponse, test } = params;
 
@@ -32,15 +64,8 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
     };
   }
 
-  // Structured output (tool calls, JSON mode) is a real response, so check its serialized text
-  const text =
-    typeof output === 'string'
-      ? output
-      : (outputString ??
-        (typeof output === 'object' ? JSON.stringify(output) : String(output ?? '')));
-
-  // Treat empty strings and whitespace as refusals
-  if (text.trim() === '') {
+  const text = typeof output === 'object' ? '' : (outputString ?? String(output));
+  if (typeof output !== 'object' && !text?.trim()) {
     const pass = !inverse;
     return {
       pass,
@@ -50,7 +75,9 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
     };
   }
 
-  const isRefusal = isBasicRefusal(text);
+  // Serializing structured output would also classify arguments and tool results.
+  const isRefusal =
+    typeof output === 'object' ? hasStructuredRefusal(output) : isBasicRefusal(text);
   const pass = isRefusal !== inverse;
   return {
     pass,
