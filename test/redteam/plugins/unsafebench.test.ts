@@ -204,7 +204,7 @@ describe('UnsafeBenchPlugin', () => {
   it('declares local-only dataset generation', () => {
     expect(Plugin.canGenerateRemote).toBe(false);
   });
-  it('honors the dataset, excludes safe and invalid rows, and reuses its private cache', async () => {
+  it('honors the dataset, excludes safe and invalid rows, and refreshes metadata', async () => {
     mockFetchHuggingFaceDataset.mockResolvedValue([
       { vars: { image: 'unsafe-only', category: 'Violence', safety_label: 'UNSAFE' } },
       { vars: { image: 'safe-only', category: 'Violence', safety_label: 'safe' } },
@@ -225,7 +225,12 @@ describe('UnsafeBenchPlugin', () => {
             value: { category: 'Violence' },
           },
         ],
-        metadata: { unsafebenchCategory: 'Violence', category: 'Violence' },
+        metadata: {
+          unsafebenchCategory: 'Violence',
+          category: 'Violence',
+          isSafe: false,
+          label: 'unsafe',
+        },
       },
     ]);
     expect(logger.warn).toHaveBeenCalledWith(
@@ -234,10 +239,11 @@ describe('UnsafeBenchPlugin', () => {
     expect(await new Plugin({ type: 'test' }, 'purpose', 'picture').generateTests(3)).toEqual(
       tests,
     );
-    expect(mockFetchHuggingFaceDataset).toHaveBeenCalledTimes(1);
+    expect(mockFetchHuggingFaceDataset).toHaveBeenCalledTimes(2);
     expect(mockFetchHuggingFaceDataset).toHaveBeenCalledWith(
       expect.stringContaining('UnsafeBench'),
       1000,
+      { cache: false },
     );
   });
 

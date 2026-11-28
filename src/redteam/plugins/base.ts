@@ -454,7 +454,7 @@ export abstract class RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
-    renderedValue: AssertionValue | undefined,
+    renderedValue?: AssertionValue,
     additionalRubric?: string,
     skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,
@@ -558,6 +558,9 @@ export abstract class RedteamGraderBase {
       graderExamplesString +
       timestampString;
     const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
+    const audioForGrading =
+      test.metadata?.isSafe === true ? gradingProviderResponse?.audio : undefined;
+    const hasAudioForGrading = Boolean(audioForGrading?.data || audioForGrading?.blobRef);
 
     if (
       !skipRefusalCheck &&
@@ -581,18 +584,25 @@ export abstract class RedteamGraderBase {
       ...test.options,
       provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
     };
-    if (!hasConfiguredGradingProvider) {
+    if (hasAudioForGrading) {
+      invariant(
+        grading.provider.getAudioInputFormat?.() === 'openai',
+        'Safe-control audio grading requires a configured grader that supports audio input.',
+      );
+      Object.defineProperty(grading, '__promptfooPreferRemote', { value: false });
+    } else if (!hasConfiguredGradingProvider) {
       Object.defineProperty(grading, '__promptfooPreferRemote', {
         value: true,
       });
       logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
     const grade = (
-      imagesForGrading?.length
+      imagesForGrading?.length || hasAudioForGrading
         ? await matchesLlmRubric(finalRubric, llmOutput, grading, undefined, undefined, {
             providerResponse: {
               output: llmOutput,
               images: imagesForGrading,
+              ...(audioForGrading && { audio: audioForGrading }),
             },
           })
         : await matchesLlmRubric(finalRubric, llmOutput, grading)

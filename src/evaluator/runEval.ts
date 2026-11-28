@@ -107,6 +107,12 @@ function hasNestedRedteamAssertion(assertion: NestedAssertion): boolean {
   );
 }
 
+function hasSafeControlGrader(assertion: NestedAssertion): boolean {
+  return assertion.type === 'assert-set'
+    ? Boolean(assertion.assert?.some(hasSafeControlGrader))
+    : /^promptfoo:redteam:(?:aegis|beavertails|unsafebench)$/.test(assertion.type ?? '');
+}
+
 export function getRepeatCacheNamespace(
   repeatIndex: number,
   evaluateOptions?: InternalEvaluateOptions,
@@ -1035,7 +1041,11 @@ async function applyRunEvalResponseOutcome({
     return;
   }
 
-  if (response.output === null || response.output === undefined) {
+  // Guardrail controls grade media-only and empty answers explicitly.
+  if (
+    response.output == null &&
+    !(test.metadata?.isSafe === true && test.assert?.some(hasSafeControlGrader))
+  ) {
     // An absent provider result is an integration error, including in redteam
     // scans. An intentional empty string still proceeds to the assertions.
     ret.success = false;
@@ -1127,9 +1137,10 @@ async function gradeRunEvalResponse({
 
   const assertionProviderResponse = {
     ...processedResponse,
-    // Keep generated audio available to graders after persistence replaces its
-    // inline bytes with a blob reference in the saved result.
+    output: response.output == null ? response.output : processedResponse.output,
+    // Keep inline media available to graders while saving blob references in the result.
     ...(response.audio?.data ? { audio: response.audio } : {}),
+    ...(response.images ? { images: response.images } : {}),
     providerTransformedOutput,
   };
 
@@ -1203,8 +1214,9 @@ async function transformRunEvalResponse({
   processedResponse: ProviderResponse;
   providerTransformedOutput: ProviderResponse['output'];
 }> {
-  const processedResponse = { ...response };
-  if (provider.transform) {
+  const hasOutput = response.output != null;
+  const processedResponse = { ...response, output: response.output ?? '' };
+  if (hasOutput && provider.transform) {
     processedResponse.output = await transform(provider.transform, processedResponse.output, {
       vars,
       prompt,
@@ -1213,7 +1225,7 @@ async function transformRunEvalResponse({
   const providerTransformedOutput = processedResponse.output;
 
   const testTransform = test.options?.transform || test.options?.postprocess;
-  if (testTransform) {
+  if (hasOutput && testTransform) {
     processedResponse.output = await transform(testTransform, processedResponse.output, {
       vars,
       prompt,

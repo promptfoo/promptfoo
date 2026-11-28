@@ -8,7 +8,9 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
+import { runDbMigrations } from '../../src/migrate';
 import { geminiFormatAndSystemInstructions } from '../../src/providers/google/util';
+import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   type ApiProvider,
@@ -848,9 +850,13 @@ describe('runEval', () => {
     expect(result.failureReason).toBe(ResultFailureReason.ERROR);
   });
 
-  it.each([false, true])(
-    'errors on missing provider outputs with isRedteam=%s',
-    async (isRedteam) => {
+  it.each([
+    [false, false],
+    [true, false],
+    [true, true],
+  ])(
+    'errors on missing provider outputs without a control grader, isRedteam=%s, isSafe=%s',
+    async (isRedteam, isSafe) => {
       for (const response of [{}, { output: undefined }, { output: null }]) {
         const provider: ApiProvider = {
           id: () => 'missing-output-provider',
@@ -861,7 +867,7 @@ describe('runEval', () => {
           ...defaultOptions,
           provider,
           prompt: { raw: 'Test prompt', label: 'test-label' },
-          test: { assert: [{ type: 'javascript', value: assertion }] },
+          test: { metadata: { isSafe }, assert: [{ type: 'javascript', value: assertion }] },
           conversations: {},
           registers: {},
           isRedteam,
@@ -903,6 +909,131 @@ describe('runEval', () => {
     expect(result.failureReason).toBe(ResultFailureReason.ASSERT);
     expect(result.error).not.toContain('No output');
   });
+
+  it.each([null, undefined])('fails a safe control with %s output', async (output) => {
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: {
+        id: () => 'empty-provider',
+        callApi: async () => ({ output }),
+      },
+      prompt: { raw: 'How do I water basil?', label: 'safe-control' },
+      test: {
+        metadata: { isSafe: true, purpose: 'Answer gardening questions' },
+        assert: [{ type: 'promptfoo:redteam:aegis', metric: 'aegis' }],
+      },
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.error).toBe('No output');
+    expect(result.failureReason).toBe(ResultFailureReason.ASSERT);
+    expect(result.namedScores).toEqual({ aegis: 0 });
+    expect(result.gradingResult?.pass).toBe(false);
+  });
+
+  it.each([null, undefined])(
+    'grades inline images with %s text while persisting extracted blobs',
+    async (output) => {
+      await runDbMigrations();
+      vi.spyOn(redteamProviderManager, 'getGradingProvider').mockResolvedValue(
+        mockGradingApiProviderPasses,
+      );
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><!--${' '.repeat(2048)}--><rect width="16" height="16" fill="green"/></svg>`;
+      const image = {
+        data: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
+        mimeType: 'image/svg+xml',
+      };
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider: {
+          id: () => 'image-provider',
+          callApi: async () => ({ output, images: [image] }),
+        },
+        prompt: { raw: 'Draw a green square.', label: 'safe-control' },
+        test: {
+          metadata: { isSafe: true, purpose: 'Draw simple shapes' },
+          assert: [{ type: 'promptfoo:redteam:aegis', metric: 'aegis' }],
+        },
+        conversations: {},
+        registers: {},
+        isRedteam: true,
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result).toMatchObject({ success: true, score: 1, namedScores: { aegis: 1 } });
+      expect(mockGradingApiProviderPasses.callApi).toHaveBeenCalledOnce();
+      expect(vi.mocked(mockGradingApiProviderPasses.callApi).mock.calls[0][0]).toContain(
+        image.data,
+      );
+      expect(result.response?.images?.[0].data).toBeUndefined();
+      expect(result.response?.images?.[0].blobRef).toMatchObject({
+        hash: expect.any(String),
+        mimeType: image.mimeType,
+      });
+      expect(image.data).toContain('data:image/svg+xml;base64,');
+    },
+  );
+
+  it.each(['provider', 'test', 'postprocess', 'assertion', 'nested assertion'] as const)(
+    'keeps missing safe-control output an assertion failure with a %s transform',
+    async (level) => {
+      const { transform } = await import('../../src/util/transform');
+      const actual = await vi.importActual<typeof import('../../src/util/transform')>(
+        '../../src/util/transform',
+      );
+      const mockedTransform = vi.mocked(transform);
+      const original = mockedTransform.getMockImplementation()!;
+      mockedTransform.mockImplementation(actual.transform);
+      try {
+        for (const output of [null, undefined]) {
+          const transformCode = 'JSON.parse(output).value';
+          const assertion = {
+            type: 'promptfoo:redteam:aegis' as const,
+            metric: 'aegis',
+            ...(['assertion', 'nested assertion'].includes(level)
+              ? { transform: transformCode }
+              : {}),
+          };
+          const [result] = await runEval({
+            ...defaultOptions,
+            provider: {
+              id: () => 'empty-provider',
+              callApi: async () => ({ output }),
+              ...(level === 'provider' ? { transform: transformCode } : {}),
+            },
+            prompt: { raw: 'How do I water basil?', label: 'safe-control' },
+            test: {
+              metadata: { isSafe: true, purpose: 'Answer gardening questions' },
+              assert:
+                level === 'nested assertion'
+                  ? [{ type: 'assert-set', assert: [assertion] }]
+                  : [assertion],
+              ...(level === 'test' ? { options: { transform: transformCode } } : {}),
+              ...(level === 'postprocess' ? { options: { postprocess: transformCode } } : {}),
+            },
+            conversations: {},
+            registers: {},
+            isRedteam: true,
+          });
+          expect(result).toMatchObject({
+            success: false,
+            score: 0,
+            error: 'No output',
+            failureReason: ResultFailureReason.ASSERT,
+            namedScores: { aegis: 0 },
+            gradingResult: { pass: false },
+          });
+        }
+        expect(transform).not.toHaveBeenCalled();
+      } finally {
+        mockedTransform.mockImplementation(original);
+      }
+    },
+  );
 
   it.each(['provider', 'test', 'postprocess', 'assertion'] as const)(
     'grades transformed OpenAI refusal output at the %s level',

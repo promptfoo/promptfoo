@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import { Checkbox } from '@app/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -38,13 +39,13 @@ export default function PluginConfigDialog({
   // Initialize with provided config
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config);
 
-  // Update localConfig when config prop changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  // Parent rerenders can replace config with a fresh object. Reset only on open or plugin changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: preserve in-progress dialog edits across parent rerenders
   useEffect(() => {
-    if (open && plugin && (!localConfig || Object.keys(localConfig).length === 0)) {
+    if (open && plugin) {
       setLocalConfig(config || {});
     }
-  }, [open, plugin, config]);
+  }, [open, plugin]);
 
   const handleArrayInputChange = (key: string, index: number, value: string) => {
     setLocalConfig((prev) => {
@@ -289,6 +290,31 @@ export default function PluginConfigDialog({
           </div>
         );
         break;
+      case 'beavertails':
+      case 'unsafebench':
+      case 'aegis':
+        specificConfig = (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">{getGuardrailPluginDescription(plugin)}</p>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="include-safe"
+                checked={localConfig.includeSafe || false}
+                onCheckedChange={(checked) =>
+                  setLocalConfig({ ...localConfig, includeSafe: checked === true })
+                }
+              />
+              <Label htmlFor="include-safe" inline>
+                Include safe controls to test for over-blocking
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Add harmless requests to check for unjustified refusals. Tests aim for an even split
+              of safe and unsafe inputs, subject to available records.
+            </p>
+          </div>
+        );
+        break;
       default:
         specificConfig = null;
     }
@@ -382,5 +408,18 @@ const arrayKeyToLabel = (key: string) => {
       return 'Target System';
     case 'targetUrls':
       return 'Target URL';
+  }
+};
+
+const getGuardrailPluginDescription = (plugin: string) => {
+  switch (plugin) {
+    case 'beavertails':
+      return 'BeaverTails pairs dataset prompts with a small set of curated harmless questions.';
+    case 'unsafebench':
+      return 'UnsafeBench uses labeled images. Safe controls assess unjustified refusals, not image-description accuracy.';
+    case 'aegis':
+      return "Aegis uses safe and unsafe requests labeled in NVIDIA's safety dataset.";
+    default:
+      return '';
   }
 };

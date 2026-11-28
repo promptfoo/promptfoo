@@ -4315,6 +4315,7 @@
                             }
                           },
                           "maxCharsPerMessage": { "type": "integer", "exclusiveMinimum": 0 },
+                          "includeSafe": { "type": "boolean" },
                           "__nonce": { "type": "number" }
                         },
                         "default": {},
