@@ -1,4 +1,16 @@
-import { isHttpRateLimitError, isTransientConnectionError } from '../util/fetch/errors';
+import {
+  isHttpRateLimitError,
+  isTransientConnectionError,
+  type SystemError,
+} from '../util/fetch/errors';
+
+const TRANSIENT_NETWORK_CODES = new Set([
+  'ETIMEDOUT',
+  'ECONNREFUSED',
+  'EAI_AGAIN',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
 
 export interface RetryPolicy {
   maxRetries: number;
@@ -68,13 +80,19 @@ export function shouldRetry(
 
   // Retry transient errors.
   // isTransientConnectionError covers TLS/socket-level failures (bad record
-  // mac, EPROTO, ECONNRESET, socket hang up).  The inline patterns below
+  // mac, EPROTO, ECONNRESET, socket hang up). The inline patterns below
   // cover higher-level transient failures (DNS, HTTP status codes, timeouts)
-  // that are distinct from those low-level connection errors.
+  // across the error and nested cause.
   if (error) {
+    const cause = (error as SystemError).cause as SystemError | undefined;
     const message = (error.message ?? '').toLowerCase();
+    const causeMessage = typeof cause?.message === 'string' ? cause.message.toLowerCase() : '';
+
     return (
       isTransientConnectionError(error) ||
+      TRANSIENT_NETWORK_CODES.has((error as SystemError).code ?? '') ||
+      TRANSIENT_NETWORK_CODES.has(cause?.code ?? '') ||
+      causeMessage.includes('econnrefused') ||
       message.includes('timeout') ||
       message.startsWith('websocket request timed out after ') ||
       message.includes('econnrefused') ||
