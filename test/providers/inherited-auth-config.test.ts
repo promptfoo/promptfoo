@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { AbliterationProvider } from '../../src/providers/abliteration';
 import { createCerebrasProvider } from '../../src/providers/cerebras';
 import { CometApiImageProvider } from '../../src/providers/cometapi';
+import { GroqProvider } from '../../src/providers/groq/chat';
+import { GroqResponsesProvider } from '../../src/providers/groq/responses';
 import { HeliconeGatewayProvider } from '../../src/providers/helicone';
 import { loadApiProvider } from '../../src/providers/index';
 import { createNscaleProvider } from '../../src/providers/nscale';
@@ -25,6 +28,9 @@ beforeEach(() => {
     NSCALE_PROXY_KEY: 'process-proxy',
     NSCALE_MISSING_KEY: undefined,
     COMETAPI_KEY: 'process-comet',
+    ABLIT_KEY: 'process-abliteration',
+    GROQ_API_KEY: 'process-groq',
+    CUSTOM_PROVIDER_KEY: 'process-custom',
     HELICONE_API_KEY: 'process-helicone',
     OPENAI_API_KEY: 'unrelated-openai',
     OPENAI_ORGANIZATION: 'unrelated-org',
@@ -59,6 +65,64 @@ function firstRequest() {
   }
   return { url, headers: request.headers, body: JSON.parse(request.body as string) };
 }
+
+describe.each([
+  { Provider: GroqProvider, key: 'GROQ_API_KEY', name: 'Groq chat', ambient: 'process-groq' },
+  {
+    Provider: GroqResponsesProvider,
+    key: 'GROQ_API_KEY',
+    name: 'Groq responses',
+    ambient: 'process-groq',
+  },
+  {
+    Provider: AbliterationProvider,
+    key: 'ABLIT_KEY',
+    name: 'Abliteration',
+    ambient: 'process-abliteration',
+  },
+  {
+    Provider: CometApiImageProvider,
+    key: 'COMETAPI_KEY',
+    name: 'Comet image',
+    ambient: 'process-comet',
+  },
+])('$name inherited credential policy', ({ Provider, key, ambient }) => {
+  it.each([undefined, '', 'CUSTOM_PROVIDER_KEY'])(
+    'masks ambient credentials when the selected key %s is explicitly empty',
+    async (apiKeyEnvar) => {
+      const selectedKey = apiKeyEnvar || key;
+      const provider = new Provider('fixture-model', {
+        config: { apiKeyEnvar },
+        env: { [selectedKey]: '', OPENAI_API_KEY: 'unrelated-scoped-key' },
+      });
+      expect(provider.getApiKey()).toBeUndefined();
+      await expect(provider.callApi('Hello')).rejects.toThrow(
+        `Set the ${selectedKey} environment variable`,
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, '', 'CUSTOM_PROVIDER_KEY'])(
+    'uses ambient credentials when the selected override %s is undefined',
+    (apiKeyEnvar) => {
+      const selectedKey = apiKeyEnvar || key;
+      const provider = new Provider('fixture-model', {
+        config: { apiKeyEnvar },
+        env: { [selectedKey]: undefined, OPENAI_API_KEY: 'unrelated-scoped-key' },
+      });
+      expect(provider.getApiKey()).toBe(apiKeyEnvar ? 'process-custom' : ambient);
+    },
+  );
+
+  it('keeps an explicit API key when the selected environment key is masked', () => {
+    const provider = new Provider('fixture-model', {
+      config: { apiKey: 'explicit-key', apiKeyEnvar: 'CUSTOM_PROVIDER_KEY' },
+      env: { CUSTOM_PROVIDER_KEY: '' },
+    });
+    expect(provider.getApiKey()).toBe('explicit-key');
+  });
+});
 
 describe('Cerebras organization isolation', () => {
   it('excludes scoped and process OpenAI organization defaults from requests', async () => {

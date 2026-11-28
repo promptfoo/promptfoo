@@ -1,4 +1,3 @@
-import { getEnvString } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import { serializeProvider } from '../serialization';
 import {
@@ -25,11 +24,6 @@ import type { GroqCompletionOptions, GroqProviderOptions } from './types';
 export class GroqProvider extends OpenAiChatCompletionProvider {
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
-  }
-
-  override getApiKey(): string | undefined {
-    const apiKeyEnvar = this.config.apiKeyEnvar || 'GROQ_API_KEY';
-    return this.config.apiKey || getEnvString(apiKeyEnvar) || this.env?.[apiKeyEnvar];
   }
 
   protected isReasoningModel(modelName = this.modelName): boolean {
