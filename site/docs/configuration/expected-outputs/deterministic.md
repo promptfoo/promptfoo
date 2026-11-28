@@ -354,6 +354,8 @@ assert:
     value: 'file://path/to/expected.json'
 ```
 
+When a JSON `equals` assertion fails, open the result’s **Evaluation** tab to compare the expected JSON with the transformed output. Nested fields in object expectations stay literal. New results include a diff for small, supported JSON values.
+
 #### Unicode normalization
 
 String `equals` and `contains` assertions compare without Unicode normalization by default. To treat composed and decomposed characters such as `é` and `e` + a combining acute accent as equivalent, set `normalizeUnicode: true`:

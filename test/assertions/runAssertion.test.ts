@@ -261,6 +261,40 @@ describe('runAssertion', () => {
     },
   };
 
+  it('skips comparison metadata for zero-weight equality failures', async () => {
+    const result = await runAssertion({
+      assertion: { type: 'equals', value: { a: 1 }, weight: 0 },
+      test: {},
+      providerResponse: { output: '{}' },
+    });
+    expect(result.pass).toBe(true);
+    expect(result.metadata?.jsonComparison).toBeUndefined();
+  });
+
+  it('records transformed output without rendering literal object fields', async () => {
+    const assertion: Assertion = {
+      type: 'equals',
+      value: { name: '{{ name }}', path: 'file://literal' },
+      transform: 'JSON.parse(output).record',
+    };
+    const result = await runAssertion({
+      prompt: 'Hello',
+      provider: createMockProvider(),
+      assertion,
+      test: { vars: { name: 'Resolved name' } },
+      providerResponse: {
+        output: '{"record":{"name":"Actual name","path":"file://literal"},"ignored":true}',
+      },
+    });
+    expect(result.pass).toBe(false);
+    expect(JSON.parse(result.metadata!.jsonComparison!.expected)).toEqual(assertion.value);
+    expect(JSON.parse(result.metadata!.jsonComparison!.actual)).toEqual({
+      name: 'Actual name',
+      path: 'file://literal',
+    });
+    expect(result.metadata?.renderedAssertionValue).toBeUndefined();
+  });
+
   it('should pass when the equality assertion passes', async () => {
     const output = 'Expected output';
 

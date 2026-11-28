@@ -230,10 +230,11 @@ export function projectTestCase(
     : projectedTestCase;
 }
 
-/** Map only grading assertion providers and component results. */
-function mapGradingResultProviderRefs<T>(
+/** Walk component results once to project providers and optional saved comparisons. */
+function mapGradingResult<T>(
   gradingResult: T,
-  mapProvider: (provider: unknown) => unknown,
+  mapProvider: ((provider: unknown) => unknown) | undefined,
+  stripComparison = false,
 ): T {
   const visited = new WeakMap<object, Record<string, unknown>>();
   const project = (value: unknown): unknown => {
@@ -247,7 +248,19 @@ function mapGradingResultProviderRefs<T>(
     }
     const projected = { ...result };
     visited.set(result, projected);
-    if (result.assertion) {
+    if (stripComparison && result.pass === false && asRecord(result.assertion)?.type === 'equals') {
+      const metadata = asRecord(result.metadata);
+      const comparison = asRecord(metadata?.jsonComparison);
+      if (
+        metadata &&
+        typeof comparison?.expected === 'string' &&
+        typeof comparison.actual === 'string'
+      ) {
+        const { jsonComparison: _comparison, ...rest } = metadata;
+        projected.metadata = rest;
+      }
+    }
+    if (mapProvider && result.assertion) {
       projected.assertion = mapTestProviderRefs(result.assertion, mapProvider);
     }
     if (Array.isArray(result.componentResults)) {
@@ -258,10 +271,18 @@ function mapGradingResultProviderRefs<T>(
   return project(gradingResult) as T;
 }
 
-/** Project assertion providers only, preserving grading details and unrelated metadata. */
-export function projectGradingResult<T>(gradingResult: T, stripPromptText: boolean): T {
-  return stripPromptText
-    ? mapGradingResultProviderRefs(gradingResult, stripProviderPromptSelectors)
+/** Apply strip flags to provider references and generated comparison metadata. */
+export function projectGradingResult<T>(
+  gradingResult: T,
+  stripPromptText: boolean,
+  stripComparison = false,
+): T {
+  return stripPromptText || stripComparison
+    ? mapGradingResult(
+        gradingResult,
+        stripPromptText ? stripProviderPromptSelectors : undefined,
+        stripComparison,
+      )
     : gradingResult;
 }
 
@@ -365,7 +386,7 @@ export function serializeResultProviderRefs<T extends object>(result: T): T {
     };
   }
   if (record.gradingResult) {
-    projected.gradingResult = mapGradingResultProviderRefs(record.gradingResult, serializeProvider);
+    projected.gradingResult = mapGradingResult(record.gradingResult, serializeProvider);
   }
   return projected as T;
 }
@@ -961,7 +982,11 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
     response,
     gradingResult: shouldStripGradingResult
       ? null
-      : projectGradingResult(redacted.gradingResult, shouldStripPromptText),
+      : projectGradingResult(
+          redacted.gradingResult,
+          shouldStripPromptText,
+          shouldStripResponseOutput || shouldStripMetadata,
+        ),
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata: shouldStripMetadata
       ? {}
