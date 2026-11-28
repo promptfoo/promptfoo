@@ -123,6 +123,51 @@ describe('Anthropic Default Providers', () => {
       },
     );
 
+    it('should keep the parent response metadata', async () => {
+      vi.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValue({
+        output: JSON.stringify({
+          type: 'tool_use',
+          id: 'test-id',
+          name: 'grade_output',
+          input: createPassingGrade(0.85, 'The output meets the criteria.'),
+        }),
+        metadata: {
+          model: 'claude-3-5-sonnet-20241022-served',
+          fileReferences: [{ type: 'container_upload', file_id: 'file_upload' }],
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result).toEqual({
+        output: createPassingGrade(0.85, 'The output meets the criteria.'),
+        metadata: {
+          model: 'claude-3-5-sonnet-20241022-served',
+          fileReferences: [{ type: 'container_upload', file_id: 'file_upload' }],
+        },
+      });
+    });
+
+    it('should report the model that served the grading reply', async () => {
+      const provider = new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL);
+      const grade = createPassingGrade(0.85, 'The output meets the criteria.');
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        id: 'msg_grade',
+        type: 'message',
+        role: 'assistant',
+        model: `${DEFAULT_ANTHROPIC_MODEL}-20260101`,
+        content: [{ type: 'tool_use', id: 'grade-id', name: 'grade_output', input: grade }],
+        stop_reason: 'tool_use',
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 20 },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Grade this output');
+
+      expect(result.output).toEqual(grade);
+      expect(result.metadata).toEqual({ model: `${DEFAULT_ANTHROPIC_MODEL}-20260101` });
+    });
+
     it('should handle non-string API response', async () => {
       const mockApiResponse = {
         output: { confession: 'I am not a string' },
@@ -145,6 +190,29 @@ describe('Anthropic Default Providers', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toContain('Anthropic LLM rubric grader - invalid JSON');
+    });
+
+    it.each([
+      {
+        name: 'a non-string reply',
+        output: { confession: 'I am not a string' },
+        error: 'Anthropic LLM rubric grader - malformed non-string output',
+      },
+      {
+        name: 'a reply that is not the grade_output tool call',
+        output: 'I cannot grade this.',
+        error: 'Anthropic LLM rubric grader - invalid JSON',
+      },
+    ])('should keep the parent response metadata on $name', async ({ output, error }) => {
+      vi.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValue({
+        output,
+        metadata: { model: 'claude-3-5-sonnet-20241022-served' },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain(error);
+      expect(result.metadata).toEqual({ model: 'claude-3-5-sonnet-20241022-served' });
     });
 
     it('should handle API errors', async () => {

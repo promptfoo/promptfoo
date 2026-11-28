@@ -2356,9 +2356,10 @@ describe('AnthropicMessagesProvider', () => {
 
       vi.spyOn(provider.anthropic.messages, 'create')
         .mockResolvedValueOnce(createSearchTurn() as Anthropic.Messages.Message)
-        .mockResolvedValueOnce(
-          createSearchTurn('toolu_second', 'solar', 8, 4) as Anthropic.Messages.Message,
-        );
+        .mockResolvedValueOnce({
+          ...createSearchTurn('toolu_second', 'solar', 8, 4),
+          model: 'claude-sonnet-4-6-20260101',
+        } as Anthropic.Messages.Message);
 
       const result = await provider.callApi('Find clean energy companies');
 
@@ -2368,6 +2369,25 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.metadata?.toolCalls).toMatchObject([
         { id: 'toolu_first', name: 'search_companies', is_error: false },
       ]);
+      expect(result.metadata?.model).toBe('claude-sonnet-4-6-20260101');
+    });
+
+    it('keeps the served model when an MCP continuation request fails', async () => {
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
+
+      mcpMocks.callTool.mockResolvedValue({ content: 'Acme Solar' });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          ...createSearchTurn(),
+          model: 'claude-sonnet-4-6-20260101',
+        } as Anthropic.Messages.Message)
+        .mockRejectedValueOnce(new Error('Connection lost'));
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.error).toBe('API call error: Connection lost');
+      expect(result.metadata?.model).toBe('claude-sonnet-4-6-20260101');
     });
 
     it('returns an error when MCP tool execution exceeds max_tool_calls', async () => {
@@ -5494,6 +5514,111 @@ describe('AnthropicMessagesProvider', () => {
       expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
       expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
+    });
+  });
+
+  describe('served model metadata', () => {
+    afterEach(() => {
+      enableCache();
+    });
+
+    const servedReply = (model?: string) =>
+      ({
+        id: 'msg_served',
+        type: 'message',
+        role: 'assistant',
+        ...(model === undefined ? {} : { model }),
+        content: [{ type: 'text', text: 'Paris', citations: null }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 4, output_tokens: 1 },
+      }) as Anthropic.Messages.Message;
+
+    it('records the served model on fresh and cached non-streaming responses', async () => {
+      enableCache();
+      const provider = createProvider('claude-sonnet-4-6', { config: { stream: false } });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue(servedReply('claude-sonnet-4-6-20260101'));
+
+      const fresh = await provider.callApi('Capital of France?');
+      const cached = await provider.callApi('Capital of France?');
+
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(cached.cached).toBe(true);
+      for (const response of [fresh, cached]) {
+        expect(response.output).toBe('Paris');
+        expect(response.metadata).toEqual({ model: 'claude-sonnet-4-6-20260101' });
+      }
+    });
+
+    it('records the served model on streaming responses', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: { stream: true } });
+      vi.spyOn(provider.anthropic.messages, 'stream').mockReturnValue({
+        finalMessage: vi.fn().mockResolvedValue(servedReply('claude-sonnet-4-6-20260101')),
+        on: vi.fn(),
+      } as unknown as ReturnType<typeof provider.anthropic.messages.stream>);
+
+      const result = await provider.callApi('Capital of France?');
+
+      expect(result.output).toBe('Paris');
+      expect(result.metadata).toEqual({ model: 'claude-sonnet-4-6-20260101' });
+    });
+
+    it('keeps file references next to the served model', async () => {
+      disableCache();
+      const provider = createProvider('claude-sonnet-5', { config: { stream: false } });
+      const fileReference = { type: 'container_upload', file_id: 'file_upload' } as const;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        ...servedReply('claude-sonnet-5-20260101'),
+        content: [{ type: 'text', text: 'Report ready.', citations: null }, fileReference],
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Create a report');
+
+      expect(result.metadata).toEqual({
+        model: 'claude-sonnet-5-20260101',
+        fileReferences: [fileReference],
+      });
+    });
+
+    it('keeps MCP tool calls next to the served model', async () => {
+      disableCache();
+      mcpMocks.getAllTools.mockReturnValue([
+        {
+          name: 'search_companies',
+          description: 'Search sample company records.',
+          inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+        },
+      ]);
+      mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
+      const provider = createProvider('claude-sonnet-4-6', createMcpOptions());
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          ...servedReply('claude-sonnet-4-6-20260101'),
+          content: [createSearchToolUse('clean energy')],
+          stop_reason: 'tool_use',
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce(servedReply('claude-sonnet-4-6-20260101'));
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.metadata?.model).toBe('claude-sonnet-4-6-20260101');
+      expect(result.metadata?.toolCalls).toHaveLength(1);
+    });
+
+    it.each([
+      ['missing', undefined],
+      ['empty', ''],
+    ])('adds no model when the reply model is %s', async (_label, model) => {
+      disableCache();
+      const provider = createProvider('claude-sonnet-4-6', { config: { stream: false } });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(servedReply(model));
+
+      const result = await provider.callApi('Capital of France?');
+
+      expect(result.output).toBe('Paris');
+      expect(result.metadata).toBeUndefined();
     });
   });
 });
