@@ -171,6 +171,8 @@ Additional audio processing capabilities:
 - `elevenlabs:isolation` - Remove background noise from audio
 - `elevenlabs:alignment` - Generate time-aligned subtitles
 
+For `elevenlabs:history`, set `vars.conversationId: "*"` and provide `agentId` to list one page of conversations. Keep a non-wildcard prompt in the config so Promptfoo does not treat it as a file glob. Test variables support `limit` (page size, 1–100), `cursor`, and `startDate`/`endDate` (ISO dates or Unix seconds). The response includes `has_more` and `next_cursor`; pass the cursor to retrieve another page. An optional `status` filters the returned page locally (`completed` also matches `done`, and `in_progress` matches `in-progress`).
+
 ## Configuration Parameters
 
 All providers support these common parameters:

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ElevenLabsClient } from '../../../../src/providers/elevenlabs/client';
 import { ElevenLabsHistoryProvider } from '../../../../src/providers/elevenlabs/history';
 import { mockProcessEnv } from '../../../util/utils';
 
@@ -172,6 +173,88 @@ describe('ElevenLabsHistoryProvider', () => {
   });
 
   describe('callApi - list conversations', () => {
+    it.each([0, '0'])('preserves epoch-zero date bounds supplied as %j', async (startDate) => {
+      vi.mocked(ElevenLabsClient.prototype.get).mockResolvedValue({
+        conversations: [],
+        has_more: false,
+        next_cursor: null,
+      });
+      const provider = new ElevenLabsHistoryProvider('elevenlabs:history', {
+        config: { agentId: 'agent' },
+      });
+      const response = await provider.callApi('*', {
+        vars: { startDate, endDate: '60' },
+      } as unknown as CallApiContextParams);
+      expect(response.error).toBeUndefined();
+      expect(ElevenLabsClient.prototype.get).toHaveBeenCalledWith(
+        '/convai/conversations?agent_id=agent&call_start_after_unix=0&call_start_before_unix=60',
+      );
+      expect(JSON.parse(response.output as string)).toMatchObject({
+        total_conversations: 0,
+        has_more: false,
+        next_cursor: null,
+      });
+    });
+
+    it.each(['startDate', 'endDate'])(
+      'reports an invalid %s without a request',
+      async (variable) => {
+        const provider = new ElevenLabsHistoryProvider('elevenlabs:history', {
+          config: { agentId: 'agent' },
+        });
+        const response = await provider.callApi('*', {
+          vars: { [variable]: 'invalid-date' },
+        } as unknown as CallApiContextParams);
+        expect(response.error).toContain(`Invalid ${variable}`);
+        expect(ElevenLabsClient.prototype.get).not.toHaveBeenCalled();
+      },
+    );
+
+    it('uses the native list route, page parameters and summary fields', async () => {
+      vi.mocked(ElevenLabsClient.prototype.get).mockResolvedValue({
+        conversations: [
+          {
+            conversation_id: 'conv-native',
+            status: 'done',
+            start_time_unix_secs: 1704067200,
+            call_duration_secs: 0,
+            message_count: 4,
+          },
+        ],
+        has_more: true,
+        next_cursor: 'next/page',
+      });
+      const provider = new ElevenLabsHistoryProvider('elevenlabs:history', {
+        config: { agentId: 'agent/a&b' },
+      });
+      const response = await provider.callApi('*', {
+        vars: { limit: 5, cursor: 'previous/page' },
+      } as unknown as CallApiContextParams);
+      const url = new URL(
+        vi.mocked(ElevenLabsClient.prototype.get).mock.calls[0][0],
+        'https://example.test',
+      );
+      expect(url.pathname).toBe('/convai/conversations');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        agent_id: 'agent/a&b',
+        page_size: '5',
+        cursor: 'previous/page',
+      });
+      expect(JSON.parse(response.output as string)).toMatchObject({
+        total_conversations: 1,
+        has_more: true,
+        next_cursor: 'next/page',
+        conversations: [
+          {
+            conversation_id: 'conv-native',
+            duration_seconds: 0,
+            turn_count: 4,
+            created_at: '2024-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+    });
+
     it('should require agent ID to list conversations', async () => {
       const provider = new ElevenLabsHistoryProvider('elevenlabs:history');
 
@@ -250,17 +333,26 @@ describe('ElevenLabsHistoryProvider', () => {
         config: { agentId: 'agent-123' },
       });
 
-      const mockResponse = { conversations: [] };
+      const mockResponse = {
+        conversations: [
+          { conversation_id: 'kept', status: 'done' },
+          { conversation_id: 'excluded', status: 'failed' },
+        ],
+      };
 
       (provider as any).client.get = vi.fn().mockResolvedValue(mockResponse);
 
-      await provider.callApi('', {
+      const response = await provider.callApi('', {
         vars: { status: 'completed' },
       } as unknown as CallApiContextParams);
 
-      expect((provider as any).client.get).toHaveBeenCalledWith(
-        expect.stringContaining('status=completed'),
+      expect((provider as any).client.get).not.toHaveBeenCalledWith(
+        expect.stringContaining('status='),
       );
+      expect(JSON.parse(response.output as string)).toMatchObject({
+        total_conversations: 1,
+        conversations: [{ conversation_id: 'kept' }],
+      });
     });
 
     it('should support filtering conversations by date range', async () => {
@@ -281,8 +373,8 @@ describe('ElevenLabsHistoryProvider', () => {
       } as unknown as CallApiContextParams);
 
       const callArg = mockGet.mock.calls[0][0];
-      expect(callArg).toContain('start_date=2024-01-01');
-      expect(callArg).toContain('end_date=2024-01-31');
+      expect(callArg).toContain('call_start_after_unix=1704067200');
+      expect(callArg).toContain('call_start_before_unix=1706659200');
     });
 
     it('should handle API errors when listing conversations', async () => {
