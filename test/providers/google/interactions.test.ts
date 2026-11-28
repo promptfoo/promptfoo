@@ -22,6 +22,10 @@ describe('GoogleInteractionsProvider', () => {
   const mockFetchWithCache = vi.mocked(fetchWithCache);
   const mockStoreBlob = vi.mocked(storeBlob);
   const mockFetchWithTimeout = vi.mocked(fetchWithTimeout);
+  // Self-contained text interactions are cached under a credential-free key.
+  const cacheableInteraction = {
+    cacheKey: expect.stringMatching(/^google:interactions:v1:[0-9a-f]{64}$/),
+  };
   const disabledToolPolicies = [
     { name: 'tool_choice', config: { tool_choice: 'none' as const } },
     {
@@ -458,6 +462,54 @@ describe('GoogleInteractionsProvider', () => {
       aspect_ratio: '9:16',
       resolution: '1080p',
     });
+  });
+
+  it.each([
+    {
+      name: 'a provider passthrough format',
+      config: {
+        aspectRatio: '16:9',
+        passthrough: { response_format: { type: 'video', aspect_ratio: '9:16' } },
+      },
+      expected: '9:16',
+    },
+    {
+      name: 'a Vertex passthrough format array',
+      config: {
+        vertexai: true,
+        aspectRatio: '16:9',
+        passthrough: { response_format: [{ type: 'video', aspect_ratio: '9:16' }] },
+      },
+      expected: '9:16',
+    },
+    {
+      name: 'a passthrough format without an aspect ratio',
+      config: {
+        aspectRatio: '16:9',
+        passthrough: { response_format: { type: 'video', resolution: '360p' } },
+      },
+      expected: undefined,
+    },
+    { name: 'config.aspectRatio', config: { aspectRatio: '9:16' }, expected: '9:16' },
+  ])('reports the aspect ratio sent by $name', async ({ config, expected }) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key', ...config } as any,
+    });
+
+    const result = await provider.callApi('A city at dusk');
+
+    const body = JSON.parse((mockFetchWithCache.mock.calls[0]?.[1] as RequestInit).body as string);
+    const sentFormat = [body.response_format].flat()[0];
+    expect(result.error).toBeUndefined();
+    expect(sentFormat.aspect_ratio).toBe(expected);
+    expect(result.video?.aspectRatio).toBe(expected);
   });
 
   it('returns a useful error when the Interactions API does not return video', async () => {
@@ -2513,28 +2565,412 @@ describe('GoogleInteractionsProvider', () => {
     }
   });
 
-  it('does not bill cached custom Omni alias responses with explicit pricing', async () => {
+  it.each(['cached', 'coalesced'])('omits the ID on %s responses', async (source) => {
     mockFetchWithCache.mockResolvedValue({
       data: {
+        id: 'private-interaction',
         status: 'completed',
-        steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
-        usage: { total_input_tokens: 10, total_output_tokens: 20 },
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'robot plan' }] }],
+        usage: { total_input_tokens: 10, total_output_tokens: 20, total_tokens: 30 },
       },
-      cached: true,
+      cached: source === 'cached',
+      coalesced: source === 'coalesced',
+      status: 200,
+      statusText: 'OK',
     } as any);
-    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
       config: {
         apiKey: 'test-key',
-        passthrough: { model: 'video-deployment' },
+        passthrough: { model: 'robotics-deployment' },
         cost: 0.01,
       },
     });
 
-    const result = await provider.callApi('A city at dusk');
+    const result = await provider.callApi('Plan the next move');
 
+    // The evaluator records a replay as incurring no cost; the response keeps the reported one.
     expect(result.error).toBeUndefined();
     expect(result.cached).toBe(true);
-    expect(result.cost).toBeUndefined();
+    expect(result.metadata).not.toHaveProperty('interactionId');
+    expect(result.raw).toBeUndefined();
+    expect(result.cost).toBeCloseTo(30 * 0.01, 12);
+    expect(result.tokenUsage).toMatchObject({
+      prompt: 10,
+      completion: 20,
+      total: 30,
+      cached: 30,
+      numRequests: 0,
+    });
+  });
+
+  describe('response caching', () => {
+    const completedText = {
+      data: {
+        id: 'interaction-text',
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'robot plan' }] }],
+        usage: { total_input_tokens: 10, total_output_tokens: 20, total_tokens: 30 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
+
+    async function getCacheArgument(
+      modelName: string,
+      config: Record<string, unknown>,
+      context?: Record<string, unknown>,
+      prompt = 'Plan the next move',
+    ) {
+      mockFetchWithCache.mockResolvedValue(completedText as any);
+      const provider = new GoogleInteractionsProvider(modelName, { config: config as any });
+      await provider.callApi(prompt, context as any);
+      return mockFetchWithCache.mock.calls.at(-1)?.[4];
+    }
+
+    it('treats reordered but equivalent request objects as the same entry', async () => {
+      const seedFirst = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'test-key',
+        passthrough: { generation_config: { seed: 1, max_output_tokens: 20 } },
+      });
+      const limitFirst = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'test-key',
+        passthrough: { generation_config: { max_output_tokens: 20, seed: 1 } },
+      });
+      const bodies = mockFetchWithCache.mock.calls.map(
+        ([, request]) => (request as RequestInit).body,
+      );
+
+      // The wire body keeps its order; only the cache identity is canonicalized.
+      expect(bodies[0]).not.toEqual(bodies[1]);
+      expect(seedFirst).toEqual(cacheableInteraction);
+      expect(limitFirst).toEqual(seedFirst);
+    });
+
+    it('keeps array order in the cache identity', async () => {
+      const first = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'test-key',
+        stopSequences: ['alpha', 'beta'],
+      });
+      const second = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'test-key',
+        stopSequences: ['beta', 'alpha'],
+      });
+
+      expect(first).toEqual(cacheableInteraction);
+      expect(second).toEqual(cacheableInteraction);
+      expect(second).not.toEqual(first);
+    });
+
+    const describeImage = (image: Record<string, unknown>) =>
+      JSON.stringify([image, { type: 'text', text: 'Describe the image.' }]);
+
+    it.each([
+      {
+        name: 'an unsigned Cloud Storage URI',
+        prompt: describeImage({
+          type: 'image',
+          uri: 'https://storage.googleapis.com/bucket/cat.png',
+        }),
+      },
+      { name: 'a gs:// URI', prompt: describeImage({ type: 'image', uri: 'gs://bucket/cat.png' }) },
+      {
+        name: 'a signed Cloud Storage image URL',
+        prompt: describeImage({
+          type: 'image',
+          mime_type: 'image/png',
+          uri: 'https://storage.googleapis.com/bucket/cat.png?X-Goog-Signature=abc123&X-Goog-Expires=900',
+        }),
+      },
+      {
+        name: 'an image URL with a shared access signature',
+        prompt: describeImage({
+          type: 'image_url',
+          image_url: {
+            url: 'https://account.blob.core.windows.net/media/cat.png?sv=2026&sig=abc123',
+          },
+        }),
+      },
+      {
+        name: 'an image URL with userinfo',
+        prompt: describeImage({ type: 'image', uri: 'https://user:pass@media.example/cat.png' }),
+      },
+      {
+        name: 'a URL with a query string inside prompt text',
+        prompt: 'Describe https://media.example/cat.png?token=abc123 in one sentence.',
+      },
+      {
+        name: 'a token-like string inside prompt text',
+        prompt: 'Bearer abcdefghijklmnopqrstuvwxyz0123456789',
+      },
+    ])('bypasses the cache for a request body carrying $name', async ({ prompt }) => {
+      await expect(
+        getCacheArgument('gemini-robotics-er-2-preview', { apiKey: 'test-key' }, undefined, prompt),
+      ).resolves.toBe(true);
+      const body = (mockFetchWithCache.mock.calls[0]?.[1] as RequestInit).body as string;
+      expect(body).toContain(prompt.includes('Bearer') ? 'Bearer' : '://');
+    });
+
+    it.each([
+      { name: 'a header map', passthrough: { metadata: { headers: { 'x-tenant': 'test' } } } },
+      { name: 'a secret-named field', passthrough: { api_key: 'not-a-real-key' } },
+      {
+        name: 'a private search store',
+        passthrough: { tools: [{ type: 'file_search', file_search_store_names: ['private'] }] },
+      },
+      {
+        name: 'a server-backed tool',
+        passthrough: { tools: [{ type: 'mcp_server', url: 'https://docs.example' }] },
+      },
+      {
+        name: 'a private cached context',
+        passthrough: { cached_content: 'cachedContents/private' },
+      },
+      {
+        name: 'a signed URL after serialization',
+        passthrough: { source: new URL('https://example.com/image?sig=short') },
+      },
+    ])('bypasses the cache for a request body carrying $name', async ({ passthrough }) => {
+      await expect(
+        getCacheArgument('gemini-robotics-er-2-preview', { apiKey: 'test-key', passthrough }),
+      ).resolves.toBe(true);
+    });
+
+    it('caches inline image bytes', async () => {
+      await expect(
+        getCacheArgument(
+          'gemini-robotics-er-2-preview',
+          { apiKey: 'test-key' },
+          undefined,
+          describeImage({ type: 'image', mime_type: 'image/png', data: 'A'.repeat(256) }),
+        ),
+      ).resolves.toEqual(cacheableInteraction);
+    });
+
+    it('caches a self-contained interaction under a credential-free key', async () => {
+      const first = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'first-key',
+        passthrough: { generation_config: { seed: 1 } },
+      });
+      const otherCredential = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'second-key',
+        passthrough: { generation_config: { seed: 1 } },
+      });
+      const otherBody = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'first-key',
+        passthrough: { generation_config: { seed: 2 } },
+      });
+
+      expect(first).toEqual(cacheableInteraction);
+      // The API key is not part of the identity; the request body is.
+      expect(otherCredential).toEqual(first);
+      expect(otherBody).toEqual(cacheableInteraction);
+      expect(otherBody).not.toEqual(first);
+    });
+
+    it('keeps response schemas with different property order in separate entries', async () => {
+      // Structured output follows schema property order, so these requests can differ.
+      const schema = (properties: Record<string, unknown>) => ({
+        apiKey: 'test-key',
+        responseSchema: { type: 'object', properties },
+      });
+      const answerFirst = await getCacheArgument(
+        'gemini-robotics-er-2-preview',
+        schema({ answer: { type: 'string' }, reasoning: { type: 'string' } }),
+      );
+      const reasoningFirst = await getCacheArgument(
+        'gemini-robotics-er-2-preview',
+        schema({ reasoning: { type: 'string' }, answer: { type: 'string' } }),
+      );
+
+      expect(answerFirst).toEqual(cacheableInteraction);
+      expect(reasoningFirst).toEqual(cacheableInteraction);
+      expect(reasoningFirst).not.toEqual(answerFirst);
+    });
+
+    it('keys requests by the serialized value of non-plain objects such as dates', async () => {
+      // YAML timestamps load as Date objects and are sent as ISO strings.
+      const first = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'test-key',
+        passthrough: { metadata: { asOf: new Date('2026-01-01T00:00:00Z') } },
+      });
+      const second = await getCacheArgument('gemini-robotics-er-2-preview', {
+        apiKey: 'test-key',
+        passthrough: { metadata: { asOf: new Date('2026-02-01T00:00:00Z') } },
+      });
+
+      expect(second).not.toEqual(first);
+    });
+
+    it('scopes the cache key to the Vertex project endpoint', async () => {
+      vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValue({
+        client: { getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }) },
+        projectId: 'detected-project',
+      });
+      const first = await getCacheArgument('gemini-robotics-er-2-preview', {
+        vertexai: true,
+        projectId: 'project-one',
+      });
+      const second = await getCacheArgument('gemini-robotics-er-2-preview', {
+        vertexai: true,
+        projectId: 'project-two',
+      });
+
+      expect(first).toEqual(cacheableInteraction);
+      expect(second).toEqual(cacheableInteraction);
+      expect(second).not.toEqual(first);
+    });
+
+    it.each([
+      { name: 'context.bustCache', config: {}, context: { bustCache: true } },
+      { name: 'the legacy debug flag', config: {}, context: { debug: true } },
+      { name: 'a follow-up interaction', config: { previousInteractionId: 'interaction-0' } },
+      {
+        name: 'a passthrough follow-up interaction',
+        config: { passthrough: { previous_interaction_id: 'interaction-0' } },
+      },
+      {
+        name: 'a prompt-level camelCase passthrough follow-up',
+        config: {},
+        context: {
+          prompt: { config: { passthrough: { previousInteractionId: 'interaction-0' } } },
+        },
+      },
+      { name: 'an explicitly stored interaction', config: { store: true } },
+      {
+        name: 'a prompt-level stored interaction',
+        config: {},
+        context: { prompt: { config: { store: true } } },
+      },
+      { name: 'custom headers', config: { headers: { 'x-tenant': 'tenant-a' } } },
+      {
+        name: 'a credential in the endpoint',
+        config: { apiBaseUrl: 'https://gateway.example?key=short' },
+      },
+    ])('bypasses the cache for $name', async ({ config, context }) => {
+      await expect(
+        getCacheArgument(
+          'gemini-robotics-er-2-preview',
+          { apiKey: 'test-key', ...config },
+          context,
+        ),
+      ).resolves.toBe(true);
+    });
+
+    it('caches an interaction that opts out of server-side storage', async () => {
+      await expect(
+        getCacheArgument('gemini-robotics-er-2-preview', { apiKey: 'test-key', store: false }),
+      ).resolves.toEqual(cacheableInteraction);
+    });
+
+    it('bypasses the cache for video interactions', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          status: 'completed',
+          steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
+        },
+        cached: false,
+      } as any);
+      const provider = new GoogleInteractionsProvider('gemini-omni-1.1-flash', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('A city at dusk');
+
+      expect(result.error).toBeUndefined();
+      expect(mockFetchWithCache.mock.calls[0]?.[4]).toBe(true);
+    });
+
+    it.each([
+      {
+        name: 'a failed interaction',
+        data: { id: 'interaction-failed', status: 'failed' },
+        error: 'did not complete (status: failed)',
+      },
+      {
+        name: 'a model output error',
+        data: {
+          status: 'completed',
+          steps: [{ type: 'model_output', error: { message: 'output blocked' } }],
+        },
+        error: 'output blocked',
+      },
+      {
+        name: 'a response without text',
+        data: { status: 'completed', steps: [{ type: 'model_output', content: [] }] },
+        error: 'did not return text output',
+      },
+    ])('removes $name from the cache', async ({ data, error }) => {
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+      mockFetchWithCache.mockResolvedValue({
+        data,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      } as any);
+      const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('Plan the next move');
+
+      expect(result.error).toContain(error);
+      expect(deleteFromCache).toHaveBeenCalled();
+    });
+
+    it.each(['original', 'cached', 'coalesced'])(
+      'evicts a pending %s interaction and only polls an ID this caller owns',
+      async (source) => {
+        const shared = source !== 'original';
+        const deleteFromCache = vi.fn();
+        const pending = { ...completedText, data: { id: 'current', status: 'in_progress' } };
+        mockFetchWithCache.mockResolvedValueOnce({
+          ...pending,
+          data: { ...pending.data, id: shared ? 'other' : 'current' },
+          cached: source === 'cached',
+          coalesced: source === 'coalesced',
+          deleteFromCache,
+        });
+        if (shared) {
+          mockFetchWithCache.mockResolvedValueOnce(pending);
+        }
+        mockFetchWithCache.mockResolvedValueOnce(completedText);
+        const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+          config: { apiKey: 'test-key' },
+        });
+
+        const result = await provider.callApi('Plan the next move');
+        expect(result.error).toBeUndefined();
+        expect(result).toMatchObject({ output: 'robot plan', cached: false });
+        expect(deleteFromCache).toHaveBeenCalledTimes(1);
+        const [endpoint, request, timeout, format] = mockFetchWithCache.mock.calls[0];
+        expect(mockFetchWithCache.mock.calls.slice(1)).toEqual([
+          ...(shared ? [[endpoint, request, timeout, format, true]] : []),
+          [
+            `${endpoint}/current`,
+            expect.objectContaining({ method: 'GET' }),
+            expect.any(Number),
+            'json',
+            true,
+          ],
+        ]);
+      },
+    );
+
+    it('keeps a completed interaction in the cache', async () => {
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+      mockFetchWithCache.mockResolvedValue({ ...completedText, deleteFromCache } as any);
+      const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('Plan the next move');
+
+      expect(result).toMatchObject({ output: 'robot plan', cached: false });
+      expect(result.tokenUsage).toMatchObject({ total: 30, numRequests: 1 });
+      expect(deleteFromCache).not.toHaveBeenCalled();
+    });
   });
 
   it('uses a Robotics passthrough model for tools, text output, and billing', async () => {
@@ -3126,7 +3562,7 @@ describe('GoogleInteractionsProvider', () => {
         ],
         usage: { total_input_tokens: 10, total_output_tokens: 20, total_tokens: 30 },
       },
-      cached: true,
+      cached: false,
     } as any);
     const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
       config: { apiKey: 'base-key', apiBaseUrl: 'https://proxy.example/google' },
@@ -3159,7 +3595,8 @@ describe('GoogleInteractionsProvider', () => {
     );
     expect(mockStoreBlob).not.toHaveBeenCalled();
     expect(result.video?.url).toBe('https://video.example/2');
-    expect(result.cost).toBeUndefined();
+    expect(result.video?.aspectRatio).toBe('16:9');
+    expect(result.cost).toBeCloseTo((10 * 1.5 + 20 * 9) / 1e6, 12);
   });
 
   it('preserves a single native multimodal interaction input object', async () => {
@@ -3262,7 +3699,7 @@ describe('GoogleInteractionsProvider', () => {
       }),
       expect.any(Number),
       'json',
-      true,
+      cacheableInteraction,
     );
   });
 
@@ -3295,7 +3732,7 @@ describe('GoogleInteractionsProvider', () => {
       }),
       expect.any(Number),
       'json',
-      true,
+      cacheableInteraction,
     );
   });
 
@@ -3342,7 +3779,7 @@ describe('GoogleInteractionsProvider', () => {
       }),
       expect.any(Number),
       'json',
-      true,
+      cacheableInteraction,
     );
   });
 
@@ -3374,7 +3811,7 @@ describe('GoogleInteractionsProvider', () => {
       }),
       expect.any(Number),
       'json',
-      true,
+      cacheableInteraction,
     );
   });
 
@@ -3420,7 +3857,7 @@ describe('GoogleInteractionsProvider', () => {
         }),
         expect.any(Number),
         'json',
-        true,
+        cacheableInteraction,
       );
     },
   );
@@ -3463,7 +3900,7 @@ describe('GoogleInteractionsProvider', () => {
       }),
       expect.any(Number),
       'json',
-      true,
+      cacheableInteraction,
     );
     const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
     expect(request.headers).not.toHaveProperty('x-goog-api-key');
@@ -3537,7 +3974,7 @@ describe('GoogleInteractionsProvider', () => {
         }),
         expect.any(Number),
         'json',
-        true,
+        cacheableInteraction,
       );
       expect(mockFetchWithCache.mock.calls[0]?.[1]?.headers).not.toHaveProperty('x-goog-api-key');
     },
@@ -3584,7 +4021,7 @@ describe('GoogleInteractionsProvider', () => {
       }),
       expect.any(Number),
       'json',
-      true,
+      cacheableInteraction,
     );
     const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
     expect(request.headers).not.toHaveProperty('x-goog-api-key');
@@ -3664,7 +4101,7 @@ describe('GoogleInteractionsProvider', () => {
         }),
         expect.any(Number),
         'json',
-        true,
+        cacheableInteraction,
       );
       const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
       expect(request.headers).not.toHaveProperty('x-goog-api-key');
@@ -3732,7 +4169,7 @@ describe('GoogleInteractionsProvider', () => {
         }),
         expect.any(Number),
         'json',
-        true,
+        cacheableInteraction,
       );
       const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
       expect(request.headers).not.toHaveProperty('x-goog-api-key');
@@ -3886,7 +4323,7 @@ describe('GoogleInteractionsProvider', () => {
         }),
         expect.any(Number),
         'json',
-        true,
+        cacheableInteraction,
       );
     },
   );
@@ -4044,65 +4481,52 @@ describe('GoogleInteractionsProvider', () => {
     });
   });
 
-  it('rejects unsupported Vertex Omni follow-up interactions before making a request', async () => {
-    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
-      config: {
-        vertexai: true,
-        projectId: 'configured-project',
-        previousInteractionId: 'interaction-0',
+  it.each([
+    { name: 'config', config: { previousInteractionId: 'interaction-0' } },
+    {
+      name: 'a snake_case passthrough key',
+      config: { passthrough: { previous_interaction_id: 'interaction-0' } },
+    },
+    {
+      name: 'a camelCase passthrough key',
+      config: { passthrough: { previousInteractionId: 'interaction-0' } },
+    },
+  ])('forwards a Vertex Omni follow-up from $name', async ({ config }) => {
+    // Vertex stores interactions by default and chains turns with previous_interaction_id.
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: { getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }) },
+      projectId: 'configured-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'interaction-1',
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
       },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { vertexai: true, projectId: 'configured-project', ...config },
     });
 
     const result = await provider.callApi('Make it brighter');
 
-    expect(result.error).toContain('does not support previousInteractionId');
-    expect(mockFetchWithCache).not.toHaveBeenCalled();
-  });
-
-  it('rejects unsupported Vertex Omni follow-ups supplied through passthrough', async () => {
-    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
-      config: {
-        vertexai: true,
-        projectId: 'configured-project',
-        passthrough: { previous_interaction_id: 'interaction-0' },
-      },
-    });
-
-    const result = await provider.callApi('Make it brighter');
-
-    expect(result.error).toContain('does not support previousInteractionId');
-    expect(mockFetchWithCache).not.toHaveBeenCalled();
-  });
-
-  it('rejects Vertex Omni follow-ups supplied through a camelCase passthrough key', async () => {
-    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
-      config: {
-        vertexai: true,
-        projectId: 'configured-project',
-        passthrough: { previousInteractionId: 'interaction-0' },
-      },
-    });
-
-    const result = await provider.callApi('Make it brighter');
-
-    expect(result.error).toContain('does not support previousInteractionId');
-    expect(mockFetchWithCache).not.toHaveBeenCalled();
-  });
-
-  it('does not reject an AI Studio Omni follow-up supplied through passthrough', async () => {
-    // The follow-up guard is Vertex-only; AI Studio supports conversational editing, so
-    // the request must proceed past the guard (here it reaches the API-key check).
-    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
-      config: {
-        passthrough: { previous_interaction_id: 'interaction-0' },
-      },
-    });
-
-    const result = await provider.callApi('Make it brighter');
-
-    expect(result.error).not.toContain('does not support previousInteractionId');
-    expect(result.error).toContain('requires an API key');
-    expect(mockFetchWithCache).not.toHaveBeenCalled();
+    expect(result.error).toBeUndefined();
+    expect(result.metadata?.interactionId).toBe('interaction-1');
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions',
+      expect.any(Object),
+      expect.any(Number),
+      'json',
+      true,
+    );
+    const body = JSON.parse(
+      (mockFetchWithCache.mock.calls[0]?.[1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(body.previous_interaction_id).toBe('interaction-0');
+    expect(body).not.toHaveProperty('previousInteractionId');
   });
 
   it('rejects unsupported Omni tools before making a request', async () => {
@@ -4482,7 +4906,7 @@ describe('GoogleInteractionsProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        true,
+        cacheableInteraction,
       );
       expect(getOAuthClient).toHaveBeenCalledTimes(testCase.usesOAuth ? 1 : 0);
     },
