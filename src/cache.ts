@@ -70,6 +70,16 @@ export function getCacheTtlMs(): number {
 }
 
 /**
+ * Resolve the on-disk cache directory from configuration.
+ *
+ * Independent of whether caching is currently enabled so maintenance
+ * operations (such as clearing) can still reach persisted responses.
+ */
+function getCacheDirectory() {
+  return getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+}
+
+/**
  * Get the cache instance with optional namespace isolation.
  *
  * @returns The current cache instance (namespace-aware if inside withCacheNamespace)
@@ -96,8 +106,7 @@ function getCacheInstance() {
     let diskCache: Cache | undefined;
 
     if (cacheType === 'disk' && enabled) {
-      cachePath =
-        getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+      cachePath = getCacheDirectory();
 
       if (!fs.existsSync(cachePath)) {
         logger.info(`Creating cache folder at ${cachePath}.`);
@@ -629,8 +638,7 @@ export function claimCacheKeyOnce(cacheKey: string): boolean {
   }
 
   if (cacheType === 'disk' && getEffectiveCacheEnabled()) {
-    const cachePath =
-      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+    const cachePath = getCacheDirectory();
     const claimsPath = path.join(cachePath, 'claims');
     try {
       fs.mkdirSync(claimsPath, { recursive: true });
@@ -1190,8 +1198,10 @@ export async function clearCache() {
   const result = await getCacheInstance().clear();
   claimedCacheKeys.clear();
   if (cacheType === 'disk') {
-    const cachePath =
-      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+    const cachePath = getCacheDirectory();
+    // The active instance may be a memory cache when caching is disabled, so
+    // its clear() does not touch persisted responses. Remove the disk file too.
+    fs.rmSync(path.join(cachePath, 'cache.json'), { force: true });
     fs.rmSync(path.join(cachePath, 'claims'), { force: true, recursive: true });
   }
   return result;
