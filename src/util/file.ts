@@ -503,21 +503,25 @@ export function maybeLoadResponseFormatFromExternalFile(
     return responseFormat;
   }
 
-  // First, render variables and load the outer response_format
   const rendered = renderVarsInObject(responseFormat, vars);
-  const loaded = maybeLoadFromExternalFile(rendered);
+  const resolved = maybeLoadFromExternalFile(rendered);
 
-  if (!loaded || typeof loaded !== 'object') {
-    return loaded;
+  if (!resolved || typeof resolved !== 'object') {
+    return resolved;
   }
+
+  // An external format is authored input. Inline formats already rendered above.
+  const loaded =
+    typeof rendered === 'string' && rendered.startsWith('file://')
+      ? renderVarsInObject(resolved, vars)
+      : resolved;
 
   // For json_schema type, check if the nested schema is a file reference
   if (loaded.type === 'json_schema') {
     const nestedSchema = loaded.schema || loaded.json_schema?.schema;
 
     if (nestedSchema) {
-      // Render and load the nested schema
-      const loadedSchema = maybeLoadFromExternalFile(renderVarsInObject(nestedSchema, vars));
+      const loadedSchema = maybeLoadFromExternalFile(nestedSchema);
 
       // Return with the loaded schema in place
       if (loaded.schema !== undefined) {

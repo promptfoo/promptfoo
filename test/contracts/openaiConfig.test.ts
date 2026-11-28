@@ -200,6 +200,22 @@ const responseValid = [
     },
     tools: 'file://tools.yaml',
   },
+  { response_format: nestedFormat },
+  {
+    response_format: {
+      type: 'json_schema',
+      name: 'result',
+      schema: schemaDocument,
+      strict: false,
+    },
+  },
+  {
+    response_format: {
+      ...nestedFormat,
+      strict: true,
+      json_schema: { ...nestedFormat.json_schema, strict: '{{ strictMode }}' },
+    },
+  },
   {
     reasoning: {
       effort: '{{ effort }}',
@@ -384,10 +400,9 @@ describe('OpenAI portable configuration contracts', () => {
             type: 'json_schema',
             name: 'result',
             schema: schemaDocument,
-            strict: false,
+            strict: 'disabled',
           },
         },
-        { response_format: nestedFormat },
       ],
     },
     {
