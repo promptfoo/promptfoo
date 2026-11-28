@@ -1,5 +1,4 @@
-import { getEnvString, getProviderEnvString } from '../../envars';
-import { requestHyperbolicJson } from './transport';
+import { getHyperbolicApiKey, requestHyperbolicJson } from './transport';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -122,12 +121,7 @@ export class HyperbolicImageProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    if (this.config?.apiKey) {
-      return this.config.apiKey;
-    }
-    return (
-      getProviderEnvString(this.env, 'HYPERBOLIC_API_KEY') || getEnvString('HYPERBOLIC_API_KEY')
-    );
+    return getHyperbolicApiKey(this);
   }
 
   getApiUrl(): string {

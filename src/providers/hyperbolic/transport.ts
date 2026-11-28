@@ -1,8 +1,18 @@
 import { fetchWithCache } from '../../cache';
+import { getEnvString, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
+import { resolveConfiguredApiKey } from '../credentials';
 import { getRequestTimeoutMs } from '../shared';
 
 import type { CallApiContextParams } from '../../types/providers';
+
+export function getHyperbolicApiKey(provider: Parameters<typeof resolveConfiguredApiKey>[0]) {
+  return (
+    resolveConfiguredApiKey(provider) ??
+    getProviderEnvString(provider.env, 'HYPERBOLIC_API_KEY') ??
+    getEnvString('HYPERBOLIC_API_KEY')
+  );
+}
 
 type JsonResult<T> =
   | { ok: true; data: T; cached: boolean; latencyMs?: number }

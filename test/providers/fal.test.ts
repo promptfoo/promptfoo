@@ -165,7 +165,7 @@ describe('Fal Provider', () => {
         const noKeyProvider = new FalImageGenerationProvider('fal-ai/flux/schnell');
 
         await expect(noKeyProvider.callApi('test prompt')).rejects.toThrow(
-          'fal.ai API key is not set. Set the FAL_KEY environment variable or or add `apiKey` to the provider config.',
+          'fal.ai API key is not set. Set the FAL_KEY environment variable or add `apiKey` to the provider config.',
         );
       });
     });
