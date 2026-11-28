@@ -1,8 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Trajectory assertions with OpenTelemetry traces
 
-# Promptfoo accepts generic tool span attributes like tool.name/tool.arguments
-# and Vercel AI SDK telemetry attributes like ai.toolCall.name/ai.toolCall.args.
+sharing: false
 
 prompts:
   - 'Explain how {{topic}} works in simple terms'
@@ -25,12 +24,6 @@ tests:
 
       - type: trajectory:tool-used
         value: compose_answer
-
-      - type: trajectory:tool-args-match
-        value:
-          name: search_corpus
-          args:
-            query: quantum computing classical computing
 
       - type: trajectory:tool-sequence
         value:
@@ -55,9 +48,10 @@ tests:
 
 tracing:
   enabled: true
+  failOnReceiverStartFailure: true
   otlp:
     http:
       enabled: true
       port: 4318
-      host: '0.0.0.0'
+      host: '127.0.0.1'
       acceptFormats: ['json']

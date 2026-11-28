@@ -7,6 +7,8 @@ description: Implement OpenTelemetry tracing in your LLM evaluations to monitor 
 
 Promptfoo uses OpenTelemetry (OTLP) traces to show what your application did behind each response and bring that information into your evals.
 
+For a runnable example that checks tool use, execution order, and latency, see [Trace-Based Agent Evals](/docs/guides/trace-based-agent-evals).
+
 Use traces to check tool calls and execution paths, give graders more context, guide red-team attacks, and explore the full timeline alongside your results.
 
 ![traces in promptfoo](/img/docs/trace.png)
