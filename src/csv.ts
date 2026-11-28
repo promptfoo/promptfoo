@@ -9,6 +9,10 @@ import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } f
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
+// A decimal numeric literal, e.g. `5`, `0.5`, `.5` or `1e1`.
+const NUMBER_PATTERN = String.raw`[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?`;
+const NUMBER_REGEX = new RegExp(`^${NUMBER_PATTERN}$`);
+
 let _assertionRegex: RegExp | null = null;
 function getAssertionRegex(): RegExp {
   if (!_assertionRegex) {
@@ -19,7 +23,7 @@ function getAssertionRegex(): RegExp {
       .sort((a, b) => b.length - a.length)
       .join('|');
     _assertionRegex = new RegExp(
-      `^(not-)?(${assertionTypesRegex})(?:\\((\\d+(?:\\.\\d+)?)\\))?(?::([\\s\\S]*))?$`,
+      `^(not-)?(${assertionTypesRegex})(?:\\(\\s*(${NUMBER_PATTERN})\\s*\\))?(?::([\\s\\S]*))?$`,
     );
   }
   return _assertionRegex;
@@ -33,7 +37,7 @@ function getAssertionRegex(): RegExp {
  */
 function parseFiniteNumber(value: string | undefined): number | undefined {
   const trimmed = value?.trim() ?? '';
-  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
+  if (!NUMBER_REGEX.test(trimmed)) {
     return undefined;
   }
   const parsed = Number(trimmed);
