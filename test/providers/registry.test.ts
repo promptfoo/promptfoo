@@ -19,6 +19,18 @@ import type { OpenAiDecisionsProvider } from '../../src/providers/openai/decisio
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
+it('keeps the suite telemetry opt-out while merging provider overrides', () => {
+  expect(
+    mergeProviderEnv(
+      'echo',
+      { PROMPTFOO_DISABLE_TELEMETRY: 'yes' },
+      {
+        PROMPTFOO_DISABLE_TELEMETRY: 'false',
+      },
+    ),
+  ).toEqual({ PROMPTFOO_DISABLE_TELEMETRY: 'yes' });
+});
+
 describe('Bedrock Runtime OpenAI API routing', () => {
   it.each([
     ['chat', 'BedrockRuntimeChatProvider', 'openai.gpt-oss-120b-1:0'],

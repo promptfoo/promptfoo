@@ -1524,7 +1524,19 @@
     "__schema36": {
       "anyOf": [
         {
-          "$ref": "#/definitions/__schema7"
+          "allOf": [
+            {
+              "$ref": "#/definitions/__schema7"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "PROMPTFOO_DISABLE_TELEMETRY": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
         },
         {
           "type": "object",

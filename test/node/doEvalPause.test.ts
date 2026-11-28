@@ -163,23 +163,6 @@ describe('persisted CLI pause drains completed deferred grading', () => {
         throw new Error('This local doEval integration fixture must not issue HTTP');
       });
       vi.stubGlobal('fetch', unexpectedFetch);
-      const expectOnlyDisabledTelemetry = () => {
-        // The shared telemetry instance records its opt-out notification once,
-        // so either case can observe it first when Vitest shuffles test order.
-        // Every fetch is still rejected before transport, including this one.
-        expect(unexpectedFetch.mock.calls.length).toBeLessThanOrEqual(1);
-        for (const [deniedUrl, deniedOptions] of unexpectedFetch.mock.calls) {
-          expect(deniedUrl).toBe('https://r.promptfoo.app/');
-          expect(deniedOptions).toMatchObject({
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          expect(JSON.parse(String(deniedOptions?.body))).toMatchObject({
-            event: 'feature_used',
-            meta: { feature: 'telemetry disabled' },
-          });
-        }
-      };
       const finalJson = path.join(directory, 'resumed.json');
       const finalJsonl = path.join(directory, 'resumed.jsonl');
       const config: UnifiedConfig = {
@@ -313,7 +296,7 @@ describe('persisted CLI pause drains completed deferred grading', () => {
             expect(rows[0].failureReason).toBe(ResultFailureReason.ERROR);
             expect(rows[0].error).toContain(callerReason.message);
           }
-          expectOnlyDisabledTelemetry();
+          expect(unexpectedFetch).not.toHaveBeenCalled();
           return;
         }
 
@@ -365,7 +348,7 @@ describe('persisted CLI pause drains completed deferred grading', () => {
           expect(rows.every((row: { success: boolean }) => row.success)).toBe(true);
           assertAlphaAccounting(rows.find((row: { testIdx: number }) => row.testIdx === 0));
         }
-        expectOnlyDisabledTelemetry();
+        expect(unexpectedFetch).not.toHaveBeenCalled();
         expect(watchdogFired).toBe(false);
         expect(
           process.listeners('SIGINT').filter((listener) => listener.name === 'sigintHandler'),
@@ -589,18 +572,7 @@ describe('persisted CLI pause drains completed deferred grading', () => {
         assertAccounting(rows.find((row: { testIdx: number }) => row.testIdx === 0));
       }
       expect(traces).toHaveBeenCalledTimes(2);
-      expect(deniedFetch.mock.calls.length).toBeLessThanOrEqual(1);
-      for (const [url, options] of deniedFetch.mock.calls) {
-        expect(url).toBe('https://r.promptfoo.app/');
-        expect(options).toMatchObject({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        expect(JSON.parse(String(options?.body))).toMatchObject({
-          event: 'feature_used',
-          meta: { feature: 'telemetry disabled' },
-        });
-      }
+      expect(deniedFetch).not.toHaveBeenCalled();
       expect(watchdogFired).toBe(false);
       if (!otelWasInitialized) {
         await shutdownOtel();

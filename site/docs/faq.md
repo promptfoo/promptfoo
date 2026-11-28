@@ -57,7 +57,7 @@ By default, eval results are stored locally. Inputs and outputs may leave your m
 
 ### Do you collect any PII?
 
-We do not collect PII through product analytics. The email or user identifier associated with your local Promptfoo environment may be sent to the relevant Promptfoo-operated endpoint when you sign in to Promptfoo Cloud, share evals, invoke a Cloud-backed feature, or set `PROMPTFOO_DISABLE_TELEMETRY` (which records a one-time opt-out acknowledgment so opt-out usage can be measured). See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full list of Cloud-backed features and the data each one sends.
+[Product analytics](/docs/configuration/telemetry) can include your local user ID and email address. Set `PROMPTFOO_DISABLE_TELEMETRY=1` to disable analytics and session replay. Signing in to Promptfoo Cloud, sharing evals, and invoking hosted features can still send account details to the relevant Promptfoo-operated endpoint. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full list of Cloud-backed features and the data each one sends.
 
 ### How do I configure Promptfoo for corporate networks or proxies?
 
