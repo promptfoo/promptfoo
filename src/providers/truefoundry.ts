@@ -270,7 +270,8 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
       ...config.headers,
     };
 
-    const tfConfig = this.config as TrueFoundryCompletionOptions;
+    // Use the merged config so prompt-level overrides win, like every other field.
+    const tfConfig = config as TrueFoundryCompletionOptions;
 
     // Add metadata header if provided
     if (tfConfig.metadata) {

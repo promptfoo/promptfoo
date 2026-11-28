@@ -463,6 +463,44 @@ describe('TrueFoundry', () => {
         );
       });
 
+      it('should let prompt-level TrueFoundry config override the provider config', async () => {
+        const provider = new TrueFoundryProvider('openai/gpt-4', {
+          config: { metadata: { team: 'provider' }, iteration_limit: 3 },
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(JSON.stringify(createChatCompletion()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
+        );
+
+        await provider.callApi('Test prompt', {
+          vars: {},
+          prompt: {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+            config: {
+              metadata: { team: 'prompt' },
+              loggingConfig: { enabled: true },
+              mcp_servers: [{ integration_fqn: 'tf/mcp' }],
+              iteration_limit: 9,
+            },
+          },
+        });
+
+        const request = mockedFetchWithRetries.mock.calls[0]?.[1] as {
+          body?: string;
+          headers: Record<string, string>;
+        };
+        const body = JSON.parse(request.body ?? '{}');
+        expect(request.headers['X-TFY-METADATA']).toBe(JSON.stringify({ team: 'prompt' }));
+        expect(request.headers['X-TFY-LOGGING-CONFIG']).toBe(JSON.stringify({ enabled: true }));
+        expect(body.mcp_servers).toEqual([{ integration_fqn: 'tf/mcp' }]);
+        expect(body.iteration_limit).toBe(9);
+        expect(body.metadata).toBeUndefined();
+      });
+
       it('should use cache by default', async () => {
         const mockResponse = {
           choices: [{ message: { content: 'Cached output' } }],
