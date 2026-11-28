@@ -3,7 +3,15 @@ import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
-import { sanitizeObject } from '../../util/sanitizer';
+import {
+  isCredentialHeader,
+  isSecretEnvVarName,
+  looksLikeSecret,
+  normalizeFieldName,
+  REDACTED,
+  sanitizeObject,
+  sanitizeUrlForLogging,
+} from '../../util/sanitizer';
 import { waitForPromiseWithAbort } from '../shared';
 import { normalizeRenderedOAuthScopes } from './auth';
 
@@ -18,8 +26,168 @@ import type {
 
 export type { OAuthTokenResult };
 
-export function sanitizeMcpToolData<T>(value: T): T {
-  return sanitizeObject(value, { context: 'MCP tool data', sanitizeUrls: true });
+const MAX_TOOL_DEPTH = 64;
+const OMITTED_TOOL_DATA = '[MCP tool data omitted: it could not be sanitized]';
+
+function isCredentialContainer(name: string, headers: boolean): boolean {
+  if (headers && isCredentialHeader(name, '')) {
+    return true;
+  }
+  const compact = normalizeFieldName(name);
+  if (
+    /^(?:token(?:usages?|counts?|budgets?|settings|ids)|passwordpolic(?:y|ies)|signaturealgorithms?|cookiesettings)$/.test(
+      compact,
+    )
+  ) {
+    return false;
+  }
+  // Ignore public words, preserving credential compounds such as authorAccessToken.
+  const credentialWords = name
+    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .replace(/\b(?:authors?|tokeni[sz]ers?)\b/gi, '');
+  // A credential map can contain secrets in its keys as well as its values.
+  return (
+    isSecretEnvVarName(name) ||
+    /(?:password|passwd|passphrase|pwd|secret|credential|dsn|jwt|clientassertion|token|auth|cookie|bearer|session|signature|(?:api|access|subscription|private|signing|encryption|cert|virtual)key)/.test(
+      normalizeFieldName(credentialWords),
+    )
+  );
+}
+
+// A form or a credential assignment can carry secrets under an ordinary argument
+// name. SQL predicates and other comparisons also use '='.
+function hasOpaqueAssignment(text: string): boolean {
+  if (!text.includes('=')) {
+    return false;
+  }
+  if (/(?:^|[?&#;])\s*[^\s=?&#;]+=/.test(text)) {
+    return true;
+  }
+  for (const [, label] of text.matchAll(/(?:^|[\s=])([^\s=]+)\s*(?==)/g)) {
+    if (isCredentialContainer(label, true)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Omit opaque encodings, forms and URL parameters before a logger can normalize
+// them. Nested URL/form/JSON decoders can disagree about which layer owns a secret.
+function isOpaque(text: string): boolean {
+  // URL parsers discard leading whitespace and embedded ASCII control characters.
+  const url = text.replace(/\p{Cc}/gu, '').trim();
+  return (
+    looksLikeSecret(text) ||
+    hasOpaqueAssignment(text) ||
+    /(?:^|[^\w-])eyJ[\w-]*\.[\w-]+\.[\w-]+/.test(text) ||
+    /%[\da-f]{2}|\b(?:basic|bearer)\s+\S/i.test(text) ||
+    (text.includes('@') && /[:/\\]/.test(text)) ||
+    (/^[a-z][a-z\d+.-]*:/i.test(url) &&
+      (!/^https?:\/\//i.test(url) || /[?#]/.test(url) || sanitizeUrlForLogging(url) !== text))
+  );
+}
+
+/** Keep nested public arguments while omitting credentials from saved results and traces. */
+export function sanitizeMcpToolData<T>(value: T): T | typeof OMITTED_TOOL_DATA {
+  let budget = 4 * 1024 * 1024;
+  const visit = (item: unknown, depth: number, headers = false): unknown => {
+    if (depth >= MAX_TOOL_DEPTH) {
+      return '[...]';
+    }
+    budget -= 64 + (typeof item === 'string' ? item.length : 0);
+    if (budget < 0) {
+      throw new Error('MCP tool data too large');
+    }
+    if (typeof item === 'string') {
+      if (/^\s*[[{"]/.test(item)) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(item);
+        } catch {
+          // Malformed JSON can still contain fields, credential tuples or escaped names.
+          // Plain bracketed text such as log prefixes and templates gets the normal checks.
+          if (/[:,\\]/.test(item) || isCredentialContainer(item, headers)) {
+            return REDACTED;
+          }
+        }
+        if (parsed !== undefined) {
+          return JSON.stringify(visit(parsed, depth + 1, headers));
+        }
+      }
+      return isOpaque(item) || (headers && isCredentialHeader('', item)) ? REDACTED : item;
+    }
+    if (Array.isArray(item)) {
+      if (
+        item.length === 2 &&
+        typeof item[0] === 'string' &&
+        isCredentialContainer(item[0], headers)
+      ) {
+        return REDACTED;
+      }
+      return item.map((child) => visit(child, depth + 1, headers));
+    }
+    if (!item || typeof item !== 'object') {
+      return typeof item === 'function' ? REDACTED : item;
+    }
+    const entries = Object.entries(item);
+    const headerEntry =
+      headers || entries.some(([key, value]) => key === 'in' && value === 'header');
+    // Header lists and form entries commonly identify a credential via a name
+    // or key and put the credential itself in an otherwise innocuous sibling.
+    if (
+      entries.some(([key]) =>
+        /(?:values?$|^(?:val|data|content|text|raw|default|examples?|const|enum|schema)$)/i.test(
+          key,
+        ),
+      ) &&
+      entries.some(
+        ([key, label]) =>
+          /^(?:name|key|field|header|parameter)$/i.test(key) &&
+          typeof label === 'string' &&
+          (isOpaque(label) ||
+            isCredentialContainer(label, headerEntry || key.toLowerCase() === 'header')),
+      )
+    ) {
+      return REDACTED;
+    }
+    return Object.fromEntries(
+      entries.flatMap(([key, child]) => {
+        budget -= key.length + 64;
+        if (budget < 0) {
+          throw new Error('MCP tool data too large');
+        }
+        if (key.includes('=') || isOpaque(key) || /^\s*[[{"]/.test(key)) {
+          return [];
+        }
+        const fieldName = normalizeFieldName(key);
+        const count =
+          typeof child === 'number' &&
+          /^(?:(?:max|min)(?:output|completion)?|prompt|completion|input|output|total|cached)tokens$/.test(
+            fieldName,
+          );
+        const sensitive =
+          child != null &&
+          typeof child !== 'boolean' &&
+          !count &&
+          isCredentialContainer(key, headers);
+        const childHeaders = headers || /headers?(?:map|list)?$/.test(fieldName);
+        return [[key, sensitive ? REDACTED : visit(child, depth + 1, childHeaders)]];
+      }),
+    );
+  };
+
+  try {
+    return sanitizeObject(visit(value, 0), {
+      context: 'MCP tool data',
+      sanitizeUrls: true,
+      maxDepth: MAX_TOOL_DEPTH,
+      throwOnError: true,
+    });
+  } catch {
+    // Getter and serializer errors can themselves contain input credentials.
+    return OMITTED_TOOL_DATA;
+  }
 }
 
 export function normalizeMcpToolContent(

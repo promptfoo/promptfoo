@@ -926,7 +926,11 @@ describe('MCPClient', () => {
       const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
 
       try {
-        const args = { query: 'inventory', session: 'opaque-session', nested: { apiKey: 'short' } };
+        const args = {
+          query: 'inventory',
+          session: 'opaque-session',
+          nested: { a: { b: { c: { id: 1, sessionCookie: 'short' } } } },
+        };
         expect(await mcpClient.callTool('tool1', args)).toEqual({
           content: 'result',
           raw: { content: 'result' },
@@ -944,7 +948,7 @@ describe('MCPClient', () => {
               'gen_ai.operation.name': 'execute_tool',
               'gen_ai.tool.name': 'tool1',
               'tool.arguments':
-                '{"query":"inventory","session":"[REDACTED]","nested":{"apiKey":"[REDACTED]"}}',
+                '{"query":"inventory","session":"[REDACTED]","nested":{"a":{"b":{"c":{"id":1,"sessionCookie":"[REDACTED]"}}}}}',
             }),
           }),
           expect.any(Function),
