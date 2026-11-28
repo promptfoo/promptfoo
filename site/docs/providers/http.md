@@ -1,4 +1,5 @@
 ---
+title: HTTP/HTTPS API
 sidebar_label: HTTP API
 description: Configure HTTP/HTTPS endpoints for custom LLM integrations with dynamic request transforms, variable substitution, and multi-provider API compatibility
 ---
@@ -1743,13 +1744,41 @@ Streaming responses typically use one of these formats:
 - **Chunked JSON**: Multiple JSON objects sent sequentially, often separated by newlines or delimiters.
 - **HTTP chunked transfer encoding**: Standard HTTP mechanism for streaming arbitrary data.
 
-Promptfoo offers full support for HTTP targets that stream responses in these formats. WebSocket requests are also supported via the [WebSocket Provider](./websocket.md). However, synchronous REST/HTTP requests are often preferable for the following reasons:
+Promptfoo offers full support for HTTP targets that stream responses in these formats. WebSocket requests are also supported via the [WebSocket Provider](./websocket.md).
 
-- Streaming formats vary widely and often require custom parsing logic in `transformResponse`.
-- Evals wait for the full response before scoring, so progressive tokens may not be surfaced.
-- Overall test duration is typically similar to non-streaming requests, so streaming does not provide a performance benefit.
+### Time to first token
 
-If you need to evaluate a streaming endpoint, you will need to configure the `transformResponse` function to parse and reconstruct the final text. For SSE-style responses, you can accumulate chunks from each `data:` line. The logic for extracting each line and determining when the response is complete may vary based on the event types and semantics used by your specific application/provider.
+When the JSON request body contains `stream: true`, the HTTP provider measures the time from request dispatch to the first non-whitespace character. That character can belong to a metadata event. Set `streamFormat` to `openai-chat`, `openai-responses` or `anthropic-messages` to wait for the first displayed text. Both OpenAI formats count refusal text.
+
+This example checks that text starts within two seconds and the complete response arrives within ten seconds.
+
+```yaml
+providers:
+  - id: https://api.openai.com/v1/chat/completions
+    config:
+      method: POST
+      headers:
+        Authorization: 'Bearer {{env.OPENAI_API_KEY}}'
+      body:
+        model: gpt-5.4-mini
+        reasoning_effort: none
+        stream: true
+        messages: [{ role: user, content: '{{prompt}}' }]
+      streamFormat: openai-chat
+
+defaultTest:
+  assert:
+    - type: ttft
+      threshold: 2000
+    - type: latency
+      threshold: 10000
+```
+
+Each measurement bypasses the response cache. The request timeout covers the full body, up to 16 MiB. Format-specific detection accepts LF, CRLF and CR line endings and limits each event to 64 KiB until text arrives.
+
+### Parsing streaming responses
+
+Use `transformResponse` to reconstruct the text from the full stream for scoring. When your transform returns a string or a string-valued `output`, promptfoo can report the completion length and estimate throughput. See [TTFT streaming metrics](/docs/configuration/expected-outputs/deterministic#ttft) for definitions.
 
 **Example streaming response format:**
 
@@ -1775,6 +1804,7 @@ Each line starts with `data: ` followed by a JSON object. The parser extracts te
 providers:
   - id: https
     config:
+      method: POST
       url: 'https://api.example.com/v1/responses'
       body:
         model: 'custom-model'
@@ -1816,6 +1846,7 @@ Supported config options:
 | queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
+| streamFormat      | string                  | Built-in TTFT detector for `openai-chat`, `openai-responses`, or `anthropic-messages` streaming responses.                                                                          |
 | tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 | validateStatus    | string \| Function      | A function or string expression that returns true if the status code should be treated as successful. By default, accepts all status codes.                                         |

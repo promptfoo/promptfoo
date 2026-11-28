@@ -528,9 +528,20 @@ describe('cost / latency thresholds', () => {
     expect(getRunnableAssertionValueError(make({ type: 'latency' } as any))).toMatch(
       /maximum latency/,
     );
+    expect(getRunnableAssertionValueError(make({ type: 'not-latency' } as any))).toMatch(
+      /maximum latency/,
+    );
     expect(
       getRunnableAssertionValueError(make({ type: 'latency', threshold: 500 as any } as any)),
     ).toBeUndefined();
+  });
+
+  it('requires a non-negative TTFT threshold', () => {
+    expect(getRunnableAssertionValueError(make({ type: 'ttft' }))).toMatch(/TTFT threshold/);
+    expect(getRunnableAssertionValueError(make({ type: 'not-ttft', threshold: -1 }))).toMatch(
+      /TTFT threshold/,
+    );
+    expect(getRunnableAssertionValueError(make({ type: 'ttft', threshold: 500 }))).toBeUndefined();
   });
 });
 

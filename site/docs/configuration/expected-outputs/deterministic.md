@@ -72,6 +72,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [trace-span-count](#trace-span-count)                           | Count spans matching names and attributes with min/max thresholds  |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
+| [ttft](#ttft)                                                   | Time to first token is at most the threshold (milliseconds)        |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
 | [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
 
@@ -1023,6 +1024,33 @@ assert:
 ```
 
 Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.
+
+### TTFT
+
+The `ttft` assertion passes when time to first token is at most `threshold` milliseconds. Use `not-ttft` to require a longer wait. Both assertions require a finite, non-negative threshold and a measured response.
+
+Enable `stream: true` in the [HTTP provider](/docs/providers/http#time-to-first-token) request body. Each measurement bypasses the response cache. By default, timing stops at the first non-whitespace character, which may be metadata. Set `streamFormat` to `openai-chat`, `openai-responses` or `anthropic-messages` to wait for the first displayed text. OpenAI refusal text counts as displayed text. Streams without matching output cannot pass either assertion.
+
+```yaml
+defaultTest:
+  assert:
+    - type: ttft
+      threshold: 2000
+```
+
+#### What the underlying streaming metrics measure
+
+The HTTP provider records these fields in `providerResponse.streamingMetrics`.
+
+| Field                | Definition                                                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `timeToFirstToken`   | Milliseconds from request dispatch to the first matching output, including time spent on retries.                                                                   |
+| `totalStreamTime`    | Milliseconds from the first body chunk to the last. Includes framing and excludes the wait for the connection to close.                                             |
+| `multiChunkDelivery` | Whether more than one non-empty chunk arrived. Chunk boundaries depend on network buffering.                                                                        |
+| `completionChars`    | Length in UTF-16 code units of the string returned by the response transform.                                                                                       |
+| `tokensPerSecond`    | Estimate of `Math.ceil(completionChars / 4) * 1000 / totalStreamTime`. Requires a non-empty transformed completion, multiple chunks and a window of at least 50 ms. |
+
+See [HTTP streaming configuration](/docs/providers/http#streaming-responses) for response transforms and supported formats.
 
 ### Levenshtein distance
 

@@ -748,7 +748,9 @@ async function fetchAndReadBody(
     const fetchLatencyMs = Date.now() - fetchStart;
 
     try {
-      const respText = await readWithResponseDeadline(resp, () => resp.text());
+      const respText = await readWithResponseDeadline(resp, () =>
+        options.readBody ? options.readBody(resp) : resp.text(),
+      );
       return { respText, resp, fetchLatencyMs };
     } catch (err) {
       if (
@@ -937,7 +939,8 @@ export async function fetchWithCache<T = unknown>(
   );
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
-  const { bust = false, repeatIndex, cacheKey: providedCacheKey, sanitizeResponse } = cacheOptions;
+  const { repeatIndex, cacheKey: providedCacheKey, sanitizeResponse } = cacheOptions;
+  const bust = Boolean(cacheOptions.bust || fetchOptions.readBody);
   const logEnabled =
     new Headers(getFetchWithProxyHeaders(url, fetchOptions)).get('x-promptfoo-silent') !== 'true';
 
