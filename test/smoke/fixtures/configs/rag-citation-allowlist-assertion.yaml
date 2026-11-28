@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - RAG citation allowlist'
+providers:
+  - echo
+prompts:
+  - '{{ response }}'
+defaultTest:
+  assert:
+    - type: is-json
+    - type: javascript
+      value: |
+        const allowed = new Set([
+          'handbook.md',
+          'https://kb.example.com/wiki/Leave_(policy)',
+        ]);
+        const { citations } = JSON.parse(output);
+        return Array.isArray(citations) && citations.length > 0 &&
+          citations.every((source) => allowed.has(source));
+
+tests:
+  - description: allowlisted file
+    vars:
+      response: '{"answer":"See the handbook","citations":["handbook.md"]}'
+  - description: allowlisted URL with parentheses
+    vars:
+      response: '{"answer":"See the policy","citations":["https://kb.example.com/wiki/Leave_(policy)"]}'
+  - description: fabricated file suffix
+    vars:
+      response: '{"answer":"See the handbook","citations":["handbook.md.bak"]}'
+  - description: fabricated URL
+    vars:
+      response: '{"answer":"See the policy","citations":["https://example.com/wiki/Leave_(policy)"]}'
+  - description: missing citations
+    vars:
+      response: '{"answer":"See the handbook","citations":[]}'
