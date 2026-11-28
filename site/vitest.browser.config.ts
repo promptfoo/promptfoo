@@ -1,5 +1,6 @@
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
+import { routerPath } from './src/test/storeRouter';
 
 declare module 'vitest/browser' {
   interface BrowserCommands {
@@ -8,6 +9,10 @@ declare module 'vitest/browser' {
 }
 
 export default defineConfig({
+  // Load the hooks and their provider from the same router without bundling the Node test helper.
+  resolve: {
+    alias: { '@docusaurus/router': routerPath, '@site/src/test/storeRouter': routerPath },
+  },
   test: {
     include: ['src/**/*.browser.tsx'],
     browser: {

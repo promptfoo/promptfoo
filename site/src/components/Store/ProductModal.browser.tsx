@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { BrowserRouter } from '@site/src/test/storeRouter';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import { commands, page } from 'vitest/browser';
@@ -46,6 +47,7 @@ it('keeps Close within reach after scrolling through a product on mobile', async
       <ProductGrid products={[shirt]} isLoading={false} error={null} />
       <ProductModal />
     </CartProvider>,
+    { wrapper: BrowserRouter },
   );
 
   await commands.tap(page.getByRole('button', { name: 'View Shirt' }).selector);
