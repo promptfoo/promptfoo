@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import Eval from '../../../src/models/eval';
 import { createApp } from '../../../src/server/server';
 import { setupTestServer } from '../../util/testServer';
 
@@ -13,6 +14,7 @@ const mockedGetTraceStore = vi.mocked(getTraceStore);
 describe('Traces Routes', () => {
   let mockGetTracesByEvaluation: ReturnType<typeof vi.fn>;
   let mockGetTrace: ReturnType<typeof vi.fn>;
+  let mockAppendTraces: ReturnType<typeof vi.fn>;
 
   const api = setupTestServer(createApp);
 
@@ -22,15 +24,99 @@ describe('Traces Routes', () => {
     // Setup mock trace store methods
     mockGetTracesByEvaluation = vi.fn();
     mockGetTrace = vi.fn();
+    mockAppendTraces = vi.fn().mockResolvedValue(true);
 
     mockedGetTraceStore.mockReturnValue({
       getTracesByEvaluation: mockGetTracesByEvaluation,
       getTrace: mockGetTrace,
     } as any);
+    vi.spyOn(Eval, 'findById').mockResolvedValue({
+      id: 'eval-123',
+      appendTraces: mockAppendTraces,
+    } as unknown as Eval);
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.resetAllMocks();
+  });
+
+  describe('POST /api/eval/:id/traces', () => {
+    const span = {
+      spanId: 'span-1',
+      name: 'provider call',
+      startTime: 1000,
+      endTime: 2000,
+    };
+
+    function trace(traceId: string, evaluationId: string = 'source-eval') {
+      return {
+        traceId,
+        evaluationId,
+        testCaseId: 'test-case-1',
+        metadata: { source: 'share' },
+        spans: [span],
+      };
+    }
+
+    it('delegates validated traces to the target eval', async () => {
+      const traces = [trace('trace-new')];
+      const response = await api.post('/api/eval/eval-123/traces').send(traces);
+
+      expect(response.status).toBe(204);
+      expect(mockAppendTraces).toHaveBeenCalledWith(traces);
+    });
+
+    it('is idempotent when the trace already belongs to the eval', async () => {
+      const traces = [trace('trace-existing')];
+      const response = await api.post('/api/eval/eval-123/traces').send(traces);
+
+      expect(response.status).toBe(204);
+      expect(mockAppendTraces).toHaveBeenCalledWith(traces);
+    });
+
+    it('returns a conflict when trace IDs belong to a different eval', async () => {
+      mockAppendTraces.mockResolvedValue(false);
+
+      const response = await api
+        .post('/api/eval/eval-123/traces')
+        .send([trace('trace-safe'), trace('trace-collision')]);
+
+      expect(response.status).toBe(409);
+      expect(response.body).toEqual({ error: 'Trace ID already exists' });
+      expect(mockAppendTraces).toHaveBeenCalledOnce();
+    });
+
+    it('rejects duplicate trace IDs in one request', async () => {
+      const response = await api
+        .post('/api/eval/eval-123/traces')
+        .send([trace('trace-duplicate'), trace('trace-duplicate')]);
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Duplicate trace ID in request' });
+      expect(mockAppendTraces).not.toHaveBeenCalled();
+    });
+
+    it('rejects trace writes for an eval that does not exist', async () => {
+      vi.mocked(Eval.findById).mockResolvedValueOnce(undefined);
+
+      const response = await api
+        .post('/api/eval/missing-eval/traces')
+        .send([trace('trace-orphan')]);
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'Eval not found' });
+      expect(mockAppendTraces).not.toHaveBeenCalled();
+    });
+
+    it('returns 500 when trace persistence fails', async () => {
+      mockAppendTraces.mockRejectedValue(new Error('Database connection failed'));
+
+      const response = await api.post('/api/eval/eval-123/traces').send([trace('trace-error')]);
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to add traces to eval' });
+    });
   });
 
   describe('GET /api/traces/evaluation/:evaluationId', () => {

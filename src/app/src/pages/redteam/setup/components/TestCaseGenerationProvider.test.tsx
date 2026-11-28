@@ -48,6 +48,7 @@ const MOCK_CONFIG = {
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  getApiBaseUrl: () => '',
 }));
 
 const callApiMock = vi.mocked(callApi);
@@ -686,9 +687,7 @@ describe('TestCaseGenerationProvider', () => {
       // The generated image should be displayed in the dialog
       const imageComponent = within(testCaseDialogComponent).getByTestId('image');
       expect(imageComponent).toBeInTheDocument();
-      expect(imageComponent).toHaveStyle({
-        backgroundImage: `url(${FAKE_IMAGE_DATA_URL})`,
-      });
+      expect(imageComponent).toHaveAttribute('src', FAKE_IMAGE_DATA_URL);
     });
 
     it('should generate videos (strategy: video)', async () => {

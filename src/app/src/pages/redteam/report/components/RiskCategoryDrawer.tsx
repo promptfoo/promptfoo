@@ -247,6 +247,7 @@ const RiskCategoryDrawer = ({
               messages={chatMessages}
               displayTurnCount={maxTurns > 1}
               maxTurns={maxTurns}
+              evaluationId={evalId}
             />
           </CollapsibleContent>
         </div>
@@ -370,6 +371,7 @@ const RiskCategoryDrawer = ({
           gradingResult={currentGradingResult}
         />
         <EvalOutputPromptDialog
+          evaluationId={evalId}
           open={detailsDialogOpen}
           onClose={() => setDetailsDialogOpen(false)}
           prompt={selectedTest?.result?.prompt.raw || 'Unknown'}
