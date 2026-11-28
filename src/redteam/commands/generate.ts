@@ -206,10 +206,11 @@ function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): st
 
 async function getConfigHash(
   configPath: string,
-  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+  options: Pick<RedteamCliGenerateOptions, 'filterPrompts' | 'filterProviders' | 'filterTargets'>,
 ): Promise<string> {
   const content = await fs.readFile(configPath, 'utf8');
   const filters = {
+    ...(options.filterPrompts === undefined ? {} : { filterPrompts: options.filterPrompts }),
     ...(options.filterProviders ? { filterProviders: options.filterProviders } : {}),
     ...(options.filterTargets ? { filterTargets: options.filterTargets } : {}),
   };
@@ -351,6 +352,7 @@ async function doGenerateRedteamInternal(
     const resolved = await resolveConfigs(
       {
         config: [configPath],
+        filterPrompts: options.filterPrompts,
         filterProviders: options.filterProviders,
         filterTargets: options.filterTargets,
       },
