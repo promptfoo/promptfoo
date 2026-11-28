@@ -1,11 +1,9 @@
+import { Command } from 'commander';
 import { describe, expect, it } from 'vitest';
 import { requestsStructuredCodeScanOutput } from '../../../src/codeScan/util/structuredOutputDetect';
 
-const node = 'node';
-const cli = '/path/to/main.js';
-
 function argv(...rest: string[]): string[] {
-  return [node, cli, ...rest];
+  return rest;
 }
 
 describe('requestsStructuredCodeScanOutput', () => {
@@ -19,6 +17,46 @@ describe('requestsStructuredCodeScanOutput', () => {
   it('detects --json on code-scans run', () => {
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '.', '--json'))).toBe(true);
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '--json', '.'))).toBe(true);
+  });
+
+  it.each(['--env-file', '--env-path'])(
+    'skips %s values before finding the root command',
+    (option) => {
+      expect(
+        requestsStructuredCodeScanOutput(argv(option, 'code-scans', 'code-scans', 'run', '--json')),
+      ).toBe(true);
+      expect(requestsStructuredCodeScanOutput(argv(option, 'code-scans', 'eval', '--json'))).toBe(
+        false,
+      );
+      expect(
+        requestsStructuredCodeScanOutput(argv('eval', option, 'code-scans', 'run', '--json')),
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    ['--env-file', 'settings.env'],
+    ['--env-path=settings.env'],
+    ['--verbose'],
+    ['-vv'],
+    ['-v', '--env-file', 'first.env', '--env-file=second.env'],
+  ])('accepts parent command options %j before run', (...options) => {
+    expect(requestsStructuredCodeScanOutput(argv('code-scans', ...options, 'run', '--json'))).toBe(
+      true,
+    );
+    expect(requestsStructuredCodeScanOutput(argv(...options, 'code-scans', 'run', '--json'))).toBe(
+      true,
+    );
+  });
+
+  it('does not mistake an option value or positional argument for the run subcommand', () => {
+    expect(
+      requestsStructuredCodeScanOutput(argv('code-scans', '--env-file', 'run', '--json')),
+    ).toBe(false);
+    expect(requestsStructuredCodeScanOutput(argv('code-scans', '--', 'run', '--json'))).toBe(false);
+    expect(
+      requestsStructuredCodeScanOutput(argv('code-scans', '--verbose', 'list', 'run', '--json')),
+    ).toBe(false);
   });
 
   it('detects --format sarif and --format json (space-separated)', () => {
@@ -47,6 +85,42 @@ describe('requestsStructuredCodeScanOutput', () => {
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-fsarif'))).toBe(true);
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-fjson'))).toBe(true);
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-ftext'))).toBe(false);
+  });
+
+  it.each([
+    ['-vfsarif'],
+    ['-vvfjson'],
+    ['-vf', 'sarif'],
+    ['-vvf', 'json'],
+    ['-vftext'],
+    ['-f', '=sarif'],
+    ['-vfsarif', '-vftext'],
+    ['-vftext', '-vvfjson'],
+    ['-vc', '--json'],
+    ['-vc--json'],
+    ['-c', '-vfsarif'],
+    ['-vcsarif', '--format', 'json'],
+    ['--base', '-vfsarif'],
+    ['--', '-vfsarif'],
+  ])('matches Commander for short option clusters %j', (...options) => {
+    const program = new Command().exitOverride();
+    const run = program
+      .command('code-scans')
+      .command('run')
+      .argument('[repo-path]')
+      .option('-v, --verbose')
+      .option('-c, --config <path>')
+      .option('--base <ref>')
+      .option('--json')
+      .option('-f, --format <format>', 'Output format', 'text')
+      .action(() => {});
+    const args = ['code-scans', 'run', ...options];
+    program.parse(args, { from: 'user' });
+    const parsed = run.opts();
+
+    expect(requestsStructuredCodeScanOutput(args)).toBe(
+      Boolean(parsed.json || parsed.format === 'json' || parsed.format === 'sarif'),
+    );
   });
 
   it('returns false for --format text (the default)', () => {

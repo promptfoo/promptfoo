@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withCacheEnabled } from '../../../../src/cache';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
 import { ElevenLabsAPIError } from '../../../../src/providers/elevenlabs/errors';
 import { ProviderRegistry, providerRegistry } from '../../../../src/providers/providerRegistry';
+import { createDeferred } from '../../../util/utils';
 
 const client = vi.hoisted(() => ({ post: vi.fn(), delete: vi.fn() }));
 vi.mock('../../../../src/providers/elevenlabs/client', () => ({
@@ -147,23 +149,53 @@ describe('ephemeral agent lifecycle', () => {
     }
   });
 
-  it('coalesces creation within an instance but keeps different instances independent', async () => {
-    const first = createProvider();
-    const second = createProvider();
-    await providerRegistry.withEvaluation(async () => {
-      const results = await Promise.all([
-        first.callApi('a'),
-        first.callApi('b'),
-        second.callApi('c'),
-      ]);
-      expect(results.map((result) => result.metadata?.agentId)).toEqual([
-        'owned-1',
-        'owned-1',
-        'owned-2',
-      ]);
+  it.each([true, false])(
+    'coalesces creation per instance independently of cache enablement (%s)',
+    async (cacheEnabled) => {
+      const first = createProvider();
+      const second = createProvider();
+      await withCacheEnabled(cacheEnabled, () =>
+        providerRegistry.withEvaluation(async () => {
+          const results = await Promise.all([
+            first.callApi('a'),
+            first.callApi('b'),
+            second.callApi('c'),
+          ]);
+          expect(results.map((result) => result.metadata?.agentId)).toEqual([
+            'owned-1',
+            'owned-1',
+            'owned-2',
+          ]);
+        }),
+      );
+      expect(client.delete).toHaveBeenCalledTimes(2);
+      expect(client.post.mock.calls.filter(([path]) => path.endsWith('/create'))).toHaveLength(2);
+    },
+  );
+
+  it('keeps an agent in use by another evaluation alive during teardown', async () => {
+    const started = createDeferred<void>();
+    const release = createDeferred<void>();
+    client.post.mockResolvedValueOnce({ agent_id: 'shared' }).mockImplementationOnce(async () => {
+      started.resolve();
+      await release.promise;
+      return { status: 'completed', simulated_conversation: [] };
     });
-    expect(client.delete).toHaveBeenCalledTimes(2);
-    expect(client.post.mock.calls.filter(([path]) => path.endsWith('/create'))).toHaveLength(2);
+    const provider = createProvider();
+    const run = () =>
+      providerRegistry.withEvaluation(() =>
+        providerRegistry.withProvider(provider, () => provider.callApi('hello')),
+      );
+    const slow = run();
+    try {
+      await started.promise;
+      expect((await run()).metadata?.agentId).toBe('shared');
+      expect(client.delete).not.toHaveBeenCalled();
+    } finally {
+      release.resolve();
+      await slow;
+    }
+    expect(client.delete.mock.calls.map(([path]) => path)).toEqual(['/convai/agents/shared']);
   });
 
   it('does not delete a user supplied agent', async () => {
