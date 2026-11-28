@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Oathbreaker models through the OpenAI-compatible provider
+
+prompts:
+  - 'Answer in one short sentence: {{question}}'
+
+# Both models run on a single `OATHBREAKER_API_KEY`.
+providers:
+  - id: openai:chat:oathbreaker-glm-5.3-flash
+    label: 'GLM-5.3 Flash Abliterated'
+    config:
+      apiBaseUrl: https://oathbreaker.ai/v1
+      apiKeyEnvar: OATHBREAKER_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      temperature: 0
+      max_tokens: 4096
+      showThinking: false
+      passthrough:
+        reasoning_effort: low
+  - id: openai:chat:oathbreaker-deepseek-v4.1-flash
+    label: 'DeepSeek V4.1 Flash Abliterated'
+    config:
+      apiBaseUrl: https://oathbreaker.ai/v1
+      apiKeyEnvar: OATHBREAKER_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      temperature: 0
+      max_tokens: 4096
+      showThinking: false
+      passthrough:
+        reasoning_effort: low
+
+tests:
+  - vars:
+      question: Which HTTP status code means "Too Many Requests"?
+    assert:
+      - type: contains
+        value: '429'
+  - vars:
+      question: Which git command temporarily shelves uncommitted changes so you can switch branches?
+    assert:
+      - type: icontains
+        value: git stash
