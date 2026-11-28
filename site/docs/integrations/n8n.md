@@ -57,47 +57,56 @@ Below is the minimal pattern most teams start with:
 | 1   | **Trigger** (Cron or Webhook) | Decide _when_ to evaluate (nightly, on Git push webhook …).       |
 | 2   | **Execute Command**           | Runs Promptfoo and emits raw stdout / stderr.                     |
 | 3   | **Code / Set** node           | Parses the resulting JSON, extracts pass/fail counts & share‑URL. |
-| 4   | **IF** node                   | Branches on “failures > 0”.                                       |
+| 4   | **IF** node                   | Branches on “nonPasses > 0”.                                      |
 | 5   | **Slack / Email / GitHub**    | Sends alert or PR comment when the gate fails.                    |
 
 ### Execute Command node configuration
 
 ```sh
-promptfoo eval \
- -c /data/promptfooconfig.yaml \
- --prompts "/data/prompts/**/*.json" \
- --output /tmp/pf-results.json \
- --share --fail-on-error
-cat /tmp/pf-results.json
+set -eu
+report_dir=$(mktemp -d)
+trap 'rm -rf "$report_dir"' EXIT
+
+PROMPTFOO_PASS_RATE_THRESHOLD=0 promptfoo eval \
+  -c /data/promptfooconfig.yaml \
+  --prompts "/data/prompts/**/*.json" \
+  --output "$report_dir/results.json" \
+  --share >&2
+cat "$report_dir/results.json"
 ```
 
 Set the working directory to `/data` (mount it with Docker volume) and set it to execute once (one run per trigger).
 
-The node writes a machine‑readable results file **and** prints it to stdout,
-so the next node can simply `JSON.parse($json["stdout"])`.
+The IF node applies the quality gate, so the eval step uses a 0% threshold to keep completed results available even when tests fail. The command sends CLI logs to stderr and reserves stdout for the JSON report. An operational error stops the command before it emits a report.
 
 :::info
 The **Execute Command** node that we rely on is only available in **self‑hosted** n8n. n8n Cloud does **not** expose it yet.
 :::
 
-### Sample “Parse & alert” snippet (Code node, TypeScript)
+### Sample “Parse & alert” snippet (Code node, JavaScript)
 
-```ts
-// Input: raw JSON string from previous node
-const output = JSON.parse(items[0].json.stdout as string);
+```js
+const [item] = $input.all();
+const output = JSON.parse(item.json.stdout);
 
-const { successes, failures } = output.results.stats;
-items[0].json.passRate = successes / (successes + failures);
-items[0].json.failures = failures;
-items[0].json.shareUrl = output.shareableUrl;
+const { successes, failures, errors = 0 } = output.results.stats;
+const nonPasses = failures + errors;
+const total = successes + nonPasses;
+if (total === 0) {
+  throw new Error('The eval produced no results');
+}
 
-return items;
+item.json.passRate = successes / total;
+item.json.nonPasses = nonPasses;
+item.json.shareUrl = output.shareableUrl;
+
+return [item];
 ```
 
-An **IF** node can then route execution:
+Configure the **IF** node to route by `nonPasses`.
 
-- **failures = 0** → take _green_ path (maybe just archive the results).
-- **failures > 0** → post to Slack or comment on the pull request.
+- **nonPasses = 0** → take the green path.
+- **nonPasses > 0** → send an alert.
 
 ## Evaluating n8n AI Agent prompts and outputs
 
