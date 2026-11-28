@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
+import logger from '../../../src/logger';
 import {
   createSessionParser,
   createValidateStatus,
@@ -818,11 +819,18 @@ describe('session endpoint', () => {
     expect(result.sessionId).toBe('session-abc-123');
   });
 
-  it('should reuse session when context contains our fetched sessionId (Hydra pattern)', async () => {
+  it('should reuse session when context contains our fetched sessionId (Hydra pattern)', async ({
+    onTestFinished,
+  }) => {
     const provider = new HttpProvider(
       'http://test.com/api',
       createAuthenticatedSessionPostOptions(),
     );
+
+    const debug = vi.spyOn(logger, 'debug');
+    onTestFinished(() => {
+      debug.mockRestore();
+    });
 
     // First call: fetch session
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
@@ -865,6 +873,17 @@ describe('session endpoint', () => {
     const mainBody2 = JSON.parse(mainCall2?.[1]?.body as string);
     expect(mainBody2.session).toBe('session-hydra-1');
     expect(result2.sessionId).toBe('session-hydra-1');
+
+    const sessionLogs = debug.mock.calls.filter(([message]) =>
+      message.startsWith('[HTTP Provider Session]:'),
+    );
+    const fetched = sessionLogs.find(([message]) => message.endsWith('Fetched new session'));
+    const reused = sessionLogs.find(([message]) =>
+      message.endsWith('Reusing existing session from context'),
+    );
+    expect(fetched?.[1]).toEqual({ sessionCorrelationId: expect.any(String) });
+    expect(reused?.[1]).toEqual(fetched?.[1]);
+    expect(JSON.stringify(sessionLogs)).not.toContain('session-hydra-1');
   });
 
   it('should fetch fresh session when context contains unknown sessionId (Meta-agent pattern)', async () => {

@@ -1369,6 +1369,23 @@ describe('logger', () => {
       );
     });
 
+    it('should only keep local correlation IDs in session log context', () => {
+      logger.setStructuredLogging(true);
+
+      logger.default.info('session event', {
+        sessionID: 'session-123',
+        sessionCorrelationId: 'local-correlation-123',
+        apiKey: 'secret-key',
+      });
+
+      expect(customLogger.info).toHaveBeenCalledWith({
+        message: 'session event',
+        sessionID: '[REDACTED]',
+        sessionCorrelationId: 'local-correlation-123',
+        apiKey: '[REDACTED]',
+      });
+    });
+
     it('should pass plain string when no context provided', () => {
       logger.setStructuredLogging(true);
 

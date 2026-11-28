@@ -1504,6 +1504,22 @@ describe('sanitizeObject', () => {
         expect(sanitizeObject({ 'x-auth': 'token123' })).toEqual({ 'x-auth': '[REDACTED]' });
       });
 
+      it('should redact generic session ID fields', () => {
+        const sessionIds = {
+          sessionId: 'session-camel',
+          sessionID: 'session-capitalized',
+          session_id: 'session-snake',
+          'session-id': 'session-kebab',
+        };
+
+        expect(sanitizeObject(sessionIds)).toEqual({
+          sessionId: '[REDACTED]',
+          sessionID: '[REDACTED]',
+          session_id: '[REDACTED]',
+          'session-id': '[REDACTED]',
+        });
+      });
+
       it('should redact cookie', () => {
         expect(sanitizeObject({ cookie: 'session=abc123' })).toEqual({ cookie: '[REDACTED]' });
       });
@@ -2316,6 +2332,14 @@ describe('sanitizeObject', () => {
       expect(result.requestBody).not.toContain('plain-secret');
     });
 
+    it('should redact session IDs in URL-encoded request bodies', () => {
+      const requestBody = 'sessionID=session-123&session_id=session-456';
+
+      const result = sanitizeObject({ requestBody });
+      expect(result.requestBody).not.toContain('session-123');
+      expect(result.requestBody).not.toContain('session-456');
+    });
+
     it('should not collapse multiline key-value diagnostic text into one form field', () => {
       const text = 'token=short-value\nowner=user@example.com\n';
 
@@ -2900,6 +2924,14 @@ describe('sanitizeUrl', () => {
   });
 
   describe('query parameter sanitization', () => {
+    it('should redact session ID parameters', () => {
+      const url = 'https://example.com/api?sessionID=session-123&session_id=session-456';
+
+      const sanitized = sanitizeUrl(url);
+      expect(sanitized).not.toContain('session-123');
+      expect(sanitized).not.toContain('session-456');
+    });
+
     describe('api key patterns', () => {
       it('should redact api_key parameter', () => {
         const url = 'https://example.com/api?api_key=secret123&data=public';

@@ -1695,10 +1695,10 @@ export class HttpProvider implements ApiProvider {
   private httpsAgent?: Dispatcher;
   private httpsAgentPromise?: Promise<Dispatcher>;
   /**
-   * Tracks session IDs that were fetched from the session endpoint.
-   * Used to distinguish sessions we created from client-generated UUIDs.
+   * Map provider-issued session IDs to local, non-secret log correlation IDs.
+   * The keys are only for recognizing sessions fetched from the configured endpoint.
    */
-  private fetchedSessions: Set<string> = new Set();
+  private fetchedSessions = new Map<string, string>();
   /**
    * Parser for extracting session ID from session endpoint response.
    */
@@ -2144,19 +2144,22 @@ export class HttpProvider implements ApiProvider {
 
     const contextSessionId = vars.sessionId as string | undefined;
 
-    // If we have a sessionId from context AND it's one we fetched, reuse it
-    if (contextSessionId && this.fetchedSessions.has(contextSessionId)) {
-      logger.debug(
-        `[HTTP Provider Session]: Reusing existing session from context: ${contextSessionId}`,
-      );
-      return contextSessionId;
+    // Only reuse a session fetched from the configured endpoint.
+    if (contextSessionId) {
+      const sessionCorrelationId = this.fetchedSessions.get(contextSessionId);
+      if (sessionCorrelationId) {
+        logger.debug('[HTTP Provider Session]: Reusing existing session from context', {
+          sessionCorrelationId,
+        });
+        return contextSessionId;
+      }
     }
 
-    // Otherwise, fetch a new session from the endpoint
     logger.debug('[HTTP Provider Session]: Fetching new session from endpoint');
     const newSessionId = await this.fetchSessionFromEndpoint(vars);
-    this.fetchedSessions.add(newSessionId);
-    logger.debug(`[HTTP Provider Session]: Fetched new session: ${newSessionId}`);
+    const sessionCorrelationId = this.fetchedSessions.get(newSessionId) ?? crypto.randomUUID();
+    this.fetchedSessions.set(newSessionId, sessionCorrelationId);
+    logger.debug('[HTTP Provider Session]: Fetched new session', { sessionCorrelationId });
     return newSessionId;
   }
 
