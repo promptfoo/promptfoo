@@ -1071,20 +1071,14 @@ export default class Eval {
               WHERE json_each.key = ${field}
                 AND json_each.value = ${value}
             )`;
-          } else if (operator === 'contains') {
-            condition = sql`EXISTS (
+          } else if (operator === 'contains' || operator === 'not_contains') {
+            const contains = sql`EXISTS (
               SELECT 1
               FROM json_each(metadata)
               WHERE json_each.key = ${field}
-                AND json_each.value LIKE ${`%${value}%`}
+                AND instr(lower(json_each.value), lower(${String(value)})) > 0
             )`;
-          } else if (operator === 'not_contains') {
-            condition = sql`NOT EXISTS (
-              SELECT 1
-              FROM json_each(metadata)
-              WHERE json_each.key = ${field}
-                AND json_each.value LIKE ${`%${value}%`}
-            )`;
+            condition = operator === 'contains' ? contains : sql`NOT ${contains}`;
           } else if (operator === 'exists') {
             // For exists, check if the field is present AND not empty
             condition = sql`EXISTS (
