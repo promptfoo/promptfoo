@@ -1,0 +1,68 @@
+name: Release publication status
+
+on:
+  push:
+    branches: [main]
+    paths: ['.release-please-manifest.json']
+  workflow_run:
+    workflows: [release-please]
+    branches: [main]
+    types: [completed]
+  schedule:
+    # Mirror validation, tag movement and manual backfills finish independently.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Merged source release PR number to refresh
+        required: true
+        type: number
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  report:
+    if: >-
+      github.repository == 'promptfoo/promptfoo' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release ')))
+    concurrency:
+      group: release-publication-status
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Create a fresh directory for comment updates
+        id: scratch
+        run: mkdir .release-comments
+      - name: Prepare the publication status with read-only credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PR: ${{ inputs.pull_request }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha || (github.event_name == 'push' && github.sha) || '' }}
+        run: python3 .github/scripts/release_publication_status.py prepare .release-comments
+      - name: Create a token for the publication comment
+        # A failed registry check can still produce a pending report for the next reconciliation.
+        if: ${{ !cancelled() && steps.scratch.outcome == 'success' && hashFiles('.release-comments/*.json') != '' }}
+        id: comment-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
+          permission-pull-requests: write
+      - name: Update the publication status on the merged release PR
+        if: ${{ !cancelled() && steps.comment-token.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.comment-token.outputs.token }}
+        run: python3 .github/scripts/release_publication_status.py publish .release-comments

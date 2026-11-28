@@ -62,6 +62,28 @@ function isShallowClone(): boolean {
 // Without these bounds, release-please re-scans the full git history on every run and
 // either times out or emits a giant changelog when something perturbs the prior tag.
 describe('release-please automation', () => {
+  it('extracts rendered release links across long inventories, references and code', () => {
+    const markdown = [
+      '[guide [v2]](<https://example.org/path(a)> "Docs") and [migration][docs]',
+      '`[example](ignored)`',
+      '<img src="https://example.org/logo.png" data-canonical-src="ignored">',
+      // Definitions can follow their use by more than GitHub's 400 KB rendering limit.
+      'details '.repeat(65000),
+      '[docs]: https://example.org/guide#upgrade "Migration"',
+      '[unused]: https://unused.invalid/',
+    ].join('\n\n');
+    const parsed = spawnSync(
+      process.execPath,
+      [path.join(REPO_ROOT, '.github/scripts/release_note_markdown.mjs'), REPO_ROOT],
+      { input: markdown, encoding: 'utf8' },
+    );
+    expect(parsed.status, parsed.stderr).toBe(0);
+    expect(JSON.parse(parsed.stdout)).toEqual({
+      urls: ['https://example.org/path(a)', 'https://example.org/guide#upgrade'],
+      html: ['<img src="https://example.org/logo.png" data-canonical-src="ignored">'],
+    });
+  });
+
   it('pins last-release-sha to a 40-char commit SHA', () => {
     const sha = readReleasePleaseConfig()['last-release-sha'];
     assert(typeof sha === 'string', 'last-release-sha must be a string');
@@ -192,7 +214,11 @@ describe('release-please automation', () => {
       '${{ runner.temp }}/code-scan-action-attest/action.yml',
     ]);
 
-    expect(publishJob.needs).toEqual(['release-please', 'attest-code-scan-action']);
+    expect(publishJob.needs).toEqual([
+      'release-please',
+      'build-code-scan-action-release',
+      'attest-code-scan-action',
+    ]);
     expect(publishJob.if).toBe(
       "${{ always() && !cancelled() && needs.attest-code-scan-action.result == 'success' }}",
     );

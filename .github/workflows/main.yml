@@ -444,10 +444,34 @@ jobs:
 
   style-check:
     name: Style Check
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
-      - *checkout-repo-read-only
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: ${{ startsWith(github.head_ref, 'release-please--branches--main--components--') && '0' || '1' }}
+
+      - name: Install the release notes Markdown parser
+        if: &release-notes-pr startsWith(github.head_ref, 'release-please--branches--main--components--')
+        working-directory: ${{ runner.temp }}
+        run: npm install --prefix prettier-install --no-save --no-audit --no-fund --ignore-scripts --registry=https://registry.npmjs.org/ prettier@3.8.1
+
+      - name: Verify release notes and the component's full tag history
+        if: *release-notes-pr
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Validate with protected-branch code. The candidate changelog is only data.
+          git archive "$BASE_SHA" .github/scripts | tar -x -C "$RUNNER_TEMP"
+          python "$RUNNER_TEMP/.github/scripts/release_history.py" "$BASE_SHA" "$HEAD_SHA"
+          python "$RUNNER_TEMP/.github/scripts/release_notes.py" verify "$HEAD_SHA" "$GITHUB_HEAD_REF"
 
       - &use-node
         name: Use Node
@@ -611,6 +635,7 @@ jobs:
       - name: Run Tests
         run: |
           python -m unittest discover -s src/python -p '*_test.py'
+          python -m unittest discover -s .github/scripts -p 'test_release*.py'
 
   docs:
     name: Build Docs
