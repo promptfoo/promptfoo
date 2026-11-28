@@ -384,6 +384,7 @@ function createRunEvalSetup({
     prompt: {
       raw: '',
       label: prompt.label,
+      ...(prompt.id && { id: prompt.id }),
       config: promptConfig,
     },
     vars,

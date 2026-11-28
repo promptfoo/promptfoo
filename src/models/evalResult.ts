@@ -509,15 +509,19 @@ export function asEvaluateResult(
 export { getResultIndexKey } from '../evaluator/resultIndex';
 // Compatibility exports for existing source consumers. New callers use evaluator/resultProcessing.
 export {
+  assertUnambiguousHistoricalProviders,
+  createExactHistoricalReplayPlan,
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistRepeatMetadata,
   persistTraceMetadata,
   projectPrompt,
   projectTracesForOutput,
+  restoreExactHistoricalReplayCases,
   sanitizeProvider,
   sanitizeResultForJsonlArtifact,
   stripRepeatLinkageFromMetadata,
   stripTraceLinkageFromMetadata,
   toSerializableProviderRef,
+  validateExactHistoricalReplayPlan,
 } from '../evaluator/resultProcessing';
