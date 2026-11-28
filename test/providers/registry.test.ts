@@ -2768,6 +2768,47 @@ describe('Provider Registry', () => {
     });
 
     it.each([
+      ['google:lyria-3.5', 'lyria-3.5'],
+      ['palm:lyria-3.5', 'lyria-3.5'],
+      ['google:lyria-3-clip-preview', 'lyria-3-clip-preview'],
+      ['google:lyria-3-pro-preview', 'lyria-3-pro-preview'],
+    ])('routes the Lyria music model %s to AI Studio', async (providerPath, modelName) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath))!;
+      const { AIStudioChatProvider } = await import('../../src/providers/google/ai.studio');
+      const provider = await factory.create(providerPath, bareOptions, bareContext);
+      expect(provider).toBeInstanceOf(AIStudioChatProvider);
+      expect((provider as InstanceType<typeof AIStudioChatProvider>).modelName).toBe(modelName);
+    });
+
+    it.each([
+      'google:lyria-realtime-exp',
+      'palm:lyria-realtime-exp',
+      'google:chat:lyria-realtime-exp',
+      'google:live:lyria-realtime-exp',
+      'vertex:lyria-realtime-exp',
+      'vertex:live:lyria-realtime-exp',
+    ])('rejects the Lyria RealTime route %s', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath))!;
+      await expect(factory.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        'Lyria RealTime API, which promptfoo does not support. Use google:lyria-3.5',
+      );
+    });
+
+    it.each([
+      'vertex:lyria-3.5',
+      'vertex:lyria-3-clip-preview',
+      'vertex:lyria-3-pro-preview',
+      'vertex:chat:lyria-3.5',
+      'vertex:interactions:lyria-3-pro-preview',
+      'vertex:lyria-002',
+    ])('rejects the Vertex Lyria route %s with Gemini API guidance', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath))!;
+      await expect(factory.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        'is not available through the vertex: provider. Vertex AI serves Lyria 3 through its Interactions API',
+      );
+    });
+
+    it.each([
       [
         'vertex:live:gemini-live-2.5-flash-native-audio',
         async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
