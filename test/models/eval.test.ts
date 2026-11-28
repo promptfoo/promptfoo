@@ -2657,7 +2657,7 @@ describe('evaluator', () => {
       expect(testIndices).toEqual([0]);
     });
 
-    it('searches user metadata with filters while the unfiltered path searches responses only', async () => {
+    it('searches the same user metadata with and without filters', async () => {
       const eval_ = await EvalFactory.create({ numResults: 4, withNamedScores: true });
       const metadataRows = [
         { model: 'metadata-scalar-needle', temperature: 0.7 },
@@ -2679,7 +2679,8 @@ describe('evaluator', () => {
         ['private-only-needle', []],
       ] as const) {
         const unfiltered = await eval_.getTablePage({ searchQuery });
-        expect(unfiltered.body).toEqual([]);
+        expect(unfiltered.body.map((row) => row.testIdx)).toEqual(expected);
+        expect(unfiltered.filteredCount).toBe(expected.length);
         const page = await eval_.getTablePage({
           searchQuery,
           filters: [JSON.stringify(createAccuracyFilter())],
