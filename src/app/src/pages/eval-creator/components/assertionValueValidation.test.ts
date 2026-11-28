@@ -62,6 +62,18 @@ describe('getRunnableAssertionValueError', () => {
     });
   });
 
+  it.each(['ends-with', 'not-ends-with'] as const)(
+    'preserves literal whitespace for %s',
+    (type) => {
+      for (const value of [' ', '\n']) {
+        const assertion = make({ type, value });
+        expect(getAssertionValueError(assertion)).toBeUndefined();
+        expect(getFirstRunnableAssertionValueError([assertion])).toBeUndefined();
+      }
+      expect(getAssertionValueError(make({ type, value: '' }))).toMatch(/Enter an expected value/);
+    },
+  );
+
   describe('regex assertions', () => {
     it('requires a pattern', () => {
       expect(getRunnableAssertionValueError(make({ type: 'regex', value: '' }))).toBeDefined();

@@ -33,6 +33,7 @@ const assertTypes: AssertionType[] = [
   'icontains',
   'equals',
   'starts-with',
+  'ends-with',
   'regex',
 
   // Multiple value matching
@@ -94,6 +95,7 @@ const assertTypes: AssertionType[] = [
   'not-rouge-s',
   'not-similar',
   'not-starts-with',
+  'not-ends-with',
   'not-webhook',
 ];
 
