@@ -123,6 +123,34 @@ describe('normalizeProviderRef', () => {
     });
   });
 
+  it('converts scalar labels to strings for options, map, and function refs', () => {
+    expect(normalizeProviderRef({ id: 'echo', label: 2.5 })).toMatchObject({
+      kind: 'options',
+      label: '2.5',
+    });
+    expect(normalizeProviderRef({ echo: { label: true } })).toMatchObject({
+      kind: 'map',
+      label: 'true',
+    });
+    const labeledFunction = Object.assign(async () => ({ output: 'ok' }), { label: 3 });
+    expect(normalizeProviderRef(labeledFunction)).toMatchObject({
+      kind: 'function',
+      id: '3',
+      label: '3',
+    });
+    expect(normalizeProviderRef({ id: '', label: 0 }, { index: 1 })).toMatchObject({
+      kind: 'unknown',
+      id: '0',
+      label: '0',
+    });
+  });
+
+  it('drops labels with no meaningful string form', () => {
+    expect(normalizeProviderRef({ id: 'echo', label: { name: 'x' } }).label).toBeUndefined();
+    expect(normalizeProviderRef({ id: 'echo', label: ['x'] }).label).toBeUndefined();
+    expect(normalizeProviderRef({ id: 'echo', label: null }).label).toBeUndefined();
+  });
+
   it('classifies string providers as named vs file based on extension', () => {
     expect(normalizeProviderRef('openai:responses:gpt-5.4')).toMatchObject({
       kind: 'named',

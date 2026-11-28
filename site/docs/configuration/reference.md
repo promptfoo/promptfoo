@@ -784,6 +784,9 @@ precedence over the legacy shared `cost` value. OpenAI audio-capable models also
 ```typescript
 interface ProviderOptions {
   id?: ProviderId;
+
+  // Display name in outputs, filters, and the web UI. An unquoted YAML number or boolean,
+  // such as `label: 2.5`, becomes the string "2.5". Quote a label like "1.10" to keep it exact.
   label?: string;
   config?: any;
 
