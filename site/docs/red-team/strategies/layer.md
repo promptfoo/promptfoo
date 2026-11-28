@@ -43,6 +43,8 @@ When the **first step** is an agentic strategy (hydra, crescendo, goat, jailbrea
 2. **Per-Turn Transforms**: Remaining steps (e.g., audio, image) are applied to each turn dynamically
 3. **Multi-Modal Attacks**: Combine conversation-based attacks with audio/image delivery
 
+Supply provider `inputs` in the step's `config`; plugin metadata schemas are not forwarded automatically. Layer steps respect plugin targeting and `excludeStrategies`, using either the registered strategy ID or the alias in `steps`. When an input field shares the injection-variable name, per-turn transforms still determine the value sent to the target. Tree attacks retain the selected transform when replaying their best prompt.
+
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:chat:gpt-audio-1.5
