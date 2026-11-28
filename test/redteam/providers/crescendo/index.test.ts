@@ -13,6 +13,7 @@ import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
 import * as traceContext from '../../../../src/tracing/traceContext';
 import { isResponseHeadersObserverErrorResponse } from '../../../../src/util/fetch/responseHeadersObserver';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+import { getProviderTokenUsage, withTokenUsageTracking } from '../../../../src/util/tokenUsage';
 import { createFailingGrader, createPassingGrader } from '../../../factories/mockGrader';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
@@ -2304,11 +2305,6 @@ describe('CrescendoProvider', () => {
   });
 
   describe('Token Counting', () => {
-    beforeEach(async () => {
-      const { TokenUsageTracker } = await import('../../../../src/util/tokenUsage');
-      TokenUsageTracker.getInstance().resetAllUsage();
-    });
-
     it('preserves attacker usage when generation returns an error after inference', async () => {
       const provider = new CrescendoProvider({
         injectVar: 'objective',
@@ -2629,9 +2625,6 @@ describe('CrescendoProvider', () => {
         redteamProvider: mockRedTeamProvider,
       });
 
-      const { TokenUsageTracker } = await import('../../../../src/util/tokenUsage');
-      const tracker = TokenUsageTracker.getInstance();
-
       const context = {
         originalProvider: mockTargetProvider,
         vars: { objective: 'test objective' },
@@ -2661,10 +2654,10 @@ describe('CrescendoProvider', () => {
         tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1, cached: 0 },
       });
 
-      await provider.callApi('test prompt', context);
+      const result = await withTokenUsageTracking(() => provider.callApi('test prompt', context));
 
-      // Should track redteam provider token usage via TokenUsageTracker
-      const redteamUsage = tracker.getProviderUsage('mock-redteam');
+      // Should track redteam provider token usage within the evaluation
+      const redteamUsage = getProviderTokenUsage(result).get('mock-redteam');
       expect(redteamUsage).toMatchObject({
         total: 75,
         prompt: 35,
@@ -2680,9 +2673,6 @@ describe('CrescendoProvider', () => {
         maxTurns: 1,
         redteamProvider: mockRedTeamProvider,
       });
-
-      const { TokenUsageTracker } = await import('../../../../src/util/tokenUsage');
-      const tracker = TokenUsageTracker.getInstance();
 
       const context = {
         originalProvider: mockTargetProvider,
@@ -2713,11 +2703,11 @@ describe('CrescendoProvider', () => {
         tokenUsage: { total: 40, prompt: 18, completion: 22, numRequests: 1, cached: 0 },
       });
 
-      const result = await provider.callApi('test prompt', context);
+      const result = await withTokenUsageTracking(() => provider.callApi('test prompt', context));
 
-      // Should track scoring provider token usage via TokenUsageTracker
+      // Should track scoring provider token usage within the evaluation
       // Scoring provider is called twice per round: refusal check + internal evaluator
-      const scoringUsage = tracker.getProviderUsage('mock-scoring');
+      const scoringUsage = getProviderTokenUsage(result).get('mock-scoring');
       expect(scoringUsage).toMatchObject({
         total: 80, // 40 * 2 calls
         prompt: 36, // 18 * 2 calls
@@ -2739,8 +2729,6 @@ describe('CrescendoProvider', () => {
         maxTurns: 1,
         redteamProvider: mockRedTeamProvider,
       });
-      const { TokenUsageTracker } = await import('../../../../src/util/tokenUsage');
-      const tracker = TokenUsageTracker.getInstance();
 
       mockRedTeamProvider.callApi.mockResolvedValue({
         cached: true,
@@ -2765,11 +2753,13 @@ describe('CrescendoProvider', () => {
         tokenUsage: { total: 40, prompt: 18, completion: 22, numRequests: 1, cached: 0 },
       });
 
-      const result = await provider.callApi('test prompt', {
-        originalProvider: mockTargetProvider,
-        vars: { objective: 'test objective' },
-        prompt: { raw: 'test prompt', label: 'test' },
-      });
+      const result = await withTokenUsageTracking(() =>
+        provider.callApi('test prompt', {
+          originalProvider: mockTargetProvider,
+          vars: { objective: 'test objective' },
+          prompt: { raw: 'test prompt', label: 'test' },
+        }),
+      );
 
       expect(result.tokenUsage).toMatchObject({
         total: 100,
@@ -2783,12 +2773,12 @@ describe('CrescendoProvider', () => {
           assertions: { total: 0, numRequests: 0 },
         },
       });
-      expect(tracker.getProviderUsage('mock-redteam')).toMatchObject({
+      expect(getProviderTokenUsage(result).get('mock-redteam')).toMatchObject({
         total: 0,
         cached: 75,
         numRequests: 0,
       });
-      expect(tracker.getProviderUsage('mock-scoring')).toMatchObject({
+      expect(getProviderTokenUsage(result).get('mock-scoring')).toMatchObject({
         total: 0,
         cached: 80,
         numRequests: 0,

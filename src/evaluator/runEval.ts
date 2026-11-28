@@ -41,7 +41,7 @@ import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProviderIdentifier, sanitizeProviderIdForLog } from '../util/provider';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from '../util/templates';
-import { TokenUsageTracker } from '../util/tokenUsage';
+import { trackResponseUsage } from '../util/tokenUsage';
 import {
   accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
@@ -986,7 +986,7 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
   const trackingId = provider.constructor?.name
     ? `${providerId} (${provider.constructor.name})`
     : providerId;
-  TokenUsageTracker.getInstance().trackResponseUsage(trackingId, response);
+  trackResponseUsage(trackingId, response);
 }
 
 async function applyRunEvalResponseOutcome({

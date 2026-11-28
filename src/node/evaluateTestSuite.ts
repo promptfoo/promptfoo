@@ -1,4 +1,5 @@
 import { evaluate as evaluateWithRuntime } from '../evaluator/engine';
+import { withTokenUsageTracking } from '../util/tokenUsage';
 import { nodeEvaluatorRuntime } from './evaluatorRuntime';
 
 import type {
@@ -34,10 +35,12 @@ export function evaluate<
   options: InternalEvaluateOptions,
   runtime?: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
-  return evaluateWithRuntime(
-    testSuite,
-    evalRecord,
-    options,
-    runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>),
+  return withTokenUsageTracking(() =>
+    evaluateWithRuntime(
+      testSuite,
+      evalRecord,
+      options,
+      runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>),
+    ),
   );
 }

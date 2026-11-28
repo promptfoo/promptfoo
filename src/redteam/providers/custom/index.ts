@@ -7,7 +7,7 @@ import invariant from '../../../util/invariant';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
-import { TokenUsageTracker } from '../../../util/tokenUsage';
+import { trackResponseUsage } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
   accumulateResponseTokenUsage,
@@ -815,7 +815,7 @@ export class CustomProvider implements ApiProvider {
       options,
     );
     accumulateAttackerTokenUsage(totalTokenUsage, response);
-    TokenUsageTracker.getInstance().trackResponseUsage(redTeamingChat.id(), response);
+    trackResponseUsage(redTeamingChat.id(), response);
     if (redTeamingChat.delay) {
       logger.debug(`[Custom] Sleeping for ${redTeamingChat.delay}ms`);
       await sleep(redTeamingChat.delay);

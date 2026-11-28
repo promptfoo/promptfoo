@@ -13,7 +13,11 @@ import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrappe
 import { getRateLimitKey } from '../../src/scheduler/rateLimitKey';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { registerTracerProvider } from '../../src/tracing/tracerProvider';
-import { TokenUsageTracker } from '../../src/util/tokenUsage';
+import {
+  getProviderTokenUsage,
+  trackResponseUsage,
+  withTokenUsageTracking,
+} from '../../src/util/tokenUsage';
 import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
@@ -490,21 +494,19 @@ describe('callback failures selected before real tool-span completion', () => {
     accumulateResponseTokenUsage(usage, f.value);
     expect(usage).toMatchObject({ total: 10, cached: 5, numRequests: 2 });
     expect(usage.incurredTokenUsage).toMatchObject({ total: 5, numRequests: 1 });
-    const tracker = TokenUsageTracker.getInstance();
     const trackingId = randomUUID();
-    try {
-      tracker.trackResponseUsage(trackingId, f.warmResponse);
-      tracker.trackResponseUsage(trackingId, f.value);
-      expect(tracker.getProviderUsage(trackingId)).toMatchObject({
-        total: 5,
-        prompt: 2,
-        completion: 3,
-        cached: 5,
-        numRequests: 1,
-      });
-    } finally {
-      tracker.resetProviderUsage(trackingId);
-    }
+    const evaluation = await withTokenUsageTracking(async () => {
+      trackResponseUsage(trackingId, f.warmResponse);
+      trackResponseUsage(trackingId, f.value);
+      return {};
+    });
+    expect(getProviderTokenUsage(evaluation).get(trackingId)).toMatchObject({
+      total: 5,
+      prompt: 2,
+      completion: 3,
+      cached: 5,
+      numRequests: 1,
+    });
     expect(f.registry.getMetrics()[f.key]).toMatchObject({
       rateLimitHits: 0,
       activeRequests: 0,

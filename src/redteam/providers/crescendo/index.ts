@@ -12,7 +12,7 @@ import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, isValidJson } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
-import { TokenUsageTracker } from '../../../util/tokenUsage';
+import { trackResponseUsage } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
   accumulateResponseTokenUsage,
@@ -949,7 +949,7 @@ export class CrescendoProvider implements ApiProvider {
     );
 
     accumulateAttackerTokenUsage(totalTokenUsage, response);
-    TokenUsageTracker.getInstance().trackResponseUsage(redTeamingChat.id(), response);
+    trackResponseUsage(redTeamingChat.id(), response);
 
     if (redTeamingChat.delay) {
       logger.debug(`[Crescendo] Sleeping for ${redTeamingChat.delay}ms`);
