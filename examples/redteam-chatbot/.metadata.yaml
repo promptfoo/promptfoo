@@ -1,0 +1,5 @@
+title: 'Red Team a Multi-turn Chatbot'
+description: 'Test a stateless chatbot for security vulnerabilities using multi-turn strategies like GOAT, crescendo, and mischievous-user'
+tags:
+  - Red Teaming
+  - Multi-turn

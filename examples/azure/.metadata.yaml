@@ -1,0 +1,7 @@
+title: 'Azure AI Examples'
+description: 'This directory contains examples for using Azure AI services with promptfoo, including Azure OpenAI, Azure AI Foundry, and third-party models available through Microsoft Foundry.'
+tags:
+  - Providers
+  - Multimodal
+  - Tool Use
+  - Agents

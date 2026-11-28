@@ -1,0 +1,5 @@
+title: 'LangChain Python Integration'
+description: 'Evaluate a LangChain LLM Math chain against direct GPT responses'
+tags:
+  - Integrations
+  - Python

@@ -1,0 +1,5 @@
+title: 'Array-Based Multi-Language Testing'
+description: 'Using array variables to generate test case combinations across multiple languages and providers'
+tags:
+  - Configuration
+  - Evaluation

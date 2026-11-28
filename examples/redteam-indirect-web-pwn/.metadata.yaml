@@ -1,0 +1,4 @@
+title: 'Indirect Web Prompt Injection Attack'
+description: 'Test AI assistants for data exfiltration vulnerabilities using hidden prompt injection in web pages with the indirect-web-pwn strategy'
+tags:
+  - Red Teaming
