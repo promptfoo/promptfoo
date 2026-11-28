@@ -73,6 +73,7 @@ export const DATASET_PLUGINS = [
 
 export const ADDITIONAL_STRATEGIES = [
   'arabic-presentation-forms',
+  'artprompt',
   'audio',
   'authoritative-markup-injection',
   'base64',
@@ -149,6 +150,7 @@ export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGUR
  */
 export const ENCODING_STRATEGIES = new Set([
   'arabic-presentation-forms',
+  'artprompt',
   'base64',
   'hex',
   'rot13',
