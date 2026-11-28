@@ -902,7 +902,7 @@ redteam:
   plugins:
     - harmful
   strategies:
-    - jailbreak # Iterative strategy that benefits from trace feedback
+    - jailbreak:meta # Adaptive strategy that benefits from trace feedback
 ```
 
 Promptfoo automatically selects spans that describe model calls, tool executions, guardrail
@@ -931,15 +931,15 @@ otherwise leave out.
 
 ### Strategy-Specific Configuration
 
-Different attack strategies can use different tracing settings:
+Different attack strategies can use different tracing settings. Key each entry by the strategy ID, such as `jailbreak:meta` or `crescendo`; the deprecated top-level `jailbreak` strategy uses the `jailbreak:meta` settings:
 
 ```yaml
 redteam:
   tracing:
     enabled: true
     strategies:
-      # Jailbreak benefits from seeing all internal operations
-      jailbreak:
+      # Meta-agent jailbreaks benefit from seeing all internal operations
+      jailbreak:meta:
         includeInAttack: true
         maxSpans: 100
       # Crescendo focuses on guardrail decisions
