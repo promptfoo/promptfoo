@@ -62,7 +62,6 @@ import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
 import type { RedteamGradingContext } from '../grading/types';
-import type { RedteamGraderBase } from '../plugins/base';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -716,6 +715,20 @@ interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
   ) => Promise<TResult>;
 }
 
+type RedteamTurnGrader = TraceableRedteamGrader<
+  { grade: GradingResult; rubric: string },
+  [
+    provider: ApiProvider | undefined,
+    renderedValue: Assertion['value'] | undefined,
+    additionalRubric?: string,
+    skipRefusalCheck?: boolean,
+    gradingContext?: RedteamGradingContext,
+  ]
+> & {
+  getGradingRubricHash?(test: AtomicTestCase, additionalRubric?: string): string | undefined;
+  usesRawGradingEvidence?(): boolean;
+};
+
 /** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
 export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   grader: TraceableRedteamGrader<TResult, TArgs>,
@@ -751,7 +764,7 @@ export async function gradeRedteamTurn({
   gradingContext,
   previous,
 }: {
-  grader: RedteamGraderBase;
+  grader: RedteamTurnGrader;
   test: AtomicTestCase;
   assertion: AssertionOrSet;
   turn: { prompt: string; output: string; messages?: unknown };
