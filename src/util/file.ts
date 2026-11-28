@@ -70,6 +70,56 @@ type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
 
+const SCHEMA_TEMPLATE_KEYS = new Set([
+  'input_schema',
+  'inputSchema',
+  'json',
+  'parameters',
+  'responseSchema',
+  'schema',
+]);
+
+export function renderStructuredConfig(
+  config: any,
+  vars?: Record<string, VarValue>,
+  allowStructured = true,
+  insertedValues?: WeakSet<object>,
+): any {
+  if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return config;
+  }
+  if (typeof config === 'string') {
+    const match = /^\{\{\s*([A-Za-z_]\w*)\s*(\|\s*dump\s*\|\s*safe\s*)?\}\}$/.exec(config);
+    if (match && allowStructured && Object.prototype.hasOwnProperty.call(vars, match[1])) {
+      const value = vars[match[1]];
+      if (
+        Array.isArray(value) ||
+        (value &&
+          typeof value === 'object' &&
+          [Object.prototype, null].includes(Object.getPrototypeOf(value)))
+      ) {
+        insertedValues?.add(value);
+        return value;
+      }
+    }
+    return renderVarsInObject(config, vars);
+  }
+  if (Array.isArray(config)) {
+    return config.map((item) =>
+      renderStructuredConfig(item, vars, allowStructured, insertedValues),
+    );
+  }
+  if (config && typeof config === 'object') {
+    return Object.fromEntries(
+      Object.entries(config).map(([key, value]) => [
+        key,
+        renderStructuredConfig(value, vars, SCHEMA_TEMPLATE_KEYS.has(key), insertedValues),
+      ]),
+    );
+  }
+  return renderVarsInObject(config, vars);
+}
+
 /**
  * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
  * surfaces when a path component isn't a directory) yield false; other errors
@@ -482,6 +532,46 @@ export function maybeLoadFromExternalFileWithVars(
   return maybeLoadFromExternalFile(rendered);
 }
 
+function loadStructuredConfigFile(config: any, insertedValues: WeakSet<object>): any {
+  if (config && typeof config === 'object' && insertedValues.has(config)) {
+    return config;
+  }
+  if (Array.isArray(config)) {
+    return config.map((item) => loadStructuredConfigFile(item, insertedValues));
+  }
+  return maybeLoadFromExternalFile(config);
+}
+
+export function maybeLoadStructuredConfigFromExternalFileWithVars(
+  config: any,
+  vars?: Record<string, VarValue>,
+): any {
+  const insertedValues = new WeakSet<object>();
+  const rendered = renderStructuredConfig(config, vars, true, insertedValues);
+  return loadStructuredConfigFile(rendered, insertedValues);
+}
+
+export function maybeLoadResponseSchemaFromExternalFileWithVars(
+  responseSchema: unknown,
+  vars?: Record<string, VarValue>,
+  load: (reference: string) => unknown = maybeLoadFromExternalFile,
+): unknown {
+  const rendered = renderStructuredConfig(responseSchema, vars);
+  if (typeof rendered !== 'string') {
+    return rendered;
+  }
+  let loaded = load(rendered);
+  if (typeof loaded === 'string') {
+    try {
+      loaded = JSON.parse(loaded);
+    } catch (error) {
+      throw new Error(`Invalid JSON in responseSchema: ${error}`);
+    }
+  }
+  // Inline values have already been rendered. Only file contents are new authored input.
+  return rendered.startsWith('file://') ? renderStructuredConfig(loaded, vars) : loaded;
+}
+
 /**
  * Loads response_format configuration from an external file with variable rendering.
  *
@@ -504,10 +594,16 @@ export function maybeLoadResponseFormatFromExternalFile(
   }
 
   // First, render variables and load the outer response_format
-  const rendered = renderVarsInObject(responseFormat, vars);
-  const loaded = maybeLoadFromExternalFile(rendered);
+  const insertedValues = new WeakSet<object>();
+  const rendered = renderStructuredConfig(responseFormat, vars, true, insertedValues);
+  const loaded = loadStructuredConfigFile(rendered, insertedValues);
 
-  if (!loaded || typeof loaded !== 'object') {
+  if (
+    !loaded ||
+    typeof loaded !== 'object' ||
+    insertedValues.has(loaded) ||
+    (loaded.json_schema && insertedValues.has(loaded.json_schema))
+  ) {
     return loaded;
   }
 
@@ -516,8 +612,12 @@ export function maybeLoadResponseFormatFromExternalFile(
     const nestedSchema = loaded.schema || loaded.json_schema?.schema;
 
     if (nestedSchema) {
-      // Render and load the nested schema
-      const loadedSchema = maybeLoadFromExternalFile(renderVarsInObject(nestedSchema, vars));
+      // Render file-loaded config, but preserve values already inserted from vars.
+      const schemaForLoading =
+        typeof rendered === 'string'
+          ? renderStructuredConfig(nestedSchema, vars, true, insertedValues)
+          : nestedSchema;
+      const loadedSchema = loadStructuredConfigFile(schemaForLoading, insertedValues);
 
       // Return with the loaded schema in place
       if (loaded.schema !== undefined) {
@@ -553,7 +653,26 @@ export async function maybeLoadToolsFromExternalFile(
   abortSignal?: AbortSignal,
 ): Promise<any> {
   abortSignal?.throwIfAborted();
-  const rendered = renderVarsInObject(tools, vars);
+  const insertedValues = new WeakSet<object>();
+  return loadRenderedTools(
+    renderStructuredConfig(tools, vars, true, insertedValues),
+    insertedValues,
+    abortSignal,
+  );
+}
+
+async function loadRenderedTools(
+  rendered: any,
+  insertedValues: WeakSet<object>,
+  abortSignal?: AbortSignal,
+): Promise<any> {
+  abortSignal?.throwIfAborted();
+  if (Array.isArray(rendered) && insertedValues.has(rendered)) {
+    if (rendered.some((tool) => !tool || typeof tool !== 'object' || Array.isArray(tool))) {
+      throw new Error('A substituted tool list must contain tool objects');
+    }
+    return rendered;
+  }
 
   // Check if this is a Python/JS file reference with function name
   // These need special handling to execute the function and get the result
@@ -649,13 +768,9 @@ export async function maybeLoadToolsFromExternalFile(
   // Array entries are already rendered; only load their file references.
   if (Array.isArray(rendered)) {
     const results = await Promise.all(
-      rendered.map((item) => maybeLoadToolsFromExternalFile(item, undefined, abortSignal)),
+      rendered.map((item) => loadRenderedTools(item, insertedValues, abortSignal)),
     );
-    // Flatten if all items are arrays (common case: multiple file:// references)
-    if (results.every((r) => Array.isArray(r))) {
-      return results.flat();
-    }
-    return results;
+    return results.flat();
   }
 
   // If tools is already an object (not a file reference), return it as-is
