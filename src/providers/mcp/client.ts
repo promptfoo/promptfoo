@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { isDeepStrictEqual } from 'node:util';
 import path from 'path';
 
 import cliState from '../../cliState';
@@ -9,6 +10,7 @@ import { isCallerAbortError } from '../../util/fetch/requestSignal';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import { waitForPromiseWithAbort } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
+import { MCPToolContractError } from './errors';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -35,6 +37,42 @@ import type {
 
 const oauthRequestSignal = new AsyncLocalStorage<AbortSignal>();
 
+/** Reject unapproved MCP contract changes without leaking schema contents into logs. */
+function assertExpectedMcpTools(
+  serverKey: string,
+  expectedTools: MCPTool[],
+  actualTools: MCPTool[],
+) {
+  const sortByName = (a: MCPTool, b: MCPTool) => a.name.localeCompare(b.name);
+  if (isDeepStrictEqual([...expectedTools].sort(sortByName), [...actualTools].sort(sortByName))) {
+    return;
+  }
+
+  const expected = new Map(expectedTools.map((tool) => [tool.name, tool]));
+  const actual = new Map(actualTools.map((tool) => [tool.name, tool]));
+  const changed = [...new Set([...expected.keys(), ...actual.keys()])].sort().flatMap((name) => {
+    const approved = expected.get(name);
+    const live = actual.get(name);
+    if (!approved) {
+      return [`${name} (added)`];
+    }
+    if (!live) {
+      return [`${name} (removed)`];
+    }
+    const fields = [
+      ...(isDeepStrictEqual(approved.description, live.description) ? [] : ['description']),
+      ...(isDeepStrictEqual(approved.inputSchema, live.inputSchema) ? [] : ['input schema']),
+    ];
+    return fields.length ? [`${name} (${fields.join(', ')})`] : [];
+  });
+  const failures = changed.length ? changed : ['duplicate definitions'];
+  const visible = failures.slice(0, 10).join(', ');
+  const overflow = failures.length > 10 ? ` (+${failures.length - 10} more)` : '';
+  throw new MCPToolContractError(
+    `MCP server ${serverKey} tool contract drift: ${visible}${overflow}. Review the live tools/list response before updating expectedTools.`,
+  );
+}
+
 /**
  * Refresh tokens per request without reconnecting and aborting other tool calls.
  * Retry a rejected token once on HTTP 401; return other failures without a retry.
@@ -45,11 +83,12 @@ function createOAuthFetch(
 ): FetchLike {
   return async (url, init) => {
     // SDK transports pass their lifetime signal, not the individual tool request's signal.
-    // Only bind tools/call: the SDK must still be able to send notifications/cancelled.
+    // Bind tool calls and their pinned list rechecks; cancellation notifications remain independent.
     let requestSignal: AbortSignal | undefined;
     if (typeof init?.body === 'string') {
       try {
-        if (JSON.parse(init.body).method === 'tools/call') {
+        const { method } = JSON.parse(init.body);
+        if (method === 'tools/call' || method === 'tools/list') {
           requestSignal = oauthRequestSignal.getStore();
         }
       } catch {
@@ -141,6 +180,7 @@ function getEffectiveRequestOptions(config: MCPConfig): MCPRequestOptions | unde
 export class MCPClient {
   private clients: Map<string, Client> = new Map();
   private tools: Map<string, MCPTool[]> = new Map();
+  private pinnedTools: Map<string, { expectedTools: MCPTool[]; serverLabel: string }> = new Map();
   private config: McpConfigParsed;
   private transports: Map<
     string,
@@ -177,6 +217,34 @@ export class MCPClient {
     this.config = McpConfigSchema.parse(config);
   }
 
+  /** Use the exact same visible tool selection for startup and in-flight pin checks. */
+  private async listVisibleTools(
+    client: Client,
+    requestOptions: MCPRequestOptions | undefined,
+    requireComplete: boolean,
+    serverLabel: string,
+  ): Promise<MCPTool[]> {
+    const toolsResult = await client.listTools(undefined, requestOptions);
+    if (requireComplete && toolsResult?.nextCursor !== undefined) {
+      throw new MCPToolContractError(
+        `MCP server ${serverLabel} returned an incomplete paginated tool list; expectedTools cannot be checked until all pages are collected.`,
+      );
+    }
+    let visible =
+      toolsResult?.tools?.map((tool) => ({
+        name: tool.name,
+        description: tool.description || '',
+        inputSchema: tool.inputSchema,
+      })) || [];
+    if (this.config.tools) {
+      visible = visible.filter((tool) => this.config.tools?.includes(tool.name));
+    }
+    if (this.config.exclude_tools) {
+      visible = visible.filter((tool) => !this.config.exclude_tools?.includes(tool.name));
+    }
+    return visible;
+  }
+
   async initialize(): Promise<void> {
     if (this.cleanupPromise) {
       await this.cleanupPromise;
@@ -191,16 +259,18 @@ export class MCPClient {
     const signal = this.startupController.signal;
     // Initialize servers
     const servers = this.config.servers || (this.config.server ? [this.config.server] : []);
+    const requireUniqueTools = servers.some((server) => server.expectedTools !== undefined);
     const usedKeys = new Set(this.clients.keys());
-    for (const server of servers) {
+    for (const [index, server] of servers.entries()) {
+      const serverOrdinal = index + 1;
       const baseKey = server.name || server.url || server.path || server.command || 'default';
       let serverKey = baseKey;
       for (let suffix = 1; usedKeys.has(serverKey); suffix++) {
         serverKey = `${baseKey}:${suffix}`;
       }
       usedKeys.add(serverKey);
-      logger.info(`connecting to server ${serverKey}`);
-      await this.connectToServer(server, serverKey, signal);
+      logger.info(`connecting to MCP server #${serverOrdinal}`);
+      await this.connectToServer(server, serverKey, signal, serverOrdinal, requireUniqueTools);
     }
   }
 
@@ -208,7 +278,11 @@ export class MCPClient {
     server: MCPServerConfig,
     serverKey: string,
     signal: AbortSignal,
+    serverOrdinal: number,
+    requireUniqueTools: boolean,
   ): Promise<void> {
+    // The internal key may be a credential-bearing URL. Never expose it in diagnostics.
+    const serverLabel = `#${serverOrdinal}`;
     signal.throwIfAborted();
     const { Client } = await loadMcpClientSdk();
     signal.throwIfAborted();
@@ -318,7 +392,7 @@ export class MCPClient {
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
           logger.debug(
-            `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
+            `Failed to connect to MCP server with Streamable HTTP transport ${serverLabel}: ${error}`,
           );
           // The failed HTTP transport is not stored in the connection maps.
           // Release it before replacing it with the fallback transport.
@@ -345,45 +419,53 @@ export class MCPClient {
       if (this.config.pingOnConnect) {
         try {
           await client.ping(requestOptions);
-          logger.debug(`MCP server ${serverKey} ping successful`);
+          logger.debug(`MCP server ${serverLabel} ping successful`);
         } catch (pingError) {
           const pingErrorMessage =
             pingError instanceof Error ? pingError.message : String(pingError);
-          throw new Error(`MCP server ${serverKey} ping failed: ${pingErrorMessage}`);
+          throw new Error(`MCP server ${serverLabel} ping failed: ${pingErrorMessage}`);
         }
       }
 
-      // List available tools
-      const toolsResult = await client.listTools(
-        undefined, // no pagination params
+      // Validate the full visible contract on the connection used for execution.
+      const filteredTools = await this.listVisibleTools(
+        client,
         requestOptions,
+        server.expectedTools !== undefined,
+        serverLabel,
       );
-      const serverTools =
-        toolsResult?.tools?.map((tool) => ({
-          name: tool.name,
-          description: tool.description || '',
-          inputSchema: tool.inputSchema,
-        })) || [];
 
-      // Filter tools if specified
-      let filteredTools = serverTools;
-      if (this.config.tools) {
-        filteredTools = serverTools.filter((tool) => this.config.tools?.includes(tool.name));
+      // Compare only exposed tools, on the same connection that executes the eval.
+      if (server.expectedTools) {
+        assertExpectedMcpTools(serverLabel, server.expectedTools, filteredTools);
       }
-      if (this.config.exclude_tools) {
-        filteredTools = filteredTools.filter(
-          (tool) => !this.config.exclude_tools?.includes(tool.name),
-        );
+
+      // Model tool names are routed to the first server that advertises them.
+      // Reject ambiguous names when any server has a pin, since a later pinned
+      // server would otherwise be bypassed by an earlier unpinned one.
+      if (requireUniqueTools) {
+        const knownNames = new Set(this.getAllTools().map((tool) => tool.name));
+        for (const tool of filteredTools) {
+          if (knownNames.has(tool.name)) {
+            throw new MCPToolContractError(
+              `MCP server ${serverLabel} has ambiguous tool name '${tool.name}' while expectedTools is configured; visible tool names must be unique across MCP servers.`,
+            );
+          }
+          knownNames.add(tool.name);
+        }
       }
 
       signal.throwIfAborted();
       this.transports.set(serverKey, transport);
       this.clients.set(serverKey, client);
       this.tools.set(serverKey, filteredTools);
+      if (server.expectedTools) {
+        this.pinnedTools.set(serverKey, { expectedTools: server.expectedTools, serverLabel });
+      }
 
       if (this.isVerboseEnabled) {
         console.log(
-          `Connected to MCP server ${serverKey} with tools:`,
+          `Connected to MCP server ${serverLabel} with tools:`,
           filteredTools.map((tool) => tool.name),
         );
       }
@@ -394,13 +476,14 @@ export class MCPClient {
         this.clients.delete(serverKey);
         this.transports.delete(serverKey);
         this.tools.delete(serverKey);
+        this.pinnedTools.delete(serverKey);
       }
       await close();
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (this.isDebugEnabled) {
-        logger.error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
+        logger.error(`Failed to connect to MCP server ${serverLabel}: ${errorMessage}`);
       }
-      throw new Error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
+      throw new Error(`Failed to connect to MCP server ${serverLabel}: ${errorMessage}`);
     } finally {
       this.pendingConnections.delete(close);
     }
@@ -465,6 +548,27 @@ export class MCPClient {
         const requestSignal = signal ? AbortSignal.any([signal, finished.signal]) : finished.signal;
         let result;
         try {
+          const pin = this.pinnedTools.get(serverKey);
+          if (pin) {
+            // Servers can change their tools after the initial handshake. Refuse a
+            // stale contract immediately before dispatch, even without a change notice.
+            const currentTools = await waitForPromiseWithAbort(
+              oauthRequestSignal.run(requestSignal, () =>
+                this.listVisibleTools(client, requestOptions, true, pin.serverLabel),
+              ),
+              signal,
+            ).catch((error: unknown) => {
+              signal?.throwIfAborted();
+              if (error instanceof MCPToolContractError) {
+                throw error;
+              }
+              // A transport failure also prevents verifying the pinned contract.
+              throw new MCPToolContractError(
+                `MCP server ${pin.serverLabel} tool contract could not be verified`,
+              );
+            });
+            assertExpectedMcpTools(pin.serverLabel, pin.expectedTools, currentTools);
+          }
           result = await waitForPromiseWithAbort(
             oauthRequestSignal.run(requestSignal, () =>
               client.callTool(
@@ -508,6 +612,11 @@ export class MCPClient {
           raw: result,
         };
       } catch (error) {
+        if (error instanceof MCPToolContractError) {
+          // A stale pinned contract invalidates the evaluation. Do not convert it
+          // into a recoverable tool result that the model could ignore.
+          throw error;
+        }
         if (isCallerAbortError(error, signal, { requireReasonMatch: true })) {
           throw signal!.reason;
         }
@@ -554,6 +663,7 @@ export class MCPClient {
     this.clients.clear();
     this.transports.clear();
     this.tools.clear();
+    this.pinnedTools.clear();
     for (const { client, transport } of connections) {
       await this.closeConnection(client, transport);
     }

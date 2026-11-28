@@ -30,6 +30,12 @@ const valid: unknown[] = [
   { enabled: false },
   { enabled: true, servers: [] },
   { server: { command: 'node' } },
+  {
+    server: {
+      command: 'node',
+      expectedTools: [{ name: 'echo', description: '', inputSchema: {} }],
+    },
+  },
   { server: { path: './server.py', name: 'local', env: { MODE: 'test' } } },
   { server: { url: 'https://mcp.example.test', auth: { type: 'none' } } },
   { server: { url: 'https://mcp.example.test', auth: oauth } },
@@ -70,6 +76,13 @@ const invalid: unknown[] = [
   { enabled: false, server: {} },
   { server: { command: '', path: '', url: '' } },
   { server: { command: 123, url: 'https://mcp.example.test' } },
+  { server: { command: 'node', expectedTools: [{ name: 'echo', inputSchema: {} }] } },
+  {
+    server: {
+      command: 'node',
+      expectedTools: [{ name: 'echo', description: '', inputSchema: 'bad' }],
+    },
+  },
   { server: { command: 'node', args: 'server.js' } },
   { server: { command: 'node', args: [123] } },
   { server: { command: 'node', env: { TOKEN: 123 } } },

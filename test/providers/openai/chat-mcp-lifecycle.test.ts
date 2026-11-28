@@ -85,6 +85,116 @@ describe('Chat MCP caller lifetime', () => {
     }
   });
 
+  it('fails OpenAI evaluation instead of returning tool-error text when a pinned contract changes mid-call', async () => {
+    const request = vi.mocked(globalThis.fetch);
+    const toolCall = vi.spyOn(Client.prototype, 'callTool');
+    const approved = {
+      name: 'lookup',
+      description: 'Approved lookup',
+      inputSchema: { type: 'object' as const },
+    };
+    vi.mocked(Client.prototype.listTools)
+      .mockResolvedValueOnce({ tools: [approved] })
+      .mockResolvedValueOnce({ tools: [{ ...approved, description: 'Unapproved lookup' }] });
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: {
+        apiKey: 'fixture-key',
+        mcp: {
+          enabled: true,
+          server: { command: 'fixture-mcp', expectedTools: [approved] },
+        },
+      },
+    });
+    try {
+      const failure = await target.callApi('test').then(
+        (response) => response.error ?? '',
+        (error) => String(error),
+      );
+      expect(failure).toMatch(/tool contract drift: lookup \(description\)/);
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(toolCall).not.toHaveBeenCalled();
+    } finally {
+      await target.cleanup();
+    }
+  });
+
+  it('refuses drifted MCP tool descriptions before an OpenAI model request', async () => {
+    const request = vi.mocked(globalThis.fetch);
+    vi.mocked(Client.prototype.listTools).mockResolvedValue({
+      tools: [{ name: 'lookup', description: 'Changed lookup', inputSchema: { type: 'object' } }],
+    });
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: {
+        apiKey: 'fixture-key',
+        mcp: {
+          enabled: true,
+          server: {
+            command: 'fixture-mcp',
+            expectedTools: [
+              { name: 'lookup', description: 'Approved lookup', inputSchema: { type: 'object' } },
+            ],
+          },
+        },
+      },
+    });
+    try {
+      await expect(target.callApi('test')).rejects.toThrow(
+        /MCP server #1 tool contract drift: lookup \(description\)/,
+      );
+      expect(request).not.toHaveBeenCalled();
+      expect(Client.prototype.close).toHaveBeenCalled();
+    } finally {
+      await expect(target.cleanup()).rejects.toThrow(/tool contract drift/);
+    }
+  });
+
+  it('allows an approved MCP tool contract before an OpenAI model request', async () => {
+    const request = vi.mocked(globalThis.fetch);
+    request.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: 'chatcmpl-contract-approved',
+          object: 'chat.completion',
+          model: 'fixture',
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: 'approved' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.mocked(Client.prototype.listTools).mockResolvedValue({
+      tools: [{ name: 'lookup', description: 'Approved lookup', inputSchema: { type: 'object' } }],
+    });
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: {
+        apiKey: 'fixture-key',
+        mcp: {
+          enabled: true,
+          server: {
+            command: 'fixture-mcp',
+            expectedTools: [
+              { name: 'lookup', description: 'Approved lookup', inputSchema: { type: 'object' } },
+            ],
+          },
+        },
+      },
+    });
+    try {
+      const output = await target.callApi('test');
+      expect(output.error).toBeUndefined();
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(Client.prototype.listTools).toHaveBeenCalledTimes(1);
+    } finally {
+      await target.cleanup();
+    }
+  });
+
   it.each([
     { timing: 'cancelled wrapped', outcome: 'success', preAborted: false },
     { timing: 'cancelled wrapped', outcome: 'failure', preAborted: false },

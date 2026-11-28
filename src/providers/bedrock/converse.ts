@@ -35,6 +35,7 @@ import {
   loadProviderCallbackFromFileUrl,
 } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
+import { MCPToolContractError } from '../mcp/errors';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
 import {
@@ -1333,6 +1334,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
       return { output: formatMcpToolResult(name, mcpResult?.content) };
     } catch (err) {
+      if (err instanceof MCPToolContractError) {
+        throw err;
+      }
       logger.error(`[Bedrock Converse] MCP tool execution failed for ${name}: ${err}`);
       const msg = formatMcpToolError(name, errorMessage(err));
       return { output: msg, error: msg };

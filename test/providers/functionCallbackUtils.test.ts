@@ -10,6 +10,7 @@ import {
   FunctionCallbackHandler,
   loadProviderCallbackFromFileUrl,
 } from '../../src/providers/functionCallbackUtils';
+import { MCPToolContractError } from '../../src/providers/mcp/errors';
 import { CallbackPathTraversalError } from '../../src/util/functions/loadFunction';
 
 import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes';
@@ -954,6 +955,20 @@ describe('FunctionCallbackHandler', () => {
         output: 'MCP Tool Error (failing_tool): Tool returned an error result',
         isError: true,
       });
+    });
+
+    it('does not convert an invalidated MCP contract into recoverable callback output', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'stale_tool', description: 'Approved tool' },
+      ]);
+      mockMCPClient.callTool.mockRejectedValue(
+        new MCPToolContractError('MCP server #1 tool contract drift: stale_tool (description)'),
+      );
+
+      await expect(
+        handler.processCall({ name: 'stale_tool', arguments: '{}' }, {}),
+      ).rejects.toThrow(/tool contract drift: stale_tool \(description\)/);
+      expect(mockMCPClient.callTool).toHaveBeenCalledOnce();
     });
 
     it('should handle MCP client exceptions', async () => {
