@@ -8,6 +8,8 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
  * own `test` matched and should not be called otherwise.
  */
 export interface ProviderFactory {
+  /** Custom modules declare their own runtime identity. */
+  isCustomModule?: true;
   test: (providerPath: string) => boolean;
   create: (
     providerPath: string,
