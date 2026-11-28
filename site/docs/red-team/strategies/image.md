@@ -96,11 +96,12 @@ The `{{image}}` syntax in the examples is a Nunjucks template variable. When pro
 :::
 
 :::tip
-This strategy requires you to install the `sharp` package for image creation.
+Install Sharp in the same location as Promptfoo:
 
-```
-npm i sharp
-```
+- If Promptfoo is installed locally, run `npm install sharp@^0.35.5` in the same project.
+- If Promptfoo is installed globally, run `npm install -g sharp@^0.35.5` using the same npm global prefix.
+
+The Promptfoo Docker image includes Sharp.
 
 :::
 

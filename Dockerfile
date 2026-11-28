@@ -60,7 +60,10 @@ COPY package.json package-lock.json ./
 # npm omits packages declared as both dev and optional dependencies with --omit=dev.
 # Remove this stage's dev declarations to retain those SDKs. Keep the lockfile
 # unchanged and copy the original manifest from the builder into the final image.
+# The Docker image includes Sharp from the locked development dependency.
 RUN --mount=type=cache,target=/root/.npm \
+    SHARP_VERSION="$(node -p 'require("./package-lock.json").packages["node_modules/sharp"].version')" && \
+    npm pkg set "optionalDependencies.sharp=$SHARP_VERSION" && \
     npm pkg delete devDependencies && \
     npm ci --omit=dev --workspaces=false --install-links --include=peer --ignore-scripts && \
     npm rebuild ./node_modules/esbuild

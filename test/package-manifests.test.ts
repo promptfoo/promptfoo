@@ -185,7 +185,10 @@ function validateDockerInstallCommands(dockerfile: string): void {
       // Package names and globs can rebuild untrusted nested dependencies.
       expect(args).toEqual(['./node_modules/esbuild']);
     } else if (command === 'pkg') {
-      expect(args).toEqual(['delete', 'devDependencies']);
+      expect([
+        ['delete', 'devDependencies'],
+        ['set', 'optionalDependencies.sharp=$SHARP_VERSION'],
+      ]).toContainEqual(args);
     }
   }
 }
@@ -709,6 +712,7 @@ describe('package manifests', () => {
   it.each([
     'RUN npm pkg delete dependencies',
     'RUN npm pkg delete optionalDependencies',
+    'RUN npm pkg set optionalDependencies.sharp=latest',
     'RUN npm ci',
     String.raw`RUN n\pm ci`,
     `RUN n'p'm ci`,
@@ -772,7 +776,6 @@ describe('package manifests', () => {
       '@opencode-ai/sdk',
       'hono',
       'read-excel-file',
-      'sharp',
     ]) {
       expect(packageJson.optionalDependencies, dependency).toHaveProperty(dependency);
       expect(packageJson.dependencies, dependency).not.toHaveProperty(dependency);
@@ -789,7 +792,7 @@ describe('package manifests', () => {
       expect(extra?.[msal]).toBeUndefined();
     }
 
-    expect(packageJson.devDependencies).not.toHaveProperty('sharp');
+    expect(packageJson.optionalDependencies).not.toHaveProperty('sharp');
     expect(sitePackageJson.optionalDependencies).toHaveProperty('sharp');
     expect(sitePackageJson.dependencies).not.toHaveProperty('sharp');
     expect(sitePackageJson.devDependencies).not.toHaveProperty('sharp');

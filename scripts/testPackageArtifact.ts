@@ -1566,6 +1566,7 @@ async function main(): Promise<void> {
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
     const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
+    assert.throws(() => packageRequire.resolve('sharp'), { code: 'MODULE_NOT_FOUND' });
     timePhase('inspect declaration documentation', () =>
       assertProviderTypeDocumentation(installedPackageDir),
     );

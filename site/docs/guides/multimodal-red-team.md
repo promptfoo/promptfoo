@@ -37,20 +37,20 @@ npx promptfoo@latest init --example redteam-multi-modal
 # Navigate to the example directory
 cd redteam-multi-modal
 
-# Install required dependencies
-npm install sharp
+# Install Promptfoo and Sharp in the same project
+npm install promptfoo sharp
 
 # Run the static image red team
-npx promptfoo@latest redteam run -c promptfooconfig.static-image.yaml
+npm exec --no -- promptfoo redteam run -c promptfooconfig.static-image.yaml
 
 # Run the image strategy red team
-npx promptfoo@latest redteam run -c promptfooconfig.image-strategy.yaml
+npm exec --no -- promptfoo redteam run -c promptfooconfig.image-strategy.yaml
 
 # Run the UnsafeBench red team
-npx promptfoo@latest redteam run -c promptfooconfig.unsafebench.yaml
+npm exec --no -- promptfoo redteam run -c promptfooconfig.unsafebench.yaml
 
 # Run the VLGuard red team
-npx promptfoo@latest redteam run -c promptfooconfig.vlguard.yaml
+npm exec --no -- promptfoo redteam run -c promptfooconfig.vlguard.yaml
 ```
 
 ## Multi-Modal Red Teaming Approaches
@@ -86,6 +86,8 @@ UnsafeBench is restricted to non-commercial academic research. Check dataset lic
 This approach converts potentially harmful text into speech audio and then sends this audio to the model. It tests whether harmful content delivered via audio can bypass safety filters that would catch the same content in plain text. For more details, see [Audio Jailbreaking](/docs/red-team/strategies/audio).
 
 ## Setting Up Your Environment
+
+If you're creating the configuration files yourself, run `npm install promptfoo sharp` in your example directory first. The commands below use the local CLI so Promptfoo can find Sharp in the same project.
 
 Before running any of the examples, set up the necessary environment variables for your chosen provider:
 
@@ -201,7 +203,7 @@ The prompt template format varies between providers. Adjust the template to matc
 Run your red team test with:
 
 ```bash
-npx promptfoo@latest redteam run -c promptfooconfig.static-image.yaml
+npm exec --no -- promptfoo redteam run -c promptfooconfig.static-image.yaml
 ```
 
 ## Approach 2: Text-to-Image Conversion (Image Strategy)
@@ -271,7 +273,7 @@ The image strategy:
 Run your test with:
 
 ```bash
-npx promptfoo@latest redteam run -c promptfooconfig.image-strategy.yaml
+npm exec --no -- promptfoo redteam run -c promptfooconfig.image-strategy.yaml
 ```
 
 ## Approach 3: UnsafeBench Dataset Testing
@@ -392,7 +394,7 @@ export HF_TOKEN=your_huggingface_token
 Then run your test:
 
 ```bash
-npx promptfoo@latest redteam run -c promptfooconfig.unsafebench.yaml
+npm exec --no -- promptfoo redteam run -c promptfooconfig.unsafebench.yaml
 ```
 
 ### Customizing UnsafeBench
@@ -545,7 +547,7 @@ Run the audio strategy red team:
 
 ```bash
 # Generate and evaluate in one step
-npx promptfoo@latest redteam run -c promptfooconfig.yaml
+npm exec --no -- promptfoo redteam run -c promptfooconfig.yaml
 ```
 
 ## Using Custom Providers
