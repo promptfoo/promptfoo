@@ -460,6 +460,97 @@ export function isTransientConnectionError(error: Error | undefined): boolean {
 }
 
 /**
+ * Network-level error codes meaning the connection was refused, reset, or
+ * dropped — as opposed to a clean HTTP error response. Proxies, firewalls, and
+ * WAFs (e.g. Cloudflare blocking a POST with a 403) typically surface this way:
+ * Node/undici reports `TypeError: fetch failed` or `TypeError: terminated` and
+ * tucks the real reason into `error.cause`.
+ */
+const CONNECTION_BLOCK_CODES = new Set([
+  'UND_ERR_SOCKET',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'EPIPE',
+  'EAI_AGAIN',
+]);
+
+/**
+ * Hint appended when a request fails at the connection layer, pointing at the
+ * common real-world causes instead of leaving users with a bare `terminated`.
+ *
+ * Worded cause-agnostically: `isConnectionError` matches undici's generic
+ * `fetch failed` wrapper and DNS codes (`EAI_AGAIN`), so this hint is also shown
+ * for DNS, TLS, and offline failures — not only proxy/firewall blocks. It leads
+ * with the proxy/Cloudflare case (the original report, promptfoo#9679) but names
+ * the other likely causes so the attribution is not misleading.
+ */
+export const CONNECTION_BLOCK_HINT =
+  'The connection failed before the response completed. Common causes are a network proxy, ' +
+  'firewall, or Cloudflare rule blocking the request (for example a 403 on POST), a DNS ' +
+  'resolution failure, a TLS/certificate misconfiguration, or no network connectivity. Check ' +
+  'your network, DNS, and proxy settings, or try a different network.';
+
+function getErrorChain(error: Error): SystemError[] {
+  const chain: SystemError[] = [];
+  let cause: unknown = error;
+  while (cause instanceof Error && chain.length < 5 && !chain.includes(cause)) {
+    const current: SystemError = cause;
+    chain.push(current);
+    cause = current.cause;
+  }
+  return chain;
+}
+
+/** Identify transport failures without matching arbitrary response error text. */
+export function isConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error) || isHttpRateLimitError(error)) {
+    return false;
+  }
+  return getErrorChain(error).some(
+    ({ code, name, message }) =>
+      (typeof code === 'string' && CONNECTION_BLOCK_CODES.has(code)) ||
+      (name === 'TypeError' && /^(?:terminated|fetch failed)$/i.test(message)) ||
+      /^socket hang up$/i.test(message) ||
+      /^Request failed after \d+ retries: TypeError: (?:terminated|fetch failed)(?:$| \(Cause:)/.test(
+        message,
+      ),
+  );
+}
+
+/** Format a bounded chain of errors without dumping arbitrary cause objects. */
+export function formatFetchError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const chain = getErrorChain(error);
+  let message = String(error);
+  const causes = chain.slice(1).map(String);
+  const lastCause = chain[chain.length - 1]?.cause;
+  if (typeof lastCause === 'string') {
+    causes.push(lastCause);
+  }
+  if (causes.length) {
+    message += ` (Cause: ${causes.join(' -> ')})`;
+  }
+  const code = chain.find((item) => typeof item.code === 'string')?.code;
+  if (code) {
+    message += ` (Code: ${code})`;
+  }
+  return message;
+}
+
+/**
+ * Like {@link formatFetchError}, but also appends {@link CONNECTION_BLOCK_HINT}
+ * when the failure looks like a connection-layer block. Use in catch blocks
+ * around outbound requests so users get an actionable message instead of a bare
+ * `terminated`.
+ */
+export function describeFetchError(error: unknown): string {
+  const base = formatFetchError(error);
+  return isConnectionError(error) ? `${base}\n${CONNECTION_BLOCK_HINT}` : base;
+}
+
+/**
  * True when an error represents an aborted/cancelled operation (an AbortController
  * signal firing). Callers use this to suppress expected cancellation rather than
  * treating it as a real failure, so the abort's `.name` must be preserved upstream.
