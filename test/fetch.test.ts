@@ -3096,3 +3096,117 @@ describe('readBoundedText', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 });
+
+describe('Request cancellation through fetch wrappers', () => {
+  const wrappers = [
+    ['proxy', (request: Request, options: RequestInit) => fetchWithProxy(request, options)],
+    [
+      'timeout',
+      (request: Request, options: RequestInit) => fetchWithTimeout(request, options, 5000),
+    ],
+    [
+      'retries',
+      (request: Request, options: RequestInit) => fetchWithRetries(request, options, 5000, 2),
+    ],
+  ] as const;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response('ok'));
+    vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetAllMocks();
+    vi.useRealTimers();
+  });
+
+  describe.each(wrappers)('%s', (_name, run) => {
+    it.each(['inherited', 'replacement'])('cancels the %s signal in flight', async (source) => {
+      const controller = new AbortController();
+      const replace = source === 'replacement';
+      const request = new Request('https://example.com', {
+        signal: replace ? AbortSignal.abort() : controller.signal,
+      });
+      const started = createDeferred<void>();
+      vi.mocked(global.fetch).mockImplementationOnce((_url, options) => {
+        const signal = options!.signal!;
+        expect(signal.aborted).toBe(false);
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          started.resolve();
+        });
+      });
+      const pending = run(request, replace ? { signal: controller.signal } : {});
+      const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      await started.promise;
+      controller.abort();
+      await rejected;
+      expect(global.fetch).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+  });
+
+  it.each(wrappers)('%s stops an already-aborted Request before dispatch', async (_name, run) => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      run(new Request('https://example.com', { signal: controller.signal }), {}),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('lets an explicit null signal mask Request cancellation across network retries', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    vi.mocked(global.fetch)
+      .mockRejectedValueOnce(new Error('temporary network failure'))
+      .mockResolvedValueOnce(new Response('ok'));
+    const response = await fetchWithRetries(
+      new Request('https://example.com', { signal: controller.signal }),
+      { signal: null },
+      5000,
+      1,
+    );
+    expect(await response.text()).toBe('ok');
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['AbortError', 'TimeoutError'])('preserves %s during proxy backoff', async (name) => {
+    const controller = new AbortController();
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(null, { status: 503, statusText: 'Service Unavailable' }),
+    );
+    const pending = fetchWithProxy(
+      new Request('https://example.com', { signal: controller.signal }),
+    );
+    const reason = new DOMException('Stopped during backoff', name);
+    const rejected = expect(pending).rejects.toBe(reason);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(1);
+    controller.abort(reason);
+    await rejected;
+    expect(global.fetch).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['request', 'parameter'])(
+    'composes the proxy %s signal with the other signal',
+    async (source) => {
+      const requestController = new AbortController();
+      const parameterController = new AbortController();
+      await fetchWithProxy(
+        new Request('https://example.com', { signal: requestController.signal }),
+        {},
+        parameterController.signal,
+      );
+      const signal = vi.mocked(global.fetch).mock.calls[0][1]?.signal;
+      expect(signal?.aborted).toBe(false);
+      (source === 'request' ? requestController : parameterController).abort();
+      expect(signal?.aborted).toBe(true);
+    },
+  );
+});

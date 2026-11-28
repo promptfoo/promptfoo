@@ -189,7 +189,7 @@ describe('explicit selected rate-limit backoff observation', () => {
       fetchWithRetries(url, { signal: controller.signal }, 10_000, 1, observe),
     ).rejects.toBe(reason);
     expect(observe).not.toHaveBeenCalled();
-    expect(transport).toHaveBeenCalledOnce();
+    expect(transport).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
 

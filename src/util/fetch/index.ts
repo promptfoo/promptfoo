@@ -225,12 +225,13 @@ export async function fetchWithProxy(
     throw new Error('Invalid URL');
   }
 
-  // Combine abort signals: incoming abortSignal parameter + any signal in options
+  // An explicit init.signal, including null, overrides the Request's signal.
+  const requestSignal = getEffectiveRequestSignal(url, options);
   const combinedSignal = abortSignal
-    ? options.signal
-      ? AbortSignal.any([options.signal, abortSignal])
+    ? requestSignal
+      ? AbortSignal.any([requestSignal, abortSignal])
       : abortSignal
-    : options.signal;
+    : requestSignal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const { getAuthHeaders, ...requestOptions } = options;
@@ -337,6 +338,7 @@ async function fetchWithTransientRetries(
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
+    options.signal?.throwIfAborted();
     let attemptOptions = options;
     if (getAuthHeaders) {
       attemptOptions = {
@@ -357,7 +359,7 @@ async function fetchWithTransientRetries(
           `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
         );
       }
-      await sleep(backoffMs);
+      await sleepWithAbort(backoffMs, options.signal);
       continue;
     }
 
@@ -376,10 +378,9 @@ export function fetchWithTimeout(
   return new Promise((resolve, reject) => {
     const timeoutController = new AbortController();
 
-    // Combine timeout signal with any incoming abort signal
-    // The composite signal will abort if EITHER signal aborts
-    const signal = options.signal
-      ? AbortSignal.any([options.signal, timeoutController.signal])
+    const requestSignal = getEffectiveRequestSignal(url, options);
+    const signal = requestSignal
+      ? AbortSignal.any([requestSignal, timeoutController.signal])
       : timeoutController.signal;
 
     // Provider config templates can render numeric settings as strings.
