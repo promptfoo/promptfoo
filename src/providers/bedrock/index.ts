@@ -671,6 +671,17 @@ function getChoicesFinishReason(responseJson: any): string | undefined {
   return typeof finishReason === 'string' ? finishReason : undefined;
 }
 
+/**
+ * Reads the raw stop reason from a DeepSeek R1 InvokeModel response body.
+ * R1 is a text-completion model on Bedrock: its native response carries
+ * `choices[0].stop_reason` (`stop` or `length`), not the OpenAI-style
+ * `finish_reason` used by the chat handlers.
+ */
+function getChoicesStopReason(responseJson: any): string | undefined {
+  const stopReason = responseJson?.choices?.[0]?.stop_reason;
+  return typeof stopReason === 'string' ? stopReason : undefined;
+}
+
 function getOpenAiCompatibleTokenUsage(responseJson: any, _promptText: string): TokenUsage {
   const usage = responseJson?.usage;
   const reasoning = coerceStrToNum(usage?.completion_tokens_details?.reasoning_tokens);
@@ -1918,7 +1929,7 @@ ${prompt}
       return undefined;
     },
     tokenUsage: getOpenAiCompatibleTokenUsage,
-    finishReason: getChoicesFinishReason,
+    finishReason: getChoicesStopReason,
   },
   MISTRAL: {
     params: async (

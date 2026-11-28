@@ -4827,7 +4827,7 @@ describe('AwsBedrockCompletionProvider', () => {
         ['COHERE_COMMAND', { generations: [{ text: 'x', finish_reason: 'COMPLETE' }] }, 'COMPLETE'],
         ['COHERE_COMMAND_R', { text: 'x', finish_reason: 'MAX_TOKENS' }, 'MAX_TOKENS'],
         ['AI21', { choices: [{ finish_reason: 'length' }] }, 'length'],
-        ['DEEPSEEK', { choices: [{ text: 'x', finish_reason: 'stop' }] }, 'stop'],
+        ['DEEPSEEK', { choices: [{ text: 'x', stop_reason: 'stop' }] }, 'stop'],
         ['DEEPSEEK_CHAT', { choices: [{ finish_reason: 'length' }] }, 'length'],
         ['MISTRAL_CHAT', { choices: [{ finish_reason: 'stop' }] }, 'stop'],
         ['OPENAI', { choices: [{ finish_reason: 'length' }] }, 'length'],
@@ -4842,6 +4842,13 @@ describe('AwsBedrockCompletionProvider', () => {
         expect(BEDROCK_MODEL.CLAUDE_MESSAGES.finishReason?.({ content: [] })).toBeUndefined();
         expect(BEDROCK_MODEL.OPENAI_COMPAT.finishReason?.({ choices: [{}] })).toBeUndefined();
         expect(BEDROCK_MODEL.AMAZON_NOVA.finishReason?.({})).toBeUndefined();
+        // DeepSeek R1 reports choices[0].stop_reason, not the OpenAI-style
+        // finish_reason, so a finish_reason-only body yields no reason.
+        expect(
+          BEDROCK_MODEL.DEEPSEEK.finishReason?.({
+            choices: [{ text: 'x', finish_reason: 'stop' }],
+          }),
+        ).toBeUndefined();
       });
     });
   });
