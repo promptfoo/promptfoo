@@ -165,11 +165,6 @@ export const handleIsSql = async ({
 
   // Additional validations for cases not correctly detected by node-sql-parser
   const normalizedSql = outputString.trim();
-  if (normalizedSql.length === 0) {
-    failureReasons.push(
-      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
-    );
-  }
   if (/`/.test(normalizedSql) && (normalizedSql.match(/`/g)?.length ?? 0) % 2 !== 0) {
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
@@ -192,7 +187,14 @@ export const handleIsSql = async ({
   }
 
   try {
-    sqlParser.astify(outputString, opt);
+    const ast = sqlParser.astify(outputString, opt);
+    // Comments produce [], and empty semicolon statements can produce nested
+    // empty arrays. Parsing successfully does not imply a statement exists.
+    if (Array.isArray(ast) && ast.flat().length === 0) {
+      failureReasons.push(
+        `SQL statement does not conform to the provided ${databaseType} database syntax.`,
+      );
+    }
     pass = !inverse;
   } catch {
     pass = inverse;

@@ -204,6 +204,35 @@ describe('is-sql assertion', () => {
 
     it.each(['', '   '])('should fail empty SQL: %j', createInvalidSqlCheck());
 
+    it.each(['-- no query', '/* no query */', ';', ';;;', '-- no query\n;'])(
+      'rejects output with no SQL statements: %j',
+      async (outputString) => {
+        for (const inverse of [false, true]) {
+          const result = await handleIsSql({
+            assertion,
+            renderedValue: undefined,
+            outputString,
+            inverse,
+          } as AssertionParams);
+          expect(result.pass).toBe(inverse);
+          expect(result.score).toBe(Number(inverse));
+        }
+      },
+    );
+
+    it.each(['-- explanatory comment\nSELECT 1;', '/* explanation */ SELECT 1; SELECT 2;'])(
+      'accepts real statements alongside comments: %j',
+      async (outputString) => {
+        const result = await handleIsSql({
+          assertion,
+          renderedValue: undefined,
+          outputString,
+          inverse: false,
+        } as AssertionParams);
+        expect(result.pass).toBe(true);
+      },
+    );
+
     it('should handle many unmatched dollar-quote tags without pathological backtracking', async () => {
       const outputString = `SELECT ${Array.from(
         { length: 20_000 },
