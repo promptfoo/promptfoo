@@ -225,20 +225,21 @@ Python snake_case fields are automatically mapped to camelCase:
 
 ## Using trace data
 
-When [tracing is enabled](/docs/tracing/), OpenTelemetry trace data is available in the `context.trace` object. This allows you to write assertions based on the execution flow:
+When [tracing is enabled](/docs/tracing/), OpenTelemetry trace data is available in the optional `context["trace"]` dictionary. This allows you to write assertions based on the execution flow:
 
 ```py
-def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
+def get_assert(output, context):
     # Check if trace data is available
-    if not hasattr(context, 'trace') or context.trace is None:
+    trace = context.get('trace')
+    if trace is None:
         # Tracing not enabled, skip trace-based checks
         return True
 
     # Access trace spans
-    spans = context.trace['spans']
+    spans = trace['spans']
 
-    # Example: Check for errors in any span
-    error_spans = [s for s in spans if s.get('statusCode', 0) >= 400]
+    # OpenTelemetry span status: 0 = UNSET, 1 = OK, 2 = ERROR
+    error_spans = [s for s in spans if s.get('statusCode') == 2]
     if error_spans:
         return {
             'pass': False,
@@ -247,8 +248,9 @@ def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
         }
 
     # Example: Calculate total trace duration
-    if spans:
-        duration = max(s.get('endTime', 0) for s in spans) - min(s['startTime'] for s in spans)
+    end_times = [s['endTime'] for s in spans if s.get('endTime') is not None]
+    if end_times:
+        duration = max(end_times) - min(s['startTime'] for s in spans)
         if duration > 5000:  # 5 seconds
             return {
                 'pass': False,
@@ -278,14 +280,17 @@ tests:
       - type: python
         value: |
           # Ensure retrieval happened before response generation
-          if context.trace:
-              spans = context.trace['spans']
-              retrieval_span = next((s for s in spans if 'retrieval' in s['name']), None)
-              generation_span = next((s for s in spans if 'generation' in s['name']), None)
-              
-              if retrieval_span and generation_span:
-                  return retrieval_span['startTime'] < generation_span['startTime']
-          return True
+          trace = context.get('trace')
+          if trace is None:
+              return True
+
+          spans = trace['spans']
+          retrieval_span = next((s for s in spans if 'retrieval' in s['name']), None)
+          generation_span = next((s for s in spans if 'generation' in s['name']), None)
+
+          if retrieval_span is None or generation_span is None:
+              return False
+          return retrieval_span['startTime'] < generation_span['startTime']
 ```
 
 ## Overriding the Python binary
