@@ -59,6 +59,27 @@ function parseNunjucksTemplate(template: string): ParseResult {
   }
 }
 
+const templateLoadingNodes = new Set(['Include', 'Extends', 'Import', 'FromImport']);
+
+function astLoadsAnotherTemplate(node: unknown): boolean {
+  if (Array.isArray(node)) {
+    return node.some(astLoadsAnotherTemplate);
+  }
+  return (
+    isNunjucksAstNode(node) &&
+    (templateLoadingNodes.has(node.typename ?? '') ||
+      (node.fields ?? []).some((field) => astLoadsAnotherTemplate(node[field])))
+  );
+}
+
+export function templateLoadsAnotherTemplate(template: string): boolean {
+  if (!/\{%-?\s*(?:include|extends|import|from)\b/.test(template)) {
+    return false;
+  }
+  const parsed = parseNunjucksTemplate(template);
+  return !parsed.ok || astLoadsAnotherTemplate(parsed.ast);
+}
+
 function isNonReferenceSymbol(parent?: NunjucksParentContext): boolean {
   if (!parent) {
     return false;

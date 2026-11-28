@@ -225,6 +225,18 @@ async function loadFilePart(
   };
 }
 
+/** Resolve native path sources without reading files or generating request bodies. */
+export function getHttpMultipartInputFilePaths(
+  config: HttpMultipartConfig,
+  vars: Record<string, unknown>,
+): string[] {
+  return config.parts.flatMap((part) =>
+    part.kind === 'file' && part.source.type === 'path'
+      ? [resolvePath(renderTemplate(part.source.path, vars))]
+      : [],
+  );
+}
+
 export async function renderHttpMultipartBody(
   config: HttpMultipartConfig,
   vars: Record<string, unknown>,

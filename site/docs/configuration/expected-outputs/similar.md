@@ -11,7 +11,7 @@ using a configurable similarity or distance metric with a threshold.
 
 Thresholds use the raw metric value. For cosine similarity and dot product, the assertion score is that value, or `1 - similarity` for `not-similar`. Negative scores and scores above 1 are preserved.
 
-A non-finite result (`NaN` or infinity) fails the assertion with score 0.
+A provider error, a missing embedding, or a non-finite result (`NaN` or infinity) produces a grading error with score 0. Bayes@N reports the affected cohort as unavailable.
 
 By default, embeddings are computed via OpenAI's `text-embedding-3-large` model.
 
@@ -35,6 +35,8 @@ assert:
       - file://my_expected_output.txt
     threshold: 0.8
 ```
+
+If none of the values match and a comparison could not be scored, `similar` reports the grading error.
 
 The negated `not-similar` assertion is the logical inverse: with an array of values it passes only when the output is dissimilar to **every** value (and fails as soon as it is too similar to any one of them). This is the natural way to assert that an output does not resemble any item in a list of forbidden or canned answers.
 

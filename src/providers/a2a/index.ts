@@ -170,7 +170,11 @@ function isAgentMessage(message?: A2AMessage): boolean {
   return message?.role ? AGENT_ROLES.has(message.role.toLowerCase()) : false;
 }
 
-function renderString(value: string, vars: RequestVars, context?: CallApiContextParams): string {
+function renderString(
+  value: string,
+  vars: RequestVars,
+  context?: Pick<CallApiContextParams, 'filters'>,
+): string {
   return getNunjucksEngine(context?.filters).renderString(value, vars);
 }
 
@@ -208,7 +212,7 @@ function generateMessageId(prompt: string, context?: CallApiContextParams): stri
   return `promptfoo-${crypto.createHash('sha256').update(JSON.stringify(identity)).digest('hex').slice(0, 24)}`;
 }
 
-function getSessionId(context?: CallApiContextParams): string | undefined {
+function getSessionId(context?: Pick<CallApiContextParams, 'vars'>): string | undefined {
   const sessionId = context?.vars?.sessionId;
   return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
 }
@@ -642,6 +646,23 @@ export class A2AProvider implements ApiProvider {
 
   id(): string {
     return this.providerId;
+  }
+
+  getEvaluationInputs(
+    context: Pick<CallApiContextParams, 'filters' | 'prompt' | 'vars'> & {
+      renderedPrompt?: string;
+    },
+  ) {
+    const vars = { ...context.vars, prompt: context.renderedPrompt ?? context.prompt.raw };
+    const contextTemplate = this.config.message?.contextId;
+    const taskTemplate = this.config.message?.taskId;
+    const contextId =
+      typeof contextTemplate === 'string'
+        ? renderString(contextTemplate, vars, context)
+        : getSessionId(context);
+    const taskId =
+      typeof taskTemplate === 'string' ? renderString(taskTemplate, vars, context) : undefined;
+    return contextId || taskId ? { hasSharedSession: true } : undefined;
   }
 
   toString(): string {

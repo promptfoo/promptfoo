@@ -2982,6 +2982,9 @@
         "repeat": {
           "type": "number"
         },
+        "bayesAtN": {
+          "type": "boolean"
+        },
         "showProgressBar": {
           "type": "boolean"
         },

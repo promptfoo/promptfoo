@@ -137,6 +137,57 @@ describe('handleSimilar', () => {
     expect(result.score).toBe(0.6);
   });
 
+  it.each([false, true])(
+    'keeps grader failure details for arrays (inverse=%s)',
+    async (inverse) => {
+      const failure = {
+        pass: false,
+        score: 0,
+        reason: 'Embedding unavailable',
+        metadata: { graderError: true, cachedResponse: true },
+        tokensUsed: { cached: 5, total: 0, numRequests: 0 },
+      } as const;
+      const value = ['unavailable reference', 'unrelated reference'];
+      const assertion = { type: 'similar' as const, value };
+      const matcher = vi.mocked(matchesSimilarity).mockResolvedValueOnce(failure);
+      if (!inverse) {
+        matcher.mockResolvedValueOnce({ pass: false, score: 0.5, reason: 'Below threshold' });
+      }
+
+      expect(
+        await handleSimilar({
+          assertion,
+          renderedValue: value,
+          inverse,
+          ...createSimilarityParams('some output'),
+        }),
+      ).toEqual({ assertion, ...failure });
+    },
+  );
+
+  it('uses a valid array match after an unavailable reference', async () => {
+    const passing = { pass: true, score: 0.9, reason: 'Above threshold' };
+    vi.mocked(matchesSimilarity)
+      .mockResolvedValueOnce({
+        pass: false,
+        score: 0,
+        reason: 'Embedding unavailable',
+        metadata: { graderError: true },
+      })
+      .mockResolvedValueOnce(passing);
+    const value = ['unavailable reference', 'matching reference'];
+    const assertion = { type: 'similar' as const, value };
+
+    expect(
+      await handleSimilar({
+        assertion,
+        renderedValue: value,
+        inverse: false,
+        ...createSimilarityParams('some output'),
+      }),
+    ).toEqual({ assertion, ...passing });
+  });
+
   it('should FAIL not-similar with an array when the output is similar to ANY value', async () => {
     // not-similar means "dissimilar to ALL". The output is too similar to the
     // first value, so the inverse check fails there and the assertion returns

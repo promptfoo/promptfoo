@@ -90,16 +90,19 @@ export async function matchesSearchRubric(
     templateVars,
     providerCallContext,
   );
+  const cacheMetadata = resp.cached ? { cachedResponse: true } : {};
 
   if (resp.error || !resp.output) {
     // A provider that errored gave no verdict to invert on; `graderFail` tags it
     // so not-search-rubric never flips a transport failure into a pass.
+    const failure = graderFail(
+      `Search rubric evaluation failed: ${resp.error || 'No output'}`,
+      resp.tokenUsage,
+    );
     return {
-      ...graderFail(
-        `Search rubric evaluation failed: ${resp.error || 'No output'}`,
-        resp.tokenUsage,
-      ),
+      ...failure,
       assertion,
+      metadata: { ...failure.metadata, ...cacheMetadata },
     };
   }
 
@@ -130,6 +133,7 @@ export async function matchesSearchRubric(
       tokensUsed: resp.tokenUsage,
       assertion,
       metadata: {
+        ...cacheMetadata,
         searchResults: result.searchResults || [],
         searchProvider: searchProvider.id(),
       },
@@ -143,7 +147,7 @@ export async function matchesSearchRubric(
       reason: 'Search rubric evaluation failed: Expected a JSON object with a boolean "pass" field',
       tokensUsed: resp.tokenUsage,
       assertion,
-      metadata: { graderError: true },
+      metadata: { graderError: true, ...cacheMetadata },
     };
   }
 }

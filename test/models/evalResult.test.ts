@@ -77,6 +77,81 @@ describe('EvalResult', () => {
     response: undefined,
   });
 
+  it('strips legacy plan verifiers from both normal rows and streaming JSONL rows', async () => {
+    const plan = {
+      version: 1,
+      groups: [
+        {
+          repeatGroupId: 'question',
+          promptIdx: 0,
+          provider: { id: 'provider' },
+          repetitions: 2,
+          inputHash: 'sha256:' + 'a'.repeat(64),
+          fileHashes: ['another-verifier'],
+        },
+      ],
+    };
+    const metadata = { bayesAtNPlan: plan, label: 'retained' };
+    const input = createEvaluateResult({ metadata, testCase: { metadata } });
+    const model = await EvalResult.createFromEvaluateResult('legacy-plan', input, {
+      persist: false,
+    });
+    for (const row of [model.toEvaluateResult(), sanitizeResultForJsonlArtifact(input)]) {
+      expect(row.metadata?.label).toBe('retained');
+      expect(row.testCase.metadata?.label).toBe('retained');
+      expect(JSON.stringify(row)).not.toContain('inputHash');
+      expect(JSON.stringify(row)).not.toContain('fileHashes');
+      expect(row.metadata?.bayesAtNPlan).toMatchObject({ version: 1 });
+    }
+    expect(input.metadata?.bayesAtNPlan).toEqual(plan);
+    expect(plan.groups[0].inputHash).toContain('sha256:');
+  });
+
+  it.each([
+    { bayesAtNPlan: 'user data', answer: 42 },
+    '{  "bayesAtNPlan": "user data", "answer": 42  }',
+  ])('preserves user payloads alongside legacy plan cleanup: %j', async (output) => {
+    const plan = {
+      version: 1,
+      groups: [
+        {
+          repeatGroupId: 'question',
+          promptIdx: 0,
+          provider: { id: 'provider' },
+          repetitions: 2,
+          inputHash: 'obsolete-verifier',
+        },
+      ],
+    };
+    const raw = '{"bayesAtNPlan":"user data"}';
+    const vars = { payload: { bayesAtNPlan: 'user data' }, raw };
+    const input = createEvaluateResult({
+      response: { output },
+      prompt: { raw, label: 'question' },
+      vars,
+      metadata: { bayesAtNPlan: plan },
+      testCase: {
+        vars,
+        providerOutput: { bayesAtNPlan: 'user data' },
+        assert: [{ type: 'equals', value: raw }],
+        metadata: { bayesAtNPlan: plan },
+      },
+    });
+    const model = await EvalResult.createFromEvaluateResult('payload-plan', input, {
+      persist: false,
+    });
+    for (const row of [model.toEvaluateResult(), sanitizeResultForJsonlArtifact(input)]) {
+      expect(row.response?.output).toEqual(output);
+      expect(row.prompt.raw).toBe(raw);
+      expect(row.vars).toEqual(vars);
+      expect(row.testCase.vars).toEqual(vars);
+      expect(row.testCase.providerOutput).toEqual({ bayesAtNPlan: 'user data' });
+      expect(row.testCase.assert?.[0]).toMatchObject({ type: 'equals', value: raw });
+      expect(JSON.stringify(row.metadata)).not.toContain('obsolete-verifier');
+      expect(JSON.stringify(row.testCase.metadata)).not.toContain('obsolete-verifier');
+    }
+  });
+
   describe('sanitizeProvider', () => {
     it('should handle ApiProvider objects', () => {
       const apiProvider = createMockProvider({

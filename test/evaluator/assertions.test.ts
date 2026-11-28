@@ -17,6 +17,45 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it.each([
+    { value: 'reference', outage: true },
+    { value: ['reference', 'another reference'], outage: true },
+    { value: 'reference', outage: false },
+  ])('uses only valid similarity verdicts for Bayes@N: %j', async ({ value, outage }) => {
+    const callEmbeddingApi = vi.fn(async (input: string) =>
+      outage && input === 'reference'
+        ? { error: 'Embedding unavailable' }
+        : { embedding: input === 'answer' ? [1, 0] : [0, 1] },
+    );
+    const grader = {
+      id: () => 'embedding-grader',
+      callApi: async () => ({ output: 'unused' }),
+      callEmbeddingApi,
+    };
+    const record = new Eval({});
+    await evaluate(
+      {
+        providers: [{ id: () => 'target', callApi: async () => ({ output: 'answer' }) }],
+        prompts: [toPrompt('question')],
+        tests: [{ assert: [{ type: 'similar', value, provider: grader }] }],
+      },
+      record,
+      { bayesAtN: true, repeat: 2, cache: false },
+    );
+    expect(callEmbeddingApi).toHaveBeenCalledWith('reference');
+    expect(record.results.map((row) => row.failureReason)).toEqual([
+      ResultFailureReason.ASSERT,
+      ResultFailureReason.ASSERT,
+    ]);
+    const cohort = (await record.getRepeatStability())?.bayesAtN?.[0];
+    if (outage) {
+      expect(cohort).toMatchObject({ unavailableReason: 'Results contain grading errors' });
+      expect(cohort).not.toHaveProperty('mean');
+    } else {
+      expect(cohort).toMatchObject({ mean: 1 / 4 });
+    }
+  });
+
   it.each(['failed', 'aborted'])(
     'preserves completed audio output when grading is %s',
     async (outcome) => {

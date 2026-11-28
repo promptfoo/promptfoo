@@ -26,6 +26,13 @@ import type {
 } from '../../types/index';
 import type { OpenAiCompletionOptions } from './types';
 
+export function getRealtimeConversationId(
+  context?: Pick<CallApiContextParams, 'test'>,
+): string | number | undefined {
+  const id = context?.test?.metadata?.conversationId;
+  return typeof id === 'number' || (typeof id === 'string' && id !== '') ? id : undefined;
+}
+
 function getRealtimeResponseError(response?: OpenAI.Realtime.RealtimeResponse) {
   if (
     response?.status === 'failed' ||
@@ -79,6 +86,8 @@ function formatCloseMessage(prefix: string, code: number, reason: Buffer | undef
   return `${prefix} (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`;
 }
 
+type RealtimeFunctionCallHandler = (name: string, args: string) => Promise<string>;
+
 export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
   modalities?: string[];
   instructions?: string;
@@ -116,7 +125,7 @@ export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
     | 'required'
     | { type: 'function'; function?: { name: string } }
     | { type: 'function'; name: string };
-  functionCallHandler?: (name: string, args: string) => Promise<string>; // Handler for function calls
+  functionCallHandler?: RealtimeFunctionCallHandler; // Handler for function calls
   toolCallTimeout?: number; // Per-call timeout for functionCallHandler in ms (default 30000)
   maxToolIterations?: number; // Max tool→follow-up rounds in a single turn (default 8)
   apiVersion?: string; // Optional API version
@@ -173,7 +182,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
   static OPENAI_REALTIME_MODEL_NAMES = OPENAI_REALTIME_MODELS.map((model) => model.id);
 
-  config: OpenAiRealtimeOptions;
+  declare config: OpenAiRealtimeOptions;
 
   // Add persistent connection handling
   persistentConnection: WebSocket | null = null;
@@ -482,7 +491,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
-    this.config = options.config || {};
     const apiUrl = this.getApiUrl();
     if (isOpenAiFirstPartyApiUrl(apiUrl) && NON_CONVERSATIONAL_REALTIME_MODELS.has(modelName)) {
       throw new Error(
@@ -502,6 +510,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     if (this.config.maintainContext === undefined) {
       this.config.maintainContext = true;
     }
+  }
+
+  getEvaluationInputs(context: Pick<CallApiContextParams, 'test'>) {
+    return this.maintainsContext(context) ? { hasSharedSession: true } : undefined;
+  }
+
+  private maintainsContext(context?: Pick<CallApiContextParams, 'test'>): boolean {
+    return this.config.maintainContext === true && getRealtimeConversationId(context) !== undefined;
   }
 
   // Resolve a tool-iteration cap with a sane default and clamp on absurd values.
@@ -571,11 +587,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   private async runToolCallRound(
     pendingFunctionCalls: ReadonlyArray<{ id: string; name: string; arguments: string }>,
     sendEvent: (event: Record<string, unknown>) => void,
+    handler: RealtimeFunctionCallHandler,
   ): Promise<string[]> {
     const results: string[] = [];
     for (const call of pendingFunctionCalls) {
       try {
-        const result = await this.runFunctionCallHandlerWithTimeout(call.name, call.arguments);
+        const result = await this.runFunctionCallHandlerWithTimeout(
+          handler,
+          call.name,
+          call.arguments,
+        );
         results.push(result);
         sendEvent({
           type: 'conversation.item.create',
@@ -607,11 +628,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
    * letting the calling site translate the failure into a redacted
    * function_call_output without leaking host-side error details to the model.
    */
-  private async runFunctionCallHandlerWithTimeout(name: string, args: string): Promise<string> {
-    const handler = this.config.functionCallHandler;
-    if (!handler) {
-      throw new Error('functionCallHandler is not configured');
-    }
+  private async runFunctionCallHandlerWithTimeout(
+    handler: RealtimeFunctionCallHandler,
+    name: string,
+    args: string,
+  ): Promise<string> {
     const timeoutMs = this.getToolCallTimeoutMs();
     let to: NodeJS.Timeout | undefined;
     try {
@@ -762,26 +783,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    // Apply function handler if provided in context
-    if (
-      context?.prompt?.config?.functionCallHandler &&
-      typeof context.prompt.config.functionCallHandler === 'function'
-    ) {
-      this.config.functionCallHandler = context.prompt.config.functionCallHandler;
-    }
-
-    // If no conversationId is provided in the metadata, set maintainContext to false
-    const conversationId =
-      context?.test && 'metadata' in context.test
-        ? (context.test.metadata as Record<string, any>)?.conversationId
-        : undefined;
-
-    if (
-      conversationId === '' ||
-      (typeof conversationId !== 'string' && typeof conversationId !== 'number')
-    ) {
-      this.config.maintainContext = false;
-    }
+    const promptHandler = context?.prompt?.config?.functionCallHandler;
+    const functionCallHandler =
+      typeof promptHandler === 'function' ? promptHandler : this.config.functionCallHandler;
 
     try {
       const promptContent = this.getRealtimeUserContent(prompt);
@@ -789,12 +793,20 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       // Use a persistent connection if we should maintain conversation context
       let result;
-      if (this.config.maintainContext === true) {
-        result = await this.persistentWebSocketRequest(promptContent, requestHeaders);
+      if (this.maintainsContext(context)) {
+        result = await this.persistentWebSocketRequest(
+          promptContent,
+          requestHeaders,
+          functionCallHandler,
+        );
       } else {
         // Connect directly to the WebSocket API using API key
         logger.debug(`Connecting directly to OpenAI Realtime API WebSocket with API key`);
-        result = await this.directWebSocketRequest(promptContent, requestHeaders);
+        result = await this.directWebSocketRequest(
+          promptContent,
+          requestHeaders,
+          functionCallHandler,
+        );
       }
 
       let finalOutput = result.output;
@@ -981,11 +993,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   async directWebSocketRequest(
     prompt: string | RealtimeUserContent[],
     requestHeaders = this.getRealtimeRequestHeaders(),
+    functionCallHandler = this.config.functionCallHandler,
   ): Promise<RealtimeResponse> {
     const promptContent = this.normalizeRealtimePromptContent(prompt);
     const wsUrl = this.getWebSocketUrl(this.modelName);
     const headers = this.buildRealtimeWsHeaders(wsUrl, requestHeaders);
-    return this.requestSingleTurn(promptContent, wsUrl, headers, 'direct');
+    return this.requestSingleTurn(promptContent, wsUrl, headers, 'direct', functionCallHandler);
   }
 
   private requestSingleTurn(
@@ -993,6 +1006,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     wsUrl: string,
     headers: Record<string, string>,
     mode: 'direct' | 'client-secret',
+    functionCallHandler = this.config.functionCallHandler,
   ): Promise<RealtimeResponse> {
     return new Promise((resolve, reject) => {
       const getCachedToolConfig = this.makeRequestToolConfigCache();
@@ -1271,11 +1285,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               }
 
               // If there are pending function calls, process them
-              if (
-                !responseError &&
-                pendingFunctionCalls.length > 0 &&
-                this.config.functionCallHandler
-              ) {
+              if (!responseError && pendingFunctionCalls.length > 0 && functionCallHandler) {
                 if (toolIterations >= maxToolIterations) {
                   clearTimeout(timeout);
                   ws.close();
@@ -1293,7 +1303,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // handler must not be killed by the outer timeout before the
                 // redacted function_call_output reaches the model.
                 clearTimeout(timeout);
-                const roundResults = await this.runToolCallRound(pendingFunctionCalls, sendEvent);
+                const roundResults = await this.runToolCallRound(
+                  pendingFunctionCalls,
+                  sendEvent,
+                  functionCallHandler,
+                );
                 functionCallResults.push(...roundResults);
 
                 // Request a new response from the model using the function results
@@ -1660,6 +1674,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   async persistentWebSocketRequest(
     prompt: string | RealtimeUserContent[],
     requestHeaders = this.getRealtimeRequestHeaders(),
+    functionCallHandler = this.config.functionCallHandler,
   ): Promise<RealtimeResponse> {
     const promptContent = this.normalizeRealtimePromptContent(prompt);
     const previous = this.inflightTurn;
@@ -1671,7 +1686,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       }
       await this.openPersistentConnection(requestHeaders);
       return new Promise<RealtimeResponse>((resolve, reject) => {
-        void this.setupMessageHandlers(promptContent, resolve, reject).catch(reject);
+        void this.setupMessageHandlers(promptContent, resolve, reject, functionCallHandler).catch(
+          reject,
+        );
       });
     })();
     this.inflightTurn = turn.catch(() => undefined);
@@ -1683,6 +1700,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     prompt: string | RealtimeUserContent[],
     resolve: (value: RealtimeResponse) => void,
     reject: (reason: Error) => void,
+    functionCallHandler: RealtimeFunctionCallHandler | undefined,
   ): Promise<void> {
     // Reset audio state at the start of each request
     this.resetAudioState();
@@ -1962,7 +1980,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               return;
             }
 
-            if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
+            if (pendingFunctionCalls.length > 0 && functionCallHandler) {
               if (toolIterations >= maxToolIterations) {
                 clearRequestTimeout();
                 // Detach our message/error/close listeners — without this, the
@@ -1990,7 +2008,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               // Pause the inactivity timeout while user code runs — handler
               // execution time is not WebSocket inactivity.
               clearRequestTimeout();
-              const roundResults = await this.runToolCallRound(pendingFunctionCalls, sendEvent);
+              const roundResults = await this.runToolCallRound(
+                pendingFunctionCalls,
+                sendEvent,
+                functionCallHandler,
+              );
               functionCallResults.push(...roundResults);
 
               sendEvent({

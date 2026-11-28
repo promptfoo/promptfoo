@@ -797,6 +797,7 @@ export function sanitizeConfigForOutput(
     shouldStripTestVars?: boolean;
     shouldStripMetadata?: boolean;
     shouldStripResponseOutput?: boolean;
+    shouldStripGradingResult?: boolean;
   } = {},
 ): Partial<UnifiedConfig> {
   const safe = sanitizeTracingConfigForPersistence(config);
@@ -820,12 +821,16 @@ export function sanitizeConfigForOutput(
         : scenario,
     );
   }
-  const sanitized = sanitizeObject(outputConfig, {
+  const sanitized = sanitizeObject(stripBayesAtNInputHashes(outputConfig, 'config'), {
     context: 'output config',
     sanitizeUrls: true,
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as Partial<UnifiedConfig>;
+  if (options.shouldStripGradingResult && sanitized.metadata) {
+    // Imported results cannot verify grader-cache evidence after grading is stripped.
+    delete sanitized.metadata.bayesAtNPlan;
+  }
   if (basePath !== undefined) {
     sanitized.basePath = basePath;
   }
@@ -1478,6 +1483,117 @@ function recursiveSanitize(
 
   // Handle plain objects
   return sanitizePlainObject(obj, depth, maxDepth, sanitizeUrls, isEnvMap);
+}
+
+function countOnlyBayesAtNPlan(entry: unknown): unknown {
+  if (
+    !entry ||
+    typeof entry !== 'object' ||
+    !('version' in entry) ||
+    entry.version !== 1 ||
+    !('groups' in entry) ||
+    !Array.isArray(entry.groups)
+  ) {
+    return undefined;
+  }
+  if (
+    entry.groups.some((group: unknown) => {
+      if (!group || typeof group !== 'object') {
+        return true;
+      }
+      const g = group as Record<string, unknown>;
+      const provider = g.provider as Record<string, unknown> | undefined;
+      return (
+        typeof g.repeatGroupId !== 'string' ||
+        !Number.isSafeInteger(g.promptIdx) ||
+        (g.promptIdx as number) < 0 ||
+        !Number.isSafeInteger(g.repetitions) ||
+        (g.repetitions as number) < 1 ||
+        !provider ||
+        typeof provider !== 'object' ||
+        typeof provider.id !== 'string' ||
+        (provider.label !== undefined && typeof provider.label !== 'string')
+      );
+    })
+  ) {
+    return undefined;
+  }
+  return {
+    version: 1,
+    groups: entry.groups.map((group: unknown) => {
+      if (!group || typeof group !== 'object') {
+        return undefined;
+      }
+      const g = group as Record<string, unknown>;
+      const provider =
+        g.provider && typeof g.provider === 'object' ? (g.provider as Record<string, unknown>) : {};
+      return {
+        repeatGroupId: g.repeatGroupId,
+        promptIdx: g.promptIdx,
+        provider: sanitizeObject(
+          { id: provider.id, label: provider.label },
+          { sanitizeUrls: true, maxDepth: Infinity, throwOnError: true },
+        ),
+        repetitions: g.repetitions,
+      };
+    }),
+  };
+}
+
+/** Project legacy plans only in metadata owned by the evaluation schema. */
+export function stripBayesAtNInputHashes<T>(
+  value: T,
+  scope: 'result' | 'config' | 'summary' = 'result',
+): T {
+  const paths =
+    scope === 'config'
+      ? [
+          ['metadata'],
+          ['defaultTest', 'metadata'],
+          ['tests', '*', 'metadata'],
+          ['scenarios', '*', 'config', '*', 'metadata'],
+          ['scenarios', '*', 'tests', '*', 'metadata'],
+        ]
+      : scope === 'summary'
+        ? [
+            ['results', '*', 'metadata'],
+            ['results', '*', 'testCase', 'metadata'],
+            ['table', 'body', '*', 'test', 'metadata'],
+            ['table', 'body', '*', 'outputs', '*', 'metadata'],
+            ['table', 'body', '*', 'outputs', '*', 'testCase', 'metadata'],
+          ]
+        : [['metadata'], ['testCase', 'metadata']];
+  const project = (item: unknown, path: string[]): unknown => {
+    if (!item || typeof item !== 'object') {
+      return item;
+    }
+    if (path[0] === '*') {
+      if (!Array.isArray(item)) {
+        return item;
+      }
+      const projected = item.map((entry) => project(entry, path.slice(1)));
+      return projected.some((entry, index) => entry !== item[index]) ? projected : item;
+    }
+    if (Array.isArray(item)) {
+      return item;
+    }
+    const record = item as Record<string, unknown>;
+    if (path.length === 0) {
+      if (!Object.prototype.hasOwnProperty.call(record, 'bayesAtNPlan')) {
+        return item;
+      }
+      const { bayesAtNPlan, ...metadata } = record;
+      const plan = countOnlyBayesAtNPlan(bayesAtNPlan);
+      return plan === undefined ? metadata : { ...metadata, bayesAtNPlan: plan };
+    }
+    const [key, ...rest] = path;
+    if (!Object.prototype.hasOwnProperty.call(record, key)) {
+      return item;
+    }
+    const projected = project(record[key], rest);
+    return projected === record[key] ? item : { ...record, [key]: projected };
+  };
+  return paths.reduce((item, path) => project(item, path) as T, value);
 }
 
 /**

@@ -1,7 +1,7 @@
 import { type EnvVarKey, getEnvString, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
 import { generateIdFromPrompt } from '../../models/prompt';
-import { OpenAiRealtimeProvider } from '../openai/realtime';
+import { getRealtimeConversationId, OpenAiRealtimeProvider } from '../openai/realtime';
 import { providerRegistry } from '../providerRegistry';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost, throwConfigurationError } from './util';
@@ -43,6 +43,13 @@ function hasSameRealtimeConnection(
   return [...headerNames].every((name) => currentHeaders[name] === nextHeaders[name]);
 }
 
+function maintainsContext(
+  conversationId: string | number | undefined,
+  config: OpenAiRealtimeOptions,
+): boolean {
+  return conversationId !== undefined && (config.maintainContext ?? true) === true;
+}
+
 export class AzureRealtimeProvider extends AzureGenericProvider {
   private readonly realtimeProviders = new Map<string, OpenAiRealtimeProvider>();
   private nextStatelessProviderId = 0;
@@ -50,6 +57,17 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
 
   constructor(deploymentName: string, options: ProviderOptions = {}) {
     super(deploymentName, options);
+  }
+
+  private getEffectiveConfig(promptConfig: CallApiContextParams['prompt']['config']) {
+    return { ...this.config, ...promptConfig } as OpenAiRealtimeOptions & { apiKeyEnvar?: string };
+  }
+
+  getEvaluationInputs(context: Pick<CallApiContextParams, 'prompt' | 'test'>) {
+    const config = this.getEffectiveConfig(context.prompt.config);
+    return maintainsContext(getRealtimeConversationId(context), config)
+      ? { hasSharedSession: true }
+      : undefined;
   }
 
   override async callApi(
@@ -60,10 +78,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     const promptConfig = context?.prompt?.config as
       | (OpenAiRealtimeOptions & { apiKeyEnvar?: string })
       | undefined;
-    const effectiveConfig = {
-      ...this.config,
-      ...promptConfig,
-    } as OpenAiRealtimeOptions & { apiKeyEnvar?: string };
+    const effectiveConfig = this.getEffectiveConfig(promptConfig);
     const promptApiKey =
       promptConfig?.apiKey ??
       (promptConfig?.apiKeyEnvar
@@ -109,10 +124,8 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
       : this.authHeaders;
     const realtimeBaseUrl = getAzureRealtimeBaseUrl(baseUrl);
     const realtimeUrl = new URL(realtimeBaseUrl);
-    const conversationId = context?.test?.metadata?.conversationId;
-    const hasConversationId =
-      conversationId !== '' &&
-      (typeof conversationId === 'string' || typeof conversationId === 'number');
+    const conversationId = getRealtimeConversationId(context);
+    const maintainContext = maintainsContext(conversationId, effectiveConfig);
     const realtimeConfig: OpenAiRealtimeOptions = {
       ...effectiveConfig,
       apiHost:
@@ -122,7 +135,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
       apiBaseUrl: realtimeBaseUrl,
       apiKey: effectiveApiKey ?? bearerToken,
       azureApiKeyAuth: Boolean(effectiveApiKey),
-      maintainContext: hasConversationId && (effectiveConfig.maintainContext ?? true),
+      maintainContext,
       headers: {
         ...inheritedAuthHeaders,
         ...effectiveConfig.headers,
@@ -131,7 +144,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     };
 
     const promptId = context?.prompt ? generateIdFromPrompt(context.prompt) : 'default';
-    const realtimeProviderKey = hasConversationId
+    const realtimeProviderKey = maintainContext
       ? `persistent:${JSON.stringify([promptId, conversationId])}`
       : `stateless:${++this.nextStatelessProviderId}`;
     let realtimeProvider = this.realtimeProviders.get(realtimeProviderKey);
@@ -159,7 +172,7 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
 
     const delegatedProvider = realtimeProvider;
     const result = await delegatedProvider.callApi(prompt, context, callApiOptions).finally(() => {
-      if (!hasConversationId) {
+      if (!maintainContext) {
         delegatedProvider.cleanup();
         this.realtimeProviders.delete(realtimeProviderKey);
       }
