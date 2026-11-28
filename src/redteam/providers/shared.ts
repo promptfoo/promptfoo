@@ -48,8 +48,11 @@ import {
 import { TransformInputType, transform } from '../../util/transform';
 import {
   getGradingAssertionHash,
+  getGradingEvidenceKinds,
   getGradingInputHash,
+  getTargetConversation,
   withGradingUsage,
+  withSelectedGradingEvidence,
 } from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -58,6 +61,7 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
+import type { RedteamGradingContext } from '../grading/types';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -711,6 +715,20 @@ interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
   ) => Promise<TResult>;
 }
 
+type RedteamTurnGrader = TraceableRedteamGrader<
+  { grade: GradingResult; rubric: string },
+  [
+    provider: ApiProvider | undefined,
+    renderedValue: Assertion['value'] | undefined,
+    additionalRubric?: string,
+    skipRefusalCheck?: boolean,
+    gradingContext?: RedteamGradingContext,
+  ]
+> & {
+  getGradingRubricHash?(test: AtomicTestCase, additionalRubric?: string): string | undefined;
+  usesRawGradingEvidence?(): boolean;
+};
+
 /** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
 export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   grader: TraceableRedteamGrader<TResult, TArgs>,
@@ -733,6 +751,68 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
     },
     invoke,
   );
+}
+
+/** Grade a selected target turn and bind its verdict, assertion, inputs, and usage together. */
+export async function gradeRedteamTurn({
+  grader,
+  test,
+  assertion,
+  turn,
+  provider,
+  additionalRubric,
+  gradingContext,
+  previous,
+}: {
+  grader: RedteamTurnGrader;
+  test: AtomicTestCase;
+  assertion: AssertionOrSet;
+  turn: { prompt: string; output: string; messages?: unknown };
+  provider?: ApiProvider;
+  additionalRubric?: string;
+  gradingContext?: RedteamGradingContext;
+  previous?: GradingResult;
+}): Promise<{ grade: GradingResult; storedResult: GradingResult }> {
+  const { conversationTranscript, priorMessages } = getTargetConversation(turn.messages);
+  const context = turn.messages
+    ? { conversationTranscript, priorMessages, ...gradingContext }
+    : gradingContext;
+  const { grade, rubric } = await runRedteamGrader(
+    grader,
+    turn.prompt,
+    turn.output,
+    test,
+    provider,
+    getGraderAssertionValue(assertion),
+    additionalRubric,
+    undefined,
+    context,
+  );
+  const evidenceKinds = getGradingEvidenceKinds(context, grader.usesRawGradingEvidence?.() ?? true);
+  const boundGrade = {
+    ...grade,
+    assertion: buildGraderResultAssertion(grade.assertion, assertion, rubric),
+    ...(grader.getGradingRubricHash && {
+      metadata: {
+        ...grade.metadata,
+        redteamGradingRubricHash: grader.getGradingRubricHash(test, additionalRubric) ?? null,
+        ...(evidenceKinds.length && {
+          redteamGradingEvidenceKinds: evidenceKinds,
+        }),
+      },
+    }),
+  };
+  return {
+    grade: boundGrade,
+    storedResult: withSelectedGradingEvidence(
+      accumulateGraderResult(previous, boundGrade, {
+        ...turn,
+        pluginId: test.metadata?.pluginId,
+        assertion,
+      }),
+      context,
+    ),
+  };
 }
 
 /** Preserve the latest verdict while retaining usage from every strategy grading turn. */

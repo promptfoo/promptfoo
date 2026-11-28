@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../../../src/assertions/index';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import logger from '../../../../src/logger';
+import { ContractsGrader } from '../../../../src/redteam/plugins/contracts';
 import { CrescendoProvider } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
@@ -2052,7 +2053,9 @@ describe('CrescendoProvider', () => {
         .fn()
         .mockResolvedValueOnce({ grade: firstGrade, rubric: 'test rubric' })
         .mockResolvedValueOnce({ grade: secondGrade, rubric: 'test rubric' });
-      mockGetGraderById.mockReturnValue({ getResult });
+      const grader = new ContractsGrader();
+      vi.spyOn(grader, 'getResult').mockImplementation(getResult);
+      mockGetGraderById.mockReturnValue(grader);
       for (const generatedQuestion of ['harmful request', 'follow-up request']) {
         mockRedTeamProvider.callApi.mockResolvedValueOnce({
           output: JSON.stringify({
@@ -2079,7 +2082,7 @@ describe('CrescendoProvider', () => {
         prompt: { raw: 'test prompt', label: 'test' },
         test: {
           assert: [{ type: 'promptfoo:redteam:contracts' }],
-          metadata: { pluginId: 'contracts' },
+          metadata: { pluginId: 'contracts', strategyId: 'crescendo' },
         } as AtomicTestCase,
       });
     };
@@ -2100,6 +2103,12 @@ describe('CrescendoProvider', () => {
       expect(result.metadata?.messages).toHaveLength(2);
       expect(result.guardrails).toBeUndefined();
 
+      const finalGrader = new ContractsGrader();
+      const regrade = vi.spyOn(finalGrader, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Contract policy failed' },
+        rubric: 'Final policy',
+      });
+      mockGetGraderById.mockReturnValue(finalGrader);
       const grade = await runAssertions({
         prompt: 'test prompt',
         providerResponse: result,
@@ -2113,8 +2122,9 @@ describe('CrescendoProvider', () => {
         },
       });
       expect(grade.pass).toBe(false);
-      expect(grade.reason).toBe('Jailbreak detected');
-      expect(mockGetGraderById).toHaveBeenCalledTimes(2);
+      expect(grade.reason).toBe('Contract policy failed');
+      expect(regrade).toHaveBeenCalledTimes(1);
+      expect(regrade.mock.calls[0][5]).toBeUndefined();
     });
 
     it('reports the last guardrail result when no round is flagged', async () => {
@@ -3701,7 +3711,6 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       {
         materializationHandled: true,
         materializedVars: {
@@ -3772,7 +3781,6 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
         },
         prompt: { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
       },
-      undefined,
       undefined,
       undefined,
       undefined,

@@ -19,6 +19,14 @@ import {
   normalizeConfigProviderAlias,
 } from './configAliases';
 
+import type { GradingTaxonomy, TaxonomyFinding } from '../contracts/gradingTaxonomy';
+
+export type {
+  GradingTaxonomy,
+  StructuredGradingRubric,
+  TaxonomyFinding,
+} from '../contracts/gradingTaxonomy';
+
 import type { ResultFailureReason } from './results';
 
 export { ProvidersSchema };
@@ -544,6 +552,9 @@ export interface ResultSuggestion {
 }
 
 export interface GradingResult {
+  /** Findings from the same judge call that produced this assertion grade. */
+  findings?: TaxonomyFinding[];
+
   // Whether the test passed or failed
   pass: boolean;
 
@@ -577,6 +588,7 @@ export interface GradingResult {
 
   // Additional info
   metadata?: {
+    taxonomy?: Pick<GradingTaxonomy, 'id' | 'version'>;
     pluginId?: string;
     strategyId?: string;
     // Context value for context-related assertions (context-faithfulness, context-recall, context-relevance)

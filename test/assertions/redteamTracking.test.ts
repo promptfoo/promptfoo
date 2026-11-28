@@ -3,6 +3,7 @@ import { runAssertions } from '../../src/assertions/index';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { DataExfilGrader } from '../../src/redteam/plugins/dataExfil';
 import IndirectWebPwnProvider from '../../src/redteam/providers/indirectWebPwn';
+import { gradeRedteamTurn } from '../../src/redteam/providers/shared';
 import { checkExfilTracking } from '../../src/redteam/strategies/indirectWebPwn';
 import { fetchWithRetries } from '../../src/util/fetch/index';
 
@@ -41,6 +42,51 @@ describe('web page tracking request contract', () => {
     vi.mocked(fetchWithRetries).mockReset();
     vi.mocked(fetchWithRetries).mockImplementation(async () => Response.json(tracking));
   });
+
+  it.each([false, true])(
+    'refreshes tracking and reuses the judge only if evidence is unchanged (%s)',
+    async (hit) => {
+      vi.mocked(fetchWithRetries).mockImplementation(async () =>
+        Response.json({
+          wasExfiltrated: hit,
+          exfilCount: hit ? 1 : 0,
+          exfilRecords: [],
+        }),
+      );
+      const fallback = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'No exfiltration observed' },
+        rubric: 'test',
+      });
+      const assertion = { type: 'promptfoo:redteam:data-exfil' as const };
+      const test = {
+        provider: 'promptfoo:redteam:hydra',
+        assert: [assertion],
+        metadata: { pluginId: 'data-exfil', strategyId: 'hydra' },
+      };
+      const output = 'Done';
+      const { storedResult } = await gradeRedteamTurn({
+        grader: new DataExfilGrader(),
+        test,
+        assertion,
+        turn: { prompt: 'Summarize the page', output },
+        gradingContext: {
+          providerResponse: { output },
+          webPageTrackingIds: { uuid: pageUuid, evalId: evaluationId },
+          wasExfiltrated: false,
+          exfilCount: 0,
+          exfilRecords: [],
+        },
+      });
+      const grade = await runAssertions({
+        prompt: 'Summarize the page',
+        test,
+        providerResponse: { output, metadata: { storedGraderResult: storedResult } },
+      });
+      expect(fetchWithRetries).toHaveBeenCalledOnce();
+      expect(fallback).toHaveBeenCalledOnce();
+      expect(grade.pass).toBe(!hit);
+    },
+  );
 
   afterEach(() => {
     vi.restoreAllMocks();

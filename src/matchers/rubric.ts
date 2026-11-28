@@ -3,6 +3,7 @@ import path from 'path';
 
 import { loadFromJavaScriptFile } from '../assertions/utils';
 import cliState from '../cliState';
+import { enforceTaxonomyVerdict, parseTaxonomyFindings } from '../contracts/gradingTaxonomy';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
@@ -22,6 +23,7 @@ import type {
   CallApiContextParams,
   GradingConfig,
   GradingResult,
+  GradingTaxonomy,
   ImageOutput,
   ProviderResponse,
   VarValue,
@@ -882,6 +884,8 @@ export async function runJsonGradingPrompt({
   providerCallContext,
   providerPromptConfig,
   throwOnError,
+  taxonomy,
+  evidenceOutput,
   vars,
   images,
   audio,
@@ -895,6 +899,8 @@ export async function runJsonGradingPrompt({
   /** Prompt config for the grader call, which providers merge over their own config. */
   providerPromptConfig?: Record<string, unknown>;
   throwOnError?: boolean;
+  taxonomy?: GradingTaxonomy;
+  evidenceOutput?: string;
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
   audio?: ProviderResponse['audio'];
@@ -946,6 +952,15 @@ export async function runJsonGradingPrompt({
     );
   }
   const { pass, score } = verdict;
+  const findings =
+    taxonomy && evidenceOutput !== undefined
+      ? parseTaxonomyFindings(parsed.findings, taxonomy, evidenceOutput)
+      : undefined;
+  if (taxonomy && evidenceOutput !== undefined && !findings) {
+    logger.warn(
+      `Omitting invalid or incomplete findings for taxonomy ${taxonomy.id} v${taxonomy.version}`,
+    );
+  }
 
   const reason =
     parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
@@ -957,23 +972,30 @@ export async function runJsonGradingPrompt({
       ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
       : {};
   }
-  const { cachedResponse: _untrustedCachedResponse, ...trustedResponseMetadata } = responseMetadata;
+  const {
+    cachedResponse: _untrustedCachedResponse,
+    taxonomy: _untrustedTaxonomy,
+    ...trustedResponseMetadata
+  } = responseMetadata;
 
-  return {
+  return enforceTaxonomyVerdict({
     assertion,
     pass,
     score,
     reason,
+    ...(findings && { findings }),
     tokensUsed: normalizeMatcherTokenUsage({
       ...resp.tokenUsage,
       completionDetails: resp.tokenUsage?.completionDetails || parsed.tokensUsed?.completionDetails,
     }),
     metadata: {
       ...trustedResponseMetadata,
+      ...(taxonomy && findings && { taxonomy: { id: taxonomy.id, version: taxonomy.version } }),
+      ...(taxonomy && typeof vars.rubric === 'string' && { renderedAssertionValue: vars.rubric }),
       renderedGradingPrompt: renderedPrompt,
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
       ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),
       ...(resp.cached ? { cachedResponse: true } : {}),
     },
-  };
+  });
 }

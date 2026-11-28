@@ -5,13 +5,16 @@ import {
   runAssertions,
 } from '../../src/assertions/index';
 import { handleRedteam } from '../../src/assertions/redteam';
+import * as llmGrading from '../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import {
   getGradingAssertionHash,
   getGradingInputHash,
 } from '../../src/redteam/grading/storedResult';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
-import { getPiiLeakTestsForCategory } from '../../src/redteam/plugins/pii';
+import { getPiiLeakTestsForCategory, PiiGrader } from '../../src/redteam/plugins/pii';
+import { getGoalRubric } from '../../src/redteam/providers/prompts';
+import { gradeRedteamTurn, redteamProviderManager } from '../../src/redteam/providers/shared';
 
 import type { Assertion, AtomicTestCase, ProviderResponse } from '../../src/types/index';
 
@@ -54,12 +57,22 @@ describe('redteam strategy result grading', () => {
     assert: [piiAssertion],
     metadata: { pluginId: 'pii:social', strategyId: 'crescendo', purpose: 'An assistant' },
   };
+  const taxonomy = new PiiGrader().structuredRubric.taxonomy;
   const storedResult = {
+    findings: Object.keys(taxonomy.categories).map((label) => ({
+      label,
+      observed: false,
+      pass: true,
+      reason: 'Absent',
+      evidence: [],
+    })),
     pass: true,
     score: 1,
     reason: 'The response only repeats a user-provided name.',
     assertion: { ...piiAssertion, value: 'Previously rendered rubric' },
     metadata: {
+      taxonomy: { id: taxonomy.id, version: taxonomy.version },
+      redteamGradingRubricHash: new PiiGrader().getGradingRubricHash(test),
       redteamGradingAssertionHash: getGradingAssertionHash(piiAssertion),
       redteamGradingInputHash: getGradingInputHash(attackPrompt, output, undefined, 'pii:social'),
     },
@@ -68,6 +81,109 @@ describe('redteam strategy result grading', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it.each([
+    { guidance: '', changed: false, calls: 1 },
+    { guidance: getGoalRubric('Find a private contact'), changed: false, calls: 2 },
+    { guidance: '', changed: true, calls: 2 },
+  ])(
+    'reuses only a strategy grade with matching final instructions: %j',
+    async ({ guidance, changed, calls }) => {
+      const judge = vi
+        .spyOn(llmGrading, 'matchesLlmRubric')
+        .mockResolvedValueOnce({ pass: true, score: 1, reason: 'Strategy decision' })
+        .mockResolvedValue({ pass: false, score: 0, reason: 'Final policy decision' });
+      vi.spyOn(redteamProviderManager, 'getGradingProvider').mockResolvedValue({
+        id: () => 'fixture',
+        callApi: async () => ({ output: '' }),
+      });
+      const { storedResult: saved } = await gradeRedteamTurn({
+        grader: new PiiGrader(),
+        test,
+        assertion: piiAssertion,
+        turn: { prompt: attackPrompt, output },
+        additionalRubric: guidance,
+      });
+      const finalTest = changed
+        ? { ...test, metadata: { ...test.metadata, purpose: 'Updated privacy policy' } }
+        : test;
+      const result = await runAssertions({
+        prompt: originalPrompt,
+        test: finalTest,
+        providerResponse: {
+          output,
+          metadata: { redteamFinalPrompt: attackPrompt, storedGraderResult: saved },
+        },
+      });
+      expect(judge).toHaveBeenCalledTimes(calls);
+      expect(result.pass).toBe(calls === 1);
+      if (calls === 2) {
+        expect(judge.mock.calls[1][2]?.structuredRubric?.policy).not.toContain('<AttackGoal>');
+      }
+    },
+  );
+
+  it('carries selected target evidence into an independent final grade without persisting it', async () => {
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult');
+    const judge = vi
+      .spyOn(llmGrading, 'matchesLlmRubric')
+      .mockResolvedValueOnce({ pass: false, score: 0, reason: 'Strategy decision' })
+      .mockResolvedValue({ pass: false, score: 0, reason: 'Final decision' });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockResolvedValue({
+      id: () => 'fixture',
+      callApi: async () => ({ output: '' }),
+    });
+    const { storedResult: saved } = await gradeRedteamTurn({
+      grader: new PiiGrader(),
+      test,
+      assertion: piiAssertion,
+      turn: { prompt: attackPrompt, output },
+      additionalRubric: getGoalRubric('Find the private file'),
+      gradingContext: { traceSummary: 'Target read a protected file', wasExfiltrated: true },
+    });
+    expect(JSON.stringify(saved)).not.toContain('Target read a protected file');
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test,
+      providerResponse: {
+        output,
+        metadata: { redteamFinalPrompt: attackPrompt, storedGraderResult: saved },
+      },
+    });
+    expect(judge).toHaveBeenCalledTimes(2);
+    expect(getResult.mock.calls[1][7]).toMatchObject({
+      traceSummary: 'Target read a protected file',
+      wasExfiltrated: true,
+    });
+    expect(result.pass).toBe(false);
+
+    const replay = await runAssertions({
+      prompt: originalPrompt,
+      test,
+      providerResponse: {
+        output,
+        metadata: {
+          redteamFinalPrompt: attackPrompt,
+          storedGraderResult: JSON.parse(JSON.stringify(saved)),
+        },
+      },
+    });
+    expect(replay.pass).toBe(false);
+    expect(replay.componentResults?.[0].metadata).toMatchObject({
+      graderError: true,
+      gradingIncomplete: true,
+    });
+    expect(judge).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidates a saved grade when the judge template changes', () => {
+    const grader = new PiiGrader();
+    expect(
+      grader.getGradingRubricHash({ ...test, options: { rubricPrompt: 'First prompt' } }),
+    ).not.toBe(
+      grader.getGradingRubricHash({ ...test, options: { rubricPrompt: 'Second prompt' } }),
+    );
   });
 
   it.each(['pii:direct', 'pii:session', 'pii:social', 'pii:api-db'])(
@@ -105,6 +221,11 @@ describe('redteam strategy result grading', () => {
             storedGraderResult: {
               ...storedResult,
               metadata: {
+                ...storedResult.metadata,
+                redteamGradingRubricHash: new PiiGrader().getGradingRubricHash({
+                  ...generatedTest,
+                  metadata: { ...test.metadata, pluginId },
+                }),
                 redteamGradingAssertionHash: getGradingAssertionHash(assertion),
                 redteamGradingInputHash: getGradingInputHash(
                   attackPrompt,
@@ -127,6 +248,33 @@ describe('redteam strategy result grading', () => {
       });
     },
   );
+
+  it.each([
+    ['missing taxonomy', { taxonomy: undefined }],
+    ['privacy v4 without a reported lookup finding', { taxonomy: { id: 'privacy', version: 4 } }],
+    ['changed policy', { redteamGradingRubricHash: 'previous-policy' }],
+  ])('refreshes a stored decision for a %s', async (_case, previousMetadata) => {
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'Fresh verdict' },
+      rubric: 'New rubric',
+    });
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test,
+      providerResponse: {
+        output,
+        metadata: {
+          redteamFinalPrompt: attackPrompt,
+          storedGraderResult: {
+            ...storedResult,
+            metadata: { ...storedResult.metadata, ...previousMetadata },
+          },
+        },
+      },
+    });
+    expect(getResult).toHaveBeenCalledTimes(1);
+    expect(result.componentResults?.[0].reason).toBe('Fresh verdict');
+  });
 
   it('regrades legacy PII results without a recorded assertion', async () => {
     const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
@@ -809,6 +957,10 @@ describe('redteam strategy result grading', () => {
       undefined,
       expect.objectContaining({
         conversationTranscript: 'User: My contact is Casey Morgan.\n\nAssistant: Acknowledged.',
+        priorMessages: [
+          { role: 'user', content: 'My contact is Casey Morgan.' },
+          { role: 'assistant', content: 'Acknowledged.' },
+        ],
       }),
     );
     expect(providerResponse).toEqual(before);
@@ -824,21 +976,32 @@ describe('redteam strategy result grading', () => {
     const providerId = `promptfoo:redteam:${strategy}`;
 
     it('reuses a current-turn grade while retaining the saved conversation', async () => {
+      const strategyTest = {
+        ...test,
+        provider: providerId,
+        metadata: { ...test.metadata, strategyId: `jailbreak:${strategy}` },
+      };
       const getResult = vi
         .spyOn(RedteamGraderBase.prototype, 'getResult')
         .mockRejectedValue(new Error('A second grading call must not happen'));
       const providerResponse = {
         output,
-        metadata: { redteamFinalPrompt: attackPrompt, messages, storedGraderResult: storedResult },
+        metadata: {
+          redteamFinalPrompt: attackPrompt,
+          messages,
+          storedGraderResult: {
+            ...storedResult,
+            metadata: {
+              ...storedResult.metadata,
+              redteamGradingRubricHash: new PiiGrader().getGradingRubricHash(strategyTest),
+            },
+          },
+        },
       };
       const before = structuredClone(providerResponse);
       const result = await runAssertions({
         prompt: originalPrompt,
-        test: {
-          ...test,
-          provider: providerId,
-          metadata: { ...test.metadata, strategyId: `jailbreak:${strategy}` },
-        },
+        test: strategyTest,
         providerResponse,
       });
 

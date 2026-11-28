@@ -3,11 +3,6 @@ import { renderPrompt } from '../../../evaluatorHelpers';
 import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import {
-  extractTraceIdFromTraceparent,
-  fetchTraceContext,
-  type TraceContextData,
-} from '../../../tracing/traceContext';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, isValidJson } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
@@ -37,21 +32,23 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../../util';
 import { MemorySystem } from '../conversationMemory';
 import { getEvalScore, getRefusalScore } from '../conversationScoring';
+import {
+  collectTargetTrace,
+  prepareGradingEvidence,
+  type TraceContextData,
+} from '../gradingEvidence';
 import { getGoalRubric } from '../prompts';
 import {
-  accumulateGraderResult,
   accumulateUnblockingTokenUsage,
-  buildGraderResultAssertion,
   captureFlaggedTurn,
   externalizeResponseForRedteamHistory,
   formatRedteamHistoryAsTranscript,
-  getGraderAssertionValue,
   getLastMessageContent,
   getTargetResponse,
+  gradeRedteamTurn,
   isConversationEndedResponse,
   isTargetCallAbortError,
   isValidChatMessageArray,
@@ -60,7 +57,6 @@ import {
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   resolveStoredGraderResult,
-  runRedteamGrader,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
@@ -86,7 +82,6 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../../types/index';
-import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
 import type { FlaggedTurn, Message, SuccessfulAttack } from '../shared';
 
@@ -337,8 +332,6 @@ export class CrescendoProvider implements ApiProvider {
       test,
       config: this.config,
     });
-    const shouldFetchTrace =
-      tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
     const traceSnapshots: TraceContextData[] = [];
 
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
@@ -443,7 +436,6 @@ export class CrescendoProvider implements ApiProvider {
           context,
           options,
           tracingOptions,
-          shouldFetchTrace,
           traceSnapshots,
           { inputMaterialization, materializationHandled, materializedVars },
         );
@@ -532,7 +524,6 @@ export class CrescendoProvider implements ApiProvider {
               context,
               options,
               tracingOptions,
-              shouldFetchTrace,
               traceSnapshots,
             );
 
@@ -627,61 +618,21 @@ export class CrescendoProvider implements ApiProvider {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             const gradingTraceSummary = tracingOptions.includeInGrading
-              ? (response.traceSummary ??
-                (response.traceContext ? formatTraceSummary(response.traceContext) : undefined))
+              ? (lastResponse.traceSummary ??
+                (lastResponse.traceContext
+                  ? formatTraceSummary(lastResponse.traceContext)
+                  : undefined))
               : undefined;
 
-            // Build grading context with image outputs, tracing, and exfil tracking data.
-            let gradingContext: RedteamGradingContext | undefined = {
-              providerResponse: lastResponse,
-              ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
-            };
-
-            // First try to get exfil data from provider response metadata (Playwright provider)
-            if (lastResponse.metadata?.wasExfiltrated === undefined) {
-              // Try to fetch exfil tracking from server API via webPageUuid
-              const webPageUuid = test.metadata?.webPageUuid as string | undefined;
-              if (webPageUuid) {
-                const evalId =
-                  context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
-                logger.debug('[Crescendo] Fetching exfil tracking from server API', {
-                  webPageUuid,
-                  evalId,
-                });
-                const exfilData = await checkExfilTracking(webPageUuid, evalId);
-                if (exfilData) {
-                  gradingContext = {
-                    ...(gradingContext ?? {}),
-                    ...(tracingOptions.includeInGrading
-                      ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
-                      : {}),
-                    wasExfiltrated: exfilData.wasExfiltrated,
-                    exfilCount: exfilData.exfilCount,
-                    exfilRecords: exfilData.exfilRecords,
-                  };
-                }
-              }
-            } else {
-              logger.debug('[Crescendo] Using exfil data from provider response metadata');
-              gradingContext = {
-                ...(gradingContext ?? {}),
-                ...(tracingOptions.includeInGrading
-                  ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
-                  : {}),
-                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
-                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
-                exfilRecords: [],
-              };
-            }
-
-            // Fallback to just tracing context if no exfil data found
-            if (tracingOptions.includeInGrading && !gradingContext?.traceContext) {
-              gradingContext = {
-                ...(gradingContext ?? {}),
-                traceContext: response.traceContext,
-                traceSummary: gradingTraceSummary,
-              };
-            }
+            let gradingContext = await prepareGradingEvidence({
+              response: lastResponse,
+              tracing: tracingOptions,
+              traceContext: lastResponse.traceContext,
+              traceSummary: gradingTraceSummary,
+              trackingMetadata: lastTransformResult?.metadata,
+              fallbackTrackingMetadata: test.metadata,
+              evaluationId: context?.evaluationId ?? test.metadata?.evaluationId,
+            });
 
             // Provide prior turns separately from the latest assistant output
             // under test. Context-aware graders can use this to reason over
@@ -708,31 +659,18 @@ export class CrescendoProvider implements ApiProvider {
               guardrails: lastResponse.guardrails,
               transformDisplayVars: lastTransformDisplayVars,
             };
-            const { grade, rubric } = await runRedteamGrader(
+            const { grade, storedResult } = await gradeRedteamTurn({
               grader,
-              gradedTurn.prompt,
-              gradedTurn.output,
               test,
-              provider,
-              getGraderAssertionValue(assertToUse),
+              assertion: assertToUse,
+              turn: gradedTurn,
+              provider: provider,
               additionalRubric,
-              undefined,
               gradingContext,
-            );
-
+              previous: storedGraderResult,
+            });
             graderPassed = grade.pass;
-            storedGraderResult = accumulateGraderResult(
-              storedGraderResult,
-              {
-                ...grade,
-                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-              },
-              {
-                ...gradedTurn,
-                pluginId: test.metadata?.pluginId,
-                assertion: assertToUse,
-              },
-            );
+            storedGraderResult = storedResult;
             flaggedRound ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
           }
         }
@@ -1041,7 +979,6 @@ export class CrescendoProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
     tracingOptions?: RedteamTracingOptions,
-    shouldFetchTrace?: boolean,
     traceSnapshots?: TraceContextData[],
     remoteMaterialization?: Pick<
       CrescendoAttackPromptResponse,
@@ -1289,43 +1226,17 @@ export class CrescendoProvider implements ApiProvider {
       content: targetResponse.output,
     });
 
-    if (
-      shouldFetchTrace &&
-      tracingOptions &&
-      !targetResponse.cached &&
-      !(targetResponse.error && options?.abortSignal?.aborted)
-    ) {
-      const traceparent = context?.traceparent ?? undefined;
-      const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
-
-      if (traceId) {
-        const traceContext = await fetchTraceContext(traceId, {
-          abortSignal: options?.abortSignal,
-          earliestStartTime: iterationStart,
-          includeInternalSpans: tracingOptions.includeInternalSpans,
-          maxSpans: tracingOptions.maxSpans,
-          maxDepth: tracingOptions.maxDepth,
-          maxRetries: tracingOptions.maxRetries,
-          retryDelayMs: tracingOptions.retryDelayMs,
-          spanFilter: tracingOptions.spanFilter,
-          sanitizeAttributes: tracingOptions.sanitizeAttributes,
-          providerConfig: tracingOptions.provider,
-          queryDelay: tracingOptions.queryDelay,
-          redactAttributes: tracingOptions.redactAttributes,
-        });
-
-        if (traceContext) {
-          targetResponse.traceContext = traceContext;
-          const computedTraceSummary =
-            tracingOptions.includeInAttack || tracingOptions.includeInGrading
-              ? formatTraceSummary(traceContext)
-              : undefined;
-          if (computedTraceSummary) {
-            targetResponse.traceSummary = computedTraceSummary;
-          }
-          traceSnapshots?.push(traceContext);
-        }
-      }
+    const { traceContext, traceSummary } = await collectTargetTrace({
+      tracing: tracingOptions,
+      traceparent: context?.traceparent,
+      startedAt: iterationStart,
+      response: targetResponse,
+      signal: options?.abortSignal,
+      snapshots: traceSnapshots,
+    });
+    if (traceContext) {
+      targetResponse.traceContext = traceContext;
+      targetResponse.traceSummary = traceSummary;
     }
 
     return {

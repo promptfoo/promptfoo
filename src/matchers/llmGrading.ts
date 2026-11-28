@@ -6,6 +6,8 @@ import {
   GEVAL_PROMPT_STEPS,
   OPENAI_CLOSED_QA_PROMPT,
   PROMPTFOO_FACTUALITY_PROMPT,
+  TAXONOMY_GRADING_INSTRUCTIONS,
+  TAXONOMY_GRADING_PROMPT,
   TRAJECTORY_GOAL_SUCCESS_PROMPT,
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
@@ -35,6 +37,7 @@ import type {
   GradingConfig,
   GradingResult,
   ProviderResponse,
+  StructuredGradingRubric,
   VarValue,
 } from '../types/index';
 
@@ -181,7 +184,7 @@ function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['au
 export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
-  grading?: GradingConfig,
+  grading?: GradingConfig & { structuredRubric?: StructuredGradingRubric },
   vars?: Record<string, VarValue>,
   assertion?: Assertion,
   options?: {
@@ -209,6 +212,9 @@ export async function matchesLlmRubric(
     getGradingOutputForAudio(llmOutput, audio),
     imageOutputs,
   );
+  const structuredRubric = grading.structuredRubric;
+  // A media placeholder or transcript cannot provide offsets into the original target output.
+  const canValidateFindings = gradingOutput === llmOutput;
   if (
     !grading.rubricPrompt &&
     shouldPreferRemote &&
@@ -218,14 +224,18 @@ export async function matchesLlmRubric(
   ) {
     try {
       return {
-        ...(await doRemoteGrading({
-          task: 'llm-rubric',
-          rubric,
-          output: gradingOutput,
-          vars: vars || {},
-          ...(imageOutputs.length ? { images: imageOutputs } : {}),
-          ...getRemoteGradingContext(),
-        })),
+        ...(await doRemoteGrading(
+          {
+            task: 'llm-rubric',
+            rubric,
+            ...structuredRubric,
+            output: gradingOutput,
+            vars: vars || {},
+            ...(imageOutputs.length ? { images: imageOutputs } : {}),
+            ...getRemoteGradingContext(),
+          },
+          ...(structuredRubric && !canValidateFindings ? [{ validateFindings: false }] : []),
+        )),
         assertion,
       };
     } catch (error) {
@@ -237,10 +247,26 @@ export async function matchesLlmRubric(
   }
 
   try {
+    // Select one policy. The legacy rubric never enters a structured judge prompt.
+    let judgeRubric = rubric;
+    if (structuredRubric) {
+      const categories = Object.entries(structuredRubric.taxonomy.categories)
+        .map(
+          ([label, category]) =>
+            `${label}: ${category.allow ? '[allowed] ' : ''}${category.description}`,
+        )
+        .join('\n');
+      judgeRubric = `${structuredRubric.policy}\n\nCategories:\n${categories}`;
+      if (grading.rubricPrompt) {
+        judgeRubric += `\n\n${TAXONOMY_GRADING_INSTRUCTIONS}`;
+      }
+    }
     return await runJsonGradingPrompt({
       assertion,
       checkName: 'llm-rubric check',
-      defaultPrompt: DEFAULT_GRADING_PROMPT,
+      defaultPrompt: structuredRubric ? TAXONOMY_GRADING_PROMPT : DEFAULT_GRADING_PROMPT,
+      taxonomy: structuredRubric?.taxonomy,
+      evidenceOutput: canValidateFindings ? llmOutput : undefined,
       grading,
       label: 'llm-rubric',
       providerCallContext,
@@ -249,8 +275,8 @@ export async function matchesLlmRubric(
       audio,
       vars: {
         ...(vars || {}),
-        output: tryParse(gradingOutput),
-        rubric,
+        output: structuredRubric ? gradingOutput : tryParse(gradingOutput),
+        rubric: judgeRubric,
       },
     });
   } catch (error) {

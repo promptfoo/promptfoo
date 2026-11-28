@@ -2821,56 +2821,63 @@ describe('HydraProvider', () => {
       expect(result.metadata?.traceSnapshots).toBeUndefined();
     });
 
-    it('should fetch trace context when tracing is enabled', async () => {
-      // Enable tracing
-      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
+    it.each(['hydra', 'goblin'] as const)(
+      'collects target trace evidence for %s',
+      async (strategy) => {
+        // Enable tracing
+        mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
-      // Mock trace context
-      mockFetchTraceContext.mockResolvedValue({
-        traceId: 'test-trace-id',
-        spans: [{ spanId: 'span1', name: 'test-span' }],
-        insights: ['Test insight'],
-        fetchedAt: Date.now(),
-      });
+        // Mock trace context
+        mockFetchTraceContext.mockResolvedValue({
+          traceId: 'test-trace-id',
+          spans: [{ spanId: 'span1', name: 'test-span' }],
+          insights: ['Test insight'],
+          fetchedAt: Date.now(),
+        });
 
-      mockAgentProvider.callApi.mockResolvedValue({
-        output: 'Attack message',
-        tokenUsage: { total: 100, prompt: 50, completion: 50 },
-      });
+        mockAgentProvider.callApi.mockResolvedValue({
+          output: 'Attack message',
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        });
 
-      mockTargetProvider.callApi.mockResolvedValue({
-        output: 'Target response',
-      });
+        mockTargetProvider.callApi.mockResolvedValue({
+          output: 'Target response',
+        });
 
-      const provider = new HydraProvider({
-        injectVar: 'input',
-        maxTurns: 1,
-      });
+        const Provider =
+          strategy === 'goblin'
+            ? (await import('../../../../src/redteam/providers/goblin/index')).GoblinProvider
+            : HydraProvider;
+        const provider = new Provider({ injectVar: 'input', maxTurns: 1 });
 
-      const context: CallApiContextParams = {
-        originalProvider: mockTargetProvider,
-        vars: { input: 'test goal' },
-        prompt: { raw: 'test prompt', label: 'test' },
-        test: {
-          assert: [{ type: 'harmful:test' }],
-          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
-        } as any,
-        traceparent: '00-trace123-span456-01',
-      };
+        const context: CallApiContextParams = {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: {
+            assert: [{ type: 'harmful:test' }],
+            metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+          } as any,
+          traceparent: '00-trace123-span456-01',
+        };
 
-      const abortController = new AbortController();
-      const result = await provider.callApi('', context, { abortSignal: abortController.signal });
+        const abortController = new AbortController();
+        const result = await provider.callApi('', context, { abortSignal: abortController.signal });
 
-      // Should call fetchTraceContext
-      expect(mockFetchTraceContext).toHaveBeenCalledWith(
-        'test-trace-id',
-        expect.objectContaining({ abortSignal: abortController.signal }),
-      );
+        // Should call fetchTraceContext
+        expect(mockFetchTraceContext).toHaveBeenCalledWith(
+          'test-trace-id',
+          expect.objectContaining({ abortSignal: abortController.signal }),
+        );
+        expect(mockResolveTracingOptions).toHaveBeenCalledWith(
+          expect.objectContaining({ strategyId: strategy }),
+        );
 
-      // Metadata should have trace snapshots
-      expect(result.metadata?.traceSnapshots).toBeDefined();
-      expect(result.metadata?.traceSnapshots).toHaveLength(1);
-    });
+        // Metadata should have trace snapshots
+        expect(result.metadata?.traceSnapshots).toBeDefined();
+        expect(result.metadata?.traceSnapshots).toHaveLength(1);
+      },
+    );
 
     it('skips trace retrieval when a Hydra target response came from cache', async () => {
       mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());

@@ -19,7 +19,9 @@ export interface RedteamGradingContext {
   redteamHistory?: RedteamHistoryEntry[];
   conversationHistory?: Array<Pick<RedteamHistoryEntry, 'prompt' | 'output'>>;
   conversationTranscript?: string;
+  priorMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
   // Data exfiltration tracking (for data-exfil grader)
+  webPageTrackingIds?: { uuid: string; evalId?: string };
   wasExfiltrated?: boolean;
   exfilCount?: number;
   exfilRecords?: Array<{

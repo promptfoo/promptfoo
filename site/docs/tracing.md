@@ -848,6 +848,8 @@ This creates a feedback loop where:
 4. **Traces are formatted and fed back to the attack strategy** for the next iteration
 5. The attack strategy uses this information to craft a better attack
 
+When `includeInGrading` is enabled, Promptfoo also supplies the selected target attempt's trace to its plugin grader and preserves that evidence for an independent final grade. Trace collection uses bounded retries and may return partial spans; finding spans does not guarantee that every tool operation has finished reporting.
+
 ### What Attackers Can See
 
 When red team tracing is enabled, adversarial strategies receive visibility into:

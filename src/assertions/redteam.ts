@@ -1,10 +1,15 @@
+import { enforceTaxonomyVerdict, hasMatchingTaxonomy } from '../contracts/gradingTaxonomy';
 import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import {
   getGradingAssertionHash,
   getGradingInputHash,
+  getSelectedGradingEvidence,
   getTargetConversation,
+  mergeExfilEvidence,
+  missingGradingEvidence,
+  recoverSelectedGradingContext,
   withGradingUsage,
 } from '../redteam/grading/storedResult';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
@@ -157,12 +162,13 @@ function createInitialGradingContext({
   assertionValueContext,
   providerResponse,
   conversationTranscript,
-}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'> & {
-  conversationTranscript?: string;
-}): RedteamGradingContext {
+  priorMessages,
+}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'> &
+  Pick<RedteamGradingContext, 'conversationTranscript' | 'priorMessages'>): RedteamGradingContext {
   const gradingContext: RedteamGradingContext = {
     providerResponse,
     ...(conversationTranscript === undefined ? {} : { conversationTranscript }),
+    ...(priorMessages?.length && { priorMessages }),
   };
 
   if (assertionValueContext.trace) {
@@ -212,7 +218,7 @@ export const handleRedteam = async (
       gradingMessages = reportedConversation.lastUserPrompt ? providerResponse.prompt : undefined;
     }
   }
-  const { lastUserPrompt, conversationTranscript } = conversation;
+  const { lastUserPrompt, conversationTranscript, priorMessages } = conversation;
   const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
@@ -233,17 +239,96 @@ export const handleRedteam = async (
     hasStrategyGrade && storedResult.tokensUsed && claimStoredGradingUsage()
       ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
       : undefined;
-  if (
+  const grader = getGraderById(assertion.type);
+  const taxonomy = grader?.structuredRubric?.taxonomy;
+  const rubricHash = storedResult?.metadata?.redteamGradingRubricHash;
+  const matchesBoundInput =
     hasStrategyGrade &&
-    typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
-    storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
     storedResult.metadata?.redteamGradingInputHash ===
       getGradingInputHash(
         effectivePrompt,
         outputString,
         gradesCurrentTurnOnly ? undefined : gradingMessages,
         test.metadata?.pluginId,
-      )
+      );
+  let gradingContext = createInitialGradingContext({
+    assertionValueContext,
+    providerResponse,
+    conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
+    priorMessages: gradesCurrentTurnOnly ? undefined : priorMessages,
+  });
+  if (matchesBoundInput) {
+    gradingContext = recoverSelectedGradingContext(storedResult, gradingContext);
+  }
+  const trackingIds =
+    getWebPageTrackingIds(
+      providerResponse.metadata,
+      test.metadata?.evaluationId,
+      test.metadata?.webPageUrl,
+    ) ??
+    getWebPageTrackingIds(
+      {
+        webPageUuid: test.metadata?.webPageUuid,
+        webPageUrl: providerResponse.metadata?.webPageUrl,
+      },
+      test.metadata?.evaluationId,
+      test.metadata?.webPageUrl,
+    ) ??
+    getWebPageTrackingIds(
+      { webPageUuid: gradingContext.webPageTrackingIds?.uuid },
+      gradingContext.webPageTrackingIds?.evalId,
+    );
+  let trackingChanged = false;
+  if (trackingIds) {
+    const previous = gradingContext.wasExfiltrated;
+    const tracking = await checkExfilTracking(trackingIds.uuid, trackingIds.evalId);
+    if (tracking) {
+      gradingContext = mergeExfilEvidence(gradingContext, tracking);
+      trackingChanged = previous !== gradingContext.wasExfiltrated;
+    }
+  }
+  const missingEvidence = matchesBoundInput
+    ? missingGradingEvidence(storedResult, gradingContext)
+    : [];
+  if (missingEvidence.length) {
+    const reason = `Selected target evidence is unavailable for final grading: ${missingEvidence.join(', ')}`;
+    return {
+      pass: false,
+      score: 0,
+      reason,
+      assertion,
+      tokensUsed: getStoredTokens(),
+      metadata: {
+        ...test.metadata,
+        graderError: true,
+        gradingIncomplete: true,
+        gradingError: reason,
+      },
+    };
+  }
+  const selectedContext = matchesBoundInput ? getSelectedGradingEvidence(storedResult) : undefined;
+  const evidenceChanged =
+    trackingChanged ||
+    Boolean(assertionValueContext.trace) ||
+    Boolean(providerResponse.images?.length || providerResponse.audio?.data) ||
+    Boolean(grader?.usesRawGradingEvidence?.() && providerResponse.raw != null) ||
+    Boolean(
+      selectedContext &&
+        (selectedContext.conversationTranscript || '') !==
+          (gradingContext.conversationTranscript || ''),
+    );
+  if (
+    hasStrategyGrade &&
+    !evidenceChanged &&
+    (rubricHash === undefined
+      ? !taxonomy && !trackingIds
+      : typeof rubricHash === 'string' && rubricHash === grader?.getGradingRubricHash(test)) &&
+    (!taxonomy ||
+      !storedResult.findings ||
+      hasMatchingTaxonomy(storedResult, taxonomy, outputString)) &&
+    typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
+    storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
+    matchesBoundInput
   ) {
     // Check if any turns had grader errors (even though we have a stored result)
     const redteamHistory = providerResponse.metadata?.redteamHistory as
@@ -252,7 +337,7 @@ export const handleRedteam = async (
     const { hasAnyErrors } = analyzeGraderErrors(redteamHistory);
 
     return {
-      ...storedResult,
+      ...(taxonomy ? enforceTaxonomyVerdict(storedResult) : storedResult),
       tokensUsed: getStoredTokens(),
       assertion: {
         ...(storedResult.assertion ?? assertion),
@@ -267,43 +352,7 @@ export const handleRedteam = async (
     };
   }
 
-  const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
-
-  // Build grading context from provider response metadata, test metadata, and locally
-  // captured assertion trace data. Keep raw trace data in-process for deterministic
-  // graders; pass only a compact trajectory summary into model-graded rubrics.
-  // This includes exfil tracking data from indirect-web-pwn strategy
-  let gradingContext = createInitialGradingContext({
-    assertionValueContext,
-    providerResponse,
-    conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
-  });
-  const trackingIds =
-    getWebPageTrackingIds(
-      providerResponse.metadata,
-      test.metadata?.evaluationId,
-      test.metadata?.webPageUrl,
-    ) ??
-    getWebPageTrackingIds(
-      {
-        webPageUuid: test.metadata?.webPageUuid,
-        webPageUrl: providerResponse.metadata?.webPageUrl,
-      },
-      test.metadata?.evaluationId,
-      test.metadata?.webPageUrl,
-    );
-  if (trackingIds) {
-    const tracking = await checkExfilTracking(trackingIds.uuid, trackingIds.evalId);
-    if (tracking) {
-      gradingContext = {
-        ...gradingContext,
-        wasExfiltrated: tracking.wasExfiltrated,
-        exfilCount: tracking.exfilCount,
-        exfilRecords: tracking.exfilRecords,
-      };
-    }
-  }
 
   try {
     const { grade, rubric, suggestions } = await grader.getResult(

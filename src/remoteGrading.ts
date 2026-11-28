@@ -1,16 +1,46 @@
+import { LRUCache } from 'lru-cache';
 import { fetchWithCache } from './cache';
+import { enforceTaxonomyVerdict, hasMatchingTaxonomy } from './contracts/gradingTaxonomy';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from './redteam/remoteGeneration';
 import { getActiveTraceparent } from './tracing/spanRoles';
+import { fetchWithProxy } from './util/fetch/index';
 
-import type { GradingResult } from './types/index';
+import type { GradingResult, StructuredGradingRubric } from './types/index';
 
-type RemoteGradingPayload = {
+type RemoteGradingPayload = Partial<StructuredGradingRubric> & {
   task: string;
   [key: string]: unknown;
 };
+
+// Share in-flight discovery across assertions, including when grading the first batch concurrently.
+const structuredRubricSupport = new LRUCache<string, boolean>({
+  max: 32,
+  ttl: 5 * 60_000,
+  fetchMethod: checkStructuredRubricSupport,
+});
+
+async function checkStructuredRubricSupport(taskUrl: string): Promise<boolean> {
+  try {
+    const url = new URL(taskUrl);
+    url.pathname = url.pathname.replace(/\/?$/, '/version');
+    const response = await fetchWithProxy(url.toString(), {
+      method: 'GET',
+      redirect: 'error',
+      signal: AbortSignal.timeout(3000),
+      disableTransientRetries: true,
+    });
+    if (!response.ok) {
+      return false;
+    }
+    const info = await response.json();
+    return Array.isArray(info?.capabilities) && info.capabilities.includes('structured-rubric');
+  } catch {
+    return false;
+  }
+}
 
 function redactImagePayloads(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -48,14 +78,19 @@ function redactImagePayloads(value: unknown): unknown {
 
 export async function doRemoteGrading(
   payload: RemoteGradingPayload,
+  options?: { validateFindings?: boolean },
 ): Promise<Omit<GradingResult, 'assertion'>> {
   try {
-    payload.email = getUserEmail();
-    const body = JSON.stringify(payload);
+    const url = getRemoteGenerationUrl();
+    const { policy, taxonomy, ...legacyPayload } = payload;
+    const request = { ...legacyPayload, email: getUserEmail() };
+    const supported = policy && taxonomy && (await structuredRubricSupport.fetch(url));
+    const wirePayload = supported ? { ...request, policy, taxonomy } : request;
+    const body = JSON.stringify(wirePayload);
     const traceparent = getActiveTraceparent();
-    logger.debug('Performing remote grading', { body: redactImagePayloads(payload) });
+    logger.debug('Performing remote grading', { body: redactImagePayloads(wirePayload) });
     const { cached, data, status, statusText } = await fetchWithCache(
-      getRemoteGenerationUrl(),
+      url,
       {
         method: 'POST',
         headers: getRemoteGenerationHeaders(traceparent ? { traceparent } : undefined),
@@ -79,10 +114,21 @@ export async function doRemoteGrading(
       throw new Error(`Remote grading failed. Response data is invalid: ${JSON.stringify(data)}`);
     }
 
-    return {
+    const metadata = { ...result.metadata };
+    const verifiedFindings =
+      supported &&
+      options?.validateFindings !== false &&
+      taxonomy &&
+      typeof payload.output === 'string' &&
+      hasMatchingTaxonomy(result, taxonomy, payload.output);
+    if (!verifiedFindings) {
+      delete metadata.taxonomy;
+    }
+    return enforceTaxonomyVerdict({
       pass: result.pass,
       score: result.score,
       reason: result.reason,
+      ...(verifiedFindings && { findings: result.findings }),
       tokensUsed: cached
         ? {
             total: 0,
@@ -98,8 +144,8 @@ export async function doRemoteGrading(
               numRequests: 1,
             }
           : undefined,
-      metadata: cached ? { ...(result.metadata ?? {}), cachedResponse: true } : result.metadata,
-    };
+      metadata: cached ? { ...metadata, cachedResponse: true } : result.metadata && metadata,
+    });
   } catch (error) {
     throw new Error(`Could not perform remote grading: ${error}`);
   }

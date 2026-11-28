@@ -4,11 +4,6 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail, isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import {
-  extractTraceIdFromTraceparent,
-  fetchTraceContext,
-  type TraceContextData,
-} from '../../tracing/traceContext';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
@@ -19,7 +14,6 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { getTargetConversation } from '../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -40,22 +34,23 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
+import {
+  collectTargetTrace,
+  prepareGradingEvidence,
+  type TraceContextData,
+} from './gradingEvidence';
 import { getGoalRubric } from './prompts';
 import {
-  accumulateGraderResult,
   accumulateUnblockingTokenUsage,
-  buildGraderResultAssertion,
   callTargetProvider,
   captureFlaggedTurn,
-  getGraderAssertionValue,
   getLastMessageContent,
+  gradeRedteamTurn,
   resolveStoredGraderResult,
-  runRedteamGrader,
   tryUnblocking,
 } from './shared';
-import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
+import { formatTraceForMetadata } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
 import type {
@@ -74,7 +69,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/providers';
-import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata } from '../types';
 import type { FlaggedTurn, Message, SuccessfulAttack } from './shared';
 
@@ -210,8 +204,6 @@ export default class GoatProvider implements ApiProvider {
       test: context?.test,
       config: this.config,
     });
-    const shouldFetchTrace =
-      tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
     const traceSnapshots: TraceContextData[] = [];
 
     let response: Response | undefined = undefined;
@@ -620,37 +612,17 @@ export default class GoatProvider implements ApiProvider {
 
         logger.debug(`GOAT turn ${turn} target response`, { response: targetResponse });
 
-        let traceContext: TraceContextData | null = null;
-        let computedTraceSummary: string | undefined;
-        if (shouldFetchTrace && !targetResponse.cached) {
-          const traceparent = context?.traceparent ?? undefined;
-          const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
-
-          if (traceId) {
-            traceContext = await fetchTraceContext(traceId, {
-              abortSignal: options?.abortSignal,
-              earliestStartTime: iterationStart,
-              includeInternalSpans: tracingOptions.includeInternalSpans,
-              maxSpans: tracingOptions.maxSpans,
-              maxDepth: tracingOptions.maxDepth,
-              maxRetries: tracingOptions.maxRetries,
-              retryDelayMs: tracingOptions.retryDelayMs,
-              spanFilter: tracingOptions.spanFilter,
-              sanitizeAttributes: tracingOptions.sanitizeAttributes,
-              providerConfig: tracingOptions.provider,
-              queryDelay: tracingOptions.queryDelay,
-              redactAttributes: tracingOptions.redactAttributes,
-            });
-
-            if (traceContext) {
-              targetResponse.traceContext = traceContext;
-              traceSnapshots.push(traceContext);
-              if (tracingOptions.includeInAttack || tracingOptions.includeInGrading) {
-                computedTraceSummary = formatTraceSummary(traceContext);
-                targetResponse.traceSummary = computedTraceSummary;
-              }
-            }
-          }
+        const { traceContext, traceSummary: computedTraceSummary } = await collectTargetTrace({
+          tracing: tracingOptions,
+          traceparent: context?.traceparent,
+          startedAt: iterationStart,
+          response: targetResponse,
+          signal: options?.abortSignal,
+          snapshots: traceSnapshots,
+        });
+        if (traceContext) {
+          targetResponse.traceContext = traceContext;
+          targetResponse.traceSummary = computedTraceSummary;
         }
 
         if (targetResponse.sessionId) {
@@ -748,61 +720,15 @@ export default class GoatProvider implements ApiProvider {
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
         if (test && assertToUse && grader && finalOutput) {
-          // Build grading context with image outputs, tracing, and exfil tracking data.
-          let gradingContext: RedteamGradingContext | undefined = {
-            providerResponse: finalResponse,
-            conversationTranscript: getTargetConversation(messages).conversationTranscript,
-            ...(finalResponse.images?.length ? { imageOutputs: finalResponse.images } : {}),
-          };
-
-          // First try to get exfil data from provider response metadata (Playwright provider)
-          if (finalResponse.metadata?.wasExfiltrated === undefined) {
-            // Try to fetch exfil tracking from server API via webPageUuid
-            const webPageUuid = test.metadata?.webPageUuid as string | undefined;
-            if (webPageUuid) {
-              const evalId =
-                context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
-              logger.debug('[GOAT] Fetching exfil tracking from server API', {
-                webPageUuid,
-                evalId,
-              });
-              const exfilData = await checkExfilTracking(webPageUuid, evalId);
-              if (exfilData) {
-                gradingContext = {
-                  ...(gradingContext ?? {}),
-                  ...(tracingOptions.includeInGrading
-                    ? {
-                        traceContext: targetResponse.traceContext,
-                        traceSummary: gradingTraceSummary,
-                      }
-                    : {}),
-                  wasExfiltrated: exfilData.wasExfiltrated,
-                  exfilCount: exfilData.exfilCount,
-                  exfilRecords: exfilData.exfilRecords,
-                };
-              }
-            }
-          } else {
-            logger.debug('[GOAT] Using exfil data from provider response metadata');
-            gradingContext = {
-              ...(gradingContext ?? {}),
-              ...(tracingOptions.includeInGrading
-                ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
-                : {}),
-              wasExfiltrated: Boolean(finalResponse.metadata.wasExfiltrated),
-              exfilCount: Number(finalResponse.metadata.exfilCount) || 0,
-              exfilRecords: [],
-            };
-          }
-
-          // Fallback to just tracing context if no exfil data found
-          if (tracingOptions.includeInGrading && !gradingContext?.traceContext) {
-            gradingContext = {
-              ...(gradingContext ?? {}),
-              traceContext: targetResponse.traceContext,
-              traceSummary: gradingTraceSummary,
-            };
-          }
+          const gradingContext = await prepareGradingEvidence({
+            response: finalResponse,
+            tracing: tracingOptions,
+            traceContext: targetResponse.traceContext,
+            traceSummary: gradingTraceSummary,
+            trackingMetadata: lastTransformResult?.metadata,
+            fallbackTrackingMetadata: test.metadata,
+            evaluationId: context?.evaluationId ?? test.metadata?.evaluationId,
+          });
 
           const gradedTurn = {
             prompt:
@@ -814,30 +740,18 @@ export default class GoatProvider implements ApiProvider {
             guardrails: finalResponse.guardrails,
             transformDisplayVars: lastTransformDisplayVars,
           };
-          const { grade, rubric } = await runRedteamGrader(
+          const { grade, storedResult } = await gradeRedteamTurn({
             grader,
-            gradedTurn.prompt,
-            gradedTurn.output,
             test,
-            targetProvider,
-            getGraderAssertionValue(assertToUse),
+            assertion: assertToUse,
+            turn: gradedTurn,
+            provider: targetProvider,
             additionalRubric,
-            undefined,
             gradingContext,
-          );
+            previous: storedGraderResult,
+          });
           graderPassed = grade.pass;
-          storedGraderResult = accumulateGraderResult(
-            storedGraderResult,
-            {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            },
-            {
-              ...gradedTurn,
-              pluginId: test.metadata?.pluginId,
-              assertion: assertToUse,
-            },
-          );
+          storedGraderResult = storedResult;
           flaggedTurn ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
         }
 

@@ -4,11 +4,6 @@ import { renderPrompt } from '../../../evaluatorHelpers';
 import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import {
-  extractTraceIdFromTraceparent,
-  fetchTraceContext,
-  type TraceContextData,
-} from '../../../tracing/traceContext';
 import invariant from '../../../util/invariant';
 import { sleep } from '../../../util/time';
 import {
@@ -36,7 +31,6 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
   extractInputVarsFromPrompt,
   extractPromptFromTags,
@@ -44,19 +38,21 @@ import {
   isBasicRefusal,
 } from '../../util';
 import {
-  accumulateGraderResult,
-  buildGraderResultAssertion,
+  collectTargetTrace,
+  prepareGradingEvidence,
+  type TraceContextData,
+} from '../gradingEvidence';
+import {
   externalizeResponseForRedteamHistory,
-  getGraderAssertionValue,
   getTargetResponse,
+  gradeRedteamTurn,
   isConversationEndedResponse,
   type Message,
   preserveSelectedError,
-  runRedteamGrader,
   type TargetResponse,
   type TurnBacktrackingStopReason,
 } from '../shared';
-import { formatTraceForMetadata, formatTraceSummary } from '../traceFormatting';
+import { formatTraceForMetadata } from '../traceFormatting';
 import { resolveTracingOptions } from '../tracingOptions';
 
 import type {
@@ -72,7 +68,6 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../../types/index';
-import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
 
 const DEFAULT_MAX_TURNS = 10;
@@ -327,8 +322,6 @@ export class HydraProvider implements ApiProvider {
       test,
       config: this.config as unknown as Record<string, unknown>,
     });
-    const shouldFetchTrace =
-      tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
     const traceSnapshots: TraceContextData[] = [];
 
     logger.debug(`${this.logPrefix} Starting attack`, {
@@ -684,37 +677,14 @@ export class HydraProvider implements ApiProvider {
         break;
       }
 
-      // Fetch trace context if tracing is enabled
-      let traceContext: TraceContextData | null = null;
-      let computedTraceSummary: string | undefined;
-      if (shouldFetchTrace && !targetResponse.cached) {
-        const traceparent = context?.traceparent ?? undefined;
-        const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
-
-        if (traceId) {
-          traceContext = await fetchTraceContext(traceId, {
-            abortSignal: options?.abortSignal,
-            earliestStartTime: iterationStart,
-            includeInternalSpans: tracingOptions.includeInternalSpans,
-            maxSpans: tracingOptions.maxSpans,
-            maxDepth: tracingOptions.maxDepth,
-            maxRetries: tracingOptions.maxRetries,
-            retryDelayMs: tracingOptions.retryDelayMs,
-            spanFilter: tracingOptions.spanFilter,
-            sanitizeAttributes: tracingOptions.sanitizeAttributes,
-            providerConfig: tracingOptions.provider,
-            queryDelay: tracingOptions.queryDelay,
-            redactAttributes: tracingOptions.redactAttributes,
-          });
-
-          if (traceContext) {
-            traceSnapshots.push(traceContext);
-            if (tracingOptions.includeInAttack || tracingOptions.includeInGrading) {
-              computedTraceSummary = formatTraceSummary(traceContext);
-            }
-          }
-        }
-      }
+      const { traceContext, traceSummary: computedTraceSummary } = await collectTargetTrace({
+        tracing: tracingOptions,
+        traceparent: context?.traceparent,
+        startedAt: iterationStart,
+        response: targetResponse,
+        signal: options?.abortSignal,
+        snapshots: traceSnapshots,
+      });
 
       logger.debug(`${this.logPrefix} Received target response`, {
         turn,
@@ -869,89 +839,27 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          // Build grading context with image outputs, tracing, and exfil tracking data.
-          const gradingContext: RedteamGradingContext = {
-            providerResponse: targetResponse,
-            ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
-            ...(tracingOptions.includeInGrading
-              ? { traceContext, traceSummary: gradingTraceSummary }
-              : {}),
-          };
+          const gradingContext = await prepareGradingEvidence({
+            response: targetResponse,
+            tracing: tracingOptions,
+            traceContext: traceContext,
+            traceSummary: gradingTraceSummary,
+            trackingMetadata: lastTransformResult?.metadata,
+            fallbackTrackingMetadata: test.metadata,
+            evaluationId: context?.evaluationId ?? test.metadata?.evaluationId,
+          });
 
-          // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
-          // In layer mode (e.g., hydra → indirect-web-pwn), lastTransformResult.metadata is the
-          // ONLY source for webPageUuid (set by indirect-web-pwn strategy during applyRuntimeTransforms)
-          const webPageUuid = lastTransformResult?.metadata?.webPageUuid as string | undefined;
-          if (webPageUuid) {
-            // evalId: context.evaluationId is primary, extract from webPageUrl as fallback
-            const webPageUrl = lastTransformResult?.metadata?.webPageUrl as string | undefined;
-            const evalId =
-              context?.evaluationId ??
-              (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
-
-            logger.debug(`${this.logPrefix} Fetching exfil tracking from server API`, {
-              webPageUuid,
-              evalId,
-              source: 'lastTransformResult.metadata',
-            });
-
-            try {
-              const exfilData = await checkExfilTracking(webPageUuid, evalId);
-              if (exfilData) {
-                Object.assign(gradingContext, {
-                  wasExfiltrated: exfilData.wasExfiltrated,
-                  exfilCount: exfilData.exfilCount,
-                  exfilRecords: exfilData.exfilRecords,
-                });
-              }
-            } catch (error) {
-              logger.warn(`${this.logPrefix} Failed to fetch exfil tracking from server`, {
-                error,
-                webPageUuid,
-              });
-            }
-          }
-
-          // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
-          if (
-            gradingContext.wasExfiltrated === undefined &&
-            targetResponse.metadata?.wasExfiltrated !== undefined
-          ) {
-            logger.debug(
-              `${this.logPrefix} Using exfil data from provider response metadata (fallback)`,
-            );
-            Object.assign(gradingContext, {
-              wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
-              exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
-              exfilRecords: [],
-            });
-          }
-
-          const { grade, rubric } = await runRedteamGrader(
+          const { grade, storedResult } = await gradeRedteamTurn({
             grader,
-            lastFinalAttackPrompt || nextMessage,
-            targetResponse.output,
             test,
-            targetProvider,
-            getGraderAssertionValue(assertToUse),
-            undefined, // additionalRubric
-            undefined, // skipRefusalCheck
+            assertion: assertToUse,
+            turn: { prompt: lastFinalAttackPrompt || nextMessage, output: targetResponse.output },
+            provider: targetProvider,
             gradingContext,
-          );
+            previous: storedGraderResult,
+          });
           graderResult = grade;
-          storedGraderResult = accumulateGraderResult(
-            storedGraderResult,
-            {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            },
-            {
-              prompt: lastFinalAttackPrompt || nextMessage,
-              output: targetResponse.output,
-              pluginId: test.metadata?.pluginId,
-              assertion: assertToUse,
-            },
-          );
+          storedGraderResult = storedResult;
 
           logger.debug(`${this.logPrefix} Grader result`, {
             turn,

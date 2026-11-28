@@ -28,6 +28,10 @@ The Tree-based Jailbreaks strategy works by:
 3. For each branch, generating new sub-branches based on hypothetical responses.
 4. Exploring this tree of possibilities to find the most effective single-shot prompts.
 
+Each usable candidate is tested as a separate target request. A search judge scores how useful the response is for exploring further branches, while the plugin grader checks whether it violates the plugin policy. A policy failure stops the search even if another branch has a higher search score. Invalid generated prompts and failed transforms consume an attempt without sending a target request.
+
+When the attempt or depth limit is reached, Promptfoo reports an existing target response and its matching grade. It does not send an additional target request to replay the selected prompt.
+
 :::warning
 This strategy is medium cost. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::
