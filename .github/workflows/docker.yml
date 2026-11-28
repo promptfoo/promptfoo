@@ -59,7 +59,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name || '' }}
-  SOURCE_REF: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
+  SOURCE_REF: ${{ inputs.tag_name || github.event.release.tag_name || github.sha }}
   BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
   BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
   # Fallback release paths build a specific tag outside release-please.yml.
@@ -76,7 +76,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: *read-only-permissions
-
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+      tags: ${{ steps.image.outputs.tags }}
+      version: ${{ steps.image.outputs.version }}
+      created: ${{ steps.image.outputs.created }}
+      license: ${{ steps.image.outputs.license }}
     steps:
       - &validate-release-tag
         name: Validate release tag
@@ -104,10 +109,66 @@ jobs:
           persist-credentials: false
 
       # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
-      - &resolve-source-commit
-        name: Resolve source commit
+      - name: Resolve source commit
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # Fix publication aliases before executing source code, including code from historical releases.
+      # Only the numeric version and prerelease affect Docker tags; SemVer build metadata is omitted.
+      - name: Prepare Docker image metadata
+        id: image
+        if: github.event_name != 'pull_request'
+        env:
+          REPO_LICENSE: ${{ github.event.repository.license.spdx_id }}
+        run: |
+          node <<'NODE'
+          const { appendFileSync } = require('node:fs');
+          const { GITHUB_REF: ref, GITHUB_REF_NAME: name, RELEASE_TAG: release } = process.env;
+          const version = name.replace(/[^a-zA-Z0-9._-]+/g, '-');
+          const tags = new Set();
+
+          // An explicit backfill publishes only its immutable release tag.
+          if (process.env.IS_RELEASE_FALLBACK !== 'true') {
+            if (ref.startsWith('refs/heads/')) {
+              tags.add(version);
+              if (ref === 'refs/heads/main') {
+                tags.add('latest');
+              }
+            } else if (ref.startsWith('refs/tags/')) {
+              const number = '(0|[1-9][0-9]*)';
+              const id = '(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)';
+              const semver = new RegExp(
+                `^v?${number}\\.${number}\\.${number}(?:-(${id}(?:\\.${id})*))?(?:\\+[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*)?$`
+              );
+              const match = semver.exec(name.replaceAll('/', '-'));
+              if (match && match.slice(1, 4).every(part => Number.isSafeInteger(Number(part)))) {
+                const [, major, minor, patch, prerelease] = match;
+                tags.add(`${major}.${minor}.${patch}${prerelease ? '-' + prerelease : ''}`);
+                if (!prerelease) {
+                  tags.add(`${major}.${minor}`);
+                  tags.add('latest');
+                }
+              }
+            }
+            tags.add(`sha-${process.env.GITHUB_SHA.slice(0, 7)}`);
+          }
+          if (release) {
+            tags.add(release);
+          }
+          if (!tags.size || [...tags].some(tag => !/^\w[\w.-]{0,127}$/.test(tag))) {
+            throw new Error('Invalid Docker publication tags');
+          }
+          const license = process.env.REPO_LICENSE || require('./package.json').license;
+          const outputs = {
+            tags: [...tags].join(' '),
+            version,
+            created: new Date().toISOString(),
+            license: typeof license === 'string' ? license.replace(/[\r\n]+/g, ' ') : '',
+          };
+          for (const [key, value] of Object.entries(outputs)) {
+            appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
+          }
+          NODE
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
@@ -279,13 +340,13 @@ jobs:
     strategy:
       matrix:
         platforms:
-          [
-            { runner: ubuntu-latest, platform: linux/amd64, digest-suffix: linux-amd64 },
-            { runner: ubuntu-24.04-arm, platform: linux/arm64, digest-suffix: linux-arm64 },
-          ]
+          [{ runner: ubuntu-latest, arch: amd64 }, { runner: ubuntu-24.04-arm, arch: arm64 }]
     runs-on: ${{ matrix.platforms.runner }}
     timeout-minutes: 60
     needs: [test]
+    outputs:
+      amd64_digest: ${{ steps.digest.outputs.amd64 }}
+      arm64_digest: ${{ steps.digest.outputs.arm64 }}
     permissions:
       contents: read
       packages: write
@@ -295,23 +356,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ env.SOURCE_REF }}
-
-      # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
-      - *resolve-source-commit
+          ref: ${{ needs.test.outputs.source_sha }}
+          persist-credentials: false
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
 
       - *set-up-docker-buildx
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          labels: |
-            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
 
       - &log-in-to-the-container-registry
         name: Log in to the Container registry
@@ -325,94 +376,79 @@ jobs:
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }}
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }},mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-linux-${{ matrix.platforms.arch }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-linux-${{ matrix.platforms.arch }},mode=max
           context: .
-          platforms: ${{ matrix.platforms.platform }}
+          platforms: linux/${{ matrix.platforms.arch }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: |
+            org.opencontainers.image.title=${{ github.event.repository.name }}
+            org.opencontainers.image.description=${{ github.event.repository.description }}
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.test.outputs.version }}
+            org.opencontainers.image.created=${{ needs.test.outputs.created }}
+            org.opencontainers.image.revision=${{ needs.test.outputs.source_sha }}
+            org.opencontainers.image.licenses=${{ needs.test.outputs.license }}
           build-args: |
             BUILD_VERSION=${{ env.BUILD_VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
-            GIT_SHA=${{ steps.source.outputs.sha }}
+            GIT_SHA=${{ needs.test.outputs.source_sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=${{ github.repository == 'promptfoo/promptfoo' && '1' || '0' }}
             OS_PACKAGE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
           outputs: |
             type=image,push-by-digest=true,name-canonical=true,push=true,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.
 
-      - name: Export digest
-        run: |
-          mkdir -p "${{ runner.temp }}/digests"
-          digest="${{ steps.build.outputs.digest }}"
-          touch "${{ runner.temp }}/digests/${digest#sha256:}"
-
-      - name: Upload digest
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: digests-${{ matrix.platforms.digest-suffix }}
-          path: ${{ runner.temp }}/digests/*
-          if-no-files-found: error
-          retention-days: 1
+      # Matrix outputs have distinct names so a retry can reuse both successful builds.
+      - name: Record platform digest
+        id: digest
+        env:
+          ARCH: ${{ matrix.platforms.arch }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "$ARCH=$DIGEST" >> "$GITHUB_OUTPUT"
 
   merge-docker-digests:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [build-docker-and-push-digests]
+    needs: [test, build-docker-and-push-digests]
     permissions:
       packages: write
     outputs:
-      manifest_digest: ${{ steps.inspect.outputs.digest }}
+      manifest_digest: ${{ steps.publish.outputs.digest }}
     steps:
-      - name: Download digests
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        with:
-          path: ${{ runner.temp }}/digests
-          pattern: digests-*
-          merge-multiple: true
-
       - *log-in-to-the-container-registry
 
       - *set-up-docker-buildx
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Fallback release builds publish immutable version tags only so moving aliases stay on normal release paths.
-          tags: |
-            type=ref,event=branch,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
-            type=ref,event=pr,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
-            type=sha,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
-            type=raw,value=${{ env.RELEASE_TAG }},enable=${{ env.RELEASE_TAG != '' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && env.IS_RELEASE_FALLBACK != 'true' }}
-
       - name: Create manifest list and push
-        working-directory: ${{ runner.temp }}/digests
-        run: |
-          # shellcheck disable=SC2046,SC2091
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
-
-      - name: Inspect image
-        id: inspect
+        id: publish
         env:
-          IMAGE_TAG: ${{ env.RELEASE_TAG || steps.meta.outputs.version }}
+          IMAGE_TAGS: ${{ needs.test.outputs.tags }}
+          AMD64_DIGEST: ${{ needs.build-docker-and-push-digests.outputs.amd64_digest }}
+          ARM64_DIGEST: ${{ needs.build-docker-and-push-digests.outputs.arm64_digest }}
         run: |
-          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
-          # Log full inspection details and extract digest
-          INSPECT_OUTPUT=$(docker buildx imagetools inspect "${IMAGE_REF}")
-          echo "$INSPECT_OUTPUT"
-          # Extract the manifest digest (first Digest: line)
-          DIGEST=$(echo "$INSPECT_OUTPUT" | grep -m1 "^Digest:" | awk '{print $2}')
-          if [ -z "$DIGEST" ]; then
-            echo "Error: Failed to extract manifest digest from inspect output"
+          for digest in "$AMD64_DIGEST" "$ARM64_DIGEST"; do
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::Missing or invalid platform digest"
+              exit 1
+            fi
+          done
+          if [[ -z "$IMAGE_TAGS" || "$AMD64_DIGEST" == "$ARM64_DIGEST" ]]; then
+            echo "::error::Expected publication tags and two distinct platform digests"
             exit 1
           fi
-          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
-          echo "Manifest digest: $DIGEST"
+          image="$REGISTRY/$(tr '[:upper:]' '[:lower:]' <<< "$IMAGE_NAME")"
+          read -ra tags <<< "$IMAGE_TAGS"
+          tag_args=()
+          for tag in "${tags[@]}"; do
+            tag_args+=(--tag "$image:$tag")
+          done
+          metadata="$RUNNER_TEMP/manifest.json"
+          docker buildx imagetools create "${tag_args[@]}" --metadata-file "$metadata" \
+            "$image@$AMD64_DIGEST" "$image@$ARM64_DIGEST"
+          digest=$(jq -er '."containerimage.descriptor".digest | select(test("^sha256:[0-9a-f]{64}$"))' "$metadata")
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "Published ${tags[*]} at $digest"
 
   attest-docker-image:
     name: 'Attest Multi-arch Image'
