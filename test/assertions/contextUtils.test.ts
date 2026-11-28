@@ -31,6 +31,21 @@ describe('resolveContext', () => {
   });
 
   describe('with context variable', () => {
+    it.each(['', 0, false])(
+      'does not replace explicit context %j with the prompt',
+      async (context) => {
+        await expect(
+          resolveContext(
+            { type: 'context-recall' },
+            { vars: { context }, options: {} },
+            'answer',
+            'The prompt contains the answer',
+            'The prompt contains the answer',
+          ),
+        ).rejects.toThrow('Context is required');
+      },
+    );
+
     it('should return context from test.vars.context', async () => {
       const assertion: Assertion = { type: 'context-faithfulness' };
       const test: AtomicTestCase = {

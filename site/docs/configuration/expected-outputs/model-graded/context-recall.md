@@ -32,7 +32,8 @@ assert:
 
 - `value` - Required. Expected answer/ground truth
 - `context` - Optional. Retrieved text (in vars or via `contextTransform`). If omitted,
-  `context-recall` uses the prompt as context.
+  `context-recall` uses the prompt as context. An explicitly empty or invalid context
+  is an error, unless `contextTransform` supplies valid context; it does not fall back to the prompt.
 - `threshold` - Optional. Minimum score 0-1 (default: 0.5)
 
 ### Full example

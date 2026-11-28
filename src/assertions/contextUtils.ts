@@ -27,7 +27,7 @@ export async function resolveContext(
 ): Promise<string | string[]> {
   // Handle context from test variables - support both string and string array
   let contextValue: string | string[] | undefined;
-  if (test.vars?.context) {
+  if (test.vars?.context !== undefined) {
     if (typeof test.vars.context === 'string') {
       contextValue = test.vars.context;
     } else if (Array.isArray(test.vars.context)) {
