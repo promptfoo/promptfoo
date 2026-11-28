@@ -93,6 +93,8 @@
     // System tools invoked by package scripts and subprocesses.
     "act",
     "go",
+    // Renders the Helm chart in test/helm-chart.test.ts.
+    "helm",
     // POSIX utility used by workspace FIFO regression tests.
     "mkfifo",
     "modelaudit",
