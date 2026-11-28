@@ -33,6 +33,7 @@ import type {
   TestCase,
   TestCaseWithVarsFile,
   TestSuiteConfig,
+  Vars,
 } from '../types/index';
 
 type StandaloneTestsFileMetadata = {
@@ -168,7 +169,7 @@ async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestC
     telemetry.record('feature_used', {
       feature: 'json tests file - azure blob',
     });
-    return parseJsonTestCases(fileContent, sanitizedVarsPath);
+    return parseJsonTestCases(fileContent, sanitizedVarsPath, false);
   }
   if (fileExtension === 'jsonl') {
     telemetry.record('feature_used', {
@@ -378,8 +379,12 @@ function withDefaultDescription(testCase: TestCase, index: number): TestCase {
   return { ...testCase, description: testCase.description || `Row #${index + 1}` };
 }
 
-function parseJsonTestCases(fileContent: string, filePath: string): TestCase[] {
-  let jsonData: any;
+function parseJsonTestCases(
+  fileContent: string,
+  filePath: string,
+  allowAgentSkills = true,
+): TestCase[] {
+  let jsonData: unknown;
   try {
     jsonData = loadYaml(fileContent);
   } catch (err) {
@@ -387,8 +392,168 @@ function parseJsonTestCases(fileContent: string, filePath: string): TestCase[] {
       `Failed to parse JSON test file ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+
+  const agentSkillsCases = allowAgentSkills && maybeConvertAgentSkillsEvalsJson(jsonData, filePath);
+  if (agentSkillsCases) {
+    return agentSkillsCases;
+  }
+
   const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
   return testCases.map(withDefaultDescription);
+}
+
+function maybeConvertAgentSkillsEvalsJson(input: unknown, sourcePath: string): TestCase[] | null {
+  const testCases = parseAgentSkillsEvalsJson(input, sourcePath);
+  if (testCases) {
+    telemetry.record('feature_used', {
+      feature: 'agent-skills evals.json tests file',
+    });
+  }
+  return testCases;
+}
+
+type AgentSkillsEvalCase = {
+  id?: string | number;
+  prompt: string;
+  expected_output?: unknown;
+  assertions?: unknown;
+  files?: unknown;
+};
+
+type AgentSkillsEvalsFile = {
+  skill_name?: unknown;
+  evals?: unknown;
+};
+
+/**
+ * Detect the AgentSkills `evals.json` format described at
+ * https://agentskills.io/skill-creation/evaluating-skills and convert it to
+ * promptfoo `TestCase`s. Returns `null` when the input does not match the
+ * expected shape so callers can fall back to the generic JSON parser.
+ *
+ * The mapping is:
+ *   - `prompt`           -> literal `vars.prompt`
+ *   - `expected_output`  -> `llm-rubric` assertion (first)
+ *   - `assertions[i]`    -> additional `llm-rubric` assertions
+ *   - `files`            -> absolute paths resolved from the JSON source layout
+ *   - `id`               -> `metadata.id` and `description`
+ *   - top-level `skill_name` -> `metadata.skill_name`
+ */
+function parseAgentSkillsEvalsJson(input: unknown, sourcePath: string): TestCase[] | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return null;
+  }
+
+  const candidate = input as AgentSkillsEvalsFile;
+  const skillName =
+    typeof candidate.skill_name === 'string' && candidate.skill_name.trim()
+      ? candidate.skill_name
+      : undefined;
+  if (!skillName || !Array.isArray(candidate.evals)) {
+    return null;
+  }
+
+  const validCases = candidate.evals.filter(
+    (entry): entry is AgentSkillsEvalCase =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as Partial<AgentSkillsEvalCase>).prompt === 'string' &&
+      Boolean((entry as AgentSkillsEvalCase).prompt.trim()),
+  );
+  const cases = validCases.flatMap((entry, idx) => {
+    const testCase = agentSkillsEvalToTestCase(entry, idx, skillName, sourcePath);
+    return testCase ? [testCase] : [];
+  });
+  if (cases.length === 0) {
+    throw new Error(`AgentSkills test source ${sourcePath} contains no runnable evals`);
+  }
+  return cases;
+}
+
+function agentSkillsEvalToTestCase(
+  entry: AgentSkillsEvalCase,
+  idx: number,
+  skillName: string,
+  sourcePath: string,
+): TestCase | null {
+  const assertions = buildAgentSkillsAssertions(entry);
+  if (assertions.length === 0) {
+    return null;
+  }
+
+  const idValue =
+    typeof entry.id === 'string' || typeof entry.id === 'number' ? entry.id : undefined;
+
+  const sourceDirectory = path.dirname(sourcePath);
+  const isStandardAgentSkillsLayout =
+    path.basename(sourcePath) === 'evals.json' && path.basename(sourceDirectory) === 'evals';
+  const sourceRoot = isStandardAgentSkillsLayout ? path.dirname(sourceDirectory) : sourceDirectory;
+  // Pass the declared paths to the agent as literal data.
+  const files = (
+    Array.isArray(entry.files)
+      ? entry.files.filter(
+          (file): file is string => typeof file === 'string' && Boolean(file.trim()),
+        )
+      : []
+  ).map((file) => path.resolve(sourceRoot, file.replace(/^file:\/\//, '')));
+  const prompt =
+    files.length > 0
+      ? `${entry.prompt}\n\nFiles available for this eval:\n${files.map((file) => `- ${file}`).join('\n')}`
+      : entry.prompt;
+  const vars: Vars = { prompt };
+  if (files.length > 0) {
+    vars.files = files;
+  }
+
+  const metadata = buildAgentSkillsMetadata(idValue, skillName);
+
+  const testCase: TestCase = {
+    description: idValue == null ? `Row #${idx + 1}` : `eval ${idValue}`,
+    vars,
+    assert: assertions,
+    options: {
+      // Keep multiple declared files together as a single var value. Only
+      // disable expansion when needed so that any defaultTest.vars arrays
+      // inherited by this test case still expand into their own variants.
+      ...(files.length > 1 ? { disableVarExpansion: true } : {}),
+      skipRenderVars: files.length ? ['prompt', 'files'] : ['prompt'],
+    },
+  };
+  if (metadata) {
+    testCase.metadata = metadata;
+  }
+  return testCase;
+}
+
+function buildAgentSkillsAssertions(
+  entry: AgentSkillsEvalCase,
+): { type: 'llm-rubric'; value: string }[] {
+  const assertions: { type: 'llm-rubric'; value: string }[] = [];
+  if (typeof entry.expected_output === 'string' && entry.expected_output.trim()) {
+    assertions.push({ type: 'llm-rubric', value: entry.expected_output });
+  }
+  if (Array.isArray(entry.assertions)) {
+    for (const assertion of entry.assertions) {
+      if (typeof assertion === 'string' && assertion.trim()) {
+        assertions.push({ type: 'llm-rubric', value: assertion });
+      }
+    }
+  }
+  return assertions;
+}
+
+function buildAgentSkillsMetadata(
+  idValue: string | number | undefined,
+  skillName: string | undefined,
+): Record<string, string | number> | undefined {
+  const metadata: Record<string, string | number> = {};
+  if (idValue != null) {
+    metadata.id = idValue;
+  }
+  if (skillName) {
+    metadata.skill_name = skillName;
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
@@ -473,7 +638,7 @@ export async function readTestConfig(
   );
 }
 
-function resolveVarsFileReferences(value: unknown, basePath: string): unknown {
+function resolveVarsFileReferences(value: unknown, basePath: string, skipVars?: string[]): unknown {
   if (typeof value === 'string') {
     if (!value.startsWith('file://')) {
       return value;
@@ -486,7 +651,10 @@ function resolveVarsFileReferences(value: unknown, basePath: string): unknown {
   }
   if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, resolveVarsFileReferences(item, basePath)]),
+      Object.entries(value).map(([key, item]) => [
+        key,
+        skipVars?.includes(key) ? item : resolveVarsFileReferences(item, basePath),
+      ]),
     );
   }
   return value;
@@ -539,7 +707,11 @@ async function readTestWithEnv(
   }
 
   if (!loadProviders) {
-    testCase.vars = resolveVarsFileReferences(testCase.vars, basePath) as TestCase['vars'];
+    testCase.vars = resolveVarsFileReferences(
+      testCase.vars,
+      basePath,
+      testCase.options?.skipRenderVars,
+    ) as TestCase['vars'];
     if (typeof testCase.provider === 'string' && testCase.provider.startsWith('file://')) {
       testCase.provider = resolveVarsFileReferences(testCase.provider, effectiveBasePath) as string;
     } else if (
@@ -708,7 +880,9 @@ async function loadTestsFromGlobWithEnv(
         fileContent,
         `Failed to parse JSON test file ${testFile}`,
       );
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases =
+        maybeConvertAgentSkillsEvalsJson(rawContent, testFile) ??
+        (maybeLoadConfigFromExternalFile(rawContent) as TestCase[]);
       testCases = await _deref(testCases, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);

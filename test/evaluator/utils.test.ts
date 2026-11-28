@@ -39,6 +39,15 @@ describe('generateVarCombinations', () => {
     expect(generateVarCombinations(vars)).toEqual(expected);
   });
 
+  it('keeps a literal file-prefixed prompt while expanding ordinary variables', () => {
+    expect(
+      generateVarCombinations({ prompt: 'file://missing', version: ['a', 'b'] }, ['prompt']),
+    ).toEqual([
+      { prompt: 'file://missing', version: 'a' },
+      { prompt: 'file://missing', version: 'b' },
+    ]);
+  });
+
   it('should correctly handle nested array variables', () => {
     const vars = {
       options: [
