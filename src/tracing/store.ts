@@ -89,22 +89,12 @@ function computeDepth(
 }
 
 export class TraceStore {
-  private db: Awaited<ReturnType<typeof getDb>> | null = null;
-
-  private async getDatabase() {
-    if (!this.db) {
-      logger.debug('[TraceStore] Initializing database connection');
-      this.db = await getDb();
-    }
-    return this.db;
-  }
-
   async createTrace(trace: StoreTraceData): Promise<void> {
     try {
       logger.debug(
         `[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`,
       );
-      await (await this.getDatabase())
+      await (await getDb())
         .insert(tracesTable)
         .values({
           id: crypto.randomUUID(),
@@ -130,7 +120,7 @@ export class TraceStore {
   ): Promise<{ stored: boolean; reason?: string }> {
     try {
       logger.debug(`[TraceStore] Adding ${spans.length} spans to trace ${traceId}`);
-      const db = await this.getDatabase();
+      const db = await getDb();
 
       // Only verify trace exists if not skipping the check (for OTLP scenarios)
       if (options?.skipTraceCheck) {
@@ -200,7 +190,7 @@ export class TraceStore {
 
     try {
       logger.debug(`[TraceStore] Fetching traces for evaluation ${evaluationId}`);
-      const db = (this.db ??= await getDbIfExists());
+      const db = await getDbIfExists();
       if (!db) {
         return [];
       }
@@ -248,7 +238,7 @@ export class TraceStore {
 
     try {
       logger.debug(`[TraceStore] Fetching trace ${traceId}`);
-      const db = await this.getDatabase();
+      const db = await getDb();
 
       const traces = await db
         .select()
@@ -282,7 +272,7 @@ export class TraceStore {
   async getTraceMetadata(traceId: string): Promise<Record<string, any> | undefined> {
     try {
       logger.debug(`[TraceStore] Fetching metadata for trace ${traceId}`);
-      const traces = await (await this.getDatabase())
+      const traces = await (await getDb())
         .select({ metadata: tracesTable.metadata })
         .from(tracesTable)
         .where(eq(tracesTable.traceId, traceId))
@@ -298,7 +288,7 @@ export class TraceStore {
   async deleteOldTraces(retentionDays: number): Promise<void> {
     try {
       logger.debug(`[TraceStore] Deleting traces older than ${retentionDays} days`);
-      const db = await this.getDatabase();
+      const db = await getDb();
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
       const cutoffCondition = sql`(
     (
@@ -352,7 +342,7 @@ export class TraceStore {
 
     try {
       logger.debug(`[TraceStore] Fetching spans for trace ${traceId}`);
-      const rows = await (await this.getDatabase())
+      const rows = await (await getDb())
         .select()
         .from(spansTable)
         .where(eq(spansTable.traceId, traceId))
