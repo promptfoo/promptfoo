@@ -1324,7 +1324,8 @@ export async function runEvalInternal(
     evalId,
     providerCallQueue,
     rateLimitRegistry,
-  }: RunEvalOptions,
+    warnedReservedRuntimeVars,
+  }: RunEvalOptions & { warnedReservedRuntimeVars?: Set<string> },
   orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> = {
     abortSignal,
   },
@@ -1344,6 +1345,20 @@ export async function runEvalInternal(
     vars: state.vars,
   });
   Object.assign(state.vars, registers);
+  // Warn before injection: grading omits reserved keys even without a runtime value.
+  const collidingReservedVars = EVAL_RUNTIME_VAR_KEYS.filter(
+    (name) =>
+      Object.prototype.hasOwnProperty.call(state.vars, name) &&
+      !warnedReservedRuntimeVars?.has(name),
+  );
+  if (collidingReservedVars.length > 0) {
+    collidingReservedVars.forEach((name) => warnedReservedRuntimeVars?.add(name));
+    logger.warn(
+      'Vars collide with reserved promptfoo runtime vars. Runtime values overwrite supplied ' +
+        'values when available. Reserved names are removed before grading. Rename the supplied vars.',
+      { collidingReservedVars },
+    );
+  }
   Object.assign(
     state.vars,
     getEvalRuntimeVars({
