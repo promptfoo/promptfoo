@@ -373,6 +373,7 @@ async function doEvalWithEnv(
     let _basePath: string | undefined;
     let commandLineOptions: Record<string, any> | undefined;
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
+    let watchSources: Awaited<ReturnType<typeof resolveConfigs>>['watchSources'];
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
@@ -540,6 +541,7 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
         testSources,
+        watchSources,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
@@ -1220,7 +1222,9 @@ async function doEvalWithEnv(
         // `--tests`, and its `--vars` alias, replace the config's own tests entirely
         // (see resolveConfigs), so `config.tests` already holds the command-line value.
         const cliTests = cmdObj.tests || cmdObj.vars;
-        const varPaths: string[] = [];
+        const varPaths = (watchSources ?? []).flatMap((source) =>
+          resolveTestsWatchPaths(source.tests, source.basePath),
+        );
         if (cliTests) {
           // Preserve the released path bases: --tests uses CWD, while --vars uses
           // the config directory. --tests takes precedence when both are supplied.

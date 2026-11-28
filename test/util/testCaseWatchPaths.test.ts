@@ -1,9 +1,10 @@
+import { pathToFileURL } from 'node:url';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { readTests, resolveTestsWatchPaths } from '../../src/util/testCaseReader';
+import { readTestFiles, readTests, resolveTestsWatchPaths } from '../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../src/types/index';
 
@@ -171,6 +172,29 @@ describe('resolveTestsWatchPaths', () => {
     ]);
   });
 
+  it('loads and watches only the encoded literal file, even beside matching glob siblings', async () => {
+    const filename = path.join(base, 'vars[12].yaml');
+    fs.writeFileSync(filename, 'source: literal');
+    fs.writeFileSync(path.join(base, 'vars1.yaml'), 'sibling: unwanted');
+    const reference = pathToFileURL(filename).href;
+    expect(await readTestFiles(reference, base)).toEqual({ source: 'literal' });
+    expect(resolve([{ vars: reference }])).toEqual([filename]);
+  });
+
+  it('preserves literal percent escapes in existing per-variable file references', () => {
+    const filename = path.join(base, 'literal%20value.txt');
+    expect(resolve([{ vars: { value: `file://${filename}` } }])).toEqual([filename]);
+  });
+
+  it.each([false, true])('watches canonical vars URLs inside a test file (list: %s)', (asList) => {
+    const filename = path.join(base, 'vars with spaces.yaml');
+    fs.writeFileSync(filename, 'source: loaded');
+    const reference = pathToFileURL(filename).href;
+    const testsFile = path.join(base, `canonical-${asList}.json`);
+    fs.writeFileSync(testsFile, JSON.stringify([{ vars: asList ? [reference] : reference }]));
+    expect(resolve(testsFile)).toEqual([testsFile, filename]);
+  });
+
   it('watches file references nested inside a tests file', () => {
     // cases.yaml holds a case whose vars point at another file; the loader reads it,
     // so editing it changes the evaluation and has to trigger a rerun.
@@ -289,6 +313,24 @@ describe('resolveTestsWatchPaths', () => {
     ] as unknown as TestSuiteConfig['tests']);
     expect(watched).toContain(path.join(base, 'va/common.yaml'));
     expect(watched).toContain(path.join(base, 'va/case.yaml'));
+  });
+
+  it('watches file dependencies inside whole-vars files', () => {
+    const varsPath = path.join(base, 'nested/vars-dependencies.yaml');
+    fs.writeFileSync(varsPath, 'context: file://context.txt\nnested: { data: file://data.json }');
+    expect(resolve([{ vars: 'file://nested/vars-dependencies.yaml' }])).toEqual(
+      expect.arrayContaining([
+        varsPath,
+        path.join(base, 'context.txt'),
+        path.join(base, 'data.json'),
+      ]),
+    );
+  });
+
+  it('treats vars-file contents as data rather than more vars imports', () => {
+    const varsPath = path.join(base, 'self-vars.yaml');
+    fs.writeFileSync(varsPath, 'vars: self-vars.yaml');
+    expect(resolve([{ vars: 'self-vars.yaml' }])).toEqual([varsPath]);
   });
 
   it('still handles the vars mapping form', () => {
