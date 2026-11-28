@@ -35,10 +35,10 @@
  * - `data:image/jpeg;charset=utf-8;base64,/9j/...` ✅ With charset parameter
  * - `data:image/jpeg;name=photo.jpg;base64,/9j/...` ✅ With filename parameter
  * - Small images (≥20 chars base64) ✅ Including 1x1 GIFs and icons
+ * - `DATA:image/jpeg;base64,...` ✅ URI scheme matching is case-insensitive
  *
  * **Not supported:**
  * - `data:image/svg+xml,%3Csvg%3E` ❌ URL-encoded (only base64 supported)
- * - `DATA:image/jpeg;base64,...` ❌ Uppercase "data:" (RFC 2397 requires lowercase)
  * - `data:image/jpeg;base64,/9j/\n4AAQ` ❌ Newlines in base64 (must be single-line)
  * - Very large files (>100MB) ⚠️ May cause OOM errors
  *
@@ -63,7 +63,7 @@ export interface ParsedDataUrl {
  * isDataUrl("https://example.com/image.jpg") // false
  */
 export function isDataUrl(value: string): boolean {
-  return typeof value === 'string' && value.startsWith('data:') && value.length > 5;
+  return typeof value === 'string' && /^data:/i.test(value) && value.length > 5;
 }
 
 /**
@@ -93,7 +93,8 @@ export function parseDataUrl(dataUrl: string): ParsedDataUrl | null {
 
   // Match: data:<mimeType>;base64,<data> OR data:<mimeType>;...;base64,<data>
   // Handles optional parameters like charset, name, etc.
-  const match = dataUrl.match(/^data:([^;,]+)(?:;[^,]*)?;base64,(.+)$/);
+  // The scheme was checked case-insensitively above; preserve the media type and payload.
+  const match = dataUrl.slice(5).match(/^([^;,]+)(?:;[^,]*)?;base64,(.+)$/);
   if (!match) {
     return null;
   }
