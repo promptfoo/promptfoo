@@ -26,9 +26,13 @@ import type { MCPClient } from './mcp/client';
 export async function loadProviderCallbackFromFileUrl(
   fileRef: string,
   logPrefix?: string,
+  basePath?: string,
 ): Promise<Function> {
   try {
-    return await loadCallbackFromFileUrl(fileRef, logPrefix ? { logPrefix } : undefined);
+    return await loadCallbackFromFileUrl(fileRef, {
+      ...(logPrefix && { logPrefix }),
+      ...(basePath && { basePath }),
+    });
   } catch (error) {
     if (error instanceof CallbackPathTraversalError) {
       throw error;
@@ -49,6 +53,7 @@ export async function executeProviderFunctionCallback({
   cache,
   logPrefix,
   abortSignal,
+  basePath,
 }: {
   functionName: string;
   args: string;
@@ -58,6 +63,8 @@ export async function executeProviderFunctionCallback({
   cache: Record<string, Function>;
   /** This provider's log prefix, e.g. `[Bedrock Converse]`. */
   logPrefix?: string;
+  /** Directory that relative `file://` callbacks resolve against. Defaults to the CLI base path. */
+  basePath?: string;
   /** Stops this caller's wait without stopping callback code that has already started. */
   abortSignal?: AbortSignal;
 }): Promise<string> {
@@ -71,7 +78,8 @@ export async function executeProviderFunctionCallback({
           ? callbacks[functionName]
           : undefined,
       cache,
-      loadFile: (reference) => loadProviderCallbackFromFileUrl(reference, logPrefix),
+      cacheScope: basePath,
+      loadFile: (reference) => loadProviderCallbackFromFileUrl(reference, logPrefix, basePath),
     });
     const callback =
       typeof resolved === 'function'

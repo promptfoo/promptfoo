@@ -167,6 +167,19 @@ describe('loadProviderCallbackFromFileUrl', () => {
     },
   );
 
+  it('resolves relative callbacks against an explicit base path', async () => {
+    const callback = vi.fn();
+    mockImportModule.mockResolvedValueOnce(callback);
+
+    await expect(
+      loadProviderCallbackFromFileUrl('file://callbacks.js:lookup', undefined, '/configs/team'),
+    ).resolves.toBe(callback);
+    expect(mockImportModule).toHaveBeenCalledWith(
+      path.resolve('/configs/team', 'callbacks.js'),
+      'lookup',
+    );
+  });
+
   it('preserves callback traversal errors by identity', async () => {
     const error = new CallbackPathTraversalError('../callback.js', '/test/basePath');
     mockImportModule.mockRejectedValueOnce(error);

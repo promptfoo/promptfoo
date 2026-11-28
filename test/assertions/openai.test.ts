@@ -275,7 +275,7 @@ describe('OpenAI assertions', () => {
         providerResponse: { output },
       });
 
-      expect(validateFunctionToolCall).toHaveBeenCalledWith(output, { value: 10 });
+      expect(validateFunctionToolCall).toHaveBeenCalledWith(output, { value: 10 }, { output });
       expect(result).toEqual({
         pass: true,
         score: 1,
