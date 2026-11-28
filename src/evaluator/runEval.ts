@@ -1,5 +1,10 @@
 import { LRUCache } from 'lru-cache';
-import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
+import {
+  assertionRequiresTrace,
+  hasTraceAwareAssertions,
+  MissingRequiredTraceError,
+  runAssertions,
+} from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
@@ -245,6 +250,7 @@ interface RenderedRunEvalPrompt {
 
 interface ProviderCallResult {
   latencyMs: number;
+  missingRequiredTrace: boolean;
   response: ProviderResponse;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
 }
@@ -487,18 +493,13 @@ async function callProviderForRunEval({
 }): Promise<ProviderCallResult> {
   const startTime = performance.now();
   let response: ProviderResponse | undefined;
+  let latencyMs: number;
+  let missingRequiredTrace = false;
   let providerInvoked = false;
   let providerFailed = false;
 
   try {
-    if (test.providerOutput) {
-      response = {
-        output: test.providerOutput,
-        tokenUsage: createEmptyTokenUsage(),
-        cost: 0,
-        cached: false,
-      };
-    } else {
+    if (test.providerOutput == null) {
       response = await callActiveProvider({
         abortSignal,
         pauseSignal,
@@ -518,31 +519,36 @@ async function callProviderForRunEval({
         traceContext,
         vars,
       });
+    } else {
+      response = {
+        output: test.providerOutput,
+        tokenUsage: createEmptyTokenUsage(),
+        cost: 0,
+        cached: false,
+      };
     }
 
     sanitizeResponseMetadata(response);
 
-    return {
-      // Results store whole milliseconds. Shared results land in integer columns, and
-      // servers reject fractional values.
-      latencyMs: Math.round(performance.now() - startTime),
-      response,
-      traceContext,
-    };
+    // Store whole milliseconds and exclude external trace collection from provider latency.
+    latencyMs = Math.round(performance.now() - startTime);
   } catch (error) {
     providerFailed = true;
     throw error;
   } finally {
-    if (providerInvoked && isExternalTraceProvider(testSuite?.tracing?.provider)) {
+    if (isExternalTraceProvider(testSuite?.tracing?.provider)) {
+      let collected = false;
       try {
-        await collectExternalTraceAfterProviderCall({
-          abortSignal,
-          providerFailed,
-          response,
-          test,
-          testSuite,
-          traceContext,
-        });
+        if (providerInvoked) {
+          collected = await collectExternalTraceAfterProviderCall({
+            abortSignal,
+            providerFailed,
+            response,
+            test,
+            testSuite,
+            traceContext,
+          });
+        }
       } catch (error) {
         // Trace collection must not discard a target response that completed
         // before CLI pause. Real caller/deadline cancellation still propagates.
@@ -554,8 +560,12 @@ async function callProviderForRunEval({
           throw error;
         }
       }
+      if (!collected && !response?.error && response?.output != null) {
+        missingRequiredTrace = test.assert?.some(assertionRequiresTrace) ?? false;
+      }
     }
   }
+  return { latencyMs, missingRequiredTrace, response, traceContext };
 }
 
 async function collectExternalTraceAfterProviderCall({
@@ -572,17 +582,17 @@ async function collectExternalTraceAfterProviderCall({
   test: AtomicTestCase;
   testSuite?: TestSuite;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
-}): Promise<void> {
+}): Promise<boolean> {
   const traceId = getTraceId(traceContext);
   if (!traceId || abortSignal?.aborted) {
-    return;
+    return false;
   }
 
   if (response?.cached) {
     logger.debug(
       `[Evaluator] Skipping external trace fetch for cached response traceId=${traceId}`,
     );
-    return;
+    return false;
   }
 
   const tracingConfig = testSuite?.tracing;
@@ -615,14 +625,16 @@ async function collectExternalTraceAfterProviderCall({
     } else {
       logger.debug(`[Evaluator] No external traces found for traceId=${traceId}`);
     }
+    return Boolean(trace);
   } catch (error) {
     if (abortSignal?.aborted) {
       if (!providerFailed) {
         throw error;
       }
-      return;
+      return false;
     }
     logger.warn(`[Evaluator] Failed to fetch external traces: ${error}`);
+    return false;
   }
 }
 
@@ -995,6 +1007,7 @@ async function applyRunEvalResponseOutcome({
   deferredGradingAbortSignal,
   evalId,
   latencyMs,
+  missingRequiredTrace,
   prompt,
   promptIdx,
   provider,
@@ -1014,6 +1027,7 @@ async function applyRunEvalResponseOutcome({
   deferredGradingAbortSignal?: AbortSignal;
   evalId?: string;
   latencyMs: number;
+  missingRequiredTrace: boolean;
   prompt: Prompt;
   promptIdx: number;
   provider: ApiProvider;
@@ -1051,6 +1065,7 @@ async function applyRunEvalResponseOutcome({
     deferredGradingAbortSignal,
     evalId,
     latencyMs,
+    missingRequiredTrace,
     prompt,
     promptIdx,
     provider,
@@ -1073,6 +1088,7 @@ async function gradeRunEvalResponse({
   deferredGradingAbortSignal,
   evalId,
   latencyMs,
+  missingRequiredTrace,
   prompt,
   promptIdx,
   provider,
@@ -1092,6 +1108,7 @@ async function gradeRunEvalResponse({
   deferredGradingAbortSignal?: AbortSignal;
   evalId?: string;
   latencyMs: number;
+  missingRequiredTrace: boolean;
   prompt: Prompt;
   promptIdx: number;
   provider: ApiProvider;
@@ -1116,6 +1133,17 @@ async function gradeRunEvalResponse({
     testIdx,
     vars,
   });
+  ret.response = processedResponse;
+  if (missingRequiredTrace) {
+    // Local spans alone would make missing external evidence look like an empty trace.
+    applyGradingError(
+      ret,
+      test.providerOutput == null
+        ? 'Required external trace is unavailable. Check the trace provider and retry without caching.'
+        : 'Required external trace is unavailable. Remove providerOutput and retry without caching.',
+    );
+    return;
+  }
   const traceId = getTraceId(traceContext);
   if (
     traceId &&
@@ -1135,7 +1163,6 @@ async function gradeRunEvalResponse({
 
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
-    ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
       { abortSignal: deferredGradingAbortSignal, providerCallQueue, rateLimitRegistry },
       () =>
@@ -1173,12 +1200,11 @@ async function gradeRunEvalResponse({
     );
     applyGradingResult(ret, checkResult);
   } catch (error) {
-    if (!isGradingAbort(error, abortSignal)) {
+    if (!(error instanceof MissingRequiredTraceError) && !isGradingAbort(error, abortSignal)) {
       throw error;
     }
     applyGradingError(ret, error, abortSignal);
   }
-  ret.response = processedResponse;
 }
 
 async function transformRunEvalResponse({
@@ -1372,7 +1398,8 @@ export async function runEvalInternal(
       vars: state.vars,
     });
     setup = rendered.setup;
-    if (!test.providerOutput) {
+    const hasProviderOutput = test.providerOutput != null;
+    if (!hasProviderOutput) {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
       workspace = await createAgentWorkspaceForConfig(
         { ...activeProvider.config, ...rendered.setup.prompt.config },
@@ -1382,7 +1409,7 @@ export async function runEvalInternal(
     }
     const stepWorkspace = workspace;
 
-    traceContext = test.providerOutput
+    traceContext = hasProviderOutput
       ? null
       : await generateTraceContextIfNeeded(
           test,
@@ -1478,6 +1505,7 @@ export async function runEvalInternal(
             deferGrading,
             evalId,
             latencyMs,
+            missingRequiredTrace: providerCall.missingRequiredTrace,
             prompt,
             promptIdx: promptIndex,
             provider,

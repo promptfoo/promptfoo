@@ -98,6 +98,10 @@ export function assertionFromString(expected: string): Assertion {
     const fullType: AssertionType = notPrefix ? `not-${type}` : type;
     const threshold = parseFiniteNumber(thresholdStr);
 
+    if (type === 'trajectory:tool-set' && value?.trimStart().startsWith('[')) {
+      return { type: fullType, value: JSON.parse(value) };
+    }
+
     if (
       type === 'contains-all' ||
       type === 'contains-any' ||

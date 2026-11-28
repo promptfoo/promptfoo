@@ -100,6 +100,7 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
+import { getToolSetEvidenceError, handleTrajectoryToolSet } from './trajectoryToolSet';
 import {
   coerceString,
   getFinalTest,
@@ -141,38 +142,54 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
 ]);
 
-const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
-  'javascript',
-  'python',
-  'ruby',
-  'trace-error-spans',
-  'trace-span-count',
-  'trace-span-duration',
-  'trajectory:goal-success',
-  'trajectory:step-count',
-  'trajectory:tool-args-match',
-  'trajectory:tool-sequence',
-  'trajectory:tool-used',
-]);
+const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
+
+function isTraceAssertionType(type: string): boolean {
+  return (
+    type.startsWith('trace-') ||
+    type.startsWith('trajectory:') ||
+    type.startsWith('promptfoo:redteam:coding-agent:')
+  );
+}
+
+export class MissingRequiredTraceError extends Error {}
+
+function traceEvidenceError(
+  baseType: string,
+  trace: { spans?: unknown } | null | undefined,
+  cached?: boolean,
+): string | undefined {
+  if (baseType === 'trajectory:tool-set') {
+    return getToolSetEvidenceError(trace?.spans, cached);
+  }
+  if (!trace && (baseType.startsWith('trace-') || baseType.startsWith('trajectory:'))) {
+    return `No trace data available for ${baseType} assertion`;
+  }
+  return undefined;
+}
+
+export function assertionRequiresTrace(assertion: AssertionOrSet): boolean {
+  if (assertion.weight === 0) {
+    return false;
+  }
+  return assertion.type === 'assert-set'
+    ? assertion.assert.some(assertionRequiresTrace)
+    : isTraceAssertionType(getAssertionBaseType(assertion));
+}
 
 export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
   if (assertion.type === 'assert-set') {
     return assertion.assert.some(assertionUsesTrace);
   }
-
-  return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
+  const type = getAssertionBaseType(assertion);
+  return SCRIPT_RESULT_ASSERTIONS.has(type) || isTraceAssertionType(type);
 }
 
 function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
-  if (assertionUsesTrace(assertion)) {
-    return true;
-  }
-
   if (assertion.type === 'assert-set') {
     return assertion.assert.some(assertionMayNeedTraceContext);
   }
-
-  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
+  if (assertionUsesTrace(assertion)) {
     return true;
   }
 
@@ -318,6 +335,7 @@ const ASSERTION_HANDLERS: Record<
   'trajectory:tool-args-match': handleTrajectoryToolArgsMatch,
   'trajectory:step-count': handleTrajectoryStepCount,
   'trajectory:tool-sequence': handleTrajectoryToolSequence,
+  'trajectory:tool-set': handleTrajectoryToolSet,
   'trajectory:tool-used': handleTrajectoryToolUsed,
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
@@ -492,8 +510,13 @@ async function runAssertionInternal({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
-  const scriptFailure = (reason: string): GradingResult =>
+  const failure = (reason: string): GradingResult =>
     applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
+  const baseType = getAssertionBaseType(assertion);
+  const evidenceError = traceEvidenceError(baseType, context.trace, providerResponse.cached);
+  if (evidenceError) {
+    return failure(evidenceError);
+  }
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -515,7 +538,7 @@ async function runAssertionInternal({
         try {
           valueFromScript = await assertionFunction(output, context);
         } catch (error) {
-          return scriptFailure(
+          return failure(
             `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
           );
         }
@@ -532,7 +555,7 @@ async function runAssertionInternal({
           );
           logger.debug(`Script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return scriptFailure((error as Error).message);
+          return failure((error as Error).message);
         }
       } else {
         renderedValue = processFileReference(renderedValue);
@@ -549,7 +572,7 @@ async function runAssertionInternal({
       try {
         valueFromScript = await Promise.resolve(requiredModule(output, context));
       } catch (error) {
-        return scriptFailure(
+        return failure(
           `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
         );
       }
@@ -557,7 +580,11 @@ async function runAssertionInternal({
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
-  } else if (renderedValue && Array.isArray(renderedValue)) {
+  }
+  if (
+    Array.isArray(renderedValue) &&
+    (Array.isArray(assertion.value) || baseType === 'trajectory:tool-set')
+  ) {
     // Process each element in the array
     renderedValue = renderedValue.map((v) => {
       if (typeof v === 'string') {
@@ -573,9 +600,6 @@ async function runAssertionInternal({
   // Centralized script output resolution
   // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
   // All other types should use the script output as the comparison value
-  const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
-  const baseType = getAssertionBaseType(assertion);
-
   if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
     // Validate the script result type - only javascript/python/ruby can return functions
     if (typeof valueFromScript === 'function') {
@@ -820,6 +844,21 @@ export async function runAssertions({
     }
   }
 
+  // Missing evidence is an error even when other scores would meet the threshold.
+  for (const { assertion, assertResult } of asserts) {
+    if (assertion.weight === 0 || assertResult.parentAssertionSet?.assertionSet.weight === 0) {
+      continue;
+    }
+    const error = traceEvidenceError(
+      getAssertionBaseType(assertion),
+      preloadedTraceData,
+      providerResponse.cached,
+    );
+    if (error) {
+      throw new MissingRequiredTraceError(error);
+    }
+  }
+
   // Serialize when the grouping queue is active: concurrent dispatch can
   // reorder provider enqueues and split same-judge groups.
   // Read at call time: --env-file and the config's `env:` block are applied after this module is imported.
@@ -899,7 +938,7 @@ export async function runAssertions({
 
     mainAssertResult.addResult({
       index,
-      result,
+      result: applyAssertionWeight(result, weight),
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
     });

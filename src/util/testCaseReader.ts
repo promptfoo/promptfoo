@@ -590,7 +590,7 @@ function validateTestCase(testCase: TestCase): void {
     !testCase.options &&
     !testCase.metadata &&
     !testCase.provider &&
-    !testCase.providerOutput &&
+    testCase.providerOutput == null &&
     !isDescriptionOnly &&
     typeof testCase.threshold !== 'number'
   ) {
