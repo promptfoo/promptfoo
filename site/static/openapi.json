@@ -826,6 +826,47 @@
         }
       }
     },
+    "/api/configs/eval/default/draft": {
+      "get": {
+        "operationId": "getDefaultEvalDraft",
+        "tags": ["Configs"],
+        "summary": "Get the default eval draft from the server working directory",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "config": { "type": ["object", "null"], "additionalProperties": {} }
+                  },
+                  "required": ["config"]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/configs/{type}": {
       "get": {
         "operationId": "listConfigsByType",

@@ -87,6 +87,29 @@ describe('EvaluateTestSuiteCreator', () => {
     useStore.getState().reset();
   });
 
+  it('loads the server default when there is no saved draft', async () => {
+    useStore.persist.clearStorage();
+    vi.mocked(callApi)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ hasCustomConfig: false })))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ config: { providers: ['echo'], prompts: ['Hi'], tests: [{}] } }),
+        ),
+      );
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(await screen.findByText('Ready to run')).toBeInTheDocument();
+  });
+
+  it('keeps a saved draft, including an explicitly empty draft', async () => {
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(await screen.findByText('0 of 3 required steps complete')).toBeInTheDocument();
+    expect(callApi).toHaveBeenCalledWith('/providers/config-status');
+    expect(callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('should open the reset confirmation dialog when the Reset button is clicked', async () => {
     render(<EvaluateTestSuiteCreator />);
     const resetButton = screen.getByRole('button', { name: 'Reset' });

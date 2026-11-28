@@ -797,6 +797,7 @@ export function sanitizeConfigForOutput(
     shouldStripTestVars?: boolean;
     shouldStripMetadata?: boolean;
     shouldStripResponseOutput?: boolean;
+    preserveDraftCredentialReferences?: boolean;
   } = {},
 ): Partial<UnifiedConfig> {
   const safe = sanitizeTracingConfigForPersistence(config);
@@ -823,6 +824,9 @@ export function sanitizeConfigForOutput(
   const sanitized = sanitizeObject(outputConfig, {
     context: 'output config',
     sanitizeUrls: true,
+    draftCredentialEnv: options.preserveDraftCredentialReferences
+      ? collectDraftCredentialEnv(outputConfig)
+      : undefined,
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as Partial<UnifiedConfig>;
@@ -1352,6 +1356,48 @@ export function sanitizeUrlEncodedString(value: string): string {
   return changed ? result : value;
 }
 
+const DRAFT_CREDENTIAL_SELECTORS = new Set([
+  'apikeyenvar',
+  'apibearertokenenvar',
+  'cfaigtokenenvar',
+]);
+
+function isCredentialEnvSelector(key: string, value: unknown): value is string {
+  return (
+    DRAFT_CREDENTIAL_SELECTORS.has(normalizeFieldName(key)) &&
+    typeof value === 'string' &&
+    /^[A-Za-z_][A-Za-z0-9_]*$/.test(value) &&
+    !looksLikeSecret(value)
+  );
+}
+
+function collectDraftCredentialEnv(config: unknown): ReadonlySet<string> {
+  const names = new Set<string>();
+  const seen = new WeakSet<object>();
+  const pending = [config];
+  while (pending.length) {
+    const value = pending.pop();
+    if (!value || typeof value !== 'object' || seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    for (const [key, child] of Object.entries(value)) {
+      if (isCredentialEnvSelector(key, child)) {
+        names.add(child.toUpperCase());
+      }
+      if (isSafeTracingCredentialTemplate(child)) {
+        const match = /\{\{\s*env(?:\.([A-Za-z_]\w*)|\[['"]([A-Za-z_]\w*)['"]\])/i.exec(child);
+        const name = match?.[1] ?? match?.[2];
+        if (name) {
+          names.add(name.toUpperCase());
+        }
+      }
+      pending.push(child);
+    }
+  }
+  return names;
+}
+
 /**
  * Sanitize plain object fields
  */
@@ -1361,6 +1407,7 @@ function sanitizePlainObject(
   maxDepth: number,
   sanitizeUrls: boolean,
   isEnvMap: boolean,
+  draftCredentialEnv?: ReadonlySet<string>,
 ): any {
   const sanitized: any = {};
   let keySuffix = 0;
@@ -1374,8 +1421,24 @@ function sanitizePlainObject(
     ) {
       key = `${redactedKey}#${++keySuffix}`;
     }
-    if (isSecretKey(key)) {
-      sanitized[key] = REDACTED;
+    if (
+      draftCredentialEnv &&
+      isEnvMap &&
+      (isSecretKey(key) || draftCredentialEnv.has(key.toUpperCase()))
+    ) {
+      continue;
+    }
+    if (draftCredentialEnv && !isEnvMap && isCredentialEnvSelector(key, value)) {
+      sanitized[key] = value;
+    } else if (
+      isSecretKey(key) ||
+      (draftCredentialEnv && DRAFT_CREDENTIAL_SELECTORS.has(normalizeFieldName(key)))
+    ) {
+      if (draftCredentialEnv && isSafeTracingCredentialTemplate(value)) {
+        sanitized[key] = value;
+      } else if (!draftCredentialEnv) {
+        sanitized[key] = REDACTED;
+      }
     } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
       sanitized[key] = Object.fromEntries(
         Object.entries(value).map(([name, item]) => [
@@ -1422,6 +1485,7 @@ function sanitizePlainObject(
         maxDepth,
         sanitizeUrls,
         key === 'env',
+        draftCredentialEnv,
       );
       sanitized[key] =
         typeof sanitizedValue === 'string' &&
@@ -1443,6 +1507,7 @@ function recursiveSanitize(
   maxDepth = MAX_DEPTH,
   sanitizeUrls = false,
   isEnvMap = false,
+  draftCredentialEnv?: ReadonlySet<string>,
 ): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
@@ -1467,7 +1532,9 @@ function recursiveSanitize(
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth, sanitizeUrls));
+    return obj.map((item) =>
+      recursiveSanitize(item, depth + 1, maxDepth, sanitizeUrls, false, draftCredentialEnv),
+    );
   }
 
   // Handle class instances
@@ -1477,7 +1544,7 @@ function recursiveSanitize(
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth, sanitizeUrls, isEnvMap);
+  return sanitizePlainObject(obj, depth, maxDepth, sanitizeUrls, isEnvMap, draftCredentialEnv);
 }
 
 /**
@@ -1494,6 +1561,7 @@ export function sanitizeObject(
     maxDepth?: number;
     // Config output and provider configs can carry credentials in any URL string or map key.
     sanitizeUrls?: boolean;
+    draftCredentialEnv?: ReadonlySet<string>;
   } = {},
 ): any {
   const {
@@ -1501,6 +1569,7 @@ export function sanitizeObject(
     throwOnError = false,
     maxDepth = MAX_DEPTH,
     sanitizeUrls = false,
+    draftCredentialEnv,
   } = options;
 
   try {
@@ -1543,7 +1612,7 @@ export function sanitizeObject(
     );
 
     // Apply recursive sanitization with depth limiting
-    return recursiveSanitize(safeObj, 0, maxDepth, sanitizeUrls);
+    return recursiveSanitize(safeObj, 0, maxDepth, sanitizeUrls, false, draftCredentialEnv);
   } catch (error) {
     if (throwOnError) {
       throw error;
