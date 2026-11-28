@@ -135,6 +135,90 @@ describe('remoteMaterialization', () => {
     });
   });
 
+  it('preserves only text fallback vars when xlsx remote materialized vars are missing', () => {
+    const inputs = {
+      question: {
+        description: 'Question to answer',
+        type: 'text',
+      },
+      spreadsheet: {
+        description: 'Uploaded spreadsheet',
+        type: 'xlsx',
+      },
+    } satisfies Inputs;
+
+    const result = buildRemoteMaterializedInputVariables(
+      {
+        inputMaterialization: {
+          spreadsheet: {
+            injectionPlacement: 'formula',
+            targetCell: 'C6',
+            targetSheet: 'Review',
+          },
+        },
+      },
+      {
+        question: 'fallback question',
+        spreadsheet: 'fallback spreadsheet',
+      },
+      inputs,
+    );
+
+    expect(result.vars).toEqual({
+      question: 'fallback question',
+    });
+    expect(result.metadata).toEqual({
+      spreadsheet: {
+        injectionPlacement: 'formula',
+        targetCell: 'C6',
+        targetSheet: 'Review',
+      },
+    });
+  });
+
+  it('uses server materialized xlsx vars and metadata when provided', () => {
+    const inputs = {
+      spreadsheet: {
+        description: 'Uploaded spreadsheet',
+        type: 'xlsx',
+      },
+    } satisfies Inputs;
+
+    const result = buildRemoteMaterializedInputVariables(
+      {
+        inputMaterialization: {
+          spreadsheet: {
+            injectionPlacement: 'hyperlink',
+            targetCell: 'B6',
+            targetSheet: 'Sheet1',
+          },
+        },
+        materializedVars: {
+          spreadsheet:
+            'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,UEs=',
+        },
+      },
+      {
+        spreadsheet: 'fallback spreadsheet',
+      },
+      inputs,
+    );
+
+    expect(result).toEqual({
+      metadata: {
+        spreadsheet: {
+          injectionPlacement: 'hyperlink',
+          targetCell: 'B6',
+          targetSheet: 'Sheet1',
+        },
+      },
+      vars: {
+        spreadsheet:
+          'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,UEs=',
+      },
+    });
+  });
+
   it('filters fallback vars to declared input keys when remote materialized vars are missing', () => {
     const inputs = {
       document: {

@@ -595,6 +595,13 @@ describe('shared input definitions', () => {
         config: { injectionPlacements: ['comment', 'footnote'] },
       },
     },
+    {
+      prompt: {
+        type: 'xlsx',
+        description: 'question',
+        config: { injectionPlacements: ['cell'], xlsx: { cells: { cell: 'b4' } } },
+      },
+    },
   ])('accepts canonical inputs in both contracts: %j', (input) => {
     expect(InputsSchema.safeParse(input).success).toBe(true);
     expect(InputsInputSchema.parse(input)).toEqual(input);
@@ -607,6 +614,14 @@ describe('shared input definitions', () => {
     { prompt: { type: 'audio', description: 'question' } },
     { prompt: { description: 'question', config: { inputPurpose: '' } } },
     { prompt: { description: 'question', config: { injectionPlacements: [] } } },
+    { prompt: { description: 'question', config: { xlsx: {} } } },
+    {
+      prompt: {
+        type: 'xlsx',
+        description: 'question',
+        config: { xlsx: { sheetName: 'Invalid/Sheet' } },
+      },
+    },
     {
       prompt: {
         type: 'image',

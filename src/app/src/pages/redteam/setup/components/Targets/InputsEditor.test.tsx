@@ -150,6 +150,64 @@ describe('InputsEditor', () => {
       });
     });
 
+    it('should allow selecting XLSX spreadsheet variables', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+
+      renderWithProviders(<ControlledInputsEditor {...defaultProps} onChange={onChange} compact />);
+
+      await user.click(screen.getByRole('button', { name: /add variable/i }));
+
+      await user.click(screen.getByRole('combobox'));
+      await user.click(await screen.findByRole('option', { name: 'XLSX' }));
+
+      expect(onChange).toHaveBeenLastCalledWith({
+        variable: {
+          description: '',
+          type: 'xlsx',
+        },
+      });
+    });
+
+    it('should drop XLSX-only config when switching to a non-XLSX type', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+
+      renderWithProviders(
+        <ControlledInputsEditor
+          {...defaultProps}
+          initialInputs={{
+            spreadsheet: {
+              config: {
+                inputPurpose: 'A finance workbook',
+                xlsx: {
+                  cells: { cell: 'C6' },
+                  sheetName: 'Review',
+                },
+              },
+              description: 'Uploaded spreadsheet',
+              type: 'xlsx',
+            },
+          }}
+          onChange={onChange}
+          compact
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      await user.click(await screen.findByRole('option', { name: 'PDF' }));
+
+      expect(onChange).toHaveBeenLastCalledWith({
+        spreadsheet: {
+          config: {
+            inputPurpose: 'A finance workbook',
+          },
+          description: 'Uploaded spreadsheet',
+          type: 'pdf',
+        },
+      });
+    });
+
     it('should preserve structured text input config when editing descriptions', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();

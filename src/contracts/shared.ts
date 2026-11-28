@@ -47,7 +47,7 @@ export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 // Includes primitives (string, number, boolean), objects, and arrays
 export type VarValue = string | number | boolean | object | unknown[];
 
-export const InputTypeValues = ['text', 'pdf', 'docx', 'image'] as const;
+export const InputTypeValues = ['text', 'pdf', 'docx', 'xlsx', 'image'] as const;
 export const InputTypeSchema = z.enum(InputTypeValues);
 export type InputType = z.infer<typeof InputTypeSchema>;
 
@@ -61,18 +61,64 @@ export const DocxInjectionPlacementValues = [
 export const DocxInjectionPlacementSchema = z.enum(DocxInjectionPlacementValues);
 export type DocxInjectionPlacement = z.infer<typeof DocxInjectionPlacementSchema>;
 
+export const XlsxInjectionPlacementValues = [
+  'cell',
+  'formula',
+  'hyperlink',
+  'comment',
+  'hidden-sheet',
+] as const;
+export const XlsxInjectionPlacementSchema = z.enum(XlsxInjectionPlacementValues);
+export type XlsxInjectionPlacement = z.infer<typeof XlsxInjectionPlacementSchema>;
+
 export const DocumentMediaInjectionPlacementValues = ['body', 'header', 'footer'] as const;
 export const DocumentMediaInjectionPlacementSchema = z.enum(DocumentMediaInjectionPlacementValues);
+
+const XlsxCellReferenceSchema = z.string().regex(/^[A-Za-z]{1,3}[1-9][0-9]{0,6}$/, {
+  error: 'XLSX cell references must be single A1-style cells such as B4',
+});
+
+const XlsxSheetNameSchema = z
+  .string()
+  .min(1, {
+    error: 'XLSX sheet names must be non-empty strings',
+  })
+  .max(31, {
+    error: 'XLSX sheet names must be 31 characters or fewer',
+  })
+  .regex(/^[^:\\/?*[\]]*$/, {
+    error: 'XLSX sheet names cannot contain : \\ / ? * [ or ]',
+  })
+  .regex(/^[^\s'](?:[\s\S]*[^\s'])?$(?![\s\S])/, {
+    error: 'XLSX sheet names cannot start or end with spaces or apostrophes',
+  });
+
+export const XlsxInputConfigSchema = z.object({
+  cells: z
+    .object({
+      cell: XlsxCellReferenceSchema.optional(),
+      comment: XlsxCellReferenceSchema.optional(),
+      formula: XlsxCellReferenceSchema.optional(),
+      hyperlink: XlsxCellReferenceSchema.optional(),
+      'hidden-sheet': XlsxCellReferenceSchema.optional(),
+    })
+    .strict()
+    .optional(),
+  hiddenSheetName: XlsxSheetNameSchema.optional(),
+  sheetName: XlsxSheetNameSchema.optional(),
+});
+export type XlsxInputConfig = z.infer<typeof XlsxInputConfigSchema>;
 
 // Exhaustive mapping keeps runtime validation and portable structural variants in sync.
 const InputPlacementSchemas = {
   text: z.string().min(1),
   pdf: DocumentMediaInjectionPlacementSchema,
   docx: DocxInjectionPlacementSchema,
+  xlsx: XlsxInjectionPlacementSchema,
   image: DocumentMediaInjectionPlacementSchema,
 } satisfies Record<InputType, z.ZodType<string>>;
 
-export const InputConfigSchema = z.object({
+const BaseInputConfigSchema = z.object({
   benign: z.boolean().optional(),
   inputPurpose: z
     .string()
@@ -84,6 +130,10 @@ export const InputConfigSchema = z.object({
     .array(z.string().min(1, { error: 'Injection placement must be a non-empty string' }))
     .min(1, { error: 'Injection placements must contain at least one placement' })
     .optional(),
+});
+
+export const InputConfigSchema = BaseInputConfigSchema.extend({
+  xlsx: XlsxInputConfigSchema.optional(),
 });
 export type InputConfig = z.infer<typeof InputConfigSchema>;
 
@@ -99,12 +149,20 @@ export const InputDefinitionObjectSchema = InputDefinitionFieldsSchema.superRefi
   const inputType = input.type ?? 'text';
   const injectionPlacements = input.config?.injectionPlacements ?? [];
 
+  if (inputType !== 'xlsx' && input.config?.xlsx) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['config', 'xlsx'],
+      message: 'XLSX config is only supported for XLSX inputs',
+    });
+  }
+
   if (inputType === 'text' || injectionPlacements.length === 0) {
     return;
   }
 
   const placementSchema = InputPlacementSchemas[inputType];
-  const placementValues = InputPlacementSchemas[inputType].options;
+  const placementValues = placementSchema.options;
   const invalidPlacements = injectionPlacements.filter(
     (placement) => !placementSchema.safeParse(placement).success,
   );
@@ -170,6 +228,7 @@ export function getInputType(input: InputDefinition): InputType {
 const NON_TEXT_INPUT_FORMAT_LABELS: Record<Exclude<InputType, 'text'>, string> = {
   pdf: 'PDF document',
   docx: 'DOCX document',
+  xlsx: 'XLSX spreadsheet',
   image: 'image',
 };
 
@@ -194,7 +253,8 @@ const InputVariableNameSchema = z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, {
 function documentInputSchema<T extends Exclude<InputType, 'text'>>(type: T) {
   return InputDefinitionFieldsSchema.strict().extend({
     type: z.literal(type),
-    config: InputConfigSchema.strict()
+    config: (type === 'xlsx' ? InputConfigSchema : BaseInputConfigSchema)
+      .strict()
       .extend({
         injectionPlacements: z.array(InputPlacementSchemas[type]).min(1).optional(),
       })
@@ -206,10 +266,11 @@ function documentInputSchema<T extends Exclude<InputType, 'text'>>(type: T) {
 const StructuralInputDefinitions = {
   text: InputDefinitionFieldsSchema.strict().extend({
     type: z.literal('text').optional(),
-    config: InputConfigSchema.strict().optional(),
+    config: BaseInputConfigSchema.strict().optional(),
   }),
   pdf: documentInputSchema('pdf'),
   docx: documentInputSchema('docx'),
+  xlsx: documentInputSchema('xlsx'),
   image: documentInputSchema('image'),
 } satisfies Record<InputType, z.ZodType>;
 
