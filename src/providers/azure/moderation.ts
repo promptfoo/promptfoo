@@ -6,11 +6,13 @@ import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
-import { getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from '../shared';
 import { AzureGenericProvider } from './generic';
 
 import type {
   ApiModerationProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
   ModerationFlag,
   ProviderModerationResponse,
 } from '../../types/index';
@@ -202,8 +204,14 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
   async callModerationApi(
     _userPrompt: string,
     assistantResponse: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderModerationResponse> {
-    await this.ensureInitialized();
+    const abortSignal = options?.abortSignal;
+    throwIfAborted(abortSignal);
+
+    await waitForPromiseWithAbort(this.ensureInitialized(), abortSignal);
+    throwIfAborted(abortSignal);
 
     const apiKey =
       this.configWithHeaders.apiKey || this.getContentSafetyApiKey() || this.getApiKeyOrThrow();
@@ -217,10 +225,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       );
     }
 
-    if (apiKey) {
-      const maskedKey = apiKey.substring(0, 4) + '...' + apiKey.substring(apiKey.length - 4);
-      logger.debug(`Using Azure Content Safety API key: ${maskedKey}`);
-    } else {
+    if (!apiKey) {
       logger.error('No Azure Content Safety API key found');
       return handleApiError(
         new Error(
@@ -229,17 +234,17 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       );
     }
 
-    const useCache = isCacheEnabled();
+    const cache = isCacheEnabled() ? getCache() : undefined;
     let cacheKey = '';
 
-    if (useCache) {
+    if (cache) {
       cacheKey = getModerationCacheKey(
         this.modelName,
         { ...this.configWithHeaders, endpoint: this.endpoint, apiVersion: this.apiVersion },
         assistantResponse,
       );
-      const cache = await getCache();
-      const cachedResponse = await cache.get(cacheKey);
+      const cachedResponse = await waitForPromiseWithAbort(cache.get(cacheKey), abortSignal);
+      throwIfAborted(abortSignal);
 
       if (cachedResponse) {
         logger.debug('Returning cached Azure moderation response');
@@ -266,20 +271,21 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
         ...(this.configWithHeaders.passthrough || {}),
       };
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), getRequestTimeoutMs());
+      const response = await fetchWithProxy(
+        url,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(getRequestTimeoutMs()),
+        },
+        abortSignal,
+      );
 
-      const response = await fetchWithProxy(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
+      throwIfAborted(abortSignal);
       if (!response.ok) {
         const errorText = await response.text();
+        throwIfAborted(abortSignal);
         logger.error(`Azure Content Safety API error: ${response.status} ${response.statusText}`);
         logger.error('Azure Content Safety API error details', {
           status: response.status,
@@ -302,15 +308,17 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       }
 
       const data = await response.json();
+      throwIfAborted(abortSignal);
       const result = parseAzureModerationResponse(data);
 
-      if (useCache && cacheKey) {
-        const cache = await getCache();
-        await cache.set(cacheKey, result);
+      if (cache) {
+        await waitForPromiseWithAbort(cache.set(cacheKey, result), abortSignal);
+        throwIfAborted(abortSignal);
       }
 
       return result;
     } catch (err) {
+      throwIfAborted(abortSignal);
       return handleApiError(err);
     }
   }

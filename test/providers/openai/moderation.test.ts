@@ -28,7 +28,13 @@ const createImageInput = () => ({
   image_url: { url: 'https://example.com/image.jpg' },
 });
 
-vi.mock('../../../src/cache');
+vi.mock('../../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+  getCache: vi.fn(),
+  getScopedCacheKey: vi.fn(),
+  isCacheEnabled: vi.fn(),
+}));
 vi.mock('../../../src/logger');
 
 describe('OpenAiModerationProvider', () => {
@@ -677,6 +683,70 @@ describe('OpenAiModerationProvider', () => {
       }
 
       await expect(Promise.all([first, second])).resolves.toEqual([{ flags: [] }, { flags: [] }]);
+    });
+  });
+
+  describe('Cancellation', () => {
+    it('forwards the abort signal to the moderation request', async () => {
+      const provider = createProvider();
+      const abortSignal = new AbortController().signal;
+
+      await provider.callModerationApi('user', 'assistant', undefined, { abortSignal });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ signal: abortSignal }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+
+    it('rethrows aborts instead of reporting them as moderation errors', async () => {
+      const provider = createProvider();
+      const controller = new AbortController();
+      const abortError = new Error('Evaluation timed out');
+      abortError.name = 'AbortError';
+      vi.mocked(fetchWithCache).mockImplementationOnce(async () => {
+        controller.abort(abortError);
+        throw abortError;
+      });
+
+      await expect(
+        provider.callModerationApi('user', 'assistant', undefined, {
+          abortSignal: controller.signal,
+        }),
+      ).rejects.toBe(abortError);
+    });
+
+    it('skips the request when the signal is already aborted', async () => {
+      const provider = createProvider();
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        provider.callModerationApi('user', 'assistant', undefined, {
+          abortSignal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('keeps an identical request from another caller alive after cancellation', async () => {
+      const provider = createProvider();
+      const controller = new AbortController();
+      const cancelled = provider.callModerationApi('user', 'same text', undefined, {
+        abortSignal: controller.signal,
+      });
+      const survivor = provider.callModerationApi('user', 'same text', undefined, {
+        abortSignal: new AbortController().signal,
+      });
+
+      controller.abort();
+      await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' });
+      await expect(survivor).resolves.toEqual({ flags: [] });
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
     });
   });
 
