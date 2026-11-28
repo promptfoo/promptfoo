@@ -1112,24 +1112,20 @@ describe('HydraProvider', () => {
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
     });
 
-    it('should continue when target provider returns error', async () => {
+    it('should stop immediately and surface the error when target provider errors on the first turn', async () => {
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
       });
 
-      mockTargetProvider.callApi
-        .mockResolvedValueOnce({
-          error: 'Target error',
-          output: '',
-        })
-        .mockResolvedValueOnce({
-          output: 'Valid response',
-        });
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        error: 'Target error: 502 Bad Gateway',
+        output: '',
+      });
 
       const provider = new HydraProvider({
         injectVar: 'input',
-        maxTurns: 2,
+        maxTurns: 5,
       });
 
       const context: CallApiContextParams = {
@@ -1144,11 +1140,71 @@ describe('HydraProvider', () => {
 
       const result = await provider.callApi('', context);
 
-      // First turn has error (doesn't count), second turn succeeds (counts as turn 1)
-      // But since we continue after error, we actually make 2 turns total
-      expect(result.metadata?.hydraRoundsCompleted).toBeGreaterThanOrEqual(1);
-      // Agent is called for each turn + learning update
-      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(3);
+      // The attack must stop at the errored turn rather than continuing to turn 2.
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(result.error).toBe('Target error: 502 Bad Gateway');
+      expect(result.metadata?.stopReason).toBe('Target error');
+      // The dispatched target request counts as an attempted round.
+      expect(result.metadata?.hydraRoundsCompleted).toBe(1);
+      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(1);
+    });
+
+    it('should stop immediately and surface the error when target provider errors mid-run', async () => {
+      mockGetGraderById.mockReturnValue({
+        getResult: vi.fn().mockResolvedValue({
+          grade: {
+            pass: true,
+            score: 1,
+            reason: 'defended',
+            tokensUsed: { total: 7, numRequests: 1 },
+          },
+        }),
+      });
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'Valid response',
+        })
+        .mockResolvedValueOnce({
+          error: 'Target error: 502 Bad Gateway',
+          output: '',
+        })
+        .mockResolvedValueOnce({
+          output: 'This should never be sent',
+        });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 5,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      // Only the successful first turn and the errored second turn should reach the target.
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.error).toBe('Target error: 502 Bad Gateway');
+      expect(result.metadata?.stopReason).toBe('Target error');
+      // Both dispatched requests count, while history only records answered turns.
+      expect(result.metadata?.hydraRoundsCompleted).toBe(2);
+      // The successful first turn is recorded; the errored second turn is not.
+      expect(result.metadata?.redteamHistory).toHaveLength(1);
+      expect(result.metadata?.storedGraderResult).toBeUndefined();
+      expect(result.tokenUsage?.assertions).toMatchObject({ total: 7, numRequests: 1 });
+      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
     });
 
     it('should stop when target ends conversation', async () => {
