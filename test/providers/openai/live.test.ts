@@ -1005,7 +1005,7 @@ describe('OpenAiLiveProvider', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('prices dated gpt-live-1 snapshots at the default voice rate', async () => {
+  it('prices published GPT-Live models and dated snapshots at the default voice rate', async () => {
     const capture = async (model: string) => {
       const result = new OpenAiLiveProvider(model, {
         config: {
@@ -1027,13 +1027,17 @@ describe('OpenAiLiveProvider', () => {
       return response;
     };
 
-    const dated = await capture('gpt-live-1-2026-09-01');
-    expect(dated.metadata?.voiceCost).toBeCloseTo(0.025);
-    expect(dated.cost).toBeCloseTo(0.025);
+    for (const model of ['gpt-live-1.1', 'gpt-live-1-9999-99-99']) {
+      const priced = await capture(model);
+      expect(priced.metadata?.voiceCost).toBeCloseTo(0.025);
+      expect(priced.cost).toBeCloseTo(0.025);
+    }
     // Other model names are priced only with costPerMinute.
-    const other = await capture('gpt-live-1-preview');
-    expect(other.metadata?.voiceCost).toBeUndefined();
-    expect(other.cost).toBeUndefined();
+    for (const model of ['gpt-live-1-preview', 'gpt-live-9.99-fakemodel']) {
+      const other = await capture(model);
+      expect(other.metadata?.voiceCost).toBeUndefined();
+      expect(other.cost).toBeUndefined();
+    }
   });
 
   it.each([301, 1e300, Number.MAX_VALUE])(

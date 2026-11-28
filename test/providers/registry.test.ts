@@ -512,7 +512,9 @@ describe('Provider Registry', () => {
     ['openai:live:gpt-live-1', 'gpt-live-1'],
     ['openai:live', 'gpt-live-1'],
     ['openai:gpt-live-1', 'gpt-live-1'],
-    ['openai:gpt-live-1-2026-09-01', 'gpt-live-1-2026-09-01'],
+    ['openai:gpt-live-1-9999-99-99', 'gpt-live-1-9999-99-99'],
+    ['openai:live:gpt-live-1.1', 'gpt-live-1.1'],
+    ['openai:gpt-live-1.1', 'gpt-live-1.1'],
   ])(
     'routes %s to the Live endpoint with scoped configuration',
     async (providerPath, modelName) => {
@@ -588,7 +590,10 @@ describe('Provider Registry', () => {
     'openai:chat:gpt-live-1',
     'openai:chat:gpt-live-1-2026-09-01',
     'openai:responses:gpt-live-1',
-    'openai:responses:gpt-live-1-2026-09-01',
+    'openai:responses:gpt-live-1-9999-99-99',
+    'openai:realtime:gpt-live-1.1',
+    'openai:chat:gpt-live-1.1',
+    'openai:responses:gpt-live-1.1',
     'openai:completion:gpt-live-1',
     'openai:embedding:gpt-live-1',
     'openai:tts:gpt-live-1',

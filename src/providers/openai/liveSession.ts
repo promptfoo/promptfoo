@@ -7,7 +7,11 @@ import { isSecretField, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { convertG711ToPcm16, convertPcm16ToWav } from './audio';
 import { calculateOpenAIUsageCost } from './billing';
-import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from './util';
+import {
+  getOpenAICompletionTokenDetails,
+  isGptLiveConversationalModel,
+  resolveMaxToolIterations,
+} from './util';
 import type OpenAI from 'openai';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
@@ -1130,10 +1134,11 @@ export class LiveSession {
     if (!this.finalized) {
       this.setError('GPT-Live final session usage is unconfirmed.');
     }
-    // gpt-live-1 and its dated snapshots share the published $0.05/minute rate.
+    // gpt-live-1, gpt-live-1.1, and their dated snapshots share the published $0.05/minute
+    // active rate. The lower standby rate applies only to paused WebRTC sessions.
     const rate =
       this.options.config.costPerMinute ??
-      (/^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(this.options.model) ? 0.05 : undefined);
+      (isGptLiveConversationalModel(this.options.model) ? 0.05 : undefined);
     let voiceCost =
       this.voiceSeconds !== undefined && rate !== undefined
         ? (this.voiceSeconds / 60) * rate
