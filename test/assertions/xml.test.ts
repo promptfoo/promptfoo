@@ -318,10 +318,55 @@ describe('validateXml', () => {
 });
 
 describe('containsXml', () => {
+  it('associates a declaration or external DOCTYPE with its own document only', () => {
+    const xml11 = '<?xml version="1.1"?>\n<!-- source --><root>&#x1;</root>';
+    const external = '<!DOCTYPE html SYSTEM "entities.dtd"><html>&nbsp;</html>';
+    expect(containsXml(`Prose ${xml11} then ${external}`, ['root', 'html']).isValid).toBe(true);
+    expect(containsXml(`${external} and <root>&nbsp;</root>`, ['root']).isValid).toBe(false);
+    expect(containsXml('<!DOCTYPE root [<!ENTITY text "data">]><root/>').isValid).toBe(false);
+  });
+
   it('should return true when valid XML is present', () => {
     const input = 'Some text <root><child>Content</child></root> more text';
     const result = containsXml(input);
     expect(result.isValid).toBe(true);
+  });
+
+  it.each([
+    '<root attr=unquoted>value</root>',
+    '<root enabled/>',
+    '<root attr="1" attr="2"/>',
+    '<root><!-- bad -- comment --></root>',
+    '<root>&undefined;</root>',
+    '<root>\u0001</root>',
+    '<p:root/>',
+    '<root xmlns:xml="wrong"/>',
+    '<root xmlns:a="urn:x" xmlns:b="urn:x" a:id="1" b:id="2"/>',
+  ])('should reject malformed XML fragments: %s', (xml) => {
+    expect(containsXml(`Text ${xml} more`)).toEqual({
+      isValid: false,
+      reason: 'No valid XML content found matching the requirements',
+    });
+  });
+
+  it('should not accept required elements from malformed fragments', () => {
+    const input = '<valid/> text <root attr=unquoted><child>Content</child></root>';
+
+    expect(containsXml(input, ['valid', 'root.child']).isValid).toBe(false);
+    expect(containsXml(input, ['valid']).isValid).toBe(true);
+  });
+
+  it('should find valid fragments after malformed ones', () => {
+    const input = '<root attr=unquoted>value</root> text <valid><child/></valid>';
+
+    expect(containsXml(input, ['valid.child']).isValid).toBe(true);
+  });
+
+  it('should satisfy requirements from valid fragments around malformed XML', () => {
+    const input = '<valid1/> <bad attr=unquoted/> <valid2/>';
+
+    expect(containsXml(input, ['valid1', 'valid2']).isValid).toBe(true);
+    expect(containsXml(input, ['valid1', 'bad', 'valid2']).isValid).toBe(false);
   });
 
   it('should return false when no XML is present', () => {
@@ -363,6 +408,22 @@ describe('containsXml', () => {
     const input = '<xml1>content1</xml1> more text <xml2>content2</xml2>';
     const result = containsXml(input, ['xml1', 'xml2']);
     expect(result.isValid).toBe(true);
+  });
+
+  it('should allow non-XML text between well-formed required fragments', () => {
+    const input = '<xml1>content1</xml1> prose & more text <xml2>content2</xml2>';
+
+    expect(containsXml(input, ['xml1', 'xml2']).isValid).toBe(true);
+  });
+
+  it('should validate namespace bindings within each fragment', () => {
+    const input =
+      '<first xmlns:p="urn:first"><p:child/></first> text <second xmlns:p="urn:second"><p:child/></second>';
+
+    expect(containsXml(input, ['first.p:child', 'second.p:child']).isValid).toBe(true);
+    expect(containsXml('<first xmlns:p="urn:first"/> text <p:second/>', ['p:second']).isValid).toBe(
+      false,
+    );
   });
 
   it('should find valid XML after earlier unclosed tags', () => {

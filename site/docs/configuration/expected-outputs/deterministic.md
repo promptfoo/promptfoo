@@ -522,6 +522,8 @@ Note: The `is-xml` assertion requires the entire output to be a supported well-f
 
 The `contains-xml` assertion checks if the LLM output contains valid XML content, even if it's not the entire output. It uses the same `value.requiredElements` format as `is-xml`; required element paths are checked from the extracted XML fragment's root.
 
+Each extracted fragment must be well-formed XML: unquoted or duplicate attributes, undeclared entities, and unbound namespace prefixes are rejected. Required elements can span multiple valid fragments separated by non-XML text.
+
 ```xml
 Sure, here is your xml:
 <root><child>Content</child></root>
