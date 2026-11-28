@@ -22,6 +22,10 @@ on:
         description: 'The release tag name (e.g., 0.120.0)'
         required: true
         type: string
+      publish_aliases:
+        description: 'Move latest and major.minor for a new stable release'
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       tag_name:
@@ -58,12 +62,13 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name || '' }}
-  SOURCE_REF: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
+  RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name || (github.event_name == 'workflow_dispatch' && github.ref_type == 'tag' && github.ref_name) || '' }}
+  SOURCE_REF: ${{ inputs.tag_name && format('refs/tags/{0}', inputs.tag_name) || github.sha }}
   BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
   BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
-  # Fallback release paths build a specific tag outside release-please.yml.
-  IS_RELEASE_FALLBACK: ${{ (github.event_name == 'workflow_dispatch' && inputs.tag_name != '') || github.event_name == 'release' }}
+  # A manually started release-please run also sees workflow_dispatch. Only
+  # the reusable workflow caller can opt into moving release aliases.
+  IS_RELEASE_FALLBACK: ${{ !inputs.publish_aliases && (inputs.tag_name != '' || github.ref_type == 'tag' || github.event_name == 'release') }}
 
 permissions: &read-only-permissions
   contents: read
@@ -76,6 +81,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: *read-only-permissions
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
 
     steps:
       - &validate-release-tag
@@ -295,7 +302,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ env.SOURCE_REF }}
+          ref: ${{ needs.test.outputs.source_sha }}
+          persist-credentials: false
 
       # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
       - *resolve-source-commit
@@ -310,8 +318,10 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # The generated version label is the trigger's branch, even for a release build.
           labels: |
             org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
+            org.opencontainers.image.version=${{ env.RELEASE_TAG || github.ref_name }}
 
       - &log-in-to-the-container-registry
         name: Log in to the Container registry
@@ -379,15 +389,17 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Fallback release builds publish immutable version tags only so moving aliases stay on normal release paths.
+          # Disable the metadata action's implicit latest tag for semver rules.
+          flavor: |
+            latest=false
+          # Other branches get only a commit tag, so branch names cannot replace
+          # releases, latest or caches. Stable release-please builds move the aliases.
           tags: |
-            type=ref,event=branch,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
-            type=ref,event=pr,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
-            type=sha,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
+            type=raw,value=main,enable=${{ env.RELEASE_TAG == '' && github.ref == 'refs/heads/main' }}
+            type=sha,enable=${{ env.RELEASE_TAG == '' }}
             type=raw,value=${{ env.RELEASE_TAG }},enable=${{ env.RELEASE_TAG != '' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && env.IS_RELEASE_FALLBACK != 'true' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.RELEASE_TAG }},enable=${{ github.ref == 'refs/heads/main' && env.RELEASE_TAG != '' && env.IS_RELEASE_FALLBACK != 'true' && !contains(env.RELEASE_TAG, '-') }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && env.RELEASE_TAG != '' && env.IS_RELEASE_FALLBACK != 'true' && !contains(env.RELEASE_TAG, '-') }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
