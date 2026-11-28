@@ -57,7 +57,12 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
-import { isFilterApplied, useResultsViewSettingsStore, useTableStore } from './store';
+import {
+  isFilterApplied,
+  type ResultsFilter,
+  useResultsViewSettingsStore,
+  useTableStore,
+} from './store';
 import TruncatedText from './TruncatedText';
 import { useHeaderCollapse } from './useHeaderCollapse';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -1195,6 +1200,22 @@ function PromptColumnHeader({
   );
 }
 
+/** A stable text for a list of filters, by which two lists can be told apart. */
+function serializeFilters(filters: ResultsFilter[]): string {
+  return JSON.stringify(
+    [...filters]
+      .sort((a, b) => a.sortIndex - b.sortIndex)
+      .map((f) => ({
+        type: f.type,
+        operator: f.operator,
+        value: f.value,
+        field: f.field,
+        logicOperator: f.logicOperator,
+        sortIndex: f.sortIndex,
+      })),
+  );
+}
+
 function isMetadataColumn(columnId: string): boolean {
   return (
     columnId.startsWith('Variable') ||
@@ -1619,6 +1640,7 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
+    activeEvalQuery,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds, renderMarkdown, stickyHeader, setStickyHeader } =
     useResultsViewSettingsStore();
@@ -1838,20 +1860,7 @@ function ResultsTable({
 
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
-    const appliedFilters = Object.values(filters.values)
-      .filter(isFilterApplied)
-      .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
-    // Create a stable string representation of applied filters
-    return JSON.stringify(
-      appliedFilters.map((f) => ({
-        type: f.type,
-        operator: f.operator,
-        value: f.value,
-        field: f.field,
-        logicOperator: f.logicOperator,
-        sortIndex: f.sortIndex, // Include sortIndex for complete representation
-      })),
-    );
+    return serializeFilters(Object.values(filters.values).filter(isFilterApplied));
   }, [filters.values]);
 
   const isFilteringActive =
@@ -1914,7 +1923,16 @@ function ResultsTable({
     // Data should already be loaded by Eval.tsx
     if (pagination.pageIndex === 0 && evalId !== previousEvalIdRef.current) {
       previousEvalIdRef.current = evalId;
-      return;
+      // Mode or URL filters can change before the initial request mounts this table.
+      const loadedView = activeEvalQuery?.evalId === evalId ? activeEvalQuery.options : undefined;
+      if (
+        !loadedView ||
+        (loadedView.filterMode === filterMode &&
+          loadedView.searchText === (debouncedSearchText ?? '') &&
+          serializeFilters(loadedView.filters) === appliedFiltersString)
+      ) {
+        return;
+      }
     }
 
     fetchEvalData(evalId, {
