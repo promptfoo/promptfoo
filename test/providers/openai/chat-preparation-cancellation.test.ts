@@ -45,7 +45,7 @@ describe('public Chat executable tool preparation', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  async function loadFixture(id: string) {
+  async function loadFixture(id: string, templated = false) {
     const file = path.join(directory, 'tools.js');
     await writeFile(
       file,
@@ -62,27 +62,34 @@ export async function get_tools() {
 `,
     );
     const fixture = await importModule(file);
+    const reference = `file://${file}:get_tools`;
+    const configuredTools = templated ? '{{ reference }}' : reference;
     provider = await loadApiProvider(id, {
-      options: { config: { tools: `file://${file}:get_tools`, maxRetries: 0 } },
+      options: { config: { tools: configuredTools, maxRetries: 0 } },
     });
-    const context: CallApiContextParams | undefined = id.startsWith('snowflake:')
-      ? {
-          vars: {},
-          prompt: {
-            raw: 'fixture',
-            label: 'fixture',
-            config: { tools: `file://${file}:get_tools` },
-          },
-        }
-      : undefined;
+    const context: CallApiContextParams | undefined =
+      templated || id.startsWith('snowflake:')
+        ? {
+            vars: { reference },
+            prompt: {
+              raw: 'fixture',
+              label: 'fixture',
+              config: id.startsWith('snowflake:') ? { tools: configuredTools } : {},
+            },
+          }
+        : undefined;
     return { fixture, target: provider, context };
   }
 
   describe.each(providerIds)('%s', (id) => {
-    it.each(['resolve', 'reject'] as const)(
-      'rejects while the configured JavaScript function stays held, then observes late %s',
-      async (settlement) => {
-        const { fixture, target, context } = await loadFixture(id);
+    it.each([
+      { settlement: 'resolve', templated: false },
+      { settlement: 'reject', templated: false },
+      ...(id === 'openai:chat:gpt-4o' ? [{ settlement: 'resolve', templated: true }] : []),
+    ])(
+      'rejects while the configured JavaScript function stays held, then observes late $settlement (templated: $templated)',
+      async ({ settlement, templated }) => {
+        const { fixture, target, context } = await loadFixture(id, templated);
         const controller = new AbortController();
         const reason = Object.assign(new Error('cancel held preparation'), { name: 'AbortError' });
         const addListener = vi.spyOn(controller.signal, 'addEventListener');

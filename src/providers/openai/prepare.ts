@@ -36,14 +36,17 @@ function isFileReference(value: unknown): value is string {
   return typeof value === 'string' && value.startsWith('file://');
 }
 
-/** Render authored values once. Loaded files are new authored input, not rendered output. */
+function loadDefinition(reference: string, vars: Record<string, VarValue>) {
+  const loaded: unknown = maybeLoadFromExternalFile(reference, undefined, {
+    skipPathRendering: true,
+  });
+  // A script reference can be returned verbatim. Only fresh definitions get a render pass.
+  return typeof loaded === 'object' ? renderVarsInObject(loaded, vars) : loaded;
+}
+
 function loadAndRender(value: unknown, vars: Record<string, VarValue>) {
-  if (isFileReference(value)) {
-    const reference = renderVarsInObject(value, vars);
-    const loaded: unknown = maybeLoadFromExternalFile(reference);
-    return renderVarsInObject(loaded, vars);
-  }
-  return renderVarsInObject(value, vars);
+  const rendered = renderVarsInObject(value, vars);
+  return isFileReference(rendered) ? loadDefinition(rendered, vars) : rendered;
 }
 
 export function prepareOpenAiResponseFormat(value: unknown, vars: Record<string, VarValue> = {}) {
@@ -54,11 +57,8 @@ export function prepareOpenAiResponseFormat(value: unknown, vars: Record<string,
   if (isRecord(loaded) && loaded.type === 'json_schema') {
     const nested = isRecord(loaded.json_schema) ? loaded.json_schema : undefined;
     const schema = loaded.schema ?? nested?.schema;
-    // The format's single pass already rendered the path. Only render the newly
-    // loaded document here; inline schema values must never be rendered twice.
     if (isFileReference(schema)) {
-      const document: unknown = maybeLoadFromExternalFile(schema);
-      const resolved = renderVarsInObject(document, vars);
+      const resolved = loadDefinition(schema, vars);
       return ResponseFormat.parse(
         loaded.schema === undefined
           ? { ...loaded, json_schema: { ...nested, schema: resolved } }
@@ -82,23 +82,22 @@ async function loadToolDefinitions(
   vars: Record<string, VarValue>,
   abortSignal?: AbortSignal,
 ): Promise<unknown> {
-  if (isFileReference(value)) {
-    const reference = renderVarsInObject(value, vars);
-    // The reference was rendered above. The loader must not render its output;
-    // this pass belongs only to the fresh definitions returned by the file.
-    const loaded: unknown = await waitForPromiseWithAbort(
-      maybeLoadToolsFromExternalFile(reference, undefined, abortSignal),
-      abortSignal,
-    );
-    return renderVarsInObject(loaded, vars);
-  }
   if (Array.isArray(value)) {
     const loaded = await Promise.all(
       value.map((entry) => loadToolDefinitions(entry, vars, abortSignal)),
     );
     return loaded.every(Array.isArray) ? loaded.flat() : loaded;
   }
-  return renderVarsInObject(value, vars);
+  const rendered = renderVarsInObject(value, vars);
+  if (isFileReference(rendered)) {
+    // Treat the rendered path as data. Only the fresh file definitions get a render pass.
+    const loaded: unknown = await waitForPromiseWithAbort(
+      maybeLoadToolsFromExternalFile(rendered, undefined, abortSignal, { skipPathRendering: true }),
+      abortSignal,
+    );
+    return renderVarsInObject(loaded, vars);
+  }
+  return rendered;
 }
 
 export async function prepareOpenAiTools(
