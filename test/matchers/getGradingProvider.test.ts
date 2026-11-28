@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { getGradingProvider } from '../../src/matchers/providers';
+import { getAndCheckProvider, getGradingProvider } from '../../src/matchers/providers';
 import { loadApiProvider } from '../../src/providers/index';
 import { createMockProvider } from '../factories/provider';
 
@@ -304,6 +304,148 @@ describe('getGradingProvider', () => {
         basePath: undefined,
       });
       expect(result).toBe(azureProvider);
+    });
+
+    it('should select defaultTest.options.provider.embedding when embedding type is requested', async () => {
+      const azureEmbeddingProvider = createMockProvider({
+        id: 'azureopenai:embedding:text-embedding-3-large',
+      });
+      (azureEmbeddingProvider as any).callEmbeddingApi = vi.fn();
+
+      const embeddingConfig = {
+        id: 'azureopenai:embedding:text-embedding-3-large',
+        config: {
+          apiHost: 'my-resource.openai.azure.com',
+          azureClientId: 'client-id',
+          azureClientSecret: 'client-secret',
+          azureTenantId: 'tenant-id',
+        },
+      };
+
+      (cliState as any).config = {
+        defaultTest: {
+          options: {
+            provider: {
+              text: {
+                id: 'azureopenai:chat:gpt-4o',
+                config: {
+                  apiHost: 'my-resource.openai.azure.com',
+                  azureClientId: 'client-id',
+                  azureClientSecret: 'client-secret',
+                  azureTenantId: 'tenant-id',
+                },
+              },
+              embedding: embeddingConfig,
+            },
+          },
+        },
+      };
+
+      vi.mocked(loadApiProvider).mockResolvedValue(azureEmbeddingProvider);
+
+      const defaultEmbedding = createMockProvider({ id: 'openai:embedding:default' });
+      const result = await getGradingProvider('embedding', undefined, defaultEmbedding);
+      const checked = await getAndCheckProvider(
+        'embedding',
+        undefined,
+        defaultEmbedding,
+        'similarity check',
+      );
+
+      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:embedding:text-embedding-3-large', {
+        options: embeddingConfig,
+        basePath: undefined,
+      });
+      expect(result).toBe(azureEmbeddingProvider);
+      expect(checked).toBe(azureEmbeddingProvider);
+    });
+
+    it('should select classification and moderation providers from defaultTest.options.provider', async () => {
+      const classificationProvider = createMockProvider({ id: 'openai:classification' });
+      const moderationProvider = createMockProvider({ id: 'openai:moderation' });
+
+      (cliState as any).config = {
+        defaultTest: {
+          options: {
+            provider: {
+              classification: 'openai:classification',
+              moderation: 'openai:moderation',
+            },
+          },
+        },
+      };
+
+      vi.mocked(loadApiProvider)
+        .mockResolvedValueOnce(classificationProvider)
+        .mockResolvedValueOnce(moderationProvider);
+
+      expect(await getGradingProvider('classification', undefined, null)).toBe(
+        classificationProvider,
+      );
+      expect(await getGradingProvider('moderation', undefined, null)).toBe(moderationProvider);
+    });
+
+    it('should fall back to defaultProvider when defaultTest.options.provider omits the requested type', async () => {
+      const defaultTextProvider = createMockProvider({ id: 'default-text-provider' });
+      const defaultEmbeddingProvider = createMockProvider({ id: 'default-embedding-provider' });
+
+      (cliState as any).config = {
+        defaultTest: {
+          options: {
+            provider: {
+              embedding: 'openai:embedding:text-embedding-3-small',
+            },
+          },
+        },
+      };
+
+      await expect(getGradingProvider('text', undefined, defaultTextProvider)).resolves.toBe(
+        defaultTextProvider,
+      );
+      expect(loadApiProvider).not.toHaveBeenCalled();
+
+      (cliState as any).config = {
+        defaultTest: {
+          options: {
+            provider: {
+              text: 'azureopenai:chat:gpt-4',
+            },
+          },
+        },
+      };
+
+      await expect(
+        getGradingProvider('embedding', undefined, defaultEmbeddingProvider),
+      ).resolves.toBe(defaultEmbeddingProvider);
+      expect(loadApiProvider).not.toHaveBeenCalled();
+    });
+
+    it('should skip simulated-user on text without blocking embedding in defaultTest.options.provider', async () => {
+      const embeddingProvider = createMockProvider({
+        id: 'openai:embedding:text-embedding-3-small',
+      });
+      const defaultTextProvider = createMockProvider({ id: 'default-text-provider' });
+
+      (cliState as any).config = {
+        defaultTest: {
+          options: {
+            provider: {
+              text: createSimulatedUserProvider(),
+              embedding: 'openai:embedding:text-embedding-3-small',
+            },
+          },
+        },
+      };
+
+      vi.mocked(loadApiProvider).mockResolvedValue(embeddingProvider);
+
+      await expect(getGradingProvider('text', undefined, defaultTextProvider)).resolves.toBe(
+        defaultTextProvider,
+      );
+      await expect(getGradingProvider('embedding', undefined, null)).resolves.toBe(
+        embeddingProvider,
+      );
+      expect(loadApiProvider).toHaveBeenCalledTimes(1);
     });
   });
 
