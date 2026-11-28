@@ -12,6 +12,7 @@ import * as path from 'path';
 import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { fingerprintCacheIdentity } from '../cacheFingerprint';
 import { resolveBedrockMantleRegion } from './mantle';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
@@ -46,9 +47,7 @@ function getNonEmptyString(value: unknown): string | undefined {
 }
 
 function fingerprintBedrockAuthValue(authSource: string, value: string, index: number) {
-  return createHmac('sha256', value)
-    .update(`${BEDROCK_CACHE_KEY_HMAC_KEY}:${authSource}:${index}`)
-    .digest('hex');
+  return fingerprintCacheIdentity(value, `${BEDROCK_CACHE_KEY_HMAC_KEY}:${authSource}:${index}`);
 }
 
 function getBedrockAuthCacheNamespace(authSource: string, values: (string | undefined)[]) {
