@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
@@ -629,6 +630,13 @@ export interface IBedrockModel {
   ) => Promise<any>;
   output: (config: BedrockOptions, responseJson: any) => any;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
+  /**
+   * Extracts the model's raw stop/finish reason from an InvokeModel response body
+   * (e.g. Claude `stop_reason`, Nova `stopReason`, OpenAI-style
+   * `choices[0].finish_reason`). `callApi` normalizes the raw value with
+   * `normalizeFinishReason` before setting it on the provider response.
+   */
+  finishReason?: (responseJson: any) => string | undefined;
 }
 
 export function parseValue(value: string | number, defaultValue: any) {
@@ -652,6 +660,26 @@ export function addConfigParam(
     params[key] =
       configValue ?? (envValue === undefined ? defaultValue : parseValue(envValue, defaultValue));
   }
+}
+
+/**
+ * Reads the raw finish reason from an OpenAI-style InvokeModel response body.
+ * Shared by every handler whose response carries `choices[0].finish_reason`.
+ */
+function getChoicesFinishReason(responseJson: any): string | undefined {
+  const finishReason = responseJson?.choices?.[0]?.finish_reason;
+  return typeof finishReason === 'string' ? finishReason : undefined;
+}
+
+/**
+ * Reads the raw stop reason from a DeepSeek R1 InvokeModel response body.
+ * R1 is a text-completion model on Bedrock: its native response carries
+ * `choices[0].stop_reason` (`stop` or `length`), not the OpenAI-style
+ * `finish_reason` used by the chat handlers.
+ */
+function getChoicesStopReason(responseJson: any): string | undefined {
+  const stopReason = responseJson?.choices?.[0]?.stop_reason;
+  return typeof stopReason === 'string' ? stopReason : undefined;
 }
 
 function getOpenAiCompatibleTokenUsage(responseJson: any, _promptText: string): TokenUsage {
@@ -708,6 +736,7 @@ const BEDROCK_MISTRAL_CHAT_MODEL = {
     }
     return undefined;
   },
+  finishReason: getChoicesFinishReason,
   tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
     if (
       responseJson?.prompt_tokens !== undefined &&
@@ -787,6 +816,7 @@ const BEDROCK_DEEPSEEK_CHAT_MODEL = {
     return responseJson.choices?.[0]?.message?.content;
   },
   tokenUsage: getOpenAiCompatibleTokenUsage,
+  finishReason: getChoicesFinishReason,
 } satisfies IBedrockModel;
 
 export const LlamaVersion = {
@@ -1177,6 +1207,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       return params;
     },
     output: (_config: BedrockOptions, responseJson: any) => responseJson?.generation,
+    finishReason: (responseJson: any) => responseJson?.stop_reason,
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
@@ -1258,6 +1289,7 @@ export const BEDROCK_MODEL = {
       return responseJson.choices?.[0]?.message?.content;
     },
     tokenUsage: getOpenAiCompatibleTokenUsage,
+    finishReason: getChoicesFinishReason,
   },
   AMAZON_NOVA: {
     params: async (
@@ -1328,6 +1360,7 @@ export const BEDROCK_MODEL = {
     output: (_config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage =>
       getNovaTokenUsage(responseJson),
+    finishReason: (responseJson: any) => responseJson?.stopReason,
   },
   /**
    * Amazon Nova 2 model handler with extended thinking (reasoning) support.
@@ -1465,6 +1498,7 @@ export const BEDROCK_MODEL = {
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage =>
       getNovaTokenUsage(responseJson),
+    finishReason: (responseJson: any) => responseJson?.stopReason,
   },
   CLAUDE_COMPLETION: {
     params: async (
@@ -1494,6 +1528,7 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (_config: BedrockOptions, responseJson: any) => responseJson?.completion,
+    finishReason: (responseJson: any) => responseJson?.stop_reason,
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (!responseJson?.usage) {
         return missingBedrockTokenUsage();
@@ -1683,6 +1718,7 @@ export const BEDROCK_MODEL = {
     output: (config: BedrockClaudeMessagesCompletionOptions, responseJson: any) => {
       return outputFromMessage(responseJson, config?.showThinking ?? true);
     },
+    finishReason: (responseJson: any) => responseJson?.stop_reason,
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (!responseJson?.usage) {
         return missingBedrockTokenUsage();
@@ -1750,6 +1786,7 @@ export const BEDROCK_MODEL = {
     },
     output: (_config: BedrockOptions, responseJson: any) => responseJson?.results?.[0]?.outputText,
     tokenUsage: getOpenAiCompatibleTokenUsage,
+    finishReason: (responseJson: any) => responseJson?.results?.[0]?.completionReason,
   },
   LLAMA2: getLlamaModelHandler(LlamaVersion.V2),
   LLAMA3: getLlamaModelHandler(LlamaVersion.V3),
@@ -1792,6 +1829,7 @@ export const BEDROCK_MODEL = {
     output: (_config: BedrockOptions, responseJson: any) => responseJson?.generations?.[0]?.text,
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage =>
       getCohereTokenUsage(responseJson),
+    finishReason: (responseJson: any) => responseJson?.generations?.[0]?.finish_reason,
   },
   COHERE_COMMAND_R: {
     params: async (
@@ -1834,6 +1872,7 @@ export const BEDROCK_MODEL = {
     output: (_config: BedrockOptions, responseJson: any) => responseJson?.text,
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage =>
       getCohereTokenUsage(responseJson),
+    finishReason: (responseJson: any) => responseJson?.finish_reason,
   },
   DEEPSEEK: {
     params: async (
@@ -1890,6 +1929,7 @@ ${prompt}
       return undefined;
     },
     tokenUsage: getOpenAiCompatibleTokenUsage,
+    finishReason: getChoicesStopReason,
   },
   MISTRAL: {
     params: async (
@@ -1929,6 +1969,7 @@ ${prompt}
       }
       return responseJson.outputs[0]?.text;
     },
+    finishReason: (responseJson: any) => responseJson?.outputs?.[0]?.stop_reason,
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
@@ -2048,6 +2089,7 @@ ${prompt}
       return answer.trim() === '' ? content : answer;
     },
     tokenUsage: getOpenAiCompatibleTokenUsage,
+    finishReason: getChoicesFinishReason,
   },
   QWEN: {
     params: async (
@@ -2147,6 +2189,7 @@ ${prompt}
       return responseJson.choices?.[0]?.message?.content;
     },
     tokenUsage: getOpenAiCompatibleTokenUsage,
+    finishReason: getChoicesFinishReason,
   },
   /**
    * Shared handler for newer Bedrock model families that speak the OpenAI Chat Completions
@@ -2276,6 +2319,7 @@ ${prompt}
       return content;
     },
     tokenUsage: getOpenAiCompatibleTokenUsage,
+    finishReason: getChoicesFinishReason,
   },
 };
 
@@ -2840,10 +2884,13 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+        const cachedOutput = JSON.parse(cachedResponse as string);
+        const finishReason = normalizeFinishReason(model.finishReason?.(cachedOutput));
         return {
-          output: model.output(mergedConfig, JSON.parse(cachedResponse as string)),
+          output: model.output(mergedConfig, cachedOutput),
           tokenUsage: createEmptyTokenUsage(),
           cached: true,
+          ...(finishReason ? { finishReason } : {}),
         };
       }
     }
@@ -2983,10 +3030,13 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           : undefined,
       );
 
+      const finishReason = normalizeFinishReason(model.finishReason?.(output));
+
       return {
         output: model.output(mergedConfig, output),
         tokenUsage,
         cost,
+        ...(finishReason ? { finishReason } : {}),
         ...(output['amazon-bedrock-guardrailAction']
           ? {
               guardrails: {

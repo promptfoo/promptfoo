@@ -12,6 +12,7 @@
  * **Provider Mappings:**
  * - OpenAI: `function_call` (legacy) → `tool_calls` (current), Responses `max_output_tokens` → `length`
  * - Anthropic: `end_turn` → `stop`, `stop_sequence` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `refusal` → `content_filter`, `pause_turn` → `pause_turn`
+ * - Amazon Bedrock: Nova/Converse `content_filtered` → `content_filter`, Titan `FINISH` → `stop`, Cohere `COMPLETE` → `stop`, Cohere `ERROR_TOXIC` → `content_filter`
  * - Vercel AI SDK: `tool-calls` → `tool_calls`, `content-filter` → `content_filter`
  *
  * @example
@@ -45,6 +46,13 @@ export const FINISH_REASON_MAP: Record<string, string> = {
   tool_use: 'tool_calls', // Tool/function was called
   refusal: 'content_filter', // Content filtering / safety refusal
   pause_turn: 'pause_turn', // Long-running turn paused, can be continued
+
+  // Amazon Bedrock - InvokeModel/Converse mappings (values arrive uppercase or
+  // snake_case and are lowercased before lookup)
+  content_filtered: 'content_filter', // Nova/Converse content filtering triggered
+  finish: 'stop', // Titan completionReason FINISH: natural completion
+  complete: 'stop', // Cohere finish_reason COMPLETE: natural completion
+  error_toxic: 'content_filter', // Cohere finish_reason ERROR_TOXIC: toxic output filtered
 
   // Vercel AI SDK - unified values use hyphens
   'tool-calls': 'tool_calls', // Tool/function was called

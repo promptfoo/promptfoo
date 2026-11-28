@@ -2,6 +2,7 @@ import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { handleFinishReason } from '../../../src/assertions/finishReason';
 import { getCache, isCacheEnabled } from '../../../src/cache';
 import logger from '../../../src/logger';
 import {
@@ -4644,6 +4645,212 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(mockCache.get).toHaveBeenCalled();
     // Verify invokeModel was not called because cache was used
     expect(mockInvokeModel).not.toHaveBeenCalled();
+  });
+
+  describe('finishReason on the InvokeModel route', () => {
+    const invokeWith = (responseBody: unknown) => {
+      const responseJson = JSON.stringify(responseBody);
+      mockInvokeModel.mockResolvedValueOnce({
+        body: Object.assign(new TextEncoder().encode(responseJson), {
+          transformToString: () => responseJson,
+        }),
+      });
+    };
+
+    it.each([
+      ['max_tokens', 'length'],
+      ['end_turn', 'stop'],
+      ['stop_sequence', 'stop'],
+      ['tool_use', 'tool_calls'],
+      ['refusal', 'content_filter'],
+    ])('maps Claude stop_reason %s to finishReason %s', async (stopReason, expected) => {
+      invokeWith({
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Once upon a' }],
+        stop_reason: stopReason,
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+      const provider = new AwsBedrockCompletionProvider(
+        'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+        { config: { region: 'us-east-1' } },
+      );
+
+      const response = await provider.callApi('Tell me a story');
+
+      expect(response.output).toBe('Once upon a');
+      expect(response.finishReason).toBe(expected);
+    });
+
+    it('passes the finish-reason assertion for a max_tokens Claude response', async () => {
+      invokeWith({
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Once upon a' }],
+        stop_reason: 'max_tokens',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+      const provider = new AwsBedrockCompletionProvider(
+        'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+        { config: { region: 'us-east-1' } },
+      );
+
+      const response = await provider.callApi('Tell me a story');
+      const grading = handleFinishReason({
+        assertion: { type: 'finish-reason', value: 'length' },
+        renderedValue: 'length',
+        providerResponse: response,
+      } as any);
+
+      expect(grading.pass).toBe(true);
+    });
+
+    it.each([
+      ['length', 'length'],
+      ['stop', 'stop'],
+    ])('maps Llama stop_reason %s to finishReason %s', async (stopReason, expected) => {
+      invokeWith({
+        generation: 'hello',
+        stop_reason: stopReason,
+        prompt_token_count: 3,
+        generation_token_count: 1,
+      });
+      const provider = new AwsBedrockCompletionProvider('meta.llama3-1-8b-instruct-v1:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      const response = await provider.callApi('hello');
+
+      expect(response.output).toBe('hello');
+      expect(response.finishReason).toBe(expected);
+    });
+
+    it.each([
+      ['max_tokens', 'length'],
+      ['end_turn', 'stop'],
+      ['tool_use', 'tool_calls'],
+      ['content_filtered', 'content_filter'],
+    ])('maps Nova stopReason %s to finishReason %s', async (stopReason, expected) => {
+      invokeWith({
+        output: { message: { role: 'assistant', content: [{ text: 'hi' }] } },
+        stopReason,
+        usage: { inputTokens: 3, outputTokens: 1, totalTokens: 4 },
+      });
+      const provider = new AwsBedrockCompletionProvider('amazon.nova-lite-v1:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      const response = await provider.callApi('hello');
+
+      expect(response.output).toBe('hi');
+      expect(response.finishReason).toBe(expected);
+    });
+
+    it('maps Mistral outputs stop_reason to finishReason', async () => {
+      invokeWith({
+        outputs: [{ text: 'bonjour', stop_reason: 'length' }],
+        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+      });
+      const provider = new AwsBedrockCompletionProvider('mistral.mistral-7b-instruct-v0:2', {
+        config: { region: 'us-east-1' },
+      });
+
+      const response = await provider.callApi('hello');
+
+      expect(response.output).toBe('bonjour');
+      expect(response.finishReason).toBe('length');
+    });
+
+    it('maps OpenAI-compatible choices finish_reason to finishReason', async () => {
+      invokeWith({
+        choices: [{ message: { content: 'ok' }, finish_reason: 'tool_calls' }],
+        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+      });
+      const provider = new AwsBedrockCompletionProvider('us.xai.grok-4.7', {
+        config: { region: 'us-east-1' },
+      });
+
+      const response = await provider.callApi('hello');
+
+      expect(response.output).toBe('ok');
+      expect(response.finishReason).toBe('tool_calls');
+    });
+
+    it('sets finishReason on a cached response', async () => {
+      mockCache.get = vi.fn().mockResolvedValue(
+        JSON.stringify({
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'cached text' }],
+          stop_reason: 'max_tokens',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        }),
+      );
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+
+      const provider = new AwsBedrockCompletionProvider(
+        'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+        { config: { region: 'us-east-1' } },
+      );
+
+      const response = await provider.callApi('Tell me a story');
+
+      expect(response.cached).toBe(true);
+      expect(response.output).toBe('cached text');
+      expect(response.finishReason).toBe('length');
+      expect(mockInvokeModel).not.toHaveBeenCalled();
+    });
+
+    it('omits finishReason when the response carries no stop field', async () => {
+      invokeWith({
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'no stop field' }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+      const provider = new AwsBedrockCompletionProvider(
+        'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+        { config: { region: 'us-east-1' } },
+      );
+
+      const response = await provider.callApi('Tell me a story');
+
+      expect(response.output).toBe('no stop field');
+      expect(response.finishReason).toBeUndefined();
+    });
+
+    describe('per-handler finishReason extractors', () => {
+      it.each([
+        ['CLAUDE_COMPLETION', { completion: 'x', stop_reason: 'max_tokens' }, 'max_tokens'],
+        ['AMAZON_NOVA_2', { stopReason: 'end_turn' }, 'end_turn'],
+        ['TITAN_TEXT', { results: [{ outputText: 'x', completionReason: 'FINISH' }] }, 'FINISH'],
+        ['COHERE_COMMAND', { generations: [{ text: 'x', finish_reason: 'COMPLETE' }] }, 'COMPLETE'],
+        ['COHERE_COMMAND_R', { text: 'x', finish_reason: 'MAX_TOKENS' }, 'MAX_TOKENS'],
+        ['AI21', { choices: [{ finish_reason: 'length' }] }, 'length'],
+        ['DEEPSEEK', { choices: [{ text: 'x', stop_reason: 'stop' }] }, 'stop'],
+        ['DEEPSEEK_CHAT', { choices: [{ finish_reason: 'length' }] }, 'length'],
+        ['MISTRAL_CHAT', { choices: [{ finish_reason: 'stop' }] }, 'stop'],
+        ['OPENAI', { choices: [{ finish_reason: 'length' }] }, 'length'],
+        ['QWEN', { choices: [{ finish_reason: 'tool_calls' }] }, 'tool_calls'],
+        ['OPENAI_COMPAT', { choices: [{ finish_reason: 'stop' }] }, 'stop'],
+      ])('%s extracts the raw stop value', (handler, body, expected) => {
+        const model = BEDROCK_MODEL[handler as keyof typeof BEDROCK_MODEL];
+        expect(model.finishReason?.(body)).toBe(expected);
+      });
+
+      it('returns undefined when the stop field is absent', () => {
+        expect(BEDROCK_MODEL.CLAUDE_MESSAGES.finishReason?.({ content: [] })).toBeUndefined();
+        expect(BEDROCK_MODEL.OPENAI_COMPAT.finishReason?.({ choices: [{}] })).toBeUndefined();
+        expect(BEDROCK_MODEL.AMAZON_NOVA.finishReason?.({})).toBeUndefined();
+        // DeepSeek R1 reports choices[0].stop_reason, not the OpenAI-style
+        // finish_reason, so a finish_reason-only body yields no reason.
+        expect(
+          BEDROCK_MODEL.DEEPSEEK.finishReason?.({
+            choices: [{ text: 'x', finish_reason: 'stop' }],
+          }),
+        ).toBeUndefined();
+      });
+    });
   });
 
   it('should hash prompt and secret values in the cache key', async () => {
