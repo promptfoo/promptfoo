@@ -4,13 +4,40 @@ import path from 'path';
 import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
-import { type Assertion, type TestCase } from '../types/index';
+import { type Assertion, type AssertionSet, isApiProvider, type TestCase } from '../types/index';
 import { loadYaml } from '../util/yamlLoad';
 
 const clone = Clone();
 
+function cloneAssertion(assertion: Assertion): Assertion;
+function cloneAssertion(assertion: Assertion | AssertionSet): Assertion | AssertionSet;
+function cloneAssertion(assertion: Assertion | AssertionSet): Assertion | AssertionSet {
+  if (assertion.type === 'assert-set') {
+    return {
+      ...clone({ ...assertion, assert: undefined }),
+      assert: assertion.assert.map((entry) => cloneAssertion(entry)),
+    };
+  }
+  const provider = assertion.provider;
+  if (isApiProvider(provider)) {
+    return { ...clone({ ...assertion, provider: undefined }), provider };
+  }
+  if (provider && typeof provider === 'object' && Object.values(provider).some(isApiProvider)) {
+    const clonedProvider = Object.fromEntries(
+      Object.entries(provider).map(([key, entry]) => [
+        key,
+        isApiProvider(entry) ? entry : clone(entry),
+      ]),
+    );
+    return { ...clone({ ...assertion, provider: undefined }), provider: clonedProvider };
+  }
+  return clone(assertion);
+}
+
 export function getFinalTest(test: TestCase, assertion: Assertion) {
-  // Deep copy
+  // Deep copy. Omit live ApiProvider instances: rfdc does not copy prototype
+  // methods, and SDK clients (e.g. Anthropic) contain circular refs that make
+  // the default clone recurse until it blows the stack.
   const ret = clone({
     ...test,
     ...(test.options &&
@@ -22,6 +49,9 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
       }),
     ...(test.provider && {
       provider: undefined,
+    }),
+    ...(test.assert && {
+      assert: undefined,
     }),
   });
 
@@ -45,6 +75,9 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
   // NOTE: Clone does not copy functions so we set the provider again
   if (test.provider) {
     ret.provider = test.provider;
+  }
+  if (test.assert) {
+    ret.assert = test.assert.map(cloneAssertion);
   }
   ret.options.provider = assertion.provider || test?.options?.provider;
   ret.options.rubricPrompt = assertion.rubricPrompt || ret.options.rubricPrompt;
