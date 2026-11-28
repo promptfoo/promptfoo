@@ -3139,6 +3139,52 @@ describe('Provider Registry', () => {
       );
     });
 
+    it.each([
+      ['google:chat:gemini-3.8-flash', 'ai.studio', 'gemini-3.8-flash', 'google:gemini-3.8-flash'],
+      ['palm:chat:gemini-3.8-flash', 'ai.studio', 'gemini-3.8-flash', 'google:gemini-3.8-flash'],
+      [
+        'google:chat:gemini-4-hydrogen',
+        'ai.studio',
+        'gemini-4-hydrogen',
+        'google:gemini-4-hydrogen',
+      ],
+      ['google:gemini-3.8-flash', 'ai.studio', 'gemini-3.8-flash', 'google:gemini-3.8-flash'],
+      ['palm:gemini-3.8-flash', 'ai.studio', 'gemini-3.8-flash', 'google:gemini-3.8-flash'],
+      ['vertex:chat:gemini-3.8-flash', 'vertex', 'gemini-3.8-flash', 'vertex:gemini-3.8-flash'],
+      ['vertex:gemini-3.8-flash', 'vertex', 'gemini-3.8-flash', 'vertex:gemini-3.8-flash'],
+    ] as const)(
+      'resolves %s to the %s chat provider with model %s',
+      async (providerPath, module, modelName, expectedId) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        const ExpectedProvider =
+          module === 'ai.studio'
+            ? (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider
+            : (await import('../../src/providers/google/vertex')).VertexChatProvider;
+        const provider = await factory!.create(providerPath, bareOptions, bareContext);
+        expect(provider).toBeInstanceOf(ExpectedProvider);
+        expect((provider as InstanceType<typeof ExpectedProvider>).modelName).toBe(modelName);
+        expect(provider.id()).toBe(expectedId);
+      },
+    );
+
+    it.each([
+      ['google:chat:', 'Missing model name for google:chat:'],
+      ['palm:chat:', 'Missing model name for palm:chat:'],
+      ['google:chat:gemini-omni-1.1-flash', 'Use google:gemini-omni-1.1-flash.'],
+      ['palm:chat:gemini-omni-1.1-flash', 'Use palm:gemini-omni-1.1-flash.'],
+      ['google:chat:gemini-3.1-flash-image', 'Use google:gemini-3.1-flash-image.'],
+      ['palm:chat:gemini-nano-banana-2.1', 'Use palm:gemini-nano-banana-2.1.'],
+    ])('rejects the non-chat Gemini route %s', async (providerPath, message) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        message,
+      );
+    });
+
     it.each(['google', 'palm'])(
       'preserves the standard Robotics model and options for explicit %s:interactions:',
       async (prefix) => {
