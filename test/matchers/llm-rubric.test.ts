@@ -2630,6 +2630,29 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     expect(tryParse(undefined as unknown as string)).toBeUndefined();
   });
 
+  it.each(['0.50', '12345678901234567890', '1e3', '"Paris"', 'null', 'true'])(
+    'should keep the JSON scalar %s as the original text',
+    (input) => {
+      expect(tryParse(input)).toBe(input);
+    },
+  );
+
+  it.each(['0.50', '12345678901234567890', 'null'])(
+    'should show the grader the scalar output %s unchanged',
+    async (output) => {
+      const provider = createMockProvider({
+        response: { output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }) },
+      });
+
+      await matchesLlmRubric('Check the value', output, {
+        rubricPrompt: 'Output: {{ output }}',
+        provider,
+      });
+
+      expect(provider.callApi.mock.calls[0][0]).toBe(`Output: ${output}`);
+    },
+  );
+
   it('should render strings inside JSON objects', async () => {
     const template = '{"role": "user", "content": "Hello {{name}}"}';
     const result = await renderLlmRubricPrompt(template, { name: 'World' });
