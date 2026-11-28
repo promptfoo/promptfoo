@@ -5,7 +5,9 @@ import { loadFromJavaScriptFile } from '../assertions/utils';
 import cliState from '../cliState';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
-import { getDefaultProviders } from '../providers/defaults';
+import { DEFAULT_VIDEO_GRADING_PROMPT, VIDEO_EVIDENCE_INSTRUCTION } from '../prompts/grading';
+import { getDefaultProviders, getDefaultVideoGradingProvider } from '../providers/defaults';
+import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parseFileUrl } from '../util/functions/loadFunction';
@@ -19,6 +21,7 @@ import { graderFail, normalizeMatcherTokenUsage } from './shared';
 import type {
   ApiProvider,
   Assertion,
+  AssertionParams,
   CallApiContextParams,
   GradingConfig,
   GradingResult,
@@ -29,6 +32,7 @@ import type {
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 const DEFAULT_GRADING_MAX_IMAGES = 4;
+const VIDEO_INLINE_LIMIT_BYTES = 20 * 1024 * 1024;
 const DEFAULT_GRADING_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 const GRADING_AUDIO_MAX_BYTES = 20 * 1024 * 1024;
 const DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
@@ -160,7 +164,7 @@ export async function renderLlmRubricPrompt(
 }
 
 type MultimodalPromptPart =
-  | { type: 'text'; text: string }
+  | { type?: 'text'; text: string }
   | { type: 'input_audio'; input_audio: { data: string; format: 'wav' | 'mp3' } }
   | { type: 'image_url'; image_url: { url: string } }
   | { type: 'input_text'; text: string }
@@ -181,14 +185,20 @@ type ChatMessageLike = {
   [key: string]: unknown;
 };
 
-function isChatMessageArray(value: unknown): value is ChatMessageLike[] {
+function isChatMessageArray(
+  value: unknown,
+  format: MultimodalPromptFormat,
+): value is ChatMessageLike[] {
   return (
     Array.isArray(value) &&
     value.every(
       (message) =>
         message !== null &&
         typeof message === 'object' &&
-        typeof (message as ChatMessageLike).role === 'string',
+        (typeof (message as ChatMessageLike).role === 'string' ||
+          (format === 'google' &&
+            (message as ChatMessageLike).role === undefined &&
+            Array.isArray((message as ChatMessageLike).parts))),
     )
   );
 }
@@ -661,11 +671,11 @@ function appendMediaToChatPrompt(
   mediaParts: MultimodalPromptPart[],
   format: MultimodalPromptFormat,
 ): string {
-  let parsed: ChatMessageLike[] | undefined;
+  let parsed: unknown;
   const trimmedPrompt = renderedPrompt.trim();
   if (trimmedPrompt.startsWith('- role:')) {
     try {
-      parsed = loadYaml(renderedPrompt) as ChatMessageLike[] | undefined;
+      parsed = loadYaml(renderedPrompt);
     } catch (err) {
       throw new Error(
         `Chat Completion prompt is not a valid YAML string: ${err}\n\n${renderedPrompt}`,
@@ -678,21 +688,37 @@ function appendMediaToChatPrompt(
       // Non-JSON prompts are still valid text prompts. Wrap them below.
     }
   }
-  if (isChatMessageArray(parsed)) {
-    const messages = parsed.map((message) => ({ ...message }));
-    const userMessageIndex = messages.map((message) => message.role).lastIndexOf('user');
+  const request =
+    format === 'google' && parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  const contents = request?.contents ?? parsed;
+  if (isChatMessageArray(contents, format)) {
+    const messages = contents.map((message) => ({ ...message }));
+    let userMessageIndex = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user' || (format === 'google' && messages[i].role === undefined)) {
+        userMessageIndex = i;
+        break;
+      }
+    }
 
     if (userMessageIndex >= 0) {
       const userMessage = messages[userMessageIndex];
       messages[userMessageIndex] = {
         ...userMessage,
-        content: appendMediaToContent(userMessage.content, mediaParts, format),
+        ...(format === 'google' && Array.isArray(userMessage.parts)
+          ? { parts: [...userMessage.parts, ...mediaParts] }
+          : { content: appendMediaToContent(userMessage.content, mediaParts, format) }),
       };
     } else {
-      messages.push({ role: 'user', content: mediaParts });
+      messages.push({
+        role: 'user',
+        ...(format === 'google' ? { parts: mediaParts } : { content: mediaParts }),
+      });
     }
 
-    return JSON.stringify(messages);
+    return JSON.stringify(request ? { ...request, contents: messages } : messages);
   }
 
   return JSON.stringify([
@@ -764,11 +790,86 @@ async function buildGradingProviderPrompt(
   };
 }
 
+interface RawVideoRubricResult {
+  pass?: unknown;
+  reason?: unknown;
+  score?: unknown;
+}
+
+function parseVideoRubricResponse(resp: ProviderResponse): RawVideoRubricResult | undefined {
+  let output = resp.output;
+  if (typeof output === 'string') {
+    const text = output.trim();
+    const fenced = text.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
+    try {
+      output = JSON.parse(fenced ? fenced[1] : text);
+    } catch {
+      return undefined;
+    }
+  }
+  return output && typeof output === 'object' && !Array.isArray(output)
+    ? (output as RawVideoRubricResult)
+    : undefined;
+}
+
+function normalizeVideoRubricResponse(
+  parsed: RawVideoRubricResult,
+): (Pick<GradingResult, 'pass' | 'score'> & { reason?: string }) | undefined {
+  let pass: boolean | undefined;
+  if (typeof parsed.pass === 'boolean') {
+    pass = parsed.pass;
+  } else if (typeof parsed.pass === 'string') {
+    const normalized = parsed.pass.trim().toLowerCase();
+    if (['true', 'yes', 'pass', 'y'].includes(normalized)) {
+      pass = true;
+    } else if (['false', 'no', 'fail', 'n'].includes(normalized)) {
+      pass = false;
+    }
+  }
+
+  const numericScore =
+    typeof parsed.score === 'number'
+      ? parsed.score
+      : typeof parsed.score === 'string' && parsed.score.trim() !== ''
+        ? Number(parsed.score)
+        : Number.NaN;
+
+  if (
+    pass === undefined ||
+    !Number.isFinite(numericScore) ||
+    numericScore < 0 ||
+    numericScore > 1
+  ) {
+    return undefined;
+  }
+
+  return {
+    pass,
+    score: numericScore,
+    ...(typeof parsed.reason === 'string' && { reason: parsed.reason }),
+  };
+}
+
 function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
+  strictVideo = false,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
   const failWithTokens = (reason: string) => graderFailureFromResponse(reason, resp);
+  if (strictVideo) {
+    const raw = parseVideoRubricResponse(resp);
+    if (!raw) {
+      return { failure: failWithTokens('video-rubric requires one complete JSON object') };
+    }
+    const parsed = normalizeVideoRubricResponse(raw);
+    return parsed
+      ? { parsed }
+      : {
+          failure: failWithTokens(
+            'video-rubric response must include a boolean pass and a finite score between 0 and 1',
+          ),
+        };
+  }
 
   let jsonObjects: unknown[] = [];
   if (typeof resp.output === 'string') {
@@ -885,6 +986,7 @@ export async function runJsonGradingPrompt({
   vars,
   images,
   audio,
+  resolveVideo,
 }: {
   assertion?: Assertion;
   checkName: string;
@@ -898,13 +1000,17 @@ export async function runJsonGradingPrompt({
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
   audio?: ProviderResponse['audio'];
+  resolveVideo?: AssertionParams['resolveVideo'];
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
   const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
 
-  const defaultProviders = await getDefaultProviders();
-  const defaultProvider =
-    defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
+  const defaultProviders = resolveVideo ? undefined : await getDefaultProviders();
+  const defaultProvider = resolveVideo
+    ? grading.provider
+      ? null
+      : getDefaultVideoGradingProvider()
+    : defaultProviders!.llmRubricProvider || defaultProviders!.gradingJsonProvider;
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
@@ -912,10 +1018,39 @@ export async function runJsonGradingPrompt({
     checkName,
   );
   const {
-    prompt: providerPrompt,
+    prompt: mediaPrompt,
     imageCount,
     audioAttached,
   } = await buildGradingProviderPrompt(renderedPrompt, images, finalProvider, audio);
+  if (resolveVideo && !/^(google|vertex):(?:chat:)?gemini(?:-|$)/i.test(finalProvider.id())) {
+    return graderFail('video-rubric requires a Gemini grader on Google AI Studio or Vertex AI');
+  }
+  // Reserve room for base64 before reading the stored file. The provider also checks the wire body.
+  const maxBytes = Math.floor((VIDEO_INLINE_LIMIT_BYTES - 1) / 4) * 3;
+  const video =
+    resolveVideo &&
+    (await resolveVideo(maxBytes).catch(() => ({ error: 'Failed to resolve managed video' })));
+  if (video && 'error' in video) {
+    return graderFail(video.error);
+  }
+  if (video && video.buffer.length > maxBytes) {
+    return graderFail('Video and rubric exceed the 20 MiB video-grading request budget');
+  }
+  const providerPrompt = video
+    ? appendMediaToChatPrompt(
+        renderedPrompt,
+        [
+          ...(rubricPrompt === DEFAULT_VIDEO_GRADING_PROMPT
+            ? []
+            : [{ text: VIDEO_EVIDENCE_INSTRUCTION }]),
+          { inlineData: { mimeType: video.mimeType, data: video.buffer.toString('base64') } },
+        ],
+        'google',
+      )
+    : mediaPrompt;
+  if (video && Buffer.byteLength(providerPrompt, 'utf8') >= VIDEO_INLINE_LIMIT_BYTES) {
+    return graderFail('Video and rubric exceed the 20 MiB video-grading request budget');
+  }
   const resp = await callProviderWithContext(
     finalProvider,
     providerPrompt,
@@ -923,14 +1058,28 @@ export async function runJsonGradingPrompt({
     vars,
     providerCallContext,
     providerPromptConfig,
-  );
+  ).catch((error): ProviderResponse => {
+    if (!video) {
+      throw error;
+    }
+    getProviderCallExecutionContext()?.abortSignal?.throwIfAborted();
+    return { error: 'Video grading provider returned an error' };
+  });
   if (resp.error || !resp.output) {
+    if (video) {
+      return graderFailureFromResponse(
+        resp.error
+          ? 'Video grading provider returned an error'
+          : 'No output from video grading provider',
+        resp,
+      );
+    }
     if (throwOnError) {
       throw new Error(resp.error || 'No output');
     }
     return graderFailureFromResponse(resp.error || 'No output', resp);
   }
-  const { parsed, failure } = parseJsonGradingResponse(label, resp);
+  const { parsed, failure } = parseJsonGradingResponse(label, resp, Boolean(video));
   if (!parsed) {
     return failure as Omit<GradingResult, 'assertion'>;
   }
@@ -947,8 +1096,14 @@ export async function runJsonGradingPrompt({
   }
   const { pass, score } = verdict;
 
-  const reason =
-    parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
+  const belowThreshold = `Score ${score} below threshold ${threshold}`;
+  let reason = parsed.reason || (pass ? 'Grading passed' : belowThreshold);
+  if (video) {
+    reason =
+      threshold !== undefined && Number.isFinite(threshold) && score < threshold
+        ? belowThreshold
+        : parsed.reason || (pass ? 'Video grading passed' : 'Video grading failed');
+  }
 
   let responseMetadata: Record<string, unknown> = {};
   if (resp.metadata && typeof resp.metadata === 'object' && !Array.isArray(resp.metadata)) {
@@ -971,6 +1126,7 @@ export async function runJsonGradingPrompt({
     metadata: {
       ...trustedResponseMetadata,
       renderedGradingPrompt: renderedPrompt,
+      ...(video ? { videoSizeBytes: video.buffer.length, videoMimeType: video.mimeType } : {}),
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
       ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),
       ...(resp.cached ? { cachedResponse: true } : {}),

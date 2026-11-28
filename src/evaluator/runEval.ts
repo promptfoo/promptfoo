@@ -1,6 +1,7 @@
 import { LRUCache } from 'lru-cache';
 import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
+import { resolveVideoBytes, videoResolutionErrorMessage } from '../blobs/video';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
 import { FILE_METADATA_KEY } from '../constants';
@@ -463,6 +464,7 @@ async function callProviderForRunEval({
   repeatIndex,
   test,
   testIndex,
+  promptIndex,
   testSuite,
   traceContext,
   vars,
@@ -482,6 +484,7 @@ async function callProviderForRunEval({
   promptForRender: Prompt;
   renderedPrompt: string;
   testIndex: number;
+  promptIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderCallResult> {
@@ -514,6 +517,7 @@ async function callProviderForRunEval({
         repeatIndex,
         test,
         testIndex,
+        promptIndex,
         testSuite,
         traceContext,
         vars,
@@ -639,6 +643,7 @@ async function callActiveProvider({
   repeatIndex,
   test,
   testIndex,
+  promptIndex,
   testSuite,
   traceContext,
   vars,
@@ -652,6 +657,7 @@ async function callActiveProvider({
   promptForRender: Prompt;
   renderedPrompt: string;
   testIndex: number;
+  promptIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderResponse> {
@@ -671,6 +677,7 @@ async function callActiveProvider({
     repeatIndex,
     test,
     testIndex,
+    promptIndex,
     traceContext,
     vars,
   });
@@ -784,6 +791,7 @@ function buildCallApiContext({
   repeatIndex,
   test,
   testIndex,
+  promptIndex,
   traceContext,
   vars,
 }: {
@@ -794,6 +802,7 @@ function buildCallApiContext({
   repeatIndex: number;
   test: AtomicTestCase;
   testIndex: number;
+  promptIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): CallApiContextParams {
@@ -807,6 +816,7 @@ function buildCallApiContext({
     getCache,
     repeatIndex,
     testIdx: testIndex,
+    promptIdx: promptIndex,
   };
 
   if (!isCacheEnabled()) {
@@ -1125,30 +1135,36 @@ async function gradeRunEvalResponse({
     await flushOtel();
   }
 
-  const assertionProviderResponse = {
-    ...processedResponse,
-    // Keep generated audio available to graders after persistence replaces its
-    // inline bytes with a blob reference in the saved result.
-    ...(response.audio?.data ? { audio: response.audio } : {}),
-    providerTransformedOutput,
-  };
+  const video = processedResponse.video;
+  const grade = () =>
+    runAssertions({
+      prompt: renderedPrompt,
+      provider,
+      providerResponse: {
+        ...processedResponse,
+        // Keep generated audio available after persistence replaces its inline bytes.
+        ...(response.audio?.data ? { audio: response.audio } : {}),
+        providerTransformedOutput,
+      },
+      test,
+      vars,
+      latencyMs: response.latencyMs ?? latencyMs,
+      assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+      traceId,
+      resolveVideo:
+        video &&
+        ((maxBytes) =>
+          resolveVideoBytes(video, maxBytes, { evaluationId: evalId, testIdx, promptIdx }).catch(
+            (error) => ({ error: videoResolutionErrorMessage(error) }),
+          )),
+    });
 
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
       { abortSignal: deferredGradingAbortSignal, providerCallQueue, rateLimitRegistry },
-      () =>
-        runAssertions({
-          prompt: renderedPrompt,
-          provider,
-          providerResponse: assertionProviderResponse,
-          test,
-          vars,
-          latencyMs: response.latencyMs ?? latencyMs,
-          assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-          traceId,
-        }).then((checkResult) => applyGradingResult(ret, checkResult)),
+      () => grade().then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, deferredGradingAbortSignal);
     });
@@ -1159,17 +1175,7 @@ async function gradeRunEvalResponse({
   try {
     const checkResult = await withProviderCallExecutionContext(
       { abortSignal, rateLimitRegistry },
-      () =>
-        runAssertions({
-          prompt: renderedPrompt,
-          provider,
-          providerResponse: assertionProviderResponse,
-          test,
-          vars,
-          latencyMs: response.latencyMs ?? latencyMs,
-          assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-          traceId,
-        }),
+      grade,
     );
     applyGradingResult(ret, checkResult);
   } catch (error) {
@@ -1418,6 +1424,7 @@ export async function runEvalInternal(
             repeatIndex,
             test,
             testIndex,
+            promptIndex,
             testSuite,
             traceContext: executionTraceContext,
             vars: state.vars,

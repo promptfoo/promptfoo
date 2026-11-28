@@ -1,9 +1,10 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { and, eq, isNotNull, or } from 'drizzle-orm';
 import { getDb } from '../database';
 import { blobAssetsTable, blobReferencesTable } from '../database/tables';
 import logger from '../logger';
+import { BoundedReadError } from './boundedRead';
 import { FilesystemBlobStorageProvider } from './filesystemProvider';
 
 import type { BlobStorageProvider, BlobStoreResult, StoredBlob } from './types';
@@ -119,9 +120,23 @@ export async function storeBlob(
   return { ...result, ref: { ...result.ref, mimeType: registeredMimeType } };
 }
 
-export async function getBlobByHash(hash: string): Promise<StoredBlob> {
+export async function getBlobByHash(hash: string, maxBytes?: number): Promise<StoredBlob> {
   const provider = getBlobStorageProvider();
-  const blob = await provider.getByHash(hash);
+  if (maxBytes !== undefined && !provider.getByHashBounded) {
+    throw new BoundedReadError('unsupported');
+  }
+  const blob =
+    maxBytes === undefined
+      ? await provider.getByHash(hash)
+      : await provider.getByHashBounded!(hash, maxBytes);
+  if (maxBytes !== undefined) {
+    if (blob.data.length > maxBytes) {
+      throw new BoundedReadError('too-large');
+    }
+    if (createHash('sha256').update(blob.data).digest('hex') !== hash.toLowerCase()) {
+      throw new Error('Managed blob integrity check failed');
+    }
+  }
   const db = await getDb();
   const asset = await db
     .select({ mimeType: blobAssetsTable.mimeType })
@@ -132,7 +147,11 @@ export async function getBlobByHash(hash: string): Promise<StoredBlob> {
   return asset ? { ...blob, metadata: { ...blob.metadata, mimeType: asset.mimeType } } : blob;
 }
 
-export async function isBlobAllowedForShare(hash: string, evalId: string): Promise<boolean> {
+export async function isBlobAllowedForShare(
+  hash: string,
+  evalId: string,
+  result?: { testIdx: number; promptIdx: number },
+): Promise<boolean> {
   const db = await getDb();
   // Result text may contain copied blob URIs, so only independently classified or imported refs
   // authorize reading local bytes during a share.
@@ -143,6 +162,8 @@ export async function isBlobAllowedForShare(hash: string, evalId: string): Promi
       and(
         eq(blobReferencesTable.blobHash, hash),
         eq(blobReferencesTable.evalId, evalId),
+        result && eq(blobReferencesTable.testIdx, result.testIdx),
+        result && eq(blobReferencesTable.promptIdx, result.promptIdx),
         or(isNotNull(blobReferencesTable.kind), eq(blobReferencesTable.location, 'import')),
       ),
     )

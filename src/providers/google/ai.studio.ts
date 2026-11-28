@@ -36,6 +36,7 @@ import {
   removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
+  serializeGoogleRequest,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -383,7 +384,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         {
           method: 'POST',
           headers,
-          body: JSON.stringify(body),
+          body: serializeGoogleRequest(body, context?.prompt?.label),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
         getRequestTimeoutMs(),
@@ -662,13 +663,17 @@ export class AIStudioEmbeddingProvider
 
 const DEFAULT_AI_STUDIO_MODEL = 'gemini-3.8-flash';
 
+export function getGoogleAiStudioJsonProvider(env?: EnvOverrides) {
+  return new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, {
+    env,
+    config: { generationConfig: { response_mime_type: 'application/json' } },
+  });
+}
+
 export function getGoogleAiStudioProviders(env?: EnvOverrides) {
   const gradingProvider = new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env });
   return {
-    gradingJsonProvider: new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, {
-      env,
-      config: { generationConfig: { response_mime_type: 'application/json' } },
-    }),
+    gradingJsonProvider: getGoogleAiStudioJsonProvider(env),
     gradingProvider,
     llmRubricProvider: new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env }),
     suggestionsProvider: gradingProvider,

@@ -61,6 +61,7 @@ import {
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
+  serializeGoogleRequest,
 } from './util';
 import { getVertexLlamaWireId, isVertexLlama4Model } from './vertexLlama';
 import type { gaxios } from 'google-auth-library';
@@ -779,6 +780,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
+    let requestBody: string;
+    try {
+      requestBody = serializeGoogleRequest(body, context?.prompt?.label);
+    } catch (error) {
+      return { error: String(error) };
+    }
+
     const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
     const apiHost = this.getApiHost();
     const tierHeader = Object.entries(tierHeaders).find(
@@ -836,7 +844,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           const res = await fetchWithProxy(url, {
             method: 'POST',
             headers: requestHeaders,
-            body: JSON.stringify(body),
+            body: requestBody,
             signal: AbortSignal.timeout(getRequestTimeoutMs()),
           });
 

@@ -4,6 +4,7 @@ import { AzureEmbeddingProvider } from '../../src/providers/azure/embedding';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
+  getDefaultVideoGradingProvider,
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
 } from '../../src/providers/defaults';
@@ -68,6 +69,22 @@ class MockProvider implements ApiProvider {
 }
 
 describe('Provider override tests', () => {
+  it('uses an explicit completion override for video grading', () => {
+    const provider = new MockProvider('fixture-video-grader');
+    setDefaultCompletionProviders(provider);
+    expect(getDefaultVideoGradingProvider()).toBe(provider);
+  });
+
+  it('defaults video grading to Google JSON with scoped credentials', () => {
+    const provider = getDefaultVideoGradingProvider({ GOOGLE_API_KEY: 'fixture-key' });
+    expect(provider).toBeInstanceOf(AIStudioChatProvider);
+    expect(provider.id()).toBe('google:gemini-3.8-flash');
+    expect((provider as AIStudioChatProvider).getApiKey()).toBe('fixture-key');
+    expect((provider as AIStudioChatProvider).config.generationConfig?.response_mime_type).toBe(
+      'application/json',
+    );
+  });
+
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
