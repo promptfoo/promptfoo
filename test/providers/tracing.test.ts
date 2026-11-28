@@ -99,6 +99,22 @@ describe('provider tracing integration', () => {
     );
   });
 
+  it('resolves a port 0 receiver only after it has bound its OS-chosen port', async () => {
+    await cliState.withRequestTracingConfig(
+      { enabled: true, otlp: { http: { enabled: true, port: 0 } } },
+      async () => {
+        expect(getConfiguredTracingExport()).toBeUndefined();
+
+        cliState.setActiveOtlpReceiver({
+          host: '127.0.0.1',
+          port: 49321,
+          acceptFormats: ['json', 'protobuf'],
+        });
+        expect(getConfiguredTracingEndpoint()).toBe('http://127.0.0.1:49321');
+      },
+    );
+  });
+
   it('does not expose disabled HTTP receivers as configured export destinations', async () => {
     await cliState.withRequestTracingConfig(
       { enabled: true, otlp: { http: { enabled: false, port: 4318 } } },

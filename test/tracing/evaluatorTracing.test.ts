@@ -19,7 +19,7 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { TestCase, TestSuite } from '../../src/types/index';
 
-const mockStartOTLPReceiver = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockStartOTLPReceiver = vi.hoisted(() => vi.fn());
 const mockStopOTLPReceiver = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockUpdateOTLPReceiverOptions = vi.hoisted(() => vi.fn());
 const mockRegisterOTLPReceiverTracePolicy = vi.hoisted(() => vi.fn());
@@ -52,7 +52,7 @@ vi.mock('../../src/tracing/otlpReceiver', () => ({
 describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockStartOTLPReceiver.mockResolvedValue(undefined);
+    mockStartOTLPReceiver.mockImplementation(async (port: number) => port);
     mockStopOTLPReceiver.mockResolvedValue(undefined);
     mockCreateTrace.mockResolvedValue(undefined);
     vi.mocked(getTraceStore).mockReturnValue({
@@ -748,10 +748,10 @@ describe('evaluatorTracing', () => {
     });
 
     it('should preserve the first receiver defaults during overlapping startup', async () => {
-      let resolveStart!: () => void;
+      let resolveStart!: (port: number) => void;
       mockStartOTLPReceiver.mockImplementationOnce(
         () =>
-          new Promise<void>((resolve) => {
+          new Promise<number>((resolve) => {
             resolveStart = resolve;
           }),
       );
@@ -792,7 +792,7 @@ describe('evaluatorTracing', () => {
       } as unknown as TestSuite);
 
       await vi.waitFor(() => expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1));
-      resolveStart();
+      resolveStart(4318);
       await Promise.all([firstStart, secondStart]);
 
       expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '127.0.0.1', ['json'], {
@@ -934,5 +934,22 @@ describe('evaluatorTracing', () => {
       expect(isOtlpReceiverStarted()).toBe(false);
       expect(cliState.activeOtlpReceiver).toBeUndefined();
     });
+
+    it.each([
+      { configured: undefined, requested: 4318, bound: 4318 },
+      { configured: 0, requested: 0, bound: 49_321 },
+    ])(
+      'records the port bound for http.port=$configured',
+      async ({ configured, requested, bound }) => {
+        mockStartOTLPReceiver.mockResolvedValueOnce(bound);
+        await startOtlpReceiverIfNeeded({
+          providers: [],
+          prompts: [],
+          tracing: { enabled: true, otlp: { http: { enabled: true, port: configured } } },
+        } as TestSuite);
+        expect(mockStartOTLPReceiver.mock.calls[0][0]).toBe(requested);
+        expect(cliState.activeOtlpReceiver?.port).toBe(bound);
+      },
+    );
   });
 });
