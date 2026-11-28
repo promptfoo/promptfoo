@@ -22,7 +22,8 @@ promptfoo will send an HTTP POST request with the following JSON payload:
 }
 ```
 
-It expects a JSON response in this format:
+It expects a successful (2xx) HTTP response with JSON in this format. Non-2xx
+responses are provider errors, even if their body contains an `output` field:
 
 ```json
 {
