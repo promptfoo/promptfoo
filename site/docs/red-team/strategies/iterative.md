@@ -46,6 +46,8 @@ The Iterative Jailbreaks strategy works by:
 
 If the plugin grader detects a vulnerability, the strategy stops before asking the judge for another rating. The result reports that turn's prompt and output and keeps the turn in `redteamHistory`, so a judge failure cannot replace the finding with a later passing result.
 
+For responses containing a penalized phrase, the strategy subtracts up to three points from the current judge rating. The deduction stops at 1, and ratings of 1 or below stay the same. The adjusted rating is recorded in `redteamHistory[].score` and used to compute `highestScore`.
+
 That final turn has no `redteamHistory[].score`. The `highestScore` metadata covers only turns the judge rated and remains `0` if none were rated. Use the plugin grader's verdict to interpret pass/fail.
 
 :::warning
