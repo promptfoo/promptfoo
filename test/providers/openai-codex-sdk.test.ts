@@ -9,7 +9,10 @@ import cliState from '../../src/cliState';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
-import { CodexCliCompatibilityError } from '../../src/providers/openai/codexCliCompatibility';
+import {
+  CodexCliCleanupError,
+  CodexCliCompatibilityError,
+} from '../../src/providers/openai/codexCliCompatibility';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { getTraceparent } from '../../src/tracing/genaiTracer';
 import { getPackageVersion } from '../../src/util/packageVersion';
@@ -2899,6 +2902,40 @@ describe('OpenAICodexSDKProvider', () => {
         await expect(resultPromise).resolves.toEqual({ error: 'OpenAI Codex SDK call aborted' });
         expect(mockCompatibilityPreflight.mock.calls[0][0].signal.aborted).toBe(true);
         expect(MockCodex).not.toHaveBeenCalled();
+      });
+
+      it('logs only sanitized cleanup details while preserving the preflight abort response', async () => {
+        const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+        const cleanup = new CodexCliCleanupError({
+          phase: 'callback',
+          code: 5,
+          killed: false,
+          signal: null,
+          elapsedMs: 25,
+          directChildExitedAtStart: false,
+          directChildExitedAtFailure: true,
+        });
+        const aborted = Object.assign(new DOMException('private detail', 'AbortError'), {
+          cause: cleanup,
+        });
+        mockCompatibilityPreflight.mockRejectedValueOnce(aborted);
+        const provider = new OpenAICodexSDKProvider({
+          config: { codex_path_override: '/custom/codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        try {
+          await expect(provider.callApi('Test prompt')).resolves.toEqual({
+            error: 'OpenAI Codex SDK call aborted',
+          });
+          expect(warn).toHaveBeenCalledWith(
+            'Codex CLI process-tree cleanup failed',
+            cleanup.cleanup,
+          );
+          expect(JSON.stringify(warn.mock.calls)).not.toContain('private detail');
+          expect(MockCodex).not.toHaveBeenCalled();
+        } finally {
+          warn.mockRestore();
+        }
       });
 
       it('should not start compatibility preflight after aborting during SDK import', async () => {
