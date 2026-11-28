@@ -70,8 +70,16 @@ export async function matchesSelectBest(
 
   invariant(typeof resp.output === 'string', 'select-best produced malformed response');
 
-  const firstIntegerMatch = resp.output.trim().match(/\d+/);
-  const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
+  // The prompt asks for a single integer, but graders routinely explain the choice first
+  // ("Text 0 is too long and text 1 is vague, so the best fit is 2."). The FIRST integer in
+  // such a reply is the reasoning, not the verdict, so a bare `/\d+/` scan silently selected
+  // the wrong output. The verdict concludes the reply, so read the integer it ends with —
+  // trailing punctuation allowed, and an optional `Best:`/`Answer:` label before it. A reply
+  // that never ends in an integer — including one that keeps enumerating after naming a
+  // winner ("Best: 2 (0 and 1 were weaker)") — yields NaN and fails loudly below rather than
+  // guessing, which the range check already handles.
+  const verdictMatch = resp.output.trim().match(/(?:(?:best|answer)\s*:\s*)?(\d+)\W*$/i);
+  const verdict = verdictMatch ? Number.parseInt(verdictMatch[1], 10) : Number.NaN;
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
     return failureResults(() => `Invalid select-best verdict: ${verdict}`);
