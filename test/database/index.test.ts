@@ -19,6 +19,7 @@ import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
+import type { FilteredMetricsSnapshotProbeResult } from './fixtures/filteredMetricsSnapshotProbe';
 import type { LockRecoveryProbeResult } from './fixtures/lockRecoveryProbe';
 import type { ShutdownQueueProbeResult } from './fixtures/shutdownQueueProbe';
 import type { WalCheckpointProbeResult } from './fixtures/walCheckpointProbe';
@@ -95,7 +96,11 @@ const execFileAsync = promisify(execFile);
 const DATABASE_PROBE_RESULT_PREFIX = 'PROMPTFOO_DATABASE_PROBE_RESULT=';
 
 async function runDatabaseProbe<T>(
-  fixture: 'walCheckpointProbe' | 'lockRecoveryProbe' | 'shutdownQueueProbe',
+  fixture:
+    | 'walCheckpointProbe'
+    | 'lockRecoveryProbe'
+    | 'shutdownQueueProbe'
+    | 'filteredMetricsSnapshotProbe',
   tempConfigDir: string,
   mode: string,
 ): Promise<T> {
@@ -541,6 +546,19 @@ describe('database', () => {
         'none',
       );
       expect(result.journalMode).toBe('wal');
+    });
+
+    it('keeps one metrics snapshot when another connection saves a retry', async () => {
+      const snapshot = await runDatabaseProbe<FilteredMetricsSnapshotProbeResult>(
+        'filteredMetricsSnapshotProbe',
+        tempConfigDir,
+        'none',
+      );
+      expect(snapshot).toMatchObject({
+        testPassCount: 1,
+        namedScores: { accuracy: 1 },
+        assertPassCount: 1,
+      });
     });
 
     it('should return same instance on subsequent calls', async () => {
