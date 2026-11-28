@@ -671,6 +671,24 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(expected, 10);
     });
 
+    it('prices additive reads and both cache-write durations for an unlisted model', () => {
+      const cost = calculateAnthropicCost(
+        'future-model',
+        { inputCost: 1e-6, outputCost: 2e-6 },
+        0,
+        1,
+        100,
+        1_000_000,
+        200_000,
+      );
+      expect(cost).toBeCloseTo(0.00001 + 1 + 0.4 + 0.000002, 12);
+      expect(
+        calculateAnthropicCost('future-model', { outputCost: 2e-6 }, 0, 1, 100),
+      ).toBeUndefined();
+      expect(calculateAnthropicCost('future-model', { inputCost: 0 }, 0, 0, 100)).toBe(0);
+      expect(calculateAnthropicCost('future-model', { cost: 2e-6 }, 0, 1, 100)).toBe(2e-6);
+    });
+
     it('should fall back to base cost when config.cost overrides cache pricing', () => {
       // config.cost overrides everything
       const cost = calculateAnthropicCost(

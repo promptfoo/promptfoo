@@ -1023,15 +1023,18 @@ export function calculateAnthropicCost(
   // rejects `undefined` at runtime but does not narrow the type.
   if (
     !usesFlatCost &&
-    modelInfo &&
     (cacheRead || cacheCreation) &&
     typeof promptTokens !== 'undefined' &&
     typeof completionTokens !== 'undefined' &&
     Number.isFinite(promptTokens) &&
     Number.isFinite(completionTokens)
   ) {
-    const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
-    const outputCost = effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo.cost.output;
+    const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo?.cost.input;
+    const outputCost = effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo?.cost.output;
+    // Cache reads and writes are billable input even when input_tokens is zero.
+    if (inputCost == null || (completionTokens > 0 && outputCost == null)) {
+      return undefined;
+    }
     return withPricingMultipliers(
       calculateCacheInputCost(
         inputCost,
@@ -1041,7 +1044,7 @@ export function calculateAnthropicCost(
         pricingModelName,
         cacheCreation1h,
       ) +
-        completionTokens * outputCost,
+        completionTokens * (outputCost ?? 0),
     );
   }
 
