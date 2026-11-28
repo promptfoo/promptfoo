@@ -49,6 +49,8 @@ describe('agentic-utils', () => {
       'openai:codex-desktop',
       'anthropic:claude-agent-sdk',
       'anthropic:claude-code:sonnet',
+      'muse-code',
+      'muse-code:muse-spark-1.2',
       'openinterpreter',
       'openinterpreter:gpt-5.4',
       'opencode',
@@ -66,6 +68,18 @@ describe('agentic-utils', () => {
       expect(isAgenticGradingProvider(provider('openai:codex-sdk'))).toBe(true);
       expect(isAgenticGradingProvider(provider('anthropic:claude-agent-sdk'))).toBe(true);
       expect(isAgenticGradingProvider(provider('openai:responses:gpt-5.5'))).toBe(false);
+    });
+
+    it('uses an explicit grading capability regardless of the display ID', () => {
+      const grader = { ...provider('custom-grader'), supportsAgenticGrading: true };
+      expect(isAgenticProvider(grader)).toBe(true);
+      expect(isAgenticGradingProvider(grader)).toBe(true);
+    });
+
+    it('allows coding agents to explicitly decline rubric grading', () => {
+      const scanner = { ...provider('openai:codex-sdk'), supportsAgenticGrading: false };
+      expect(isAgenticProvider(scanner)).toBe(true);
+      expect(isAgenticGradingProvider(scanner)).toBe(false);
     });
 
     it.each(['openai:codex-security', 'openai:codex-security:gpt-5.6-sol'])(

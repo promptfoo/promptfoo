@@ -87,6 +87,14 @@ describe('ProviderOptionsSchema', () => {
 });
 
 describe('ProviderSchema union', () => {
+  it('preserves an explicit agentic grading capability with a custom provider ID', () => {
+    const input = {
+      ...createMockProvider({ id: 'muse-comparison' }),
+      supportsAgenticGrading: true,
+    };
+    expect(ProviderSchema.parse(input)).toHaveProperty('supportsAgenticGrading', true);
+  });
+
   it('preserves the explicit embedding cancellation capability without requiring it', () => {
     const provider = {
       id: () => 'custom-embedding',
