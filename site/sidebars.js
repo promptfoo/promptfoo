@@ -170,6 +170,7 @@ const redTeamSidebar = [
           'red-team/strategies/basic',
           'red-team/strategies/best-of-n',
           'red-team/strategies/citation',
+          'red-team/strategies/fullwidth',
           'red-team/strategies/gcg',
           'red-team/strategies/hex',
           'red-team/strategies/homoglyph',

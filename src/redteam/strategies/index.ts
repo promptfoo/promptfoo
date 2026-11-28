@@ -11,6 +11,7 @@ import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
 import { addCustom } from './custom';
+import { addFullwidth } from './fullwidth';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addGoblin } from './goblin';
@@ -78,6 +79,7 @@ export const Strategies: Strategy[] = [
   },
   createEncodingStrategy('base64', 'Base64', () => addBase64Encoding),
   createEncodingStrategy('homoglyph', 'Homoglyph', () => addHomoglyphs),
+  createEncodingStrategy('fullwidth', 'Fullwidth', () => addFullwidth),
   createEncodingStrategy(
     'arabic-presentation-forms',
     'Arabic presentation forms',
