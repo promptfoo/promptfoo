@@ -1,8 +1,7 @@
 import chalk from 'chalk';
-import { TERMINAL_MAX_WIDTH } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { generateTable, wrapTable } from '../table';
+import { fitColumnWidths, generateTable, wrapTable } from '../table';
 import { getDatasetFromHash, getPromptFromHash, hasRecentEvalWithIdPrefix } from '../util/database';
 import { printBorder, setupEnv } from '../util/index';
 import type { Command } from 'commander';
@@ -22,21 +21,13 @@ const EVAL_USAGE_COLUMN_MAX_WIDTHS: Record<string, number> = {
   'Pass count': 12,
   'Fail count': 18,
 };
-const MIN_COLUMN_WIDTH = 5;
 
 function getEvalUsageColumnWidths(columns: string[]): Record<string, number> {
-  const otherColumns = columns.filter((column) => column !== 'Eval ID');
-  // TERMINAL_MAX_WIDTH already leaves a margin for the table borders, as in wrapTable.
-  const available = TERMINAL_MAX_WIDTH - EVAL_ID_COLUMN_WIDTH;
-  const share = Math.max(
-    MIN_COLUMN_WIDTH,
-    Math.floor(available / Math.max(otherColumns.length, 1)),
+  return fitColumnWidths(
+    columns,
+    { 'Eval ID': EVAL_ID_COLUMN_WIDTH },
+    EVAL_USAGE_COLUMN_MAX_WIDTHS,
   );
-  const widths: Record<string, number> = { 'Eval ID': EVAL_ID_COLUMN_WIDTH };
-  for (const column of otherColumns) {
-    widths[column] = Math.min(EVAL_USAGE_COLUMN_MAX_WIDTHS[column] ?? share, share);
-  }
-  return widths;
 }
 
 function formatMetrics(metrics: MatchedPrompt['evals'][number]['metrics']) {

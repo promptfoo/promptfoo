@@ -47,6 +47,31 @@ export function generateTable(
   return table.toString();
 }
 
+/**
+ * Column widths for `wrapTable` that keep a table within the terminal width. Columns in
+ * `fixedWidths` keep their width; the others share what is left, each capped at its
+ * `preferredWidths` entry and never narrower than `minWidth`.
+ */
+export function fitColumnWidths(
+  columns: string[],
+  fixedWidths: Record<string, number>,
+  preferredWidths: Record<string, number> = {},
+  minWidth = 5,
+): Record<string, number> {
+  const otherColumns = columns.filter((column) => !(column in fixedWidths));
+  const fixedTotal = columns.reduce((sum, column) => sum + (fixedWidths[column] ?? 0), 0);
+  // TERMINAL_MAX_WIDTH already leaves a margin for the table borders.
+  const share = Math.max(
+    minWidth,
+    Math.floor((TERMINAL_MAX_WIDTH - fixedTotal) / Math.max(otherColumns.length, 1)),
+  );
+  const widths: Record<string, number> = {};
+  for (const column of columns) {
+    widths[column] = fixedWidths[column] ?? Math.min(preferredWidths[column] ?? share, share);
+  }
+  return widths;
+}
+
 export function wrapTable(
   rows: Record<string, string | number>[],
   columnWidths?: Record<string, number>,
