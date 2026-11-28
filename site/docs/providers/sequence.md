@@ -33,6 +33,10 @@ The Sequence Provider:
 4. Collects all responses
 5. Joins them together using the specified separator
 
+Cost assertions use the sum of the costs reported by the individual calls. If
+any call omits its cost, the total is unavailable. Incurred cost excludes
+cached calls and is only available when each call's incurred cost is known.
+
 ## Usage Example
 
 This example sends three related prompts and runs assertions on their combined output:

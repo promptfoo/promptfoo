@@ -166,6 +166,17 @@ describe('providerWrapper', () => {
       });
     });
 
+    it('uses a retry’s explicit incurred cost and excludes a cached terminal response', () => {
+      const options = createProviderRateLimitOptions();
+
+      const result = options.finalizeResult?.({ output: 'Recovered', cost: 0.02, cached: true }, [
+        { error: 'temporary failure', cost: 0.01, incurredCost: 0.004 },
+      ]);
+
+      expect(result?.cost).toBeCloseTo(0.03);
+      expect(result?.incurredCost).toBeCloseTo(0.004);
+    });
+
     it('drops unsafe retry accounting fields', () => {
       const options = createProviderRateLimitOptions();
       const retryResult: ProviderResponse = {
