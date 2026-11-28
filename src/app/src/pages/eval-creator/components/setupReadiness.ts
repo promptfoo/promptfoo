@@ -1,5 +1,9 @@
 import { getMissingAssertionVariables } from './assertionPrerequisites';
-import { getFirstRunnableAssertionValueError, isRecord } from './assertionValueValidation';
+import {
+  getFirstRunnableAssertionValueError,
+  getFirstTrajectoryCountBoundsError,
+  isRecord,
+} from './assertionValueValidation';
 import type { AssertionOrSet, ProviderOptions, UnifiedConfig } from '@promptfoo/types';
 
 export type SetupStepId = 1 | 2 | 3 | 4;
@@ -146,6 +150,25 @@ function getEffectiveAssertions(
   const disablesDefaultAsserts =
     isRecord(testCase.options) && testCase.options.disableDefaultAsserts === true;
   return [...(disablesDefaultAsserts ? [] : defaultAssertions), ...getAssertions(testCase)];
+}
+
+// Check only inline tests. Unresolved tests may disable default assertions, so
+// their effective count bounds must be validated by the runtime.
+export function getTrajectoryCountConfigError(config: Partial<UnifiedConfig>): string | undefined {
+  const defaultAssertions = getAssertions(config.defaultTest);
+  const testCases = Array.isArray(config.tests) ? config.tests : [];
+  for (const testCase of testCases) {
+    if (!isRecord(testCase) || ('path' in testCase && typeof testCase.path === 'string')) {
+      continue;
+    }
+    const error = getFirstTrajectoryCountBoundsError(
+      getEffectiveAssertions(testCase, defaultAssertions),
+    );
+    if (error) {
+      return error;
+    }
+  }
+  return undefined;
 }
 
 function referenceMatchesValue(reference: string, value: string | undefined): boolean {

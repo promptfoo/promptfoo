@@ -11,6 +11,7 @@ import { callApi } from '@app/utils/api';
 import { useLocation, useNavigate } from 'react-router';
 import {
   countTests,
+  getTrajectoryCountConfigError,
   normalizePrompts,
   normalizePromptsForJob,
   normalizeProviders,
@@ -73,6 +74,12 @@ const RunTestSuiteButton = () => {
     testCount === 0;
 
   const runTestSuite = async () => {
+    const trajectoryCountError = getTrajectoryCountConfigError(config);
+    if (trajectoryCountError) {
+      setRunError(trajectoryCountError);
+      return;
+    }
+
     setIsRunning(true);
     setRunError(null);
     setProgressPercent(0);
