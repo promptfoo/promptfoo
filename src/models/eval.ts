@@ -576,7 +576,7 @@ export default class Eval {
             opts.results?.map((r) => ({
               ...r,
               metadata: persistTraceMetadata(
-                persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
+                persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId, r.repeatCached),
                 r.traceId,
                 r.evaluationId,
               ),
@@ -1410,7 +1410,7 @@ export default class Eval {
           results.map((r) => ({
             ...r,
             metadata: persistTraceMetadata(
-              persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
+              persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId, r.repeatCached),
               r.traceId,
               r.evaluationId,
             ),

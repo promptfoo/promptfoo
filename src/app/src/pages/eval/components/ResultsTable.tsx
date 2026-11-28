@@ -986,12 +986,14 @@ async function saveManualRating({
   resultId,
   version,
   gradingResult,
+  commentOnly,
   table,
 }: {
   evalId: string | null;
   resultId: string;
   version: number | null | undefined;
   gradingResult: GradingResult;
+  commentOnly: boolean;
   table: EvaluateTable;
 }): Promise<void> {
   invariant(evalId, 'Cannot save manual rating without an evaluation ID');
@@ -1003,7 +1005,7 @@ async function saveManualRating({
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ ...gradingResult }),
+          body: JSON.stringify({ ...gradingResult, commentOnly }),
         })
       : await callApi(EVAL_ROUTES.DETAIL(evalId), {
           method: 'PATCH',
@@ -1692,6 +1694,7 @@ function ResultsTable({
         score,
         comment,
       });
+      const commentOnly = isPass === undefined && score === undefined;
       const newTable = buildRatingTableUpdate({
         head,
         body,
@@ -1710,7 +1713,10 @@ function ResultsTable({
             evalId,
             resultId,
             version,
-            gradingResult,
+            gradingResult: commentOnly
+              ? { ...gradingResult, pass: existingOutput.pass, score: existingOutput.score }
+              : gradingResult,
+            commentOnly,
             table: newTable,
           });
         } catch (error) {
