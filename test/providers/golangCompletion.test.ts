@@ -300,6 +300,28 @@ describe('GolangProvider', () => {
     }
   });
 
+  it.each([false, true])('preserves caller context (frozen: %s)', async (frozen) => {
+    const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
+    const context = {
+      prompt: createLabeledPrompt(),
+      vars: { name: 'world' },
+      getCache: vi.fn(),
+      filters: { uppercase: (value: string) => value.toUpperCase() },
+      originalProvider: provider,
+    };
+    const original = { ...context };
+    if (frozen) {
+      Object.freeze(context);
+    }
+
+    await expect(provider.callApi('hello', context)).resolves.toEqual({ output: 'test output' });
+
+    expect(context).toEqual(original);
+    const execution = mockExecFile.mock.calls.find(([file]) => file.includes('golang_wrapper'));
+    const args = JSON.parse(execution![1][2]);
+    expect(args[2]).toEqual({ prompt: createLabeledPrompt(), vars: { name: 'world' } });
+  });
+
   describe('constructor', () => {
     it('should initialize with correct properties', () => {
       const provider = new GolangProvider('script.go', {
