@@ -1345,16 +1345,20 @@ export function getOpenAICacheWriteInputTokens(usage: any): number | undefined {
   return undefined;
 }
 
-export function getOpenAICompletionTokenDetails(
-  usage: any,
-): TokenUsage['completionDetails'] | undefined {
-  // Some OpenAI-compatible APIs (e.g. Moonshot) report cached prompt tokens at
-  // the top level of usage instead of inside prompt_tokens_details.
-  const cachedInputTokens =
+// Moonshot and DeepSeek expose top-level cache counts. Nested OpenAI details take precedence.
+function getOpenAICacheReadInputTokens(usage: any): number | undefined {
+  const value =
     usage.prompt_tokens_details?.cached_tokens ??
     usage.input_tokens_details?.cached_tokens ??
     usage.cached_tokens ??
-    0;
+    usage.prompt_cache_hit_tokens;
+  return isSafeTokenCount(value) ? value : undefined;
+}
+
+export function getOpenAICompletionTokenDetails(
+  usage: any,
+): TokenUsage['completionDetails'] | undefined {
+  const cachedInputTokens = getOpenAICacheReadInputTokens(usage) ?? 0;
   const cacheWriteInputTokens = getOpenAICacheWriteInputTokens(usage);
   const completionDetails = usage.completion_tokens_details ?? usage.output_tokens_details;
 
@@ -1395,11 +1399,6 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   tokenUsage.prompt = isSafeTokenCount(usage.prompt_tokens) ? usage.prompt_tokens : 0;
   tokenUsage.completion = isSafeTokenCount(usage.completion_tokens) ? usage.completion_tokens : 0;
 
-  const promptDetails = isRecord(usage.prompt_tokens_details)
-    ? usage.prompt_tokens_details
-    : isRecord(usage.input_tokens_details)
-      ? usage.input_tokens_details
-      : undefined;
   const completionDetails = isRecord(usage.completion_tokens_details)
     ? usage.completion_tokens_details
     : isRecord(usage.output_tokens_details)
@@ -1410,9 +1409,7 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
     ['reasoning', completionDetails?.reasoning_tokens],
     ['acceptedPrediction', completionDetails?.accepted_prediction_tokens],
     ['rejectedPrediction', completionDetails?.rejected_prediction_tokens],
-    // Some OpenAI-compatible APIs (e.g. Moonshot) report cached prompt tokens at the
-    // top level of usage instead of inside prompt_tokens_details. Nested details win.
-    ['cacheReadInputTokens', promptDetails?.cached_tokens ?? usage.cached_tokens],
+    ['cacheReadInputTokens', getOpenAICacheReadInputTokens(usage)],
     ['cacheCreationInputTokens', getOpenAICacheWriteInputTokens(usage)],
   ] as const;
   for (const [field, value] of detailMappings) {

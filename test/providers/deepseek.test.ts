@@ -421,6 +421,7 @@ describe('DeepSeek native requests', () => {
       expect(body).not.toHaveProperty('thinking');
     }
     expect(result.error).toBeUndefined();
+    expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(40);
     expect(result.output).toBe('fixture answer');
     const expected =
       model === 'custom-model'

@@ -350,41 +350,34 @@ describe('getTokenUsage', () => {
     ).toEqual({ prompt: 0, completion: 0, numRequests: 1 });
   });
 
-  it('should read cached tokens from top-level usage.cached_tokens (e.g. Moonshot)', () => {
-    const data = {
-      usage: {
-        total_tokens: 100,
-        prompt_tokens: 40,
-        completion_tokens: 60,
-        cached_tokens: 32,
-      },
-    };
+  it.each(['cached_tokens', 'prompt_cache_hit_tokens'])(
+    'reads top-level usage.%s from compatible APIs',
+    (field) => {
+      const usage = { total_tokens: 100, prompt_tokens: 40, completion_tokens: 60, [field]: 32 };
+      expect(getTokenUsage({ usage }, false)).toEqual({
+        total: 100,
+        prompt: 40,
+        completion: 60,
+        numRequests: 1,
+        completionDetails: { cacheReadInputTokens: 32 },
+      });
+    },
+  );
 
-    const result = getTokenUsage(data, false);
-    expect(result).toEqual({
-      total: 100,
-      prompt: 40,
-      completion: 60,
-      numRequests: 1,
-      completionDetails: {
-        cacheReadInputTokens: 32,
-      },
+  it.each([0, 32])('prefers nested cached tokens (%s) over top-level counters', (cached) => {
+    const usage = {
+      cached_tokens: 7,
+      prompt_cache_hit_tokens: 24,
+      prompt_tokens_details: { cached_tokens: cached },
+    };
+    expect(getTokenUsage({ usage }, false).completionDetails).toEqual({
+      cacheReadInputTokens: cached,
     });
   });
 
-  it('should prefer prompt_tokens_details.cached_tokens over the top-level field', () => {
-    const data = {
-      usage: {
-        total_tokens: 100,
-        prompt_tokens: 40,
-        completion_tokens: 60,
-        cached_tokens: 7,
-        prompt_tokens_details: { cached_tokens: 32 },
-      },
-    };
-
-    const result = getTokenUsage(data, false);
-    expect(result.completionDetails).toEqual({ cacheReadInputTokens: 32 });
+  it.each(['32', -1, 0.5])('ignores an invalid native cache count (%j)', (value) => {
+    const usage = { prompt_cache_hit_tokens: value };
+    expect(getTokenUsage({ usage }, false).completionDetails).toBeUndefined();
   });
 
   it.each([
