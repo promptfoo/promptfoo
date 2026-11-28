@@ -14,6 +14,7 @@ interface TraceSpanCountValue {
 export const handleTraceSpanCount = ({
   assertion,
   assertionValueContext,
+  inverse,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-span-count assertion');
@@ -25,6 +26,9 @@ export const handleTraceSpanCount = ({
   }
 
   const { pattern, min, max, attributes } = value;
+  if (min !== undefined && max !== undefined && min > max) {
+    throw new Error('trace-span-count minimum must not exceed maximum');
+  }
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Count spans matching the pattern
@@ -58,9 +62,10 @@ export const handleTraceSpanCount = ({
     reason += `. Matched spans: ${spanNames.join(', ')}`;
   }
 
+  const finalPass = inverse ? !pass : pass;
   return {
-    pass,
-    score: pass ? 1 : 0,
+    pass: finalPass,
+    score: finalPass ? 1 : 0,
     reason: withTraceAttributeFilterContext(reason, attributes),
     assertion,
   };

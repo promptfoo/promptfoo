@@ -415,30 +415,28 @@ export async function matchesClosedQa(
   if (resp.error || !resp.output) {
     return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
-
-  invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
-  try {
-    const pass = resp.output.trimEnd().endsWith('Y');
-    let reason;
-    if (pass) {
-      reason = `The submission meets the criterion:\n${resp.output}`;
-    } else if (resp.output.trimEnd().endsWith('N')) {
-      reason = `The submission does not meet the criterion:\n${resp.output}`;
-    } else {
-      return graderFail(
-        `Model grader produced a malformed response:\n${resp.output}`,
-        resp.tokenUsage,
-      );
-    }
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason,
-      tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
-    };
-  } catch (err) {
-    return graderFail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
+  if (resp.isRefusal) {
+    return graderFail('Model grader refused to provide a verdict', resp.tokenUsage);
   }
+  if (typeof resp.output !== 'string') {
+    return graderFail('model-graded-closedqa produced malformed response', resp.tokenUsage);
+  }
+  const verdict = resp.output.trimEnd().match(/(?:^|\s)([YN])$/)?.[1];
+  if (!verdict) {
+    return graderFail(
+      `Model grader produced a malformed response:\n${resp.output}`,
+      resp.tokenUsage,
+    );
+  }
+  const pass = verdict === 'Y';
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass
+      ? `The submission meets the criterion:\n${resp.output}`
+      : `The submission does not meet the criterion:\n${resp.output}`,
+    tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+  };
 }
 
 /**
