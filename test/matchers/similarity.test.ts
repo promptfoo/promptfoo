@@ -53,6 +53,52 @@ describe('matchesSimilarity', () => {
     vi.restoreAllMocks();
   });
 
+  it('rejects empty embeddings instead of passing a zero Euclidean distance', async () => {
+    vi.mocked(DefaultEmbeddingProvider.callEmbeddingApi).mockResolvedValue({
+      embedding: [],
+      tokenUsage: { total: 2, prompt: 2 },
+    });
+
+    await expect(
+      matchesSimilarity('Expected output', 'Sample output', 0.5, false, undefined, 'euclidean'),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Invalid embedding: expected a non-empty vector of finite numbers',
+      tokensUsed: { total: 4, prompt: 4 },
+    });
+  });
+
+  it.each([
+    { name: 'empty', vector: [] },
+    { name: 'numeric strings', vector: ['1', '0'] },
+    { name: 'null entries', vector: [1, null] },
+    { name: 'non-finite entries', vector: [1, Infinity] },
+    { name: 'NaN entries', vector: [1, NaN] },
+    { name: 'sparse entries', vector: new Array(2) },
+    { name: 'array-like object', vector: { 0: 1, 1: 0, length: 2 } },
+  ])('rejects $name for either embedding and either assertion polarity', async ({ vector }) => {
+    for (const invalidInput of ['Expected output', 'Sample output']) {
+      vi.mocked(DefaultEmbeddingProvider.callEmbeddingApi).mockImplementation(async (text) => ({
+        // Exercise malformed data returned by a custom provider or HTTP endpoint.
+        embedding: (text === invalidInput ? vector : [1, 0]) as number[],
+        tokenUsage: { total: 2, prompt: 2 },
+      }));
+      for (const metric of ['cosine', 'dot_product', 'euclidean'] as const) {
+        for (const inverse of [false, true]) {
+          await expect(
+            matchesSimilarity('Expected output', 'Sample output', 0.5, inverse, undefined, metric),
+          ).resolves.toMatchObject({
+            pass: false,
+            score: 0,
+            reason: 'Invalid embedding: expected a non-empty vector of finite numbers',
+            tokensUsed: { total: 4, prompt: 4 },
+          });
+        }
+      }
+    }
+  });
+
   it.each([
     { tracing: false, cancellation: true, array: false },
     { tracing: true, cancellation: false, array: false },
