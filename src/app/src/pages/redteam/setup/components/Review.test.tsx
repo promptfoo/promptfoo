@@ -1057,7 +1057,10 @@ Application Details:
           statusCalls++;
           return {
             ok: true,
-            json: async () => ({ hasRunningJob: statusCalls === 1 }),
+            json: async () => ({
+              hasRunningJob: statusCalls === 1,
+              jobId: statusCalls === 1 ? 'existing-job' : null,
+            }),
           } as Response;
         }
         if (url === '/redteam/cancel') {
@@ -1418,19 +1421,66 @@ Application Details:
         }
         if (url === '/redteam/run') {
           return {
+            ok: true,
             json: async () => ({ id: 'test-job-id' }),
           } as any;
         }
         if (url.startsWith('/eval/job/')) {
-          return {
-            json: async () => ({
-              status: 'running',
-              logs: ['Running tests...'],
-            }),
-          } as any;
+          return Response.json({ status: 'in-progress', logs: ['Running tests...'] });
         }
         return { json: async () => ({}) } as any;
       });
+    });
+
+    it('offers the existing-job dialog when another run wins after preflight', async () => {
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
+      const original = vi.mocked(callApi).getMockImplementation()!;
+      vi.mocked(callApi).mockImplementation(async (url, ...args) => {
+        if (url === '/redteam/run') {
+          return Response.json(
+            { error: 'Job already running', jobId: 'other-job' },
+            { status: 409 },
+          );
+        }
+        if (url === '/redteam/cancel') {
+          return Response.json(
+            { error: 'The selected job is no longer running.' },
+            { status: 409 },
+          );
+        }
+        return original(url, ...args);
+      });
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await userEvent
+        .setup({ delay: null })
+        .click(screen.getByRole('button', { name: /run now/i }));
+
+      expect(await screen.findByRole('dialog', { name: 'Job Already Running' })).toBeVisible();
+      expect(vi.mocked(callApi).mock.calls.some(([url]) => url.startsWith('/eval/job/'))).toBe(
+        false,
+      );
+      await userEvent
+        .setup({ delay: null })
+        .click(screen.getByRole('button', { name: /cancel existing & run new/i }));
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('dialog', { name: 'Job Already Running' }),
+        ).not.toBeInTheDocument(),
+      );
+      expect(callApi).toHaveBeenCalledWith(
+        '/redteam/cancel',
+        expect.objectContaining({ body: JSON.stringify({ jobId: 'other-job' }) }),
+      );
+      expect(vi.mocked(callApi).mock.calls.filter(([url]) => url === '/redteam/run')).toHaveLength(
+        1,
+      );
     });
 
     it('sends per-plugin settings through the real serializer when running', async () => {
@@ -1531,7 +1581,12 @@ Application Details:
       });
     });
 
-    it('should show Cancel button when isRunning is true', async () => {
+    it('enables Cancel once the job ID is available', async () => {
+      const { useRedteamJobStore: jobStore } = await vi.importActual<
+        typeof import('@app/stores/redteamJobStore')
+      >('@app/stores/redteamJobStore');
+      jobStore.setState({ jobId: null, _hasHydrated: false });
+      vi.mocked(useRedteamJobStore).mockImplementation(jobStore);
       const user = userEvent.setup({ delay: null });
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
@@ -1555,12 +1610,11 @@ Application Details:
 
       await user.click(screen.getByRole('button', { name: /run now/i }));
 
-      // Wait for the Cancel button to appear
       await waitFor(() => {
-        const cancelButton = screen.getByRole('button', { name: /cancel/i });
-        expect(cancelButton).toBeInTheDocument();
-        expect(cancelButton).toBeEnabled(); // Cancel button should always be enabled
+        expect(jobStore.getState().jobId).toBe('test-job-id');
+        expect(screen.getByRole('button', { name: /cancel/i })).toBeEnabled();
       });
+      jobStore.getState().clearJob();
     });
 
     it('should not show tooltip when button is disabled due to isRunning', async () => {
@@ -2063,6 +2117,12 @@ Application Details:
     });
 
     it('should call clearJob when cancelling a job', async () => {
+      vi.mocked(useRedteamJobStore).mockReturnValue({
+        jobId: 'job-to-cancel',
+        setJob: mockSetJob,
+        clearJob: mockClearJob,
+        _hasHydrated: false,
+      });
       const user = userEvent.setup({ delay: null });
       vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
         if (url === '/redteam/status') {
@@ -2119,7 +2179,10 @@ Application Details:
 
       await user.click(screen.getByRole('button', { name: /cancel/i }));
 
-      // Should call clearJob
+      expect(callApi).toHaveBeenCalledWith(
+        '/redteam/cancel',
+        expect.objectContaining({ body: JSON.stringify({ jobId: 'job-to-cancel' }) }),
+      );
       await waitFor(() => {
         expect(mockClearJob).toHaveBeenCalled();
       });
