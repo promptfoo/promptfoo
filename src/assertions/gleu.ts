@@ -1,5 +1,5 @@
-import invariant from '../util/invariant';
 import { countNGrams, getNGrams } from './ngrams';
+import { getTextReferences } from './textReferences';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -128,7 +128,7 @@ export function calculateGleuScore(
  * @param {Object} params.assertion - The assertion configuration object
  * @param {boolean} params.inverse - Whether to invert the pass condition
  * @param {string} params.outputString - The candidate string to evaluate
- * @param {string|string[]} params.renderedValue - The reference string(s) to compare against
+ * @param {string|number|Array<string|number>} params.renderedValue - The reference(s) to compare against; numbers are compared as text
  * @param {string} params.provider - The provider name (unused)
  * @param {Object} params.test - The test case data (unused)
  * @returns {GradingResult} Object containing:
@@ -136,7 +136,7 @@ export function calculateGleuScore(
  *   - score: GLEU score (0-1)
  *   - reason: explanation of the result
  *   - assertion: original assertion config
- * @throws {Error} If renderedValue is not a string or array of strings
+ * @throws {Error} If renderedValue is not a string, finite number, or array of them
  */
 export function handleGleuScore({
   assertion,
@@ -145,14 +145,12 @@ export function handleGleuScore({
   renderedValue,
 }: AssertionParams): GradingResult {
   // Validate inputs
-  invariant(
-    typeof renderedValue === 'string' ||
-      (Array.isArray(renderedValue) && renderedValue.every((v) => typeof v === 'string')),
-    '"gleu" assertion must have a string or array of strings value',
+  const references = getTextReferences(
+    renderedValue,
+    '"gleu" assertion must have a string, number, or array of strings or numbers value',
   );
 
   const threshold = assertion.threshold ?? 0.5;
-  const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
   const score = calculateGleuScore(outputString, references);
   const pass = score >= threshold !== inverse;
 

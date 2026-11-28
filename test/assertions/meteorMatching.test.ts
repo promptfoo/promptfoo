@@ -103,12 +103,21 @@ describe('METEOR matching with the real handler', () => {
     expect(result.pass).toBe(!inverse);
   });
 
-  it.each([{ value: null }, { value: 42 }, { value: {} }, { value: ['cat', 42] }])(
-    'rejects non-string reference values: $value',
+  it.each([{ value: null }, { value: {} }, { value: Number.NaN }, { value: ['cat', {}] }])(
+    'rejects reference values that are not strings or finite numbers: $value',
     async ({ value }) => {
       await expect(score('cat', value as string)).rejects.toThrow(
-        '"meteor" assertion must have a string or array of strings value',
+        '"meteor" assertion must have a string, number, or array of strings or numbers value',
       );
+    },
+  );
+
+  it.each([{ value: 42 }, { value: ['cat', 42] }])(
+    'compares numeric reference values as text: $value',
+    async ({ value }) => {
+      // Numbers come from YAML/CSV test files; the helper's type only allows strings.
+      const result = await score('42', value as unknown as string);
+      expect(result.pass).toBe(true);
     },
   );
 });

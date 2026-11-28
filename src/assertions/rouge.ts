@@ -1,6 +1,6 @@
 import * as rouge from 'js-rouge';
-import invariant from '../util/invariant';
 import { countNGrams } from './ngrams';
+import { getTextReference } from './textReferences';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -39,17 +39,20 @@ export function handleRougeScore({
   outputString,
   inverse,
 }: AssertionParams): GradingResult {
-  invariant(typeof renderedValue === 'string', '"rouge" assertion type must be a string value');
+  const reference = getTextReference(
+    renderedValue,
+    '"rouge" assertion type must be a string or number value',
+  );
   const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
 
   // js-rouge rejects blank text, including NEXT LINE (which trim does not remove).
   let score = 0;
-  if (!/^[\s\u0085]*$/u.test(outputString) && !/^[\s\u0085]*$/u.test(renderedValue)) {
+  if (!/^[\s\u0085]*$/u.test(outputString) && !/^[\s\u0085]*$/u.test(reference)) {
     // Segment L/S text before folding case to preserve sentence boundaries.
     score =
       fnName === 'n'
-        ? rougeNScore(outputString.toLowerCase(), renderedValue.toLowerCase())
-        : rouge[fnName](outputString, renderedValue, { caseSensitive: false });
+        ? rougeNScore(outputString.toLowerCase(), reference.toLowerCase())
+        : rouge[fnName](outputString, reference, { caseSensitive: false });
   }
 
   const threshold = assertion.threshold ?? 0.75;

@@ -295,12 +295,28 @@ describe('handleRougeScore', () => {
     });
   });
 
-  it.each(['rouge-n', 'rouge-l', 'rouge-s'])('%s rejects non-string references', (baseType) => {
-    expect(() =>
-      handleRougeScore({
-        ...makeParams('actual text', 'expected text', { baseType }),
-        renderedValue: 123 as any,
-      }),
-    ).toThrow('"rouge" assertion type must be a string value');
+  it.each(['rouge-n', 'rouge-l', 'rouge-s'])(
+    '%s rejects references that are not strings or finite numbers',
+    (baseType) => {
+      for (const renderedValue of [{ a: 1 }, true, Number.NaN, ['expected text']]) {
+        expect(() =>
+          handleRougeScore({
+            ...makeParams('actual text', 'expected text', { baseType }),
+            renderedValue: renderedValue as any,
+          }),
+        ).toThrow('"rouge" assertion type must be a string or number value');
+      }
+    },
+  );
+
+  // ROUGE-S scores skip-bigrams, so a single token never matches regardless of type.
+  it.each(['rouge-n', 'rouge-l'])('%s compares numeric references as text', (baseType) => {
+    const result = handleRougeScore({
+      ...makeParams('2024', 'unused', { baseType }),
+      renderedValue: 2024 as any,
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
   });
 });
