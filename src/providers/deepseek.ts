@@ -199,10 +199,13 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
     if (config.reasoning_effort !== undefined) {
       body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
+    // DeepSeek's `thinking` toggle overrides `reasoning_effort`, so the bare default
+    // disables thinking only when the request selects no mode of its own.
     if (
       this.usesBareModelDefault &&
       !Object.prototype.hasOwnProperty.call(config.passthrough ?? {}, 'model') &&
-      !Object.prototype.hasOwnProperty.call(body, 'thinking')
+      !Object.prototype.hasOwnProperty.call(body, 'thinking') &&
+      !Object.prototype.hasOwnProperty.call(body, 'reasoning_effort')
     ) {
       Object.assign(body, { thinking: { type: 'disabled' } });
     }
