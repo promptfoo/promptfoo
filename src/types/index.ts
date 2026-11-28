@@ -989,6 +989,8 @@ export const TestCaseSchema = z.object({
       ...GradingConfigSchema.shape,
       // If true, do not expand arrays of variables into multiple eval cases.
       disableVarExpansion: z.boolean().optional(),
+      // Treat these string variables as runtime text, including file references and template syntax.
+      literalVars: z.array(z.string()).optional(),
       // If true, do not include an implicit `_conversation` variable in the prompt.
       disableConversationVar: z.boolean().optional(),
       // If true, skip defaultTest assertions for this test case while still inheriting other defaults.

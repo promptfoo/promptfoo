@@ -119,11 +119,18 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
  * @param vars The variables object containing potential file references
  * @returns An object mapping variable names to their file metadata
  */
-export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadata {
+export function collectFileMetadata(
+  vars: Record<string, VarValue>,
+  literalVars: string[] = [],
+): FileMetadata {
   const fileMetadata: FileMetadata = {};
 
   for (const [varName, value] of Object.entries(vars)) {
-    if (typeof value === 'string' && value.startsWith('file://')) {
+    if (
+      !literalVars.includes(varName) &&
+      typeof value === 'string' &&
+      value.startsWith('file://')
+    ) {
       const filePath = path.resolve(cliState.basePath || '', value.slice('file://'.length));
       const fileExtension = filePath.split('.').pop() || '';
 

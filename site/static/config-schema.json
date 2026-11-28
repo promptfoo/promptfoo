@@ -1259,6 +1259,12 @@
         "disableVarExpansion": {
           "type": "boolean"
         },
+        "literalVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "disableConversationVar": {
           "type": "boolean"
         },
