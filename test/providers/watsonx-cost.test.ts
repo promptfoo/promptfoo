@@ -166,6 +166,53 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it.each([{ result: { resources: [] } }, metadata('class_c1', 'class_c1', 'different-model')])(
+    'caches a missing model until the metadata TTL expires: %j',
+    async (missing) => {
+      vi.useFakeTimers();
+      const regionalClient = client();
+      regionalClient.listFoundationModelSpecs.mockResolvedValueOnce(missing);
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const instance = provider(chat);
+      const responses = await Promise.all(
+        ['First', 'Second', 'Third'].map((prompt) => instance.callApi(prompt)),
+      );
+      for (const response of responses) {
+        expect(response).toMatchObject({ output: 'Hello' });
+        expect(response.error).toBeUndefined();
+        expect(response.cost).toBeUndefined();
+      }
+      expect((await instance.callApi('Still missing')).cost).toBeUndefined();
+      expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      const recovered = await instance.callApi('After metadata refresh');
+      expect(recovered.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
+      expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('retries transient metadata failures with response caching enabled', async () => {
+    const regionalClient = client();
+    regionalClient.listFoundationModelSpecs.mockRejectedValueOnce(new Error('Temporary failure'));
+    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+    const responses = new Map<string, string>();
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(getCache).mockReturnValue({
+      get: vi.fn(async (key: string) => responses.get(key)),
+      set: vi.fn(async (key: string, value: string) => responses.set(key, value)),
+    } as any);
+    const instance = provider(chat);
+    expect((await instance.callApi('During failure')).cost).toBeUndefined();
+    const recovered = await instance.callApi('After recovery');
+    const replay = await instance.callApi('After recovery');
+    expect(recovered.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
+    expect(replay).toMatchObject({ cached: true, cost: recovered.cost });
+    expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
+    expect(chat ? regionalClient.textChat : regionalClient.generateText).toHaveBeenCalledTimes(2);
+  });
+
   it('retries client initialization after a shared failure', async () => {
     const regionalClient = client();
     const initializationError = new Error('Client initialization failed');
@@ -1079,15 +1126,10 @@ describe('WatsonX metadata cache boundaries', () => {
 
   it.each([
     { result: { resources: {} } },
-    { result: { resources: [] } },
-    {
-      result: {
-        resources: [
-          { model_id: 'different-model', input_tier: 'class_c1', output_tier: 'class_c1' },
-        ],
-      },
-    },
-  ])('does not cache missing or malformed model metadata: %j', async (unavailable) => {
+    { result: { resources: [{}] } },
+    { result: { resources: [null] } },
+    { result: { resources: [{ model_id: '' }] } },
+  ])('does not cache malformed model metadata: %j', async (unavailable) => {
     const regionalClient = client();
     regionalClient.listFoundationModelSpecs.mockResolvedValueOnce(unavailable as any);
     vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
