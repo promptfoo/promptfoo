@@ -1,5 +1,7 @@
 import OpenAI from 'openai';
 import logger from '../../logger';
+import { isPrivateRangeGuardContextActive } from '../../util/fetch/guardContext';
+import { type FetchOptions, fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
@@ -45,6 +47,24 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
   attachments?: OpenAI.Beta.Threads.Message.Attachment[];
   tool_resources?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tool_resources'];
 };
+
+/**
+ * SDK transport for the OpenAI assistant provider. Outside a guarded server
+ * route this is the plain global fetch, so eval behavior is unchanged.
+ * Inside the private-range guard context it routes through fetchWithProxy,
+ * so an SDK request to a public apiBaseUrl that redirects into private space
+ * is validated hop by hop instead of being followed by the SDK's ordinary
+ * fetch. The check runs at request time, not construction time, so a provider
+ * loaded outside the guard and called inside it is still covered. This is the
+ * same pattern as the Anthropic guarded transport; the assistant provider is
+ * the only other provider that constructs an SDK client directly.
+ */
+const guardedOpenAiFetch: NonNullable<
+  NonNullable<ConstructorParameters<typeof OpenAI>[0]>['fetch']
+> = (input, init) =>
+  isPrivateRangeGuardContextActive()
+    ? fetchWithProxy(input instanceof URL ? input.toString() : input, init as FetchOptions)
+    : globalThis.fetch(input, init);
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   assistantId: string;
@@ -238,6 +258,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       apiKey: this.getApiKey(),
       organization: orgHeaderOverridden ? undefined : this.getOrganization(),
       baseURL: apiUrl.toString(),
+      fetch: guardedOpenAiFetch,
       defaultQuery,
       maxRetries: 3,
       timeout: getRequestTimeoutMs(),

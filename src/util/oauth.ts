@@ -1,5 +1,7 @@
 import logger from '../logger';
+import { isPrivateRangeGuardContextActive } from './fetch/guardContext';
 import { fetchWithProxy } from './fetch/index';
+import { assertUrlResolvesPublic } from './privateNetwork';
 
 /**
  * Buffer time before token expiry to trigger proactive refresh (60 seconds)
@@ -40,6 +42,19 @@ export interface OAuthTokenResult {
  */
 export async function fetchOAuthToken(config: OAuthTokenConfig): Promise<OAuthTokenResult> {
   const now = Date.now();
+
+  // Inside a guarded server route, the token endpoint is a caller-supplied
+  // target the provider preflight never sees: it validates only server.url,
+  // and the guarded fetch validates redirect hops, not the initial URL. A
+  // public server.url paired with a private tokenUrl would otherwise post
+  // client credentials to private space unchecked. Validate the effective
+  // endpoint here, before any credentials are sent: callers render
+  // templates before reaching this point, so the check sees the URL that
+  // is actually fetched. Outside the guard this is skipped, so eval
+  // behavior is unchanged.
+  if (isPrivateRangeGuardContextActive()) {
+    await assertUrlResolvesPublic(config.tokenUrl);
+  }
 
   logger.debug('[OAuth] Fetching new token');
 

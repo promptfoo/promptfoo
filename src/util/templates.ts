@@ -1,6 +1,8 @@
 import nunjucks from 'nunjucks';
 import { getEnvBool, getEnvOverrides, isTemplateProcessEnvDisabled } from '../envars';
 import logger from '../logger';
+import { isPrivateRangeGuardContextActive } from './fetch/guardContext';
+import { renderGuardedRawRequest, renderGuardedTemplate } from './guardedTemplate';
 
 import type { NunjucksFilterMap } from '../types/index';
 
@@ -499,6 +501,23 @@ export function getNunjucksEngine(
       }
       return template;
     }
+    if (isPrivateRangeGuardContextActive()) {
+      let result: string;
+      try {
+        result = renderGuardedTemplate(template, context ?? {});
+      } catch (error) {
+        if (callback && error instanceof Error) {
+          callback(new nunjucks.lib.TemplateError(error.message, 0, 0), null);
+          return;
+        }
+        throw error;
+      }
+      if (callback) {
+        callback(null, result);
+        return;
+      }
+      return result;
+    }
     return renderString(template, { env: templateEnv, ...context }, callback);
   }) as typeof env.renderString;
 
@@ -512,6 +531,43 @@ export function getNunjucksEngine(
     }
   }
   return env;
+}
+
+/**
+ * Render raw HTTP requests. Guarded server diagnostics interpolate data directly.
+ * Ordinary evaluations retain the existing Nunjucks expression syntax.
+ */
+export function renderRawHttpRequest(template: string, vars: Record<string, unknown>): string {
+  if (isPrivateRangeGuardContextActive()) {
+    return renderGuardedRawRequest(
+      template,
+      getEnvBool('PROMPTFOO_DISABLE_TEMPLATING') ? undefined : vars,
+    );
+  }
+  // Protect literal Nunjucks syntax in the source by raw-wrapping
+  // and then re-enabling only variable tags.
+  const VAR_TOKEN = '__PF_VAR__';
+  let working = template;
+
+  // 1) Temporarily replace all {{...}} occurrences with placeholders
+  const placeholders: string[] = [];
+  working = working.replace(/\{\{[\s\S]*?\}\}/g, (m) => {
+    const idx = placeholders.push(m) - 1;
+    return `${VAR_TOKEN}${idx}__`;
+  });
+
+  // 2) Wrap everything in raw so Nunjucks ignores any {%...%} found in headers/cookies
+  working = `{% raw %}${working}{% endraw %}`;
+
+  // 3) Re-enable variables by inserting endraw/raw around each placeholder
+  working = working.replace(new RegExp(`${VAR_TOKEN}(\\d+)__`, 'g'), (_m, g1) => {
+    const original = placeholders[Number(g1)];
+    return `{% endraw %}${original}{% raw %}`;
+  });
+
+  // 4) Render with Nunjucks normally
+  const nunjucks = getNunjucksEngine();
+  return nunjucks.renderString(working, vars);
 }
 
 /**

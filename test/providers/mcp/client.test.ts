@@ -575,7 +575,10 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({ fetch: expect.any(Function) }),
+      );
       expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, {
         signal: expect.any(AbortSignal),
       });
@@ -625,8 +628,14 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
-      expect(SSEClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({ fetch: expect.any(Function) }),
+      );
+      expect(SSEClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({ fetch: expect.any(Function) }),
+      );
       expect(mockClient.connect).toHaveBeenCalledTimes(2);
     });
 
