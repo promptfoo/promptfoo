@@ -171,6 +171,10 @@ describe('matchesClassification', () => {
   it.each(
     [
       { response: { error: 'Request timed out' }, reason: 'Request timed out' },
+      {
+        response: { classification: {}, noLabelsDetected: true, error: 'Request timed out' },
+        reason: 'Request timed out',
+      },
       { response: {}, reason: 'Unknown error fetching classification' },
       { response: { classification: {} }, reason: 'No classification scores returned' },
     ].flatMap((testCase) => [false, true].map((cached) => ({ ...testCase, cached }))),
@@ -462,6 +466,43 @@ describe('matchesClassification', () => {
       );
     },
   );
+
+  it.each([
+    { expected: undefined, reason: 'Maximum classification score 0.00 < 0.5' },
+    ...['harmful', 'constructor', '__proto__', 'toString'].map((expected) => ({
+      expected,
+      reason: 'Classification ' + expected + ' has score 0.00 < 0.5',
+    })),
+  ])(
+    'scores every label 0 when the provider detected no labels (expected $expected)',
+    async ({ expected, reason }) => {
+      const provider = createMockProvider({
+        callClassificationApi: vi
+          .fn()
+          .mockResolvedValue({ classification: {}, noLabelsDetected: true }),
+      });
+
+      await expect(
+        matchesClassification(expected, 'Sample output', 0.5, { provider }),
+      ).resolves.toEqual({ pass: false, score: 0, reason });
+    },
+  );
+
+  it('accepts only a boolean confirmation that no labels were detected', async () => {
+    const provider = createMockProvider({
+      callClassificationApi: vi
+        .fn()
+        .mockResolvedValue({ classification: {}, noLabelsDetected: 'false' }),
+    });
+
+    await expect(
+      matchesClassification(undefined, 'Sample output', 0.5, { provider }),
+    ).resolves.toMatchObject({
+      pass: false,
+      reason: 'No classification scores returned',
+      metadata: { graderError: true },
+    });
+  });
 
   it('treats an absent label in a nonempty classification as a valid negative verdict', async () => {
     await expect(

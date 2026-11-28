@@ -161,6 +161,12 @@ export interface ProviderClassificationResponse {
   cached?: boolean;
   error?: string;
   classification?: Record<string, number>;
+  /**
+   * Confirms that an empty `classification` is a result: the classifier ran and detected no
+   * labels, as a token classifier does for text without entities. Without it, an empty
+   * `classification` is treated as a failed call.
+   */
+  noLabelsDetected?: boolean;
   tokenUsage?: Partial<TokenUsage>;
 }
 

@@ -693,7 +693,12 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
         }
         scores.set(label, Math.max(scores.get(label) ?? -Infinity, item.score));
       }
-      return { classification: Object.fromEntries(scores) };
+      return {
+        classification: Object.fromEntries(scores),
+        ...(response.data.length === 0 && response.status >= 200 && response.status < 300
+          ? { noLabelsDetected: true }
+          : {}),
+      };
     } catch (err) {
       return {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
