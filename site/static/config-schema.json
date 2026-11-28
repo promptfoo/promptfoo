@@ -2183,6 +2183,7 @@
         "vlguard",
         "vlsu",
         "wordplay",
+        "xss-output",
         "xstest"
       ]
     },
@@ -2489,6 +2490,7 @@
         "vlguard",
         "vlsu",
         "wordplay",
+        "xss-output",
         "xstest"
       ]
     },
