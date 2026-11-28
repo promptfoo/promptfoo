@@ -2707,6 +2707,87 @@ describe('evaluator', () => {
       expect(limited.testIndices.length).toBeLessThanOrEqual(2);
       expect(limited.filteredCount).toBeGreaterThanOrEqual(limited.testIndices.length);
     });
+
+    it('matches literal text on the response-only and filtered search paths', async () => {
+      const objectOutput = { 'file\\name': 'C:\\tmp' };
+      const arrayOutput = ['C:\\tmp'];
+      const variable = { path: 'V:\\tmp' };
+      const metadataObject = { path: 'M:\\tmp' };
+      const metadataArray = ['M:\\array'];
+      // Exactly 50,000 UTF-8 bytes after escaping, before the surrounding % characters.
+      const longQuery = '界_'.repeat(10_000);
+      const outputs = [
+        'snake_case',
+        'snakeXcase',
+        '100%',
+        '1000',
+        'C:\\path\\%_file',
+        'C:\\\\path',
+        'quoted "value"\n',
+        'slash\\\newline',
+        objectOutput,
+        arrayOutput,
+        'nul\0right',
+        'nul\0wrong',
+        longQuery,
+      ];
+      const eval_ = await EvalFactory.create({ numResults: outputs.length, withNamedScores: true });
+      const db = await getDb();
+      for (const [index, output] of outputs.entries()) {
+        await db.run(
+          sql`UPDATE eval_results SET response = ${JSON.stringify({ output })} WHERE eval_id = ${eval_.id} AND test_idx = ${index}`,
+        );
+      }
+
+      await db.run(sql`UPDATE eval_results SET test_case = json_set(test_case, '$.vars.display', json(${JSON.stringify(variable)}))
+        WHERE eval_id = ${eval_.id} AND test_idx = 4`);
+
+      for (const [index, value] of [metadataObject, metadataArray].entries()) {
+        const metadata = JSON.stringify({ display: value });
+        await db.run(sql`UPDATE eval_results SET metadata = ${metadata}
+          WHERE eval_id = ${eval_.id} AND test_idx = ${index}`);
+        await db.run(sql`UPDATE eval_results SET test_case = json_set(test_case, '$.metadata', json(${metadata}))
+          WHERE eval_id = ${eval_.id} AND test_idx = ${index + 2}`);
+      }
+      await db.run(sql`UPDATE eval_results SET metadata = ${JSON.stringify({ __promptfoo: { metadataObject, metadataArray } })}
+        WHERE eval_id = ${eval_.id} AND test_idx = 6`);
+
+      const filters = [JSON.stringify(createAccuracyFilter())];
+      for (const [searchQuery, expected, filtered = expected] of [
+        ['SNAKE_CASE', [0]],
+        ['100%', [2]],
+        ['_', [0, 4, 12]],
+        ['%', [2, 4]],
+        ['C:\\path\\%_', [4]],
+        ['C:\\\\path', [5]],
+        ['\\', [4, 5, 7, 8, 9], [0, 1, 2, 3, 4, 5, 7, 8, 9]],
+        ['\\n', [8]],
+        [JSON.stringify(objectOutput), [8]],
+        [JSON.stringify(arrayOutput), [9]],
+        [JSON.stringify(variable), [], [4]],
+        [JSON.stringify(metadataObject), [], [0, 2]],
+        [JSON.stringify(metadataArray), [], [1, 3]],
+        ['M:\\tmp', [], [0, 2]],
+        ['M:\\array', [], [1, 3]],
+        ['NUL\0RIGHT', [10]],
+        ['\0', [10, 11]],
+        ['\0absent', []],
+        ['\\u0000', []],
+        [longQuery, [12]],
+      ] as const) {
+        for (const activeFilters of [[], filters]) {
+          const indices = activeFilters.length ? filtered : expected;
+          const page = await eval_.getTablePage({ searchQuery, filters: activeFilters });
+          expect(
+            page.body.map((row) => row.testIdx),
+            searchQuery,
+          ).toEqual(indices);
+          expect(page.filteredCount).toBe(indices.length);
+        }
+        const [metrics] = await eval_.getFilteredMetrics({ searchQuery, filters });
+        expect(metrics.testPassCount).toBe(filtered.length);
+      }
+    });
   });
 
   describe('getTraces', () => {

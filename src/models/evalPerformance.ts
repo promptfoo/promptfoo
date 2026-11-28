@@ -1,10 +1,44 @@
-import { sql } from 'drizzle-orm';
+import { type SQL, sql } from 'drizzle-orm';
 import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import logger from '../logger';
+import { escapeLikePattern } from '../util/sqlLike';
 
 import type { EvalResultsFilterMode } from '../types/index';
+
+const SQLITE_MAX_LIKE_PATTERN_BYTES = 50_000;
+
+export function matchResultSearch(
+  field: SQL,
+  query: string,
+  format: 'text' | 'json' | 'response' | 'vars',
+): SQL {
+  const contains = (value: SQL) => sql`instr(lower(${value}), lower(${query})) > 0`;
+  if (format === 'text') {
+    return contains(field);
+  }
+
+  const hasNul = query.includes('\0');
+  if (!hasNul && !query.includes('\\')) {
+    const pattern = `%${escapeLikePattern(query)}%`;
+    return Buffer.byteLength(pattern) <= SQLITE_MAX_LIKE_PATTERN_BYTES
+      ? sql`${field} LIKE ${pattern} ESCAPE '\\'`
+      : contains(field);
+  }
+
+  // The table renders object and array outputs, variables, and metadata as compact JSON.
+  // Their children still supply decoded values for searches such as a file path.
+  const cell = format === 'response' ? sql`key = 'output'` : sql`key IS NOT NULL`;
+  const value = sql`CASE WHEN path = '$' AND ${cell} THEN value ELSE atom END`;
+  const hasEscape = hasNul
+    ? sql`(instr(${field}, '\\u0000') OR instr(${field}, char(0)))`
+    : sql`instr(${field}, '\\')`;
+  return sql`(${hasEscape} AND EXISTS (
+    SELECT 1 FROM json_tree(CASE WHEN json_valid(${field}) THEN ${field} ELSE json_quote(${field}) END)
+    WHERE ${contains(value)} OR ${contains(sql`key`)}
+  ))`;
+}
 
 /** Result from COUNT queries using db.all() - count is always a number in result array */
 interface CountResult {
@@ -132,8 +166,7 @@ export async function queryTestIndicesOptimized(
   // This is a compromise - we search less fields but query is faster
   let searchCondition = sql`1=1`;
   if (opts.searchQuery && opts.searchQuery.trim() !== '' && !opts.filters?.length) {
-    // Only search in response field for better performance
-    searchCondition = sql`response LIKE ${`%${opts.searchQuery}%`}`;
+    searchCondition = matchResultSearch(sql`response`, opts.searchQuery, 'response');
   }
 
   const whereClause = sql`${baseQuery} AND ${searchCondition}`;
