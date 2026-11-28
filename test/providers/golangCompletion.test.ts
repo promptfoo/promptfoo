@@ -376,6 +376,29 @@ describe('GolangProvider', () => {
       expect(result).toEqual({ output: 'cached result', cached: true });
     });
 
+    it('should hit the cache across eval runs that differ only in __evalId', async () => {
+      const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
+      mockIsCacheEnabled.mockReturnValue(true);
+      const store = new Map<string, string>();
+      mockGetCache.mockResolvedValue({
+        get: vi.fn(async (key: string) => store.get(key)),
+        set: vi.fn(async (key: string, value: string) => {
+          store.set(key, value);
+        }),
+      } as never);
+      mockExecFile.mockImplementation(createSuccessfulGoExecutor());
+      const callWithVars = (vars: Record<string, string | number>) =>
+        provider.callApi('test prompt', { prompt: createLabeledPrompt(), vars });
+
+      const first = await callWithVars({ name: 'world', __evalId: 'eval-1', __repeatIndex: 0 });
+      const rerun = await callWithVars({ name: 'world', __evalId: 'eval-2', __repeatIndex: 0 });
+      const repeat = await callWithVars({ name: 'world', __evalId: 'eval-2', __repeatIndex: 1 });
+
+      expect(first.cached).toBeFalsy();
+      expect(rerun.cached).toBe(true);
+      expect(repeat.cached).toBeFalsy();
+    });
+
     it('should handle cache errors', async () => {
       const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
 
