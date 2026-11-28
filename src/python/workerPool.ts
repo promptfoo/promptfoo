@@ -25,7 +25,7 @@ export class PythonWorkerPool {
   ) {}
 
   async initialize(): Promise<void> {
-    if (this.shuttingDown) {
+    if (this.shuttingDown || this.shutdownPromise) {
       throw new Error('Worker pool shutting down');
     }
     if (this.isInitialized) {
@@ -55,7 +55,7 @@ export class PythonWorkerPool {
       this.pythonPath || 'python',
       typeof this.pythonPath === 'string',
     );
-    if (this.shuttingDown) {
+    if (this.shuttingDown || this.shutdownPromise) {
       throw new Error('Worker pool shutting down');
     }
 
@@ -77,10 +77,10 @@ export class PythonWorkerPool {
       await Promise.all(initPromises);
     } catch (error) {
       // Failed startup must release both ready and still-starting peers before retrying.
-      await Promise.all(this.workers.splice(0).map((worker) => worker.shutdown()));
+      await this.releaseWorkers();
       throw error;
     }
-    if (this.shuttingDown) {
+    if (this.shuttingDown || this.shutdownPromise) {
       throw new Error('Worker pool shutting down');
     }
     this.isInitialized = true;
@@ -145,13 +145,19 @@ export class PythonWorkerPool {
     return this.workers.length;
   }
 
-  async shutdown(): Promise<void> {
-    this.shutdownPromise ??= this.shutdownWorkers();
+  shutdown(): Promise<void> {
+    this.shuttingDown = true;
+    return this.releaseWorkers();
+  }
+
+  private releaseWorkers(): Promise<void> {
+    this.shutdownPromise ??= this.shutdownWorkers().finally(() => {
+      this.shutdownPromise = null;
+    });
     return this.shutdownPromise;
   }
 
   private async shutdownWorkers(): Promise<void> {
-    this.shuttingDown = true;
     this.isInitialized = false;
     logger.debug(`Shutting down Python worker pool (${this.workers.length} workers)`);
 
@@ -161,9 +167,13 @@ export class PythonWorkerPool {
     }
 
     // Shutdown all workers in parallel
-    await Promise.all(this.workers.map((w) => w.shutdown()));
-
-    this.workers = [];
+    const results = await Promise.allSettled(this.workers.map((worker) => worker.shutdown()));
+    this.workers = this.workers.filter((_, i) => results[i].status === 'rejected');
+    const failure = results.find((result) => result.status === 'rejected');
+    if (failure) {
+      this.shuttingDown = true;
+      throw failure.reason;
+    }
 
     logger.debug('Python worker pool shutdown complete');
   }

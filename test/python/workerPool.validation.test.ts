@@ -181,6 +181,26 @@ describe('Python pool executable validation', () => {
     },
   );
 
+  it('keeps an explicit shutdown terminal when it joins startup cleanup', async () => {
+    const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');
+    pools.push(pool);
+    const stopped = createDeferred<void>();
+    vi.spyOn(PythonWorker.prototype, 'initialize').mockRejectedValueOnce(new Error('startup'));
+    const shutdown = vi
+      .spyOn(PythonWorker.prototype, 'shutdown')
+      .mockReturnValueOnce(stopped.promise);
+
+    const initialized = pool.initialize().catch((error) => error);
+    await setImmediate();
+    const closed = pool.shutdown();
+    stopped.resolve();
+    await closed;
+
+    expect(await initialized).toEqual(new Error('startup'));
+    expect(shutdown).toHaveBeenCalledOnce();
+    await expect(pool.initialize()).rejects.toThrow('Worker pool shutting down');
+  });
+
   it.each([
     ['starting', 'EPIPE'],
     ['ready', 'EPIPE'],
