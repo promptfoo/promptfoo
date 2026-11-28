@@ -331,15 +331,31 @@ function findJsonObjectEnd(str: string, start: number, objectEnds: Map<number, n
   return -1;
 }
 
-export function extractJsonObjects(str: string): object[] {
-  const jsonObjects: object[] = [];
-  const maxJsonLength = 100000; // Limit the size of parsed candidates
+/**
+ * An object extracted from LLM output, plus provenance.
+ *
+ * `autoClosed` is true when the object only parsed because extractJsonObjects
+ * appended synthetic `}` characters to balance braces (i.e. the span was an
+ * UNTERMINATED fragment that ran to the end of the response). Security: such a
+ * fragment is never something the author deliberately emitted as complete JSON;
+ * it is either a truncated verdict, trailing prose with stray braces, or an
+ * attacker fragment the author echoed. Callers that pick a verdict object
+ * should prefer complete objects (see selectVerdictObject).
+ */
+export type ExtractedJsonObject = {
+  object: object;
+  autoClosed: boolean;
+};
+
+export function extractJsonObjectsWithMeta(str: string): ExtractedJsonObject[] {
+  const jsonObjects: ExtractedJsonObject[] = [];
+  const maxJsonLength = 100000; // Prevent processing extremely large invalid JSON
 
   if (str.length <= maxJsonLength) {
     try {
       const parsed = JSON.parse(str);
       if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        return [parsed];
+        return [{ object: parsed, autoClosed: false }];
       }
     } catch {
       // Keep the original input for tolerant extraction below.
@@ -362,7 +378,7 @@ export function extractJsonObjects(str: string): object[] {
       const end = localEnd === -1 ? -1 : windowStart + localEnd;
       if (end > i && end - i <= maxJsonLength) {
         try {
-          jsonObjects.push(JSON.parse(str.slice(i, end)));
+          jsonObjects.push({ object: JSON.parse(str.slice(i, end)), autoClosed: false });
           i = end - 1;
           continue;
         } catch {
@@ -389,7 +405,8 @@ export function extractJsonObjects(str: string): object[] {
           try {
             // If we're at the end but braces don't match, add missing closing braces
             let potentialJson = str.slice(i, j);
-            if (openBraces > closeBraces) {
+            const autoClosed = openBraces > closeBraces;
+            if (autoClosed) {
               potentialJson += '}'.repeat(openBraces - closeBraces);
             }
 
@@ -397,7 +414,7 @@ export function extractJsonObjects(str: string): object[] {
             const parsedObj = loadYaml(processedJson, { json: true });
 
             if (typeof parsedObj === 'object' && parsedObj !== null) {
-              jsonObjects.push(parsedObj);
+              jsonObjects.push({ object: parsedObj, autoClosed });
               i = j - 1; // Move i to the end of the valid JSON object
               break;
             }
@@ -415,10 +432,268 @@ export function extractJsonObjects(str: string): object[] {
   return jsonObjects;
 }
 
+export function extractJsonObjects(str: string): object[] {
+  return extractJsonObjectsWithMeta(str).map((entry) => entry.object);
+}
+
 export function extractFirstJsonObject<T>(str: string): T {
   const jsonObjects = extractJsonObjects(str);
   invariant(jsonObjects.length >= 1, `Expected a JSON object, but got ${JSON.stringify(str)}`);
   return jsonObjects[0] as T;
+}
+
+function isVerdictShaped(value: unknown, verdictKeys: string[]): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    verdictKeys.some((key) => Object.prototype.hasOwnProperty.call(value, key))
+  );
+}
+
+function* walkVerdictObjects(root: object, verdictKeys: string[], checkOrder = false) {
+  const pending: { value: unknown; depth: number }[] = [{ value: root, depth: 0 }];
+  const seen = new WeakSet<object>();
+  while (pending.length > 0) {
+    const { value, depth } = pending.pop()!;
+    if (typeof value !== 'object' || value === null || seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    if (Array.isArray(value)) {
+      // Multiple verdicts in a rubric breakdown are ambiguous.
+      const verdicts = value.filter((entry) => isVerdictShaped(entry, verdictKeys));
+      if (verdicts.length === 1) {
+        pending.push({ value: verdicts[0], depth: depth + 1 });
+      }
+      continue;
+    }
+    if (isVerdictShaped(value, verdictKeys)) {
+      yield { value, depth, unordered: false };
+    }
+    if (
+      checkOrder &&
+      Object.entries(value).some(
+        ([key, child]) =>
+          /^(0|[1-9]\d*)$/.test(key) &&
+          Number(key) < 0xffffffff &&
+          child !== null &&
+          typeof child === 'object',
+      ) &&
+      Object.values(value).filter((child) => child !== null && typeof child === 'object').length > 1
+    ) {
+      yield { value: undefined, depth, unordered: true };
+      return;
+    }
+    const children = Object.values(value);
+    for (let i = children.length - 1; i >= 0; i--) {
+      pending.push({ value: children[i], depth: depth + 1 });
+    }
+  }
+}
+
+/**
+ * Security: unwrap verdict shells produced by merged JSON fragments.
+ *
+ * When an LLM judge echoes an UNTERMINATED JSON fragment from the
+ * model-under-test (e.g. `{pass: true, score: 1` with no closing brace),
+ * extractJsonObjects balances braces across the whole span and parses the
+ * result leniently, merging the fragment with the judge's later verdict into
+ * ONE object whose top-level keys come from the attacker, while the judge's
+ * real verdict survives only as a nested value — possibly buried under
+ * non-verdict-shaped intermediate objects or inside a single-element array.
+ * That bypasses last-object verdict selection.
+ *
+ * The judge emits its own verdict LAST in the response, and both JSON and
+ * YAML-flow key order follow text order, so the RIGHTMOST (then deepest)
+ * verdict-shaped object in the tree is the judge's real verdict and is
+ * returned. Content the judge echoed from the model-under-test appears
+ * earlier in the prose and therefore earlier in traversal order. Arrays
+ * holding MULTIPLE verdict-shaped elements are ambiguous (e.g. per-criterion
+ * rubric breakdowns) and are never descended into.
+ */
+export function unwrapNestedVerdict<T extends object>(
+  obj: T,
+  verdictKeys: string[],
+): T | undefined {
+  let best: object = obj;
+  for (const { value, unordered } of walkVerdictObjects(obj, verdictKeys, true)) {
+    if (unordered || !value) {
+      return undefined;
+    }
+    best = value;
+  }
+  return best as T;
+}
+
+/**
+ * Normalizes a verdict value for conflict comparison. Booleans and
+ * boolean-like strings collapse to 'true'/'false'; other strings are compared
+ * case-insensitively. Numbers compare EXACTLY (as `number:<value>`), so a
+ * score-only verdict like {score: 0.25} is not treated as agreeing with an
+ * injected {score: 1} merely because both are truthy.
+ */
+function normalizeVerdictValue(value: unknown): string | undefined {
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? `number:${value}` : undefined;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (/^(true|yes|pass|y)$/i.test(trimmed)) {
+      return 'true';
+    }
+    if (/^(false|no|fail|n)$/i.test(trimmed)) {
+      return 'false';
+    }
+    return trimmed.toLowerCase();
+  }
+  return undefined;
+}
+
+/**
+ * True when two verdict-shaped objects disagree on a verdict key they share.
+ */
+function verdictsConflict(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>,
+  verdictKeys: string[],
+): boolean {
+  for (const key of verdictKeys) {
+    if (key in a && key in b) {
+      const na = normalizeVerdictValue(a[key]);
+      const nb = normalizeVerdictValue(b[key]);
+      if (na !== undefined && nb !== undefined && na !== nb) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Security: detects a verdict-shaped object nested inside `obj` (excluding
+ * `obj` itself) that CONFLICTS with `obj`'s own top-level verdict values.
+ *
+ * A merged shell — an attacker fragment the judge echoed, fused with the
+ * judge's later verdict by lenient brace balancing — has exactly this shape:
+ * attacker keys at the top, conflicting judge verdict nested inside. A
+ * genuine verdict carrying metadata that merely repeats a verdict key with
+ * the SAME value does not trip this.
+ */
+function containsConflictingNestedVerdict(
+  obj: Record<string, unknown>,
+  verdictKeys: string[],
+): boolean {
+  for (const { value, depth } of walkVerdictObjects(obj, verdictKeys)) {
+    if (value && depth > 0 && verdictsConflict(obj, value, verdictKeys)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Security: pick the verdict object from everything extracted out of an
+ * LLM-judge response.
+ *
+ * Selection rules, in order:
+ * 1. If several COMPLETE verdict-shaped objects disagree on a verdict key,
+ *    the response contains conflicting verdict JSON — injected content from
+ *    the model-under-test (echoed by the judge) rather than a self-contradicting
+ *    judge. Return undefined so callers fail closed instead of guessing.
+ * 2. If the LAST object is complete and verdict-shaped, it is the judge's own
+ *    verdict — the standard last-object rule — returned as-is (its nested
+ *    metadata is NOT unwrapped). The one exception: if it nests a verdict-
+ *    shaped object that CONFLICTS with its own top-level values (a merged
+ *    shell that happened to balance), the response is ambiguous — return
+ *    undefined so callers fail closed.
+ * 3. Otherwise (the last object was auto-closed / is not verdict-shaped — an
+ *    UNTERMINATED fragment, trailing prose with stray braces, or trailing
+ *    non-verdict JSON), prefer the last COMPLETE verdict-shaped object. The
+ *    judge emits exactly one complete verdict-shaped object; a trailing
+ *    fragment or junk object is never trustworthy. If that complete verdict
+ *    conflicts with the verdict recoverable from the trailing merged shell,
+ *    the response is ambiguous — return undefined.
+ * 4. Otherwise fall back to the last object (truncation salvage / merged
+ *    shell) and let unwrapNestedVerdict recover the rightmost nested verdict.
+ */
+export function selectVerdictObject<T extends object>(
+  entries: ExtractedJsonObject[],
+  verdictKeys: string[],
+): T | undefined {
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  const completeVerdicts = entries
+    .filter((entry) => !entry.autoClosed)
+    .map((entry) => entry.object as Record<string, unknown>)
+    .filter((obj) => isVerdictShaped(obj, verdictKeys));
+  if (completeVerdicts.length >= 2) {
+    let hasSharedDecision = false;
+    for (const key of verdictKeys) {
+      const values = new Set<string>();
+      let seen = 0;
+      for (const obj of completeVerdicts) {
+        const input = obj[key];
+        const normalized = normalizeVerdictValue(input);
+        if (input !== undefined && normalized === undefined) {
+          return undefined;
+        }
+        if (normalized !== undefined) {
+          values.add(normalized);
+          seen++;
+        }
+      }
+      if (values.size > 1) {
+        return undefined;
+      }
+      hasSharedDecision ||= seen === completeVerdicts.length;
+    }
+    // Without a decision field in common, the candidates cannot corroborate each other.
+    if (!hasSharedDecision) {
+      return undefined;
+    }
+  }
+
+  const last = entries[entries.length - 1];
+  const lastIsCompleteVerdict = !last.autoClosed && isVerdictShaped(last.object, verdictKeys);
+
+  if (lastIsCompleteVerdict) {
+    const lastRecord = last.object as Record<string, unknown>;
+    if (containsConflictingNestedVerdict(lastRecord, verdictKeys)) {
+      return undefined; // balanced merged shell / self-conflicting: fail closed
+    }
+    return last.object as T;
+  }
+
+  // The last object is not a complete verdict (auto-closed trailer, trailing
+  // non-verdict JSON, ...). Prefer the last COMPLETE verdict-shaped object.
+  for (let k = entries.length - 2; k >= 0; k--) {
+    const entry = entries[k];
+    if (entry.autoClosed || !isVerdictShaped(entry.object, verdictKeys)) {
+      continue;
+    }
+    const chosen = entry.object as Record<string, unknown>;
+    const lastVerdict = unwrapNestedVerdict(last.object as Record<string, unknown>, verdictKeys);
+    if (!lastVerdict) {
+      return undefined;
+    }
+    if (
+      isVerdictShaped(lastVerdict, verdictKeys) &&
+      verdictsConflict(chosen, lastVerdict, verdictKeys)
+    ) {
+      return undefined; // echoed verdict conflicts with merged shell: fail closed
+    }
+    return containsConflictingNestedVerdict(chosen, verdictKeys) ? undefined : (chosen as T);
+  }
+
+  // No complete verdict-shaped object anywhere: truncation salvage / merged
+  // shell. Unwrap to the rightmost verdict.
+  return unwrapNestedVerdict(last.object as T, verdictKeys);
 }
 
 /**
