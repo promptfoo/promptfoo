@@ -75,7 +75,9 @@ const validMessages = [
     tools: 'file://tools.py:get_tools',
   },
   { thinking: { type: 'enabled', budget_tokens: 1024, display: 'summarized' } },
+  { thinking: { type: 'enabled', budget_tokens: 1024, display: null } },
   { thinking: { type: 'adaptive', display: 'omitted' } },
+  { thinking: { type: 'adaptive', display: null } },
   { thinking: { type: 'disabled' } },
   { thinking: { type: 'between_tools' } },
   {
@@ -144,6 +146,8 @@ const invalidMessages: unknown[] = [
   { effort: 'unknown' },
   { thinking: { type: 'enabled' } },
   { thinking: { type: 'enabled', budget_tokens: '1024' } },
+  { thinking: { type: 'enabled', budget_tokens: 1024, display: 'unknown' } },
+  { thinking: { type: 'adaptive', display: false } },
   ...[-1, 0, 512, 1023, 1024.5].map((budget_tokens) => ({
     thinking: { type: 'enabled', budget_tokens },
   })),

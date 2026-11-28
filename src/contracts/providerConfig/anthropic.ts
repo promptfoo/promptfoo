@@ -76,11 +76,11 @@ const Thinking = z.union([
   z.strictObject({
     type: z.literal('enabled'),
     budget_tokens: z.number().int().min(1024),
-    display: z.enum(['summarized', 'omitted']).optional(),
+    display: z.enum(['summarized', 'omitted']).nullable().optional(),
   }),
   z.strictObject({
     type: z.literal('adaptive'),
-    display: z.enum(['summarized', 'omitted']).optional(),
+    display: z.enum(['summarized', 'omitted']).nullable().optional(),
   }),
   z.strictObject({ type: z.literal('disabled') }),
   z.strictObject({ type: z.literal('between_tools') }),

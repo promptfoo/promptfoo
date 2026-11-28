@@ -37,6 +37,11 @@ const nativeTools = [
   { type: 'custom', name: 'lookup', input_schema: { type: 'object' }, eager_input_streaming: true },
 ] satisfies Anthropic.Messages.ToolUnion[];
 
+const nativeThinking = [
+  { type: 'enabled', budget_tokens: 1024, display: null },
+  { type: 'adaptive', display: null },
+] satisfies Anthropic.Messages.ThinkingConfigParam[];
+
 // Documented Azure structured-output/reasoning configuration, also used by provider tests.
 const azureConfig = {
   modelName: 'o3',
@@ -68,6 +73,26 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('portable inputs reach native request construction', () => {
+  it.each(nativeThinking)('preserves nullable thinking display: %j', async (thinking) => {
+    const config = { apiKey: 'test-key', thinking };
+    expectTypeOf(config).toExtend<AnthropicMessageOptions>();
+    expect(AnthropicMessagesConfigInputSchema.parse(config)).toEqual(config);
+    expect(validateAnthropic(config)).toBe(true);
+    const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', { config });
+    const send = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 1, output_tokens: 1 },
+    } as Anthropic.Messages.Message);
+    const result = await provider.callApi('Hello');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('ok');
+    expect(send).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ thinking }),
+      expect.any(Object),
+    );
+  });
+
   it.each(nativeTools)('preserves a native SDK tool: %j', async (tool) => {
     const config = { apiKey: 'test-key', tools: [tool] };
     expectTypeOf(config).toExtend<AnthropicMessageOptions>();
