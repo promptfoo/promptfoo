@@ -421,7 +421,7 @@ export const handleToolCallF1 = ({
 
   return {
     pass,
-    score: f1,
+    score: inverse ? 1 - f1 : f1,
     reason: pass
       ? `Tool Call F1: ${f1.toFixed(3)} (precision=${precision.toFixed(3)}, recall=${recall.toFixed(3)}). ` +
         `Expected: [${expectedList}], Called: [${actualList}]`
