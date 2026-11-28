@@ -412,6 +412,96 @@ describe('doesProviderRefMatch', () => {
     expect(doesProviderRefMatch('./my-provider.js', provider)).toBe(true);
     expect(doesProviderRefMatch(`file://${absolutePath}`, provider)).toBe(true);
   });
+
+  it.each([
+    ['file://./providers/*', 'file://providers/alpha.js'],
+    ['exec:./scripts/*', 'exec:scripts/alpha.js'],
+    ['python:./scripts/*', 'python:scripts/alpha.py:call_api'],
+    ['golang:./scripts/*', 'golang:scripts/alpha.go'],
+    [
+      `file://${path.resolve('.')}/other/../providers/*`,
+      `file://${path.resolve('providers/alpha.js')}`,
+    ],
+    [
+      `file://${path.resolve('providers')}/*`,
+      `file://${path.resolve('.')}/other/../providers/alpha.js`,
+    ],
+    ['file://providers/../providers/*', 'file://providers/alpha.js'],
+    ['file://./providers/*', `file://${path.resolve('providers/alpha.js')}`],
+    ['file://providers/*', `file://${path.join('providers', 'alpha.js')}`],
+  ])('matches normalized wildcard %s against %s', (ref, id) => {
+    expect(doesProviderRefMatch(ref, createProvider(id))).toBe(true);
+  });
+
+  it.each(['file://providers-other/alpha.js', 'file://providers'])(
+    'keeps the directory boundary when normalizing a wildcard for %s',
+    (id) => {
+      expect(doesProviderRefMatch('file://./providers/*', createProvider(id))).toBe(false);
+    },
+  );
+
+  it('keeps exec command arguments out of normalized path matching', () => {
+    const command = createProvider('exec:echo junk/../scripts/result.js');
+    expect(doesProviderRefMatch('exec:./scripts/*', command)).toBe(false);
+    expect(doesProviderRefMatch('exec:echo *', command)).toBe(true);
+    expect(
+      doesProviderRefMatch('exec:echo junk/../scripts/*', createProvider('exec:scripts/result.js')),
+    ).toBe(false);
+  });
+
+  it.each([
+    'exec:./scripts/runner.sh --verbose',
+    'exec:"./scripts/runner.sh" --verbose',
+    "exec:'./scripts/runner.sh' --verbose",
+    'exec:./scripts/runner.sh --output ../other/result.json',
+    'exec:  ./scripts/runner.sh\t--verbose',
+  ])('matches exec executable paths without resolving arguments: %s', (id) => {
+    expect(doesProviderRefMatch(`exec:${path.resolve('scripts')}/*`, createProvider(id))).toBe(
+      true,
+    );
+  });
+
+  it('preserves exec arguments when matching a normalized command prefix', () => {
+    const provider = createProvider('exec:./scripts/runner.sh\t--mode  "fast mode"');
+    const executable = path.resolve('scripts/runner.sh');
+    expect(doesProviderRefMatch(`exec:${executable}\t--mode  *`, provider)).toBe(true);
+    expect(doesProviderRefMatch(`exec:${executable} --mode *`, provider)).toBe(false);
+    expect(doesProviderRefMatch(`exec:${executable} --other *`, provider)).toBe(false);
+  });
+
+  it('normalizes quoted exec paths containing spaces', () => {
+    const provider = createProvider('exec:"./scripts/my runner.sh" --verbose');
+    expect(doesProviderRefMatch(`exec:${path.resolve('scripts')}/*`, provider)).toBe(true);
+  });
+
+  it('does not combine adjacent quoted command and argument tokens into a path', () => {
+    const provider = createProvider('exec:"./other"../scripts/runner --verbose');
+    expect(doesProviderRefMatch(`exec:${path.resolve('other..', 'scripts')}/*`, provider)).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    'exec:echo ./scripts/runner.sh',
+    'exec:./other/runner.sh ../scripts/result.json',
+    'exec:./scripts-other/runner.sh ../scripts/result.json',
+    'exec:"./scripts/runner.sh --verbose',
+    'exec:"" ./scripts/runner.sh',
+  ])('does not match an exec argument as an executable path: %s', (id) => {
+    expect(doesProviderRefMatch(`exec:${path.resolve('scripts')}/*`, createProvider(id))).toBe(
+      false,
+    );
+  });
+
+  it('preserves raw label wildcards that look like file paths', () => {
+    const provider = createProvider('custom-provider', 'file://./providers/alpha');
+    expect(doesProviderRefMatch('file://./providers/*', provider)).toBe(true);
+  });
+
+  it('preserves the global wildcard for file and named providers', () => {
+    expect(doesProviderRefMatch('*', createProvider('file://providers/alpha.js'))).toBe(true);
+    expect(doesProviderRefMatch('*', createProvider('openai:gpt-4'))).toBe(true);
+  });
 });
 
 describe('isProviderAllowed', () => {

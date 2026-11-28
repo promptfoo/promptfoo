@@ -119,6 +119,9 @@ tests:
 | `openai:*`         | Wildcard - any provider starting with `openai:`                       |
 | `openai`           | Legacy prefix - matches `openai:gpt-6-sol`, `openai:gpt-6-luna`, etc. |
 
+Trailing wildcards in `file://`, `exec:`, `python:`, and `golang:` references also compare normalized paths. Directory separators are preserved: `file://./providers/*` matches `file://providers/model.js` and excludes `file://providers-other/model.js`.
+For Python and Go IDs with only a filename and optional function suffix, relative path wildcards use the provider's `basePath`, or the current working directory when unset.
+
 **Apply to all tests using `defaultTest`:**
 
 ```yaml
