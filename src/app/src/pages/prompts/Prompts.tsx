@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { DataTable } from '@app/components/data-table';
 import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
+import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
@@ -59,8 +60,19 @@ export default function Prompts({
         accessorKey: 'label',
         header: 'Label',
         accessorFn: (row) => row.prompt.label || row.prompt.display || row.prompt.raw,
-        cell: ({ getValue }) => (
-          <span className="line-clamp-2 break-words text-sm">{getValue<string>()}</span>
+        cell: ({ getValue, row }) => (
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto max-w-full justify-start whitespace-normal px-0 text-left"
+            onClick={(event) => {
+              event.stopPropagation();
+              setSelectedIndex(row.index);
+            }}
+          >
+            <span className="line-clamp-2 break-words text-sm">{getValue<string>()}</span>
+          </Button>
         ),
         size: 200,
       },

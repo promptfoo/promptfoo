@@ -5,6 +5,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  useDialogReturnFocus,
 } from '@app/components/ui/dialog';
 
 export interface Tool {
@@ -27,12 +28,13 @@ interface ToolsDialogProps {
 }
 
 const ToolsDialog = ({ open, onClose, tools }: ToolsDialogProps) => {
+  const focus = useDialogReturnFocus();
   if (!tools || tools.length === 0) {
     return null;
   }
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent {...focus} className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Available Tools</DialogTitle>
         </DialogHeader>
