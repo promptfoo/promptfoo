@@ -2979,6 +2979,7 @@
           "type": "number"
         },
         "progressCallback": {},
+        "providerProgressCallback": {},
         "repeat": {
           "type": "number"
         },

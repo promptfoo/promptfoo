@@ -80,6 +80,14 @@ describe('evalOperations', () => {
       verifyApiCall();
     });
 
+    it('shows the server guidance when replay cannot verify the model endpoint', async () => {
+      const error =
+        'Cannot verify the original model endpoint. Rerun using the eval configuration.';
+      setupApiMock(Response.json({ error }, { status: 400 }));
+
+      expect(await replayEvaluation(params)).toEqual({ error });
+    });
+
     it('should return an object with an error property when the API call is aborted', async () => {
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';

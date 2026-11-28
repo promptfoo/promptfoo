@@ -77,7 +77,11 @@ import invariant from '../util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from '../util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from '../util/namedMetrics';
 import { filterFiniteScores } from '../util/numeric';
-import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
+import {
+  getProviderPromptOverride,
+  isPromptAllowed,
+  promptIdentityCandidates,
+} from '../util/promptMatching';
 import {
   getProviderIdentifier,
   isAnthropicProvider,
@@ -118,6 +122,7 @@ import {
   deferredGradingPromises,
   getRepeatCacheNamespace,
   isGradingAbort,
+  prepareProviderSetup,
   promptUsesConversationVariable,
   runEvalInternal,
 } from './runEval';
@@ -723,17 +728,6 @@ function canRestoreSavedText(prompts: Prompt[], savedPrompts: CompletedPrompt[])
     (saved) =>
       !callableRaw.has(saved.raw) && !callableLabels.has(saved.label) && textRaw.has(saved.raw),
   );
-}
-
-function promptIdentityCandidates(prompts: Prompt[]): Map<string, Set<string | undefined>> {
-  const identities = new Map<string, Set<string | undefined>>();
-  for (const prompt of prompts) {
-    const key = JSON.stringify([generateIdFromPrompt(prompt), prompt.raw, prompt.label]);
-    const ids = identities.get(key) ?? new Set<string | undefined>();
-    ids.add(prompt.id);
-    identities.set(key, ids);
-  }
-  return identities;
 }
 
 type PreparedPromptRecovery = {
@@ -2702,6 +2696,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices,
     progressBarManager,
     prompts,
+    runEvalOptions,
     serialRunEvalOptions,
     shouldGroupGradingByProvider,
   }: {
@@ -2719,10 +2714,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices: Set<number>;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
+    runEvalOptions: RunEvalOptions[];
     serialRunEvalOptions: RunEvalOptions[];
     shouldGroupGradingByProvider: boolean;
   }): Promise<TEvaluation | undefined> {
     try {
+      // Setup shares interruption/finalization with execution and keeps the original step order.
+      await prepareProviderSetup(runEvalOptions, checkAbort);
       if (shouldGroupGradingByProvider) {
         await this.runGroupedEvalSteps({
           checkAbort,
@@ -2755,6 +2753,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       checkAbort();
     } catch (err) {
       if (!combinedAbortSignal.aborted) {
+        clearTimeout(globalTimeout);
         cleanupProgressAfterError(progressBarManager, ciProgressReporter, err);
         throw err;
       }
@@ -4053,6 +4052,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       processedIndices,
       progressBarManager,
       prompts,
+      runEvalOptions,
       serialRunEvalOptions,
       shouldGroupGradingByProvider,
     });

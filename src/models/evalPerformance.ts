@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
-import { evalResultsTable } from '../database/tables';
+import { evalResultsTable, savedReportResultPredicate } from '../database/tables';
 import logger from '../logger';
 
 import type { EvalResultsFilterMode } from '../types/index';
@@ -21,8 +21,18 @@ interface CountCacheEntry {
   timestamp: number;
 }
 
+interface ResultsSummary {
+  count: number;
+  savedReportPromptIndices: number[];
+  onlySavedReportPromptIndices: number[];
+}
+
 // Simple in-memory cache for counts with 5-minute TTL
 const countCache = new Map<string, CountCacheEntry>();
+const savedReportPromptCache = new Map<
+  string,
+  { indices: number[]; onlyIndices: number[]; timestamp: number }
+>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 async function getResultCount(evalId: string, distinct: boolean): Promise<number> {
@@ -71,6 +81,47 @@ export function getCachedResultsCount(evalId: string): Promise<number> {
   return getResultCount(evalId, true);
 }
 
+/** Full-eval column provenance uses a partial index, independently of the count-only path. */
+export async function getCachedResultsSummary(evalId: string): Promise<ResultsSummary> {
+  const count = await getCachedResultsCount(evalId);
+  const cached = savedReportPromptCache.get(evalId);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return {
+      count,
+      savedReportPromptIndices: cached.indices,
+      onlySavedReportPromptIndices: cached.onlyIndices,
+    };
+  }
+
+  const db = await getDb();
+  // Matching the index predicate lets SQLite read only indexed prompt positions, without
+  // loading or parsing metadata from ordinary results (which can contain large histories).
+  const rows = await db
+    .selectDistinct({ promptIdx: evalResultsTable.promptIdx, count: sql<number>`COUNT(*)` })
+    .from(evalResultsTable)
+    .where(sql`${evalResultsTable.evalId} = ${evalId} AND ${savedReportResultPredicate}`)
+    .groupBy(evalResultsTable.promptIdx)
+    .all();
+  const indices = rows
+    .map((row) => row.promptIdx)
+    .filter((index) => Number.isInteger(index) && index >= 0);
+  // Count rows through the eval/prompt index; ordinary metadata need not be parsed.
+  const totals = rows.length
+    ? await db
+        .select({ promptIdx: evalResultsTable.promptIdx, count: sql<number>`COUNT(*)` })
+        .from(evalResultsTable)
+        .where(sql`${evalResultsTable.evalId} = ${evalId}`)
+        .groupBy(evalResultsTable.promptIdx)
+        .all()
+    : [];
+  const totalsByPrompt = new Map(totals.map((row) => [row.promptIdx, Number(row.count)]));
+  const onlyIndices = rows
+    .filter((row) => totalsByPrompt.get(row.promptIdx) === Number(row.count))
+    .map((row) => row.promptIdx);
+  savedReportPromptCache.set(evalId, { indices, onlyIndices, timestamp: Date.now() });
+  return { count, savedReportPromptIndices: indices, onlySavedReportPromptIndices: onlyIndices };
+}
+
 /**
  * Get the total count of all result rows for an eval.
  * This counts every result row in the database, including multiple results
@@ -86,8 +137,10 @@ export function clearCountCache(evalId?: string) {
   if (evalId) {
     countCache.delete(`distinct:${evalId}`);
     countCache.delete(`total:${evalId}`);
+    savedReportPromptCache.delete(evalId);
   } else {
     countCache.clear();
+    savedReportPromptCache.clear();
   }
 }
 

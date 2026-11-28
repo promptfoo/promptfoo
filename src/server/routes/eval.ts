@@ -1,12 +1,28 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
+import { getEnvBool } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
+import {
+  getNamedOpenAiTextId,
+  getProviderEndpointAliases,
+  getSafeProviderId,
+  isPackagePath,
+  isWebSocketProviderPath,
+} from '../../providers/index';
 import { EvalSchemas } from '../../types/api/eval';
+import {
+  getCloudDatabaseId,
+  getProviderFromCloud,
+  isCloudProvider,
+  withCloudProviderResolver,
+} from '../../util/cloud';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
@@ -14,16 +30,24 @@ import {
   generateEvalCsv,
   getEvalTableOutputPromptLocationsBySize,
   getEvalTablePromptStrippedPayload,
+  getReplayColumn,
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
-import { loadProviderConfigsFromFile, normalizeProviderRef } from '../../util/providerRef';
 import {
+  isProviderConfigFileReference,
+  normalizeProviderRef,
+  type ProviderRefDescriptor,
+  readRawProviderConfigFile,
+} from '../../util/providerRef';
+import {
+  REDACTED,
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeObject,
 } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
+import { getTemplateEnvValue } from '../../util/templates';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
@@ -36,6 +60,7 @@ import type {
   EvaluateTestSuite,
   GradingResult,
   PromptMetrics,
+  ProviderOptions,
   ResultsFile,
   Vars,
 } from '../../types/index';
@@ -181,6 +206,9 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     {
       ...evaluateOptions,
       eventSource: 'web',
+      providerProgressCallback: (progress, completed) => {
+        evalJobService.setProviderProgress(id, progress, completed);
+      },
       progressCallback: (progress: number, total: number) => {
         invariant(evalJobService.setProgress(id, progress, total), 'Job not found');
         console.log(`[${id}] ${progress}/${total}`);
@@ -584,6 +612,746 @@ evalRouter.post('/:id/results', async (req: Request, res: Response) => {
   res.status(204).send();
 });
 
+const TEMPLATE_MARKER = /\{[{%#]/;
+
+// The native file loader renders nested paths. Inspect them as data and allow
+// only literal JSON/YAML settings outside fields used to select a provider.
+function replayFileData(
+  value: unknown,
+  setting?: (path: string) => unknown,
+  seen = new Set<object>(),
+): unknown {
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    if (!setting || !isProviderConfigFileReference(value) || TEMPLATE_MARKER.test(value)) {
+      throw new Error('Cannot inspect a nested provider file safely');
+    }
+    return setting(value);
+  }
+  if (value && typeof value === 'object') {
+    if (seen.has(value)) {
+      throw new Error('Aliased provider files are not supported during replay');
+    }
+    seen.add(value);
+    const visit = (child: unknown) => replayFileData(child, setting, seen);
+    return Array.isArray(value)
+      ? value.map(visit)
+      : Object.fromEntries(Object.entries(value).map(([key, child]) => [key, visit(child)]));
+  }
+  return value;
+}
+
+function readReplayProviders(path: string, basePath?: string) {
+  if (TEMPLATE_MARKER.test(path)) {
+    throw new Error('Cannot identify the replay provider safely');
+  }
+  const data = readRawProviderConfigFile(path, basePath);
+  return (Array.isArray(data) ? data : [data]).map((entry) => {
+    const ref = normalizeProviderRef(entry);
+    if (ref.kind !== 'options') {
+      throw new Error('Provider file entries must have an ID');
+    }
+    const { config, ...metadata } = ref.loadOptions;
+    replayFileData(metadata);
+    replayFileData(config?.url);
+    const localSettings = typeof config === 'object' && !isCloudProvider(ref.loadProviderPath);
+    replayFileData(config, localSettings ? (path) => path : undefined);
+    return ref;
+  });
+}
+
+function isCodexSecurityPath(path: string) {
+  return path === 'openai:codex-security' || path.startsWith('openai:codex-security:');
+}
+
+function getReplayProviderError(reference: ProviderRefDescriptor): string | undefined {
+  const providerPath = 'loadProviderPath' in reference ? reference.loadProviderPath : undefined;
+  if (providerPath && isCodexSecurityPath(providerPath)) {
+    return 'Codex Security does not support prompt-only replay. Rerun using the eval configuration to preserve operation and report settings.';
+  }
+  if (
+    reference.kind === 'unknown' ||
+    (providerPath &&
+      (isProviderConfigFileReference(providerPath) ||
+        isCloudProvider(providerPath) ||
+        TEMPLATE_MARKER.test(providerPath)))
+  ) {
+    return 'Cannot identify the replay provider safely. Rerun using the eval configuration.';
+  }
+  return undefined;
+}
+
+function replayEnvValue(template: string, env: ProviderOptions['env'], allowAmbient = false) {
+  const match = /^\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/.exec(template);
+  if (match?.[0] !== template || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    throw new Error('Cannot identify the replay provider safely');
+  }
+  const key = match[1];
+  const value =
+    env && Object.hasOwn(env, key) ? env[key] : allowAmbient && getTemplateEnvValue(key);
+  if (typeof value !== 'string' || !value || TEMPLATE_MARKER.test(value)) {
+    throw new Error('Cannot identify the replay provider safely');
+  }
+  return value;
+}
+
+// An environment-selected provider can only replay a local echo without operational options.
+function replayEcho(
+  path: string,
+  env: ProviderOptions['env'],
+  corroborated: boolean,
+  options?: ProviderOptions,
+) {
+  const alias = options?.id === path ? undefined : options?.id;
+  const dynamic = [alias, options?.label].some(
+    (v) => v !== undefined && (typeof v !== 'string' || TEMPLATE_MARKER.test(v)),
+  );
+  const extra = Object.keys(options ?? {}).some(
+    (k) =>
+      !['id', 'label', 'env', 'prompts'].includes(k) &&
+      !(k === 'config' && isDeepStrictEqual(options?.config, {})),
+  );
+  // An ID override can survive a change of provider. Only a saved environment
+  // binding can identify that target, even if the override itself is "echo".
+  const allowAmbient = corroborated && alias === undefined;
+  if (dynamic || extra || replayEnvValue(path, env, allowAmbient) !== 'echo') {
+    throw new Error('Cannot identify the replay provider safely');
+  }
+  return { id: alias ?? 'echo', ...(options?.label && { label: options.label }) };
+}
+
+function replayUrlTransport(path: string) {
+  if (/^https?(?::|$)/.test(path)) {
+    return 'http';
+  }
+  if (isWebSocketProviderPath(path)) {
+    return 'websocket';
+  }
+  return undefined;
+}
+
+// Replace saved prompt filters while retaining routing and provider-specific options.
+function prepareReplayCandidate<T>(
+  provider: T,
+  column: string | undefined,
+  suiteEnv: ProviderOptions['env'],
+  singleSource: boolean,
+  corroboratedEcho = false,
+) {
+  const ref = normalizeProviderRef(provider);
+  if (ref.kind !== 'options' && ref.kind !== 'map' && ref.kind !== 'named') {
+    return provider;
+  }
+  let options = 'loadOptions' in ref ? ref.loadOptions : undefined;
+  let path = ref.loadProviderPath;
+  const env = { ...suiteEnv, ...options?.env };
+  // Cloud labels depend on the remote environment, even when supplied locally.
+  const deferLabel = isCloudProvider(path) && TEMPLATE_MARKER.test(options?.label ?? '');
+  if (!deferLabel && options?.label && TEMPLATE_MARKER.test(options.label)) {
+    // Ambient labels can swap between sources. Only use one to confirm a sole provider.
+    const label = replayEnvValue(options.label, env, singleSource && !!column);
+    options = { ...options, label };
+  }
+  if (!deferLabel && column && options?.label && options.label !== column) {
+    return;
+  }
+  if (options?.id && options.id !== path && TEMPLATE_MARKER.test(options.id)) {
+    throw new Error('Cannot identify the replay provider safely');
+  }
+  if (TEMPLATE_MARKER.test(path)) {
+    options = replayEcho(path, env, corroboratedEcho, options);
+    path = 'echo';
+  } else if (ref.kind === 'named' && !isCloudProvider(path)) {
+    // A bare string has no saved prompt filters. Wrapping it would override the native ID.
+    return provider;
+  } else if (
+    options?.config?.url &&
+    replayUrlTransport(path) &&
+    TEMPLATE_MARKER.test(options.config.url)
+  ) {
+    // Inspect and execute the same destination, without rendering arbitrary template code.
+    const url = replayEnvValue(options.config.url, env);
+    options = { ...options, config: { ...options.config, url } };
+  }
+  return ref.kind === 'map'
+    ? { [path]: { ...options, prompts: ['Replay'] } }
+    : { ...options, id: path, prompts: ['Replay'] };
+}
+
+function replayProviderId(target: ProviderRefDescriptor) {
+  if ('loadProviderPath' in target) {
+    // URL providers ignore ID overrides. WebSocket columns also redact URL credentials.
+    const path = target.loadProviderPath;
+    const transport = replayUrlTransport(path);
+    if (transport) {
+      const url = ('loadOptions' in target && target.loadOptions.config?.url) || path;
+      if (TEMPLATE_MARKER.test(url)) {
+        throw new Error('Cannot identify the replay provider safely');
+      }
+      return transport === 'websocket' ? getSafeProviderId(url) : url;
+    }
+    if (target.kind === 'named') {
+      // Without an ID override these factories normalize the endpoint name.
+      if (/^anthropic:(?:messages|completion):.+/.test(path)) {
+        return path.replace(/^anthropic:[^:]+:/, 'anthropic:');
+      }
+      if (
+        path.startsWith('ollama:') &&
+        !/^ollama:(?:chat|completion|embeddings?)(?::|$)/.test(path)
+      ) {
+        return path.replace(/^ollama:/, 'ollama:completion:');
+      }
+    }
+    const openAiId = getNamedOpenAiTextId(path);
+    if (path === 'echo' || isCodexSecurityPath(path) || openAiId) {
+      return target.kind === 'named' ? (openAiId ?? path) : target.id;
+    }
+  }
+  // Other factories can choose their own ID, even when given an override.
+  return undefined;
+}
+
+async function matchReplayTarget(
+  ref: ProviderRefDescriptor,
+  column: string | undefined,
+  uniqueColumn: boolean,
+  nativeGroup: string | undefined,
+  suiteEnv: ProviderOptions['env'],
+) {
+  let cloud;
+  let target = ref;
+  if ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) {
+    try {
+      const id = getCloudDatabaseId(ref.loadProviderPath);
+      const options: ProviderOptions = 'loadOptions' in ref ? ref.loadOptions : {};
+      cloud = { id, options, provider: await getProviderFromCloud(id, options) };
+    } catch (error) {
+      // A known collision or an unindexed request must never fall back to a different target.
+      if (
+        uniqueColumn &&
+        nativeGroup &&
+        nativeGroup !== column &&
+        !ref.label &&
+        ref.id !== column
+      ) {
+        return;
+      }
+      throw error;
+    }
+    if (TEMPLATE_MARKER.test(cloud.provider.id) || isCloudProvider(cloud.provider.id)) {
+      throw new Error('Cannot identify the replay provider safely');
+    }
+    // Match the native loader's template scope: suite, Cloud, then entry.
+    // Keep remote values in the pinned snapshot, outside the replay suite.
+    const effective = prepareReplayCandidate(
+      {
+        ...cloud.provider,
+        label: cloud.options.label ?? cloud.provider.label,
+        config: { ...cloud.provider.config, ...cloud.options.config },
+        env: { ...cloud.provider.env, ...cloud.options.env },
+      },
+      column,
+      suiteEnv,
+      false,
+    );
+    if (!effective) {
+      return;
+    }
+    target = normalizeProviderRef(effective);
+  }
+  // Inspect the effective URL even when a label masks an unresolved cloud destination.
+  const id = replayProviderId(target);
+  const identity = target.label || id;
+  if (TEMPLATE_MARKER.test(identity ?? target.id)) {
+    throw new Error('Cannot identify the replay provider safely');
+  }
+  if (column && !identity) {
+    // An unknown native ID can collide with any other source. Require a
+    // distinct saved group per provider and corroborate the selected ID.
+    if (!nativeGroup || (nativeGroup === column && target.id !== column)) {
+      throw new Error('Ambiguous replay request');
+    }
+  }
+  if (column && column !== (identity || nativeGroup)) {
+    return;
+  }
+  return { target, cloud };
+}
+
+function replaySources(eval_: Eval, allowsProvider: (id: string, label?: string) => boolean) {
+  const providers = eval_.config.providers ?? [];
+  const sources = Array.isArray(providers) ? providers : [providers];
+  let mutableIdentity = false;
+  const resolved = sources
+    .flatMap((source, sourceIndex) => {
+      const ref = normalizeProviderRef(source);
+      if (ref.kind !== 'file') {
+        mutableIdentity ||=
+          'loadProviderPath' in ref &&
+          isCloudProvider(ref.loadProviderPath) &&
+          (!ref.label || TEMPLATE_MARKER.test(ref.label));
+        return [{ provider: source, fromFile: false, ref, sourceIndex }];
+      }
+      try {
+        const entries = readReplayProviders(ref.loadProviderPath, eval_.config.basePath);
+        mutableIdentity = true;
+        return entries.map((entry) => ({
+          provider: entry.loadOptions,
+          sourceIndex,
+          fromFile: true,
+          ref: entry,
+        }));
+      } catch {
+        // A missing file could own the column even if a remaining label matches.
+        throw new Error('Cannot inspect the replay provider file safely');
+      }
+    })
+    .filter(({ ref }) => allowsProvider(ref.id, ref.label));
+  const singleSource = sources.length === 1 && resolved.length === 1;
+  return { singleSource, mutableIdentity, resolved };
+}
+
+// Only skip a live instance when its saved column is known to be unrelated.
+function excludeReplayInstance(ref: ProviderRefDescriptor, column?: string, group?: string) {
+  if (!column || !group || group === column || (ref.label || ref.id) === column) {
+    throw new Error('Cannot recover the saved provider instance');
+  }
+}
+
+async function selectReplayProvider(eval_: Eval, promptIndex?: number) {
+  const { name, groups, unique, allowsProvider, allowsPrompts } = getReplayColumn(
+    eval_,
+    promptIndex,
+  );
+  const { singleSource, mutableIdentity, resolved } = replaySources(eval_, allowsProvider);
+  if (promptIndex === undefined && !singleSource) {
+    throw new Error('Ambiguous replay request');
+  }
+  const complete = groups.length === resolved.length && new Set(groups).size === groups.length;
+  // Cloud and file labels can change since the evaluation. Never use their
+  // current values alone to distinguish targets or fall back to another one.
+  if (mutableIdentity && !complete) {
+    throw new Error('Ambiguous replay request');
+  }
+  const mutable = resolved.some(
+    ({ ref, fromFile }) =>
+      fromFile || ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)),
+  );
+  const saved = await EvalQueries.getReplayTarget(eval_.id, promptIndex, mutable);
+  let selected;
+  const unavailable = new Set(eval_.runtimeOptions?.unreplayableProviderIndices);
+  for (const [index, { provider, fromFile, ref, sourceIndex }] of resolved.entries()) {
+    const nativeGroup = complete ? groups[index] : undefined;
+    if (unavailable.has(sourceIndex)) {
+      excludeReplayInstance(ref, name, nativeGroup);
+      continue;
+    }
+    const corroboratedEcho =
+      saved?.id === 'echo' || (!ref.label && (name ?? nativeGroup) === 'echo');
+    const candidate = prepareReplayCandidate(
+      provider,
+      name,
+      eval_.config.env,
+      singleSource,
+      corroboratedEcho,
+    );
+    if (candidate === undefined) {
+      continue;
+    }
+    const match = await matchReplayTarget(
+      normalizeProviderRef(candidate),
+      name,
+      unique,
+      nativeGroup,
+      eval_.config.env,
+    );
+    if (match) {
+      if (selected || (name && mutableIdentity && groups[index] !== name)) {
+        throw new Error('Ambiguous replay request');
+      }
+      selected = { candidate, fromFile, ref, ...match };
+    }
+  }
+  if (!selected) {
+    throw new Error('No matching replay provider');
+  }
+  const id = replayProviderId(selected.target) ?? selected.target.id;
+  const selectors =
+    ('loadOptions' in selected.ref ? selected.ref.loadOptions.prompts : undefined) ??
+    selected.cloud?.provider.prompts;
+  const { label } = selected.target;
+  if (!allowsProvider(id, label) || !allowsPrompts(id, label, selectors)) {
+    throw new Error('Provider excluded from the original evaluation');
+  }
+  return { ...selected, id, saved };
+}
+
+type ReplaySelection = Awaited<ReturnType<typeof selectReplayProvider>>;
+
+// A prompt-only replay drops all call options. Those options can select an
+// endpoint or credentials, and test.provider can replace the target entirely.
+// Check the entire selected column: the UI row index may refer to filtered data.
+function hasReplayOverrides(eval_: Eval, saved: ReplaySelection['saved'], promptIndex?: number) {
+  const hasOptions = (options: unknown) =>
+    Object.keys(options ?? {}).some((key) => key !== 'provider' && key !== 'repeat');
+  const columns = eval_.getPrompts();
+  const selected = promptIndex === undefined ? columns : [columns[promptIndex]];
+  if (selected.some(({ config }) => hasOptions(config))) {
+    return true;
+  }
+  if (saved) {
+    return Boolean(saved.overrides);
+  }
+  // Older snapshots can lack result rows. Never open external test sources
+  // or run generators to recover settings from them during replay.
+  const { prompts, tests, scenarios, defaultTest } = eval_.config;
+  if (scenarios?.length || (tests && !Array.isArray(tests))) {
+    return true;
+  }
+  if (
+    Array.isArray(prompts) &&
+    prompts.some((p) => typeof p !== 'string' && 'config' in p && hasOptions(p.config))
+  ) {
+    return true;
+  }
+  const overridden = (test: unknown) =>
+    test != null &&
+    (typeof test !== 'object' ||
+      'path' in test ||
+      'provider' in test ||
+      'providerOutput' in test ||
+      ('options' in test && hasOptions(test.options)));
+  return overridden(defaultTest) || Boolean(Array.isArray(tests) && tests.some(overridden));
+}
+
+function assertMatchesSavedTarget(selection: ReplaySelection) {
+  const { saved } = selection;
+  // Cloud and file definitions can keep their labels after changing providers.
+  // Without a recorded runtime ID their original target cannot be established.
+  if (!saved) {
+    if (selection.fromFile || selection.cloud) {
+      throw new Error('No recorded provider for mutable replay target');
+    }
+    return;
+  }
+  if (saved.scanner || saved.id !== selection.id) {
+    throw new Error('Cannot verify the original replay provider');
+  }
+  if (saved.linkedTargetId) {
+    const linked = isCloudProvider(saved.linkedTargetId)
+      ? getCloudDatabaseId(saved.linkedTargetId)
+      : saved.linkedTargetId;
+    const localLink =
+      'loadOptions' in selection.target && selection.target.loadOptions.config?.linkedTargetId;
+    if (selection.cloud ? linked !== selection.cloud.id : saved.linkedTargetId !== localLink) {
+      throw new Error('Cloud target changed since evaluation');
+    }
+  }
+}
+
+// Redaction hides the original credential expression. Do not let a changed
+// definition run template code or read unrelated secrets from the process.
+function replayCredential(value: string, env: ProviderOptions['env']) {
+  if (TEMPLATE_MARKER.test(value)) {
+    replayEnvValue(value.replace(/^(?:bearer|basic)\s+/i, ''), env);
+  }
+  return REDACTED;
+}
+
+// A model ID or raw HTTP request ID doesn't identify the destination. Require
+// the entire static configuration to match, including nested settings and raw
+// request headers. Opaque settings (e.g. a redacted OAuth or session object)
+// cannot prove a match. Only credential strings may differ due to redaction.
+function matchesRecordedSettings(
+  config: Record<string, unknown>,
+  recorded: string,
+  env: ProviderOptions['env'],
+  basePath?: string,
+) {
+  const original = JSON.parse(recorded);
+  if (!original || typeof original !== 'object' || Array.isArray(original)) {
+    return false;
+  }
+  if (!Object.hasOwn(config, 'basePath') && original.basePath === basePath) {
+    delete original.basePath;
+  }
+  if (!Object.hasOwn(config, 'linkedTargetId')) {
+    delete original.linkedTargetId; // The Cloud link was verified separately.
+  }
+  const current = { ...config };
+  if (original.apiKey === REDACTED && typeof current.apiKey === 'string') {
+    current.apiKey = replayCredential(current.apiKey, env);
+  }
+  if (current.headers && typeof current.headers === 'object') {
+    current.headers = Object.fromEntries(
+      Object.entries(current.headers).map(([key, value]) => [
+        key,
+        /^(?:authorization|x-api-key)$/i.test(key) &&
+        typeof value === 'string' &&
+        original.headers?.[key] === REDACTED
+          ? replayCredential(value, env)
+          : value,
+      ]),
+    );
+  }
+  return isDeepStrictEqual(original, current);
+}
+
+// Runtime results omit provider controls such as transform. Only saved inline
+// overrides can supply those controls, even when the underlying provider is local.
+function assertAllowedReplayControls({ fromFile, ref, cloud }: ReplaySelection) {
+  const allowed = new Set(['id', 'label', 'config', 'env', 'prompts']);
+  if (cloud && !fromFile) {
+    for (const key of ['transform', 'delay', 'inputs'] as const) {
+      if (cloud.options[key] != null) {
+        allowed.add(key);
+      }
+    }
+  }
+  const local = fromFile && 'loadOptions' in ref ? ref.loadOptions : undefined;
+  for (const options of [local, cloud?.provider]) {
+    if (options && Object.keys(options).some((key) => !allowed.has(key))) {
+      throw new Error('Cannot verify mutable provider controls');
+    }
+  }
+}
+
+// Results omit provider env. Only accept transports with a recorded explicit
+// destination and plain request settings, without callbacks or auxiliary endpoints.
+const REPLAY_REQUEST_SETTINGS = new Set([
+  'basePath',
+  'linkedTargetId',
+  'apiKey',
+  'headers',
+  'url',
+  'body',
+  'request',
+  'method',
+  'useHttps',
+  'messageTemplate',
+  'apiHost',
+  'apiBaseUrl',
+  'temperature',
+  'max_tokens',
+  'max_completion_tokens',
+  'top_p',
+  'seed',
+  'stop',
+  'stream',
+]);
+
+function bindReplaySetting(value: string, env: ProviderOptions['env']) {
+  return value.replace(/\{\{[^{}]*\}\}/g, (expr) => replayEnvValue(expr, env));
+}
+
+// Outside the request body, an explicit setting can change the destination
+// (including an auxiliary session or token URL). Inspect only literal saved
+// environment bindings. Never run templates or read ambient values here.
+function assertSavedReplayBindings(value: unknown, env: ProviderOptions['env']) {
+  if (typeof value === 'string' && TEMPLATE_MARKER.test(value)) {
+    if (TEMPLATE_MARKER.test(bindReplaySetting(value, env))) {
+      throw new Error('Cannot verify provider template');
+    }
+  } else if (value && typeof value === 'object') {
+    for (const child of Object.values(value)) {
+      assertSavedReplayBindings(child, env);
+    }
+  }
+}
+
+class UnverifiedModelEndpoint extends Error {}
+
+function isLiteralReplayAddress(address: unknown) {
+  return (
+    typeof address === 'string' &&
+    !!address.trim() &&
+    !TEMPLATE_MARKER.test(address) &&
+    !/\[REDACTED\]|%5BREDACTED%5D/i.test(address)
+  );
+}
+
+// Only accept aliases for native model transports that honor them. Agent
+// backends and multi-service providers can choose a different destination.
+function replayEndpointAliases(path: string) {
+  if (path.startsWith('ollama:')) {
+    return ['OLLAMA_BASE_URL'];
+  }
+  if (path.startsWith('anthropic:') && !/^anthropic:claude-(?:agent-sdk|code)/.test(path)) {
+    return ['ANTHROPIC_BASE_URL'];
+  }
+  if (/^(?:openai|mistral):/.test(path) && !/^openai:agents(?::|$)/.test(path)) {
+    return getProviderEndpointAliases(path);
+  }
+  return [];
+}
+
+// A model ID omits the endpoint. Even if no gateway is configured today,
+// one may have been set in the original process and removed since then.
+function assertSavedModelEndpoint(
+  path: string,
+  settings: Record<string, unknown>,
+  env: ProviderOptions['env'],
+) {
+  const explicit = getNamedOpenAiTextId(path) && (settings.apiHost || settings.apiBaseUrl);
+  if (explicit) {
+    if (typeof explicit !== 'string' || !isLiteralReplayAddress(bindReplaySetting(explicit, env))) {
+      throw new UnverifiedModelEndpoint();
+    }
+    return;
+  }
+  const endpoints = replayEndpointAliases(path)
+    .map((key) => env?.[key])
+    .filter(Boolean);
+  if (!endpoints.length || !endpoints.every(isLiteralReplayAddress)) {
+    throw new UnverifiedModelEndpoint();
+  }
+}
+
+function assertReplayDestination(target: ProviderRefDescriptor, suiteEnv: ProviderOptions['env']) {
+  if (!('loadProviderPath' in target) || target.loadProviderPath === 'echo') {
+    return;
+  }
+  const options = 'loadOptions' in target ? target.loadOptions : undefined;
+  const env = { ...suiteEnv, ...options?.env };
+  const settings = { ...options?.config };
+  const transport = replayUrlTransport(target.loadProviderPath);
+  if (transport) {
+    delete settings.body;
+    delete settings.messageTemplate;
+  } else {
+    // Older snapshots of live Chat and Responses instances have the same
+    // short model ID and options. Their original API cannot be inferred.
+    if (
+      options?.config &&
+      options.label !== undefined &&
+      /^openai:[^:]+$/.test(target.loadProviderPath) &&
+      !getNamedOpenAiTextId(target.loadProviderPath)
+    ) {
+      throw new Error('Cannot distinguish a saved model ID from a provider selector');
+    }
+    assertSavedModelEndpoint(target.loadProviderPath, settings, env);
+  }
+  if (transport === 'http' && settings.request != null) {
+    // Raw HTTP takes its destination from the request line and Host header,
+    // even when a URL is set. Reject request files and dynamic headers.
+    const head =
+      typeof settings.request === 'string' &&
+      settings.request.trimStart().split(/\r?\n\r?\n/, 1)[0];
+    if (
+      !head ||
+      !/^[a-z-]+[ \t]+(?:\/|https?:\/\/|\*)/i.test(head) ||
+      TEMPLATE_MARKER.test(head) ||
+      /__PF_VAR__|\[REDACTED\]|%5BREDACTED%5D/i.test(head)
+    ) {
+      throw new Error('Cannot verify raw HTTP destination');
+    }
+    delete settings.request;
+  }
+  assertSavedReplayBindings(settings, env);
+}
+
+function hasStaticReplayRoute(path: string, config: Record<string, unknown>) {
+  if (path === 'echo') {
+    return true;
+  }
+  if (Object.keys(config).some((key) => !REPLAY_REQUEST_SETTINGS.has(key))) {
+    return false;
+  }
+  const transport = replayUrlTransport(path);
+  let destination;
+  if (getNamedOpenAiTextId(path)) {
+    destination = config.apiHost || config.apiBaseUrl;
+  } else if (transport === 'http' && typeof config.request === 'string') {
+    return true; // The raw request head was verified for all HTTP providers.
+  } else if (transport) {
+    // A WebSocket ID can redact part of the URL. Without a recorded URL
+    // setting, such an ID cannot attest to the original destination.
+    if (transport === 'websocket' && !config.url && getSafeProviderId(path) !== path) {
+      return false;
+    }
+    destination = config.url || path;
+    const protocol = transport === 'http' ? /^https?:\/\// : /^wss?:\/\//;
+    if (typeof destination !== 'string' || !protocol.test(destination)) {
+      return false;
+    }
+  } else {
+    return false;
+  }
+  return isLiteralReplayAddress(destination);
+}
+
+function prepareReplaySettings(
+  selection: ReplaySelection,
+  basePath?: string,
+  suiteEnv?: ProviderOptions['env'],
+) {
+  const { fromFile, cloud, target, saved } = selection;
+  assertReplayDestination(target, suiteEnv);
+  if (!fromFile && !cloud) {
+    return selection.candidate;
+  }
+  if (target.kind !== 'options') {
+    throw new Error('Cannot verify mutable provider settings');
+  }
+  assertAllowedReplayControls(selection);
+  const path = target.loadProviderPath;
+  let candidate = selection.candidate;
+  let config = target.loadOptions.config;
+  if (!hasStaticReplayRoute(path, config ?? {})) {
+    throw new Error('Cannot verify mutable provider destination');
+  }
+  if (fromFile && !cloud && path === 'echo' && config) {
+    // Only local echo has inert nested settings. Never resolve paths in
+    // credentials, headers, or destinations for a network transport.
+    config = replayFileData(config, (path) =>
+      replayFileData(readRawProviderConfigFile(path, basePath)),
+    );
+    candidate = { ...target.loadOptions, config };
+  } else {
+    replayFileData(config);
+  }
+  const mutableEnv = fromFile ? target.loadOptions.env : cloud?.provider.env;
+  const recorded = saved?.config ?? (path === 'echo' ? '{}' : undefined);
+  if (
+    (path !== 'echo' && !replayUrlTransport(path) && Object.keys(mutableEnv ?? {}).length > 0) ||
+    !recorded ||
+    !matchesRecordedSettings(config ?? {}, recorded, mutableEnv, basePath)
+  ) {
+    throw new Error('Cannot verify mutable provider settings');
+  }
+  return candidate;
+}
+
+// Replay accepts edited text and scalar values, never template programs or
+// external variable/prompt references. Only interpolate names supplied in this
+// request. A JSON prompt is decoded before rendering, including Unicode escapes.
+function validReplayInput(prompt: string, variables: Record<string, unknown> = {}) {
+  const literal = (value: string) =>
+    !TEMPLATE_MARKER.test(value) &&
+    !/\\u00(?:7b|25|23)|^(?:file|exec|portkey|langfuse|helicone):/i.test(value.trimStart());
+  for (const [name, value] of Object.entries(variables)) {
+    if (name === 'env' || name.startsWith('__') || Object.hasOwn(Object.prototype, name)) {
+      return false;
+    }
+    // renderPrompt loads variable sources even when the prompt never references them.
+    if (typeof value === 'string') {
+      if (!literal(value) || isPackagePath(value.trimStart())) {
+        return false;
+      }
+    } else if (value !== null && typeof value === 'object') {
+      return false;
+    }
+  }
+  return literal(
+    prompt.replace(/\{\{\s*([a-z_]\w*)\s*\}\}/gi, (expr, name) =>
+      Object.hasOwn(variables, name) ? ' ' : expr,
+    ),
+  );
+}
+
+// Edit & Replay is intentionally unthrottled so local viewer users can compare
+// successive edits across columns from the same address. The saved provider
+// checks do not authenticate the caller. Restrict viewer access to trusted
+// users because each replay can incur provider costs.
 evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = EvalSchemas.Replay.Request.safeParse(req.body);
   if (!bodyResult.success) {
@@ -591,7 +1359,13 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
-  const { evaluationId, testIndex, prompt, variables } = bodyResult.data;
+  const { evaluationId, promptIndex, prompt, variables } = bodyResult.data;
+  if (!validReplayInput(prompt, variables)) {
+    res
+      .status(400)
+      .json({ error: 'Replay requires plain values and simple variable substitutions.' });
+    return;
+  }
 
   try {
     // Load the evaluation to get the provider configuration
@@ -601,74 +1375,72 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Get the provider configuration from the eval
-    const providers = eval_.config.providers;
-    if (!providers) {
+    if (!eval_.config.providers) {
       res.status(400).json({ error: 'No providers found in evaluation' });
       return;
     }
 
-    // Handle different provider config formats
-    // biome-ignore lint/suspicious/noExplicitAny: FIXME
-    let providerConfig: any;
-    if (Array.isArray(providers)) {
-      if (providers.length === 0) {
-        res.status(400).json({ error: 'No providers found in evaluation' });
+    let selected;
+    try {
+      selected = await selectReplayProvider(eval_, promptIndex);
+      const replayError = getReplayProviderError(selected.target);
+      if (replayError) {
+        res.status(400).json({ error: replayError });
         return;
       }
-      // Use the first provider or the one at the specified test index
-      providerConfig = providers[(testIndex ?? 0) % providers.length];
-    } else if (typeof providers === 'string' || typeof providers === 'function') {
-      providerConfig = providers;
-    } else {
-      // providers might be a single provider object
-      providerConfig = providers;
+      assertMatchesSavedTarget(selected);
+      if (hasReplayOverrides(eval_, selected.saved, promptIndex)) {
+        throw new Error('Prompt-only replay cannot preserve saved provider overrides');
+      }
+    } catch (error) {
+      sendError(
+        res,
+        400,
+        'Cannot resolve the replay provider. Rerun using the eval configuration.',
+        error,
+      );
+      return;
     }
 
-    // Replay is a one-prompt diagnostic. Keep the saved selection and local options,
-    // but replace evaluation routing filters after expanding provider config files.
-    const selectedRef = normalizeProviderRef(providerConfig);
-    const replayProviders = (
-      selectedRef.kind === 'file'
-        ? loadProviderConfigsFromFile(selectedRef.loadProviderPath, eval_.config.basePath)
-        : [providerConfig]
-    ).map((provider) => {
-      const ref = normalizeProviderRef(provider);
-      if (ref.kind === 'options' || ref.kind === 'map') {
-        const options = { ...ref.loadOptions, prompts: ['Replay'] };
-        return ref.kind === 'map' ? { [ref.loadProviderPath]: options } : options;
-      }
-      if (ref.kind === 'named') {
-        return { id: ref.loadProviderPath, prompts: ['Replay'] };
-      }
-      // Persisted refs are declarative; leave other forms for normal loader validation.
-      return provider;
-    });
-
-    // Run the prompt through the provider
-    const result = await evaluateWithSource(
-      {
-        prompts: [
-          {
-            raw: prompt,
-            label: 'Replay', // Add required label field
-          },
-        ],
-        providers: replayProviders,
-        basePath: eval_.config.basePath,
-        tests: [
-          {
-            vars: (variables || {}) as Vars,
-          },
-        ],
-      },
-      {
-        maxConcurrency: 1,
-        showProgressBar: false,
-        eventSource: 'web',
-        cache: false, // Always disable cache for replays to get fresh results
-      },
-    );
+    const { cloud } = selected;
+    let candidate;
+    try {
+      candidate = prepareReplaySettings(selected, eval_.config.basePath, eval_.config.env);
+    } catch (error) {
+      res.status(400).json({
+        error:
+          error instanceof UnverifiedModelEndpoint
+            ? 'Cannot verify the original model endpoint. Rerun using the eval configuration with the intended endpoint set explicitly.'
+            : 'Cannot verify provider settings. Rerun using the eval configuration.',
+      });
+      return;
+    }
+    const evaluateReplay = () =>
+      evaluateWithSource(
+        {
+          prompts: [{ raw: prompt, label: 'Replay' }],
+          providers: [candidate],
+          basePath: eval_.config.basePath,
+          tests: [{ vars: (variables ?? {}) as Vars }],
+        },
+        {
+          providerEnv: eval_.config.env,
+          maxConcurrency: 1,
+          showProgressBar: false,
+          eventSource: 'web',
+          cache: false, // Always disable cache for replays to get fresh results
+        },
+      );
+    // Keep native cloud/local merge semantics without rereading a different target.
+    const result = await (cloud
+      ? withCloudProviderResolver((id, options) => {
+          invariant(
+            id === cloud.id && JSON.stringify(options ?? {}) === JSON.stringify(cloud.options),
+            'Replay requested a provider outside the inspected selection',
+          );
+          return cloud.provider;
+        }, evaluateReplay)
+      : evaluateReplay());
 
     const summary = await result.toEvaluateSummary();
 

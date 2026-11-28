@@ -9,6 +9,10 @@ import { setupTestServer } from '../../util/testServer';
 vi.mock('../../../src/models/eval');
 vi.mock('../../../src/globalConfig/accounts');
 vi.mock('../../../src/node', () => ({ evaluateWithSource: vi.fn() }));
+vi.mock('../../../src/util/cloud', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/util/cloud')>()),
+  getProviderFromCloud: vi.fn(),
+}));
 
 import Eval, { EvalQueries } from '../../../src/models/eval';
 import { evaluateWithSource } from '../../../src/node';
@@ -16,6 +20,7 @@ import { loadApiProviders } from '../../../src/providers/index';
 // Import after mocking
 import { createApp } from '../../../src/server/server';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../../../src/types/api/eval';
+import { getProviderFromCloud } from '../../../src/util/cloud';
 
 const mockedEval = vi.mocked(Eval);
 const mockedEvalQueries = vi.mocked(EvalQueries);
@@ -294,7 +299,7 @@ describe('Eval Routes - Zod Validation', () => {
     it.each([
       {
         providers: 'echo',
-        expected: [{ id: 'echo', prompts: ['Replay'] }],
+        expected: ['echo'],
       },
       {
         providers: [
@@ -309,7 +314,9 @@ describe('Eval Routes - Zod Validation', () => {
         expected: [{ id: 'promptfoo://provider/saved-target', prompts: ['Replay'] }],
       },
       {
-        providers: [{ 'promptfoo://provider/saved-target': { id: 'local-alias', prompts: [] } }],
+        providers: [
+          { 'promptfoo://provider/saved-target': { id: 'local-alias', prompts: ['first'] } },
+        ],
         expected: [
           { 'promptfoo://provider/saved-target': { id: 'local-alias', prompts: ['Replay'] } },
         ],
@@ -318,7 +325,18 @@ describe('Eval Routes - Zod Validation', () => {
       'replays the requested prompt with saved provider selection $providers',
       async ({ providers, expected }) => {
         const before = structuredClone(providers);
-        mockFindById.mockResolvedValue({ config: { providers } });
+        vi.mocked(getProviderFromCloud).mockResolvedValue({ id: 'echo' });
+        mockedEvalQueries.getReplayTarget.mockResolvedValue({
+          id: 'echo',
+          config: null,
+          linkedTargetId: null,
+          scanner: 0,
+          overrides: 0,
+        });
+        mockFindById.mockResolvedValue({
+          getPrompts: () => [{ label: 'first', provider: 'echo' }],
+          config: { providers },
+        });
         vi.mocked(evaluateWithSource).mockResolvedValue({
           toEvaluateSummary: async () => ({ results: [{ response: { output: 'Hello World' } }] }),
         } as unknown as Eval);
@@ -345,7 +363,7 @@ describe('Eval Routes - Zod Validation', () => {
         const providerPath = path.join(directory, 'providers.json');
         const providers = [
           {
-            id: './echo.cjs',
+            id: 'echo',
             label: 'First',
             prompts: ['first'],
             config: { settings: 'file://./settings.json' },
@@ -354,11 +372,15 @@ describe('Eval Routes - Zod Validation', () => {
         ];
         writeFileSync(providerPath, JSON.stringify(providers));
         writeFileSync(path.join(directory, 'settings.json'), JSON.stringify({ greeting: 'Hello' }));
-        writeFileSync(
-          path.join(directory, 'echo.cjs'),
-          "module.exports = class { id() { return 'replay-echo'; } async callApi(prompt) { return { output: prompt }; } };",
-        );
+        mockedEvalQueries.getReplayTarget.mockResolvedValue({
+          id: 'echo',
+          config: JSON.stringify({ settings: { greeting: 'Hello' } }),
+          linkedTargetId: null,
+          scanner: 0,
+          overrides: 0,
+        });
         mockFindById.mockResolvedValue({
+          getPrompts: () => providers.map(({ label }) => ({ provider: label, label: 'first' })),
           config: {
             providers:
               referenceKind === 'relative' ? 'file://./providers.json' : `file://${providerPath}`,
@@ -366,7 +388,6 @@ describe('Eval Routes - Zod Validation', () => {
           },
         });
         vi.mocked(evaluateWithSource).mockImplementation(async (suite) => {
-          // Exercise the native contained-file loader using the route's evaluation context.
           const [provider] = await loadApiProviders(suite.providers, { basePath: suite.basePath });
           const response = await provider.callApi('Hello World');
           return {
@@ -374,11 +395,12 @@ describe('Eval Routes - Zod Validation', () => {
           } as unknown as Eval;
         });
         try {
-          const response = await api.post('/api/eval/replay').send({
-            evaluationId: 'test-id',
-            prompt: 'Hello World',
-          });
+          const replay = { evaluationId: 'test-id', prompt: 'Hello World' };
+          const ambiguous = await api.post('/api/eval/replay').send(replay);
+          expect(ambiguous.status).toBe(400);
+          expect(evaluateWithSource).not.toHaveBeenCalled();
 
+          const response = await api.post('/api/eval/replay').send({ ...replay, promptIndex: 0 });
           expect(response.status).toBe(200);
           expect(response.body.output).toBe('Hello World');
           expect(evaluateWithSource).toHaveBeenCalledWith(
@@ -389,7 +411,6 @@ describe('Eval Routes - Zod Validation', () => {
                   prompts: ['Replay'],
                   config: { settings: { greeting: 'Hello' } },
                 },
-                { ...providers[1], prompts: ['Replay'] },
               ],
               basePath: directory,
             }),
@@ -397,6 +418,13 @@ describe('Eval Routes - Zod Validation', () => {
           );
           expect(providers.map((provider) => provider.prompts)).toEqual([['first'], []]);
           expect(providers[0].config).toEqual({ settings: 'file://./settings.json' });
+          writeFileSync(
+            path.join(directory, 'settings.json'),
+            JSON.stringify({ greeting: 'Changed' }),
+          );
+          const changed = await api.post('/api/eval/replay').send({ ...replay, promptIndex: 0 });
+          expect(changed.status).toBe(400);
+          expect(evaluateWithSource).toHaveBeenCalledTimes(1);
         } finally {
           rmSync(directory, { recursive: true, force: true });
         }

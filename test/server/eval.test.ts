@@ -1,12 +1,24 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { once } from 'node:events';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { generateIdFromPrompt } from '../../src/models/prompt';
+import { evaluateWithSource } from '../../src/node';
+import { loadApiProviders } from '../../src/providers/index';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { createApp } from '../../src/server/server';
+import { ResultFailureReason } from '../../src/types';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 import { setupTestServer } from '../util/testServer';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -41,6 +53,529 @@ describe('eval routes', () => {
     await Promise.allSettled(cleanupPromises);
     testEvalIds.clear();
     vi.resetAllMocks();
+  });
+
+  it.each([undefined, 0])(
+    'replays a saved environment-selected provider with prompt index %s',
+    async (promptIndex) => {
+      onTestFinished(mockProcessEnv({ REPLAY_FIXTURE_PROVIDER: 'echo' }));
+      const original = { raw: 'original', label: 'original' };
+      const saved = await Eval.create(
+        { providers: [{ id: '{{ env.REPLAY_FIXTURE_PROVIDER }}' }] },
+        [original],
+        { completedPrompts: [{ ...original, provider: 'echo' }] },
+      );
+      testEvalIds.add(saved.id);
+
+      const response = await api.post('/api/eval/replay').send({
+        evaluationId: saved.id,
+        promptIndex,
+        prompt: 'edited replay',
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.output).toBe('edited replay');
+    },
+  );
+
+  it('checks the authored prompt ID even when several definitions share a label hash', async () => {
+    const original = { id: 'question-1', label: 'Readable', raw: 'First question' };
+    const other = { ...original, id: 'question-2', raw: 'Different question' };
+    const hash = generateIdFromPrompt(original);
+    const request = async (selector: string, prompts = [other, original]) => {
+      const saved = await Eval.create(
+        { providers: [{ id: 'echo', prompts: [selector] }], prompts },
+        prompts,
+        { completedPrompts: [{ ...original, id: hash, provider: 'echo' }] },
+      );
+      testEvalIds.add(saved.id);
+      return api
+        .post('/api/eval/replay')
+        .send({ evaluationId: saved.id, promptIndex: 0, prompt: 'edited' });
+    };
+    expect((await request(original.id)).body.output).toBe('edited');
+    expect((await request('question-*')).status).toBe(200);
+    expect((await request(other.id)).status).toBe(400);
+    expect((await request(hash)).status).toBe(400);
+    expect((await request(hash, [])).status).toBe(400);
+    const ambiguous = [original, { ...original, id: 'another-id' }];
+    expect((await request(original.id, ambiguous)).status).toBe(400);
+    expect((await request(original.label, ambiguous)).status).toBe(200);
+  });
+
+  it('applies saved label and ID prompt overrides before provider filters on replay', async () => {
+    const prompt = { id: 'current', label: 'Readable', raw: 'Original' };
+    const replay = async (
+      providerPromptMap: Record<string, string[]>,
+      instance: string[],
+      label = 'named',
+    ) => {
+      const config = {
+        providers: [{ id: 'echo', label, prompts: instance }],
+        prompts: [prompt],
+        providerPromptMap,
+      };
+      const saved = await Eval.create(config, [prompt], {
+        completedPrompts: [{ ...prompt, id: generateIdFromPrompt(prompt), provider: label }],
+      });
+      testEvalIds.add(saved.id);
+      return api
+        .post('/api/eval/replay')
+        .send({ evaluationId: saved.id, promptIndex: 0, prompt: 'edited' });
+    };
+    const allowed = [prompt.id];
+    expect((await replay({ named: allowed, echo: [] }, ['legacy'])).body.output).toBe('edited');
+    expect((await replay({ named: [], echo: allowed }, allowed)).status).toBe(400);
+    expect((await replay({ echo: [] }, allowed)).status).toBe(400);
+    expect((await replay({ echo: allowed }, [], 'toString')).status).toBe(200);
+    expect((await replay({ unrelated: [] }, allowed)).status).toBe(200);
+    expect((await replay({ unrelated: allowed }, [])).status).toBe(400);
+  });
+
+  it('sends a replay only to the HTTP destination bound by the saved suite', async () => {
+    const requests: { url?: string; authorization?: string; tenant?: string | string[] }[] = [];
+    const target = createServer((req, res) => {
+      requests.push({
+        url: req.url,
+        authorization: req.headers.authorization,
+        tenant: req.headers['x-tenant'],
+      });
+      req.pipe(res);
+    }).listen(0, '127.0.0.1');
+    await once(target, 'listening');
+    onTestFinished(() => new Promise<void>((resolve) => target.close(() => resolve())));
+    const address = target.address();
+    invariant(address && typeof address !== 'string', 'Expected a loopback listener');
+    const base = `http://127.0.0.1:${address.port}`;
+    const url = `${base}/saved`;
+    onTestFinished(mockProcessEnv({ REPLAY_URL: `${base}/wrong`, PF_TOKEN: 'ambient' }));
+    const original = { raw: 'original', label: 'original' };
+    const saved = await Eval.create(
+      {
+        providers: [
+          {
+            id: 'http',
+            env: { OPENAI_ORGANIZATION: 'provider' },
+            config: {
+              url: '{{ env.REPLAY_URL }}',
+              method: 'POST',
+              body: '{{prompt}}',
+              headers: {
+                Authorization: 'Bearer {{ env.PF_TOKEN }}',
+                'X-Tenant': '{{ env.OPENAI_ORGANIZATION }}',
+              },
+            },
+          },
+        ],
+        env: { REPLAY_URL: url, PF_TOKEN: 'suite-fixture', OPENAI_ORGANIZATION: 'suite' },
+      },
+      [original],
+      { completedPrompts: [{ ...original, provider: url }] },
+    );
+    testEvalIds.add(saved.id);
+    const response = await api.post('/api/eval/replay').send({
+      evaluationId: saved.id,
+      promptIndex: 0,
+      prompt: 'edited replay',
+    });
+    expect(response.status).toBe(200);
+    expect(requests).toEqual([
+      { url: '/saved', authorization: 'Bearer suite-fixture', tenant: 'provider' },
+    ]);
+    expect(JSON.stringify(response.body)).not.toContain('suite-fixture');
+    expect(response.body.output).toBe('edited replay');
+  });
+
+  it('binds mutable file targets to the persisted result even when the label stays the same', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'promptfoo-replay-'));
+    onTestFinished(() => rm(directory, { force: true, recursive: true }));
+    const requests: string[] = [];
+    const target = createServer((req, res) => {
+      requests.push(req.url!);
+      req.pipe(res);
+    }).listen(0, '127.0.0.1');
+    await once(target, 'listening');
+    onTestFinished(() => new Promise<void>((resolve) => target.close(() => resolve())));
+    const address = target.address();
+    invariant(address && typeof address !== 'string', 'Expected a loopback listener');
+    const base = `http://127.0.0.1:${address.port}`;
+    const file = join(directory, 'providers.json');
+    const update = (url: string) =>
+      writeFile(
+        file,
+        JSON.stringify({
+          id: 'http',
+          label: 'Saved',
+          config: { url, method: 'POST', body: '{{prompt}}' },
+        }),
+      );
+    const prompt = { label: 'question', raw: 'original' };
+    const saved = await Eval.create({ providers: [`file://${file}`] }, [prompt], {
+      completedPrompts: [{ ...prompt, provider: 'Saved' }],
+    });
+    testEvalIds.add(saved.id);
+    const request = (promptIndex?: number) =>
+      api
+        .post('/api/eval/replay')
+        .send({ evaluationId: saved.id, promptIndex, testIndex: 99, prompt: 'edited' });
+    await update(base + '/saved');
+    expect((await request(0)).status).toBe(400); // No recorded identity yet.
+    const original = {
+      promptIdx: 0,
+      testIdx: 0,
+      prompt,
+      promptId: 'question',
+      testCase: {},
+      vars: {},
+      provider: {
+        id: base + '/saved',
+        label: 'Saved',
+        config: { url: base + '/saved', method: 'POST', body: '{{prompt}}' },
+      },
+      success: true,
+      score: 1,
+      latencyMs: 1,
+      failureReason: ResultFailureReason.NONE,
+      namedScores: {},
+      cost: 0,
+    };
+    await saved.addResult(original);
+    expect((await request(0)).body.output).toBe('edited');
+    await update(base + '/other');
+    expect((await request(0)).status).toBe(400);
+    expect((await request()).status).toBe(400);
+    // A conflicting scanner result anywhere in the column also blocks a replay.
+    await update(base + '/saved');
+    await saved.addResult({ ...original, testIdx: 1, metadata: { codexSecurity: {} } });
+    expect((await request(0)).status).toBe(400);
+    expect(requests).toEqual(['/saved']);
+  });
+
+  async function replayTargets() {
+    const calls: Array<{ host?: string; authorization?: string }> = [];
+    const listen = async () => {
+      const server = createServer((req, res) => {
+        calls.push({ host: req.headers.host, authorization: req.headers.authorization });
+        req.resume();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ choices: [{ message: { content: 'fixture' } }] }));
+      }).listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      onTestFinished(() => new Promise<void>((resolve) => server.close(() => resolve())));
+      const address = server.address();
+      invariant(address && typeof address !== 'string', 'Expected a loopback listener');
+      return `127.0.0.1:${address.port}`;
+    };
+    const first = await listen();
+    const other = await listen();
+    return { calls, first, other };
+  }
+
+  it.each(['openai', 'raw HTTP', 'inline HTTP request file'])(
+    'binds a mutable %s endpoint even when both the stored ID and label stay unchanged',
+    async (transport) => {
+      const directory = await mkdtemp(join(tmpdir(), 'promptfoo-replay-'));
+      onTestFinished(() => rm(directory, { force: true, recursive: true }));
+      const { calls, first, other } = await replayTargets();
+      const inline = transport === 'inline HTTP request file';
+      const file = join(directory, inline ? 'request.txt' : 'provider.json');
+      const model = transport === 'openai';
+      const update = (host: string) => {
+        const request = `POST /ask HTTP/1.1\r\nHost: ${host}\r\n\r\n{{prompt}}`;
+        const config = model ? { apiBaseUrl: `http://${host}/v1` } : { request };
+        const provider = { id: model ? 'openai:chat:gpt-4o' : 'http', label: 'Saved', config };
+        return writeFile(file, inline ? request : JSON.stringify(provider));
+      };
+      await update(first);
+      const reference = `file://${file}`;
+      const saved = await evaluateWithSource(
+        {
+          providers: [inline ? { id: 'http', config: { request: reference } } : reference],
+          env: { OPENAI_API_KEY: 'suite-fixture', OPENAI_BASE_URL: `http://${first}/fallback` },
+          prompts: ['original'],
+          tests: [{ vars: {} }],
+          writeLatestResults: true,
+          sharing: false,
+        },
+        { cache: false, showProgressBar: false, eventSource: 'library' },
+      );
+      testEvalIds.add(saved.id);
+      const replay = () =>
+        api.post('/api/eval/replay').send({
+          evaluationId: saved.id,
+          promptIndex: 0,
+          prompt: 'edited',
+        });
+      expect((await replay()).status).toBe(inline ? 400 : 200);
+      await update(other);
+      const blocked = await replay();
+      expect(blocked.status).toBe(400);
+      expect(JSON.stringify(blocked.body)).not.toContain('suite-fixture');
+      const expected = { host: first, authorization: model ? 'Bearer suite-fixture' : undefined };
+      expect(calls).toEqual(inline ? [expected] : [expected, expected]);
+    },
+  );
+
+  it.each(['raw Host', 'ambient endpoint', 'saved endpoint', 'test provider', 'provider output'])(
+    'only sends a replay to the original inline target with %s',
+    async (source) => {
+      const { calls, first, other } = await replayTargets();
+      const model = source.endsWith('endpoint');
+      const raw = source === 'raw Host';
+      const endpoint = `http://${first}/v1`;
+      vi.stubEnv('REPLAY_ENDPOINT', endpoint);
+      onTestFinished(() => {
+        vi.unstubAllEnvs();
+      });
+      const config = model
+        ? { apiBaseUrl: '{{ env.REPLAY_ENDPOINT }}' }
+        : raw
+          ? {
+              request:
+                'POST /ask HTTP/1.1\r\nHost: {{host}}\r\nAuthorization: Bearer {{env.OPENAI_API_KEY}}\r\n\r\n{{prompt}}',
+            }
+          : { url: `http://${other}`, method: 'POST', body: '{{prompt}}' };
+      const savedEndpoint = source === 'saved endpoint';
+      const saved = await evaluateWithSource(
+        {
+          providers: [{ id: model ? 'openai:chat:gpt-4o' : 'http', config }],
+          env: {
+            OPENAI_API_KEY: 'suite-fixture',
+            OPENAI_BASE_URL: endpoint,
+            ...(savedEndpoint && { REPLAY_ENDPOINT: endpoint }),
+          },
+          prompts: ['original'],
+          tests: [
+            {
+              vars: { host: first },
+              ...(source === 'test provider' && {
+                provider: { id: () => 'echo', callApi: async () => ({ output: 'local' }) },
+              }),
+              ...(source === 'provider output' && { providerOutput: 'recorded' }),
+            },
+          ],
+          writeLatestResults: true,
+          sharing: false,
+        },
+        { cache: false, showProgressBar: false, eventSource: 'library' },
+      );
+      testEvalIds.add(saved.id);
+      expect((await saved.toEvaluateSummary()).results[0].success).toBe(true);
+      const expected = { host: first, authorization: 'Bearer suite-fixture' };
+      expect(calls.splice(0)).toEqual(raw || model ? [expected] : []);
+      vi.stubEnv('REPLAY_ENDPOINT', `http://${other}/v1`);
+      const replay = await api.post('/api/eval/replay').send({
+        evaluationId: saved.id,
+        testIndex: 0,
+        promptIndex: 0,
+        prompt: 'edited',
+        variables: { host: other },
+      });
+      expect(replay.status).toBe(savedEndpoint ? 200 : 400);
+      expect(calls).toEqual(savedEndpoint ? [expected] : []);
+      expect(JSON.stringify(replay.body)).not.toContain('suite-fixture');
+    },
+  );
+
+  it('keeps saved credentials outside edited prompts and variables', async () => {
+    const secret = 'synthetic-saved-credential';
+    const saved = await evaluateWithSource(
+      {
+        providers: ['echo'],
+        prompts: ['original'],
+        tests: [{ vars: {} }],
+        env: { OPENAI_API_KEY: secret },
+        writeLatestResults: true,
+        sharing: false,
+      },
+      { cache: false, showProgressBar: false, eventSource: 'library' },
+    );
+    testEvalIds.add(saved.id);
+    const replay = (prompt: string, variables?: Record<string, unknown>) =>
+      api
+        .post('/api/eval/replay')
+        .send({ evaluationId: saved.id, promptIndex: 0, prompt, variables });
+    for (const [prompt, variables] of [
+      ['{{env.OPENAI_API_KEY}}', {}],
+      ['{{question}}', { question: '{{env.OPENAI_API_KEY}}' }],
+      ['{"text":"\\u007b\\u007benv.OPENAI_API_KEY}}"}', {}],
+      ['{% set key = env.OPENAI_API_KEY %}{{key}}', {}],
+      ['{"text":"{\\u0025 include file %}"}', {}],
+      ['{{question}}', { question: 'file://untrusted.js' }],
+    ] as const) {
+      const response = await replay(prompt, variables);
+      expect(JSON.stringify(response.body)).not.toContain(secret);
+      expect(response.status).toBe(400);
+    }
+    const valid = await replay('Hello {{ name }}', { name: 'World' });
+    expect(valid.status).toBe(200);
+    expect(valid.body.output).toBe('Hello World');
+  });
+
+  it('refuses an implicit model endpoint before sending a saved key to the current gateway', async () => {
+    const { calls, first, other } = await replayTargets();
+    vi.stubEnv('OPENAI_BASE_URL', 'http://' + first);
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    const saved = await evaluateWithSource(
+      {
+        providers: ['openai:chat:gpt-4o'],
+        prompts: ['original'],
+        tests: [{ vars: {} }],
+        env: { OPENAI_API_KEY: 'suite-fixture' },
+        writeLatestResults: true,
+        sharing: false,
+      },
+      { cache: false, showProgressBar: false, eventSource: 'library' },
+    );
+    testEvalIds.add(saved.id);
+    expect(calls.splice(0)).toEqual([{ host: first, authorization: 'Bearer suite-fixture' }]);
+    vi.stubEnv('OPENAI_BASE_URL', 'http://' + other);
+    const replay = await api.post('/api/eval/replay').send({
+      evaluationId: saved.id,
+      promptIndex: 0,
+      prompt: 'edited',
+    });
+    expect(calls).toEqual([]);
+    expect(replay.status).toBe(400);
+  });
+
+  it.each(['ambient', 'suite', 'provider'])(
+    'checks the original model gateway when its %s setting could be overridden',
+    async (scope) => {
+      const id = 'openai:chat:gpt-4.1';
+      const gateway = 'https://gateway.invalid/v1';
+      const destinations: string[] = [];
+      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockImplementation(
+        async function (this: OpenAiChatCompletionProvider) {
+          destinations.push(this.getApiUrl());
+          return { output: 'fixture' };
+        },
+      );
+      vi.stubEnv('OPENAI_API_KEY', 'synthetic-gateway-key');
+      vi.stubEnv('OPENAI_BASE_URL', gateway);
+      onTestFinished(() => {
+        vi.unstubAllEnvs();
+      });
+      const env = { OPENAI_BASE_URL: gateway };
+      const saved = await evaluateWithSource(
+        {
+          providers: [scope === 'provider' ? { id, env } : id],
+          ...(scope === 'suite' && { env }),
+          prompts: ['original'],
+          tests: [{ vars: {} }],
+          writeLatestResults: true,
+          sharing: false,
+        },
+        { cache: false, showProgressBar: false, eventSource: 'library' },
+      );
+      testEvalIds.add(saved.id);
+      expect(destinations.splice(0)).toEqual([gateway]);
+      vi.stubEnv('OPENAI_BASE_URL', undefined);
+      if (scope !== 'ambient') {
+        vi.stubEnv('OPENAI_API_HOST', 'changed.invalid');
+      }
+      const response = await api.post('/api/eval/replay').send({
+        evaluationId: saved.id,
+        promptIndex: 0,
+        prompt: 'edited',
+      });
+      if (scope === 'ambient') {
+        expect(destinations).toEqual([]);
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain('original model endpoint');
+      } else {
+        expect(destinations).toEqual([gateway]);
+        expect(response.status).toBe(200);
+      }
+    },
+  );
+
+  it('refuses an unverifiable Azure destination even when no environment was saved', async () => {
+    const { calls, first, other } = await replayTargets();
+    vi.stubEnv('AZURE_API_KEY', 'synthetic-azure-key');
+    vi.stubEnv('AZURE_API_BASE_URL', 'http://' + first);
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    const saved = await evaluateWithSource(
+      {
+        providers: [{ id: 'azure:chat:fixture' }],
+        prompts: ['original'],
+        tests: [{ vars: {} }],
+        writeLatestResults: true,
+        sharing: false,
+      },
+      { cache: false, showProgressBar: false, eventSource: 'library' },
+    );
+    testEvalIds.add(saved.id);
+    expect(calls.splice(0).map(({ host }) => host)).toEqual([first]);
+    vi.stubEnv('AZURE_API_BASE_URL', 'http://' + other);
+    const response = await api.post('/api/eval/replay').send({
+      evaluationId: saved.id,
+      promptIndex: 0,
+      prompt: 'edited',
+    });
+    expect(calls).toEqual([]);
+    expect(response.status).toBe(400);
+  });
+
+  it('does not reload a live Responses instance as Chat using its display ID', async () => {
+    const { calls, first, other } = await replayTargets();
+    const providers = await loadApiProviders(['openai:responses:gpt-4.1', 'echo'], {
+      env: { OPENAI_BASE_URL: 'http://' + first },
+    });
+    vi.spyOn(providers[0], 'callApi').mockResolvedValue({ output: 'original' });
+    const saved = await evaluateWithSource(
+      {
+        providers,
+        prompts: ['original'],
+        tests: [{ vars: {} }],
+        env: { OPENAI_API_KEY: 'suite-fixture', OPENAI_BASE_URL: 'http://' + other },
+        writeLatestResults: true,
+        sharing: false,
+      },
+      { cache: false, showProgressBar: false, eventSource: 'library' },
+    );
+    testEvalIds.add(saved.id);
+    const replay = (promptIndex: number) =>
+      api.post('/api/eval/replay').send({
+        evaluationId: saved.id,
+        promptIndex,
+        prompt: 'edited',
+      });
+    expect((await replay(0)).status).toBe(400);
+    expect((await replay(1)).body.output).toBe('edited');
+    expect(calls).toEqual([]);
+  });
+
+  it('distinguishes graders from per-call options anywhere in the selected column', async () => {
+    const saved = await evaluateWithSource(
+      {
+        providers: ['echo'],
+        prompts: ['original'],
+        tests: [{ options: { provider: 'echo', repeat: 1 } }],
+        writeLatestResults: true,
+        sharing: false,
+      },
+      { cache: false, showProgressBar: false, eventSource: 'library' },
+    );
+    testEvalIds.add(saved.id);
+    const replay = () =>
+      api.post('/api/eval/replay').send({
+        evaluationId: saved.id,
+        testIndex: 0,
+        promptIndex: 0,
+        prompt: 'edited',
+      });
+    expect((await replay()).body.output).toBe('edited');
+    const [original] = (await saved.toEvaluateSummary()).results;
+    await saved.addResult({
+      ...original,
+      testIdx: 1,
+      testCase: { options: { apiBaseUrl: 'https://original.invalid' } },
+    });
+    expect((await replay()).status).toBe(400);
   });
 
   function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {

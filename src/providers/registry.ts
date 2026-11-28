@@ -129,6 +129,20 @@ import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
+const DEFAULT_OPENAI_TEXT_MODEL = 'gpt-6-sol';
+
+/** String selectors have no ID override. Both endpoints display the model in saved columns. */
+export function getNamedOpenAiTextId(path: string) {
+  const match = /^openai:(?:chat|responses)(?::(.*))?$/.exec(path);
+  return match ? `openai:${match[1] || DEFAULT_OPENAI_TEXT_MODEL}` : undefined;
+}
+
+// The JavaScript file factory precedes WebSocket in the registry. A URL
+// ending in a module extension must not be identified as a WebSocket target.
+export function isWebSocketProviderPath(path: string) {
+  return (path === 'websocket' || /^wss?(?::|$)/.test(path)) && !isJavascriptFile(path);
+}
+
 const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|codex-desktop)(?::|$)/;
 
 /** Aliases read together by these providers must keep their original scope priority. */
@@ -246,7 +260,7 @@ function getProviderEnvAliasGroups(
   return [];
 }
 
-function getProviderEndpointAliases(providerPath: string): readonly string[] {
+export function getProviderEndpointAliases(providerPath: string): readonly string[] {
   if (providerPath.startsWith('openai:') && !CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
     return ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'];
   }
@@ -1273,7 +1287,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
-          modelName || configuredModel || 'gpt-6-sol',
+          modelName || configuredModel || DEFAULT_OPENAI_TEXT_MODEL,
           providerOptions,
         );
       }
@@ -1303,7 +1317,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'responses') {
         return new OpenAiResponsesProvider(
-          modelName || configuredModel || 'gpt-6-sol',
+          modelName || configuredModel || DEFAULT_OPENAI_TEXT_MODEL,
           providerOptions,
         );
       }
@@ -1830,12 +1844,7 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) =>
-      providerPath.startsWith('ws:') ||
-      providerPath.startsWith('wss:') ||
-      providerPath === 'websocket' ||
-      providerPath === 'ws' ||
-      providerPath === 'wss',
+    test: isWebSocketProviderPath,
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EvalProviderProgressSchema } from '../../contracts/providers';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
@@ -171,6 +172,7 @@ export const GetJobResponseSchema = z.discriminatedUnion('status', [
     progress: z.number(),
     total: z.number(),
     logs: z.array(z.string()),
+    providerProgress: z.array(EvalProviderProgressSchema).max(100).optional(),
   }),
   z.object({
     status: z.literal('complete'),
@@ -240,6 +242,7 @@ export type AddResultsRequest = z.infer<typeof AddResultsRequestSchema>;
 export const ReplayRequestSchema = z.object({
   evaluationId: z.string().min(1),
   testIndex: z.number().int().nonnegative().optional(),
+  promptIndex: z.number().int().nonnegative().optional(),
   prompt: z.string().min(1),
   variables: z.record(z.string(), z.unknown()).optional(),
 });

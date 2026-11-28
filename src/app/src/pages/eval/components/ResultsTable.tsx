@@ -56,7 +56,6 @@ import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
-import { type ProviderDef } from './providerConfig';
 import { isFilterApplied, useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import { useHeaderCollapse } from './useHeaderCollapse';
@@ -70,6 +69,7 @@ import type {
   VisibilityState,
 } from '@tanstack/react-table';
 
+import type { ProviderDef } from './providerConfig';
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
@@ -1024,6 +1024,7 @@ function renderPromptMetricDetails({
   idx,
   isRedteam,
   showStats,
+  hasReportImports,
   testCounts,
 }: {
   metrics: PromptMetrics['total'];
@@ -1031,6 +1032,7 @@ function renderPromptMetricDetails({
   idx: number;
   isRedteam: boolean;
   showStats: boolean;
+  hasReportImports: boolean;
   testCounts: PromptSummaryMetric[];
 }): React.ReactNode {
   if (!showStats) {
@@ -1039,7 +1041,7 @@ function renderPromptMetricDetails({
 
   return (
     <div className="prompt-detail collapse-hidden">
-      {renderRequestMetric({ metrics, isRedteam })}
+      {!hasReportImports && renderRequestMetric({ metrics, isRedteam })}
       {renderAssertMetric(metrics)}
       {renderCostMetric({
         metrics,
@@ -1052,12 +1054,13 @@ function renderPromptMetricDetails({
         isRedteam,
         testCount: testCounts[idx],
       })}
-      {renderLatencyMetric({
-        metrics,
-        filteredMetrics,
-        testCount: testCounts[idx],
-      })}
-      {renderTokensPerSecondMetric(metrics)}
+      {!hasReportImports &&
+        renderLatencyMetric({
+          metrics,
+          filteredMetrics,
+          testCount: testCounts[idx],
+        })}
+      {!hasReportImports && renderTokensPerSecondMetric(metrics)}
     </div>
   );
 }
@@ -1180,6 +1183,7 @@ function PromptColumnHeader({
         idx,
         isRedteam,
         showStats,
+        hasReportImports: prompt.onlySavedReportImports ?? prompt.hasSavedReportImports === true,
         testCounts,
       })}
       {filterMode === 'failures' && headPromptCount > 1 && (

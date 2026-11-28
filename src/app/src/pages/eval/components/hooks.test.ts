@@ -348,6 +348,34 @@ describe('usePassingTestCounts', () => {
 });
 
 describe('useTestCounts', () => {
+  it('includes provider errors in total and filtered case denominators', () => {
+    mockedUseTableStore.mockReturnValue({
+      table: {
+        head: {
+          prompts: [
+            { metrics: { testPassCount: 0, testFailCount: 0, testErrorCount: 1 } },
+            { metrics: { testPassCount: 2, testFailCount: 1, testErrorCount: 1 } },
+          ],
+        },
+      },
+      filteredMetrics: [
+        { testPassCount: 0, testFailCount: 0, testErrorCount: 1 },
+        { testPassCount: 1, testFailCount: 0, testErrorCount: 1 },
+      ],
+    });
+
+    const { result } = renderHook(() => ({ counts: useTestCounts(), rates: usePassRates() }));
+
+    expect(result.current.counts).toEqual([
+      { total: 1, filtered: 1 },
+      { total: 4, filtered: 2 },
+    ]);
+    expect(result.current.rates).toEqual([
+      { total: 0, filtered: 0 },
+      { total: 50, filtered: 50 },
+    ]);
+  });
+
   it('should return an array of total test counts for each prompt when the table is defined and metrics are present', () => {
     const mockTable: EvaluateTable = {
       head: {

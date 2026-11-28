@@ -1,8 +1,22 @@
+import { generateIdFromPrompt } from '../models/prompt';
+
 import type { Prompt, TestSuite } from '../types/index';
+
+/** Match saved columns to authored IDs without collapsing ambiguous prompt definitions. */
+export function promptIdentityCandidates(prompts: Prompt[]): Map<string, Set<string | undefined>> {
+  const identities = new Map<string, Set<string | undefined>>();
+  for (const prompt of prompts) {
+    const key = JSON.stringify([generateIdFromPrompt(prompt), prompt.raw, prompt.label]);
+    const ids = identities.get(key) ?? new Set<string | undefined>();
+    ids.add(prompt.id);
+    identities.set(key, ids);
+  }
+  return identities;
+}
 
 /** Returns an own label/ID override without copying its array; undefined means no override. */
 export function getProviderPromptOverride(
-  provider: TestSuite['providers'][number],
+  provider: Pick<TestSuite['providers'][number], 'label' | 'id'>,
   map: TestSuite['providerPromptMap'],
 ): string[] | undefined {
   const ownSelectors = (key: string) =>
