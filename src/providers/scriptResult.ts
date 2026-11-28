@@ -54,6 +54,7 @@ export function applyCachedCallApiMetadata(
 
   logger.debug(`${language}Provider setting cached=true for cached ${apiType} result`);
   parsedResult.cached = true;
+  delete parsedResult.cacheHit;
 
   if (parsedResult.tokenUsage) {
     const total = parsedResult.tokenUsage.total || 0;

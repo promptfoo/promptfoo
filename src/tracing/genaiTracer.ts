@@ -191,8 +191,10 @@ export interface GenAISpanResult {
   responseModel?: string;
   responseId?: string;
   finishReasons?: string[];
-  /** Whether the response was served from cache */
+  /** Whether the response was replayed from stored cache. */
   cacheHit?: boolean;
+  /** Whether token usage represents previously billed work, including shared requests. */
+  cached?: boolean;
   /** Response body (will be truncated to MAX_BODY_LENGTH) */
   responseBody?: string;
   /** Additional provider-specific attributes to add to the span */
@@ -415,14 +417,14 @@ export async function withGenAISpan<T>(
       // Set response attributes if extractor provided
       if (resultExtractor) {
         const result = resultExtractor(value);
-        if (
-          result.cacheHit === undefined &&
-          value !== null &&
-          typeof value === 'object' &&
-          'cached' in value &&
-          typeof value.cached === 'boolean'
-        ) {
-          result.cacheHit = value.cached;
+        if (result.cacheHit === undefined && value && typeof value === 'object') {
+          if ('cached' in value && typeof value.cached === 'boolean') {
+            result.cached ??= value.cached;
+          }
+          if ('cacheHit' in value && typeof value.cacheHit === 'boolean') {
+            result.cacheHit ??= value.cacheHit;
+          }
+          result.cacheHit ??= result.cached;
         }
         setGenAIResponseAttributes(span, result, ctx.sanitizeBodies);
       }
@@ -616,7 +618,7 @@ export function setGenAIResponseAttributes(
       span.setAttribute(PromptfooAttributes.USAGE_TOTAL_TOKENS, usage.total);
     }
     if (usage.cached != null) {
-      if (result.cacheHit === true) {
+      if ((result.cached ?? result.cacheHit) === true) {
         span.setAttribute(PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS, usage.cached);
       } else if (usage.completionDetails?.cacheReadInputTokens == null) {
         span.setAttribute(GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS, usage.cached);
@@ -761,8 +763,12 @@ export function extractProviderResponseAttributes(response: ProviderResponse): G
   if (response.finishReason) {
     result.finishReasons = [response.finishReason];
   }
+  const cacheHit = response.cacheHit ?? response.cached;
+  if (cacheHit !== undefined) {
+    result.cacheHit = cacheHit;
+  }
   if (response.cached !== undefined) {
-    result.cacheHit = response.cached;
+    result.cached = response.cached;
   }
   if (response.output !== undefined) {
     result.responseBody =

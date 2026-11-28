@@ -338,7 +338,9 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
+        get: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ output: 'cached result', cacheHit: false })),
         set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);

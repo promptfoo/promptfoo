@@ -363,7 +363,9 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', createAbsoluteBasePathOptions());
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
+        get: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ output: 'cached result', cacheHit: false })),
         set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
@@ -373,7 +375,7 @@ describe('GolangProvider', () => {
       expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('golang:'));
       expect(mockExecFile).not.toHaveBeenCalled();
       expect(result.cached).toBe(true);
-      expect(result).toEqual({ output: 'cached result', cached: true });
+      expect(result).toEqual({ output: 'cached result', cached: true, cacheHit: true });
     });
 
     it('should handle cache errors', async () => {

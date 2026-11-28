@@ -845,6 +845,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
           : undefined;
       const accounting = {
         cached,
+        cacheHit: response.cached,
         latencyMs,
         tokenUsage: cached
           ? { total: usage.total_tokens, cached: usage.total_tokens }

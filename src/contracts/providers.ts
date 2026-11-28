@@ -37,6 +37,8 @@ export interface ImageOutput {
 
 export interface ProviderResponse {
   cached?: boolean;
+  /** Stored response replay; false for live coalescing even when cached is true for billing. */
+  cacheHit?: boolean;
   cost?: number;
   /** Actual target-provider cost incurred during this run, excluding response-cache replays. */
   incurredCost?: number;

@@ -948,6 +948,7 @@ describe('OpenAiDecisionsProvider', () => {
     const result = await provider({ inputCost: 0.01, outputCost: 0.02 }).callApi('Usage fixture');
     if (total === 120) {
       expect(result.error).toBeUndefined();
+      expect(result.cacheHit).toBe(mode === 'cached');
       expect(result.tokenUsage).toMatchObject(
         mode === 'fresh'
           ? { total: 120, prompt: 100, completion: 20 }
