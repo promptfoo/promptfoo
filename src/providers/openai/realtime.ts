@@ -186,12 +186,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // socket whose state is still CONNECTING.
   private connectionReady: Promise<void> | null = null;
   private connectionConfig: { url: string; headers: Record<string, string> } | undefined;
-  private persistentConnectionLifecycleCleanup: (() => void) | null = null;
   // Per-provider serialization queue. Concurrent calls on the same provider
   // instance share one socket; the OpenAI Realtime wire shape is not designed
   // to multiplex unrelated turns over a single connection (events for one
   // turn would interleave with another's). Chain turns through this promise.
   private inflightTurn: Promise<unknown> = Promise.resolve();
+  private activeConversationId: string | number | undefined;
 
   // Add audio state management
   private lastAudioItemId: string | null = null;
@@ -482,7 +482,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
-    this.config = options.config || {};
+    this.config = { ...options.config, maintainContext: options.config?.maintainContext ?? true };
     const apiUrl = this.getApiUrl();
     if (isOpenAiFirstPartyApiUrl(apiUrl) && NON_CONVERSATIONAL_REALTIME_MODELS.has(modelName)) {
       throw new Error(
@@ -497,11 +497,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       logger.debug(`Using unknown OpenAI realtime model: ${modelName}`);
     }
     assertOpenAiApiModel(modelName, apiUrl);
-
-    // Enable maintainContext by default
-    if (this.config.maintainContext === undefined) {
-      this.config.maintainContext = true;
-    }
   }
 
   // Resolve a tool-iteration cap with a sane default and clamp on absurd values.
@@ -571,32 +566,26 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   private async runToolCallRound(
     pendingFunctionCalls: ReadonlyArray<{ id: string; name: string; arguments: string }>,
     sendEvent: (event: Record<string, unknown>) => void,
+    functionCallHandler: OpenAiRealtimeOptions['functionCallHandler'],
   ): Promise<string[]> {
     const results: string[] = [];
     for (const call of pendingFunctionCalls) {
+      let output: string;
       try {
-        const result = await this.runFunctionCallHandlerWithTimeout(call.name, call.arguments);
-        results.push(result);
-        sendEvent({
-          type: 'conversation.item.create',
-          item: {
-            type: 'function_call_output',
-            call_id: call.id,
-            output: result,
-          },
-        });
+        output = await this.runFunctionCallHandlerWithTimeout(
+          call.name,
+          call.arguments,
+          functionCallHandler,
+        );
       } catch (err) {
         logger.error(`Realtime functionCallHandler "${call.name}" failed: ${String(err)}`);
-        results.push(REDACTED_TOOL_ERROR_OUTPUT);
-        sendEvent({
-          type: 'conversation.item.create',
-          item: {
-            type: 'function_call_output',
-            call_id: call.id,
-            output: REDACTED_TOOL_ERROR_OUTPUT,
-          },
-        });
+        output = REDACTED_TOOL_ERROR_OUTPUT;
       }
+      sendEvent({
+        type: 'conversation.item.create',
+        item: { type: 'function_call_output', call_id: call.id, output },
+      });
+      results.push(output);
     }
     return results;
   }
@@ -607,8 +596,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
    * letting the calling site translate the failure into a redacted
    * function_call_output without leaking host-side error details to the model.
    */
-  private async runFunctionCallHandlerWithTimeout(name: string, args: string): Promise<string> {
-    const handler = this.config.functionCallHandler;
+  private async runFunctionCallHandlerWithTimeout(
+    name: string,
+    args: string,
+    handler: OpenAiRealtimeOptions['functionCallHandler'],
+  ): Promise<string> {
     if (!handler) {
       throw new Error('functionCallHandler is not configured');
     }
@@ -742,6 +734,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   async webSocketRequest(
     clientSecret: string,
     prompt: string | RealtimeUserContent[],
+    functionCallHandler = this.config.functionCallHandler,
   ): Promise<RealtimeResponse> {
     const promptContent = this.normalizeRealtimePromptContent(prompt);
     const wsUrl = this.getClientSecretSocketUrl(clientSecret);
@@ -750,7 +743,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       Origin: this.getWebSocketOrigin(),
       ...this.getRealtimeRequestHeaders(),
     };
-    return this.requestSingleTurn(promptContent, wsUrl, headers, 'client-secret');
+    return this.requestSingleTurn(
+      promptContent,
+      wsUrl,
+      headers,
+      'client-secret',
+      functionCallHandler,
+    );
   }
 
   async callApi(
@@ -762,26 +761,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    // Apply function handler if provided in context
-    if (
-      context?.prompt?.config?.functionCallHandler &&
-      typeof context.prompt.config.functionCallHandler === 'function'
-    ) {
-      this.config.functionCallHandler = context.prompt.config.functionCallHandler;
-    }
-
-    // If no conversationId is provided in the metadata, set maintainContext to false
-    const conversationId =
-      context?.test && 'metadata' in context.test
-        ? (context.test.metadata as Record<string, any>)?.conversationId
-        : undefined;
-
-    if (
-      conversationId === '' ||
-      (typeof conversationId !== 'string' && typeof conversationId !== 'number')
-    ) {
-      this.config.maintainContext = false;
-    }
+    const promptHandler = context?.prompt?.config?.functionCallHandler;
+    const functionCallHandler =
+      typeof promptHandler === 'function' ? promptHandler : this.config.functionCallHandler;
+    const conversationId = context?.test?.metadata?.conversationId;
+    const hasConversationId =
+      (typeof conversationId === 'string' && conversationId !== '') ||
+      (typeof conversationId === 'number' && Number.isFinite(conversationId));
+    const maintainContext = this.config.maintainContext === true && hasConversationId;
 
     try {
       const promptContent = this.getRealtimeUserContent(prompt);
@@ -789,12 +776,21 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       // Use a persistent connection if we should maintain conversation context
       let result;
-      if (this.config.maintainContext === true) {
-        result = await this.persistentWebSocketRequest(promptContent, requestHeaders);
+      if (maintainContext) {
+        result = await this.persistentWebSocketRequest(
+          promptContent,
+          requestHeaders,
+          functionCallHandler,
+          conversationId,
+        );
       } else {
         // Connect directly to the WebSocket API using API key
         logger.debug(`Connecting directly to OpenAI Realtime API WebSocket with API key`);
-        result = await this.directWebSocketRequest(promptContent, requestHeaders);
+        result = await this.directWebSocketRequest(
+          promptContent,
+          requestHeaders,
+          functionCallHandler,
+        );
       }
 
       let finalOutput = result.output;
@@ -981,11 +977,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   async directWebSocketRequest(
     prompt: string | RealtimeUserContent[],
     requestHeaders = this.getRealtimeRequestHeaders(),
+    functionCallHandler = this.config.functionCallHandler,
   ): Promise<RealtimeResponse> {
     const promptContent = this.normalizeRealtimePromptContent(prompt);
     const wsUrl = this.getWebSocketUrl(this.modelName);
     const headers = this.buildRealtimeWsHeaders(wsUrl, requestHeaders);
-    return this.requestSingleTurn(promptContent, wsUrl, headers, 'direct');
+    return this.requestSingleTurn(promptContent, wsUrl, headers, 'direct', functionCallHandler);
   }
 
   private requestSingleTurn(
@@ -993,6 +990,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     wsUrl: string,
     headers: Record<string, string>,
     mode: 'direct' | 'client-secret',
+    functionCallHandler: OpenAiRealtimeOptions['functionCallHandler'],
   ): Promise<RealtimeResponse> {
     return new Promise((resolve, reject) => {
       const getCachedToolConfig = this.makeRequestToolConfigCache();
@@ -1271,11 +1269,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               }
 
               // If there are pending function calls, process them
-              if (
-                !responseError &&
-                pendingFunctionCalls.length > 0 &&
-                this.config.functionCallHandler
-              ) {
+              if (!responseError && pendingFunctionCalls.length > 0 && functionCallHandler) {
                 if (toolIterations >= maxToolIterations) {
                   clearTimeout(timeout);
                   ws.close();
@@ -1293,7 +1287,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // handler must not be killed by the outer timeout before the
                 // redacted function_call_output reaches the model.
                 clearTimeout(timeout);
-                const roundResults = await this.runToolCallRound(pendingFunctionCalls, sendEvent);
+                const roundResults = await this.runToolCallRound(
+                  pendingFunctionCalls,
+                  sendEvent,
+                  functionCallHandler,
+                );
                 functionCallResults.push(...roundResults);
 
                 // Request a new response from the model using the function results
@@ -1493,8 +1491,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     if (this.persistentConnection != null) {
       logger.debug(`Tearing down persistent connection: ${reason}`);
     }
-    this.persistentConnectionLifecycleCleanup?.();
-    this.persistentConnectionLifecycleCleanup = null;
+    this.activeConversationId = undefined;
     this.persistentConnection = null;
     this.connectionReady = null;
     this.connectionConfig = undefined;
@@ -1526,8 +1523,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
    * exception.
    */
   private installPersistentConnectionLifecycleHandlers(ws: WebSocket): void {
-    this.persistentConnectionLifecycleCleanup?.();
-
     const onIdleError = (error: Error) => {
       logger.error(`Persistent WebSocket error while idle: ${error}`);
       if (this.persistentConnection === ws) {
@@ -1535,6 +1530,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       }
     };
     const onIdleClose = (code: number, reason: Buffer) => {
+      // A retired socket may still emit errors during its close handshake.
+      ws.removeListener('error', onIdleError);
       const message = formatCloseMessage('Persistent WebSocket closed while idle', code, reason);
       logger.debug(message);
       if (this.persistentConnection === ws) {
@@ -1543,11 +1540,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     };
 
     ws.on('error', onIdleError);
-    ws.on('close', onIdleClose);
-    this.persistentConnectionLifecycleCleanup = () => {
-      ws.removeListener('error', onIdleError);
-      ws.removeListener('close', onIdleClose);
-    };
+    ws.once('close', onIdleClose);
   }
 
   /**
@@ -1646,20 +1639,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     return this.connectionReady;
   }
 
-  /**
-   * Persistent-connection turn entry point.
-   *
-   * Two correctness guarantees that the previous implementation lacked:
-   *  1. Wait for the shared socket to reach readyState OPEN before sending —
-   *     concurrent callers no longer race past a CONNECTING socket and trigger
-   *     "WebSocket is not open: readyState 0".
-   *  2. Serialize turns through `inflightTurn` so unrelated tests sharing one
-   *     provider instance don't interleave their session.update / response.create
-   *     events on the same wire. Failed turns don't block the queue.
-   */
+  // Serialize turns on the shared connection; a failed turn releases the next one.
   async persistentWebSocketRequest(
     prompt: string | RealtimeUserContent[],
     requestHeaders = this.getRealtimeRequestHeaders(),
+    functionCallHandler = this.config.functionCallHandler,
+    conversationId?: string | number,
   ): Promise<RealtimeResponse> {
     const promptContent = this.normalizeRealtimePromptContent(prompt);
     const previous = this.inflightTurn;
@@ -1669,26 +1654,34 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       } catch {
         // Prior turn errors don't poison the queue.
       }
+      if (this.activeConversationId !== undefined && this.activeConversationId !== conversationId) {
+        this.cleanup();
+      }
       await this.openPersistentConnection(requestHeaders);
+      this.activeConversationId = conversationId;
       return new Promise<RealtimeResponse>((resolve, reject) => {
-        void this.setupMessageHandlers(promptContent, resolve, reject).catch(reject);
+        void this.setupMessageHandlers(promptContent, resolve, reject, functionCallHandler).catch(
+          reject,
+        );
       });
     })();
     this.inflightTurn = turn.catch(() => undefined);
     return turn;
   }
 
-  // Helper method to set up message handlers for persistent WebSocket
   private async setupMessageHandlers(
     prompt: string | RealtimeUserContent[],
     resolve: (value: RealtimeResponse) => void,
     reject: (reason: Error) => void,
+    functionCallHandler: OpenAiRealtimeOptions['functionCallHandler'],
   ): Promise<void> {
     // Reset audio state at the start of each request
     this.resetAudioState();
     const promptContent = this.normalizeRealtimePromptContent(prompt);
     // Snapshot before the await so a concurrent turn cannot mutate it under us.
     const previousItemIdAtTurnStart = this.previousItemId;
+    const connection = this.persistentConnection;
+    let active = true;
     const realtimeToolConfig = await this.getRealtimeToolConfigWithTimeout();
 
     const startRequestTimeout = () =>
@@ -1699,9 +1692,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         // unanswered response on the shared connection; without teardown the
         // stale handler keeps firing for every later turn's events, recreating
         // the event-interleaving bug this provider was hardened against.
-        if (cleanupMessageHandler) {
-          cleanupMessageHandler();
-        }
+        cleanupMessageHandler?.();
         const conn = this.persistentConnection;
         this.tearDownPersistentConnection('response timeout');
         conn?.close();
@@ -1755,8 +1746,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         event.event_id = this.generateEventId();
       }
 
-      const connection = this.persistentConnection;
-      if (!connection) {
+      // An awaited handler can outlive the originating turn, even on a reused socket.
+      if (!active || !connection || this.persistentConnection !== connection) {
         throw new Error(
           `Cannot send Realtime event ${event.type}: persistent WebSocket is not set.`,
         );
@@ -1781,9 +1772,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
     const resolveResponse = () => {
       // Clean up message handler if it exists
-      if (cleanupMessageHandler) {
-        cleanupMessageHandler();
-      }
+      cleanupMessageHandler?.();
 
       clearRequestTimeout();
 
@@ -1962,16 +1951,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               return;
             }
 
-            if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
+            if (pendingFunctionCalls.length > 0 && functionCallHandler) {
               if (toolIterations >= maxToolIterations) {
                 clearRequestTimeout();
                 // Detach our message/error/close listeners — without this, the
                 // shared persistent socket keeps invoking this stale handler
                 // for every event on every subsequent turn, recreating the
                 // event-interleaving bug this PR was meant to fix.
-                if (cleanupMessageHandler) {
-                  cleanupMessageHandler();
-                }
+                cleanupMessageHandler?.();
                 // The session still contains an unresolved function_call. Do
                 // not reuse that contaminated socket for later maintainContext
                 // turns; close it and force the next request to reconnect.
@@ -1990,7 +1977,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               // Pause the inactivity timeout while user code runs — handler
               // execution time is not WebSocket inactivity.
               clearRequestTimeout();
-              const roundResults = await this.runToolCallRound(pendingFunctionCalls, sendEvent);
+              const roundResults = await this.runToolCallRound(
+                pendingFunctionCalls,
+                sendEvent,
+                functionCallHandler,
+              );
               functionCallResults.push(...roundResults);
 
               sendEvent({
@@ -2028,13 +2019,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             this.resetAudioState();
             // Detach our listeners on the shared socket; otherwise this stale
             // handler keeps firing for events from later turns.
-            if (cleanupMessageHandler) {
-              cleanupMessageHandler();
+            cleanupMessageHandler?.();
+            if (pendingFunctionCalls.length > 0) {
+              this.cleanup();
             }
             reject(new Error(responseError));
             break;
         }
       } catch (error) {
+        if (!active) {
+          return;
+        }
         logger.error(`Error processing WebSocket message: ${error}`);
         clearRequestTimeout();
         this.resetAudioState();
@@ -2042,19 +2037,18 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         // we don't want a subsequent socket event to fire stale handlers
         // against an already-rejected promise (no harm functionally, but it
         // would re-trigger tearDown logic and produce confusing logs).
-        if (cleanupMessageHandler) {
-          cleanupMessageHandler();
-        }
+        cleanupMessageHandler?.();
         reject(new Error(`Error processing WebSocket message: ${error}`));
       }
     };
 
     // Add message handler for this request
-    if (this.persistentConnection) {
-      const conn = this.persistentConnection;
+    if (connection && this.persistentConnection === connection) {
+      const conn = connection;
       conn.on('message', messageHandler);
       const onSocketError = (error: Error) => {
         logger.error(`WebSocket error: ${error}`);
+        cleanupMessageHandler?.();
         clearTimeout(requestTimeout);
         this.resetAudioState();
         if (this.persistentConnection === conn) {
@@ -2069,6 +2063,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       const onSocketClose = (code: number, reason: Buffer) => {
         const message = formatCloseMessage('Persistent WebSocket closed mid-turn', code, reason);
         logger.debug(message);
+        cleanupMessageHandler?.();
         clearTimeout(requestTimeout);
         this.resetAudioState();
         if (this.persistentConnection === conn) {
@@ -2080,6 +2075,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       conn.once('close', onSocketClose);
 
       cleanupMessageHandler = () => {
+        active = false;
         conn.removeListener('message', messageHandler);
         conn.removeListener('error', onSocketError);
         conn.removeListener('close', onSocketClose);
@@ -2108,14 +2104,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       // listener clears it. Do not let that stale timeout tear down a later
       // persistent socket after the failed call has already returned.
       clearRequestTimeout();
-      if (cleanupMessageHandler) {
-        cleanupMessageHandler();
-      }
+      cleanupMessageHandler?.();
       throw error;
     }
   }
 
-  // Add cleanup method to close WebSocket connections
   cleanup(): void {
     if (this.persistentConnection) {
       logger.info('Cleaning up persistent WebSocket connection');
