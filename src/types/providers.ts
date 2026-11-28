@@ -117,6 +117,8 @@ export interface CallApiContextParams {
 
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
+  /** @internal Per-request output default below explicit limits and above environment defaults. */
+  defaultOutputTokens?: number;
   /**
    * Signal that can be used to abort the request
    */
@@ -145,6 +147,8 @@ export interface ApiProvider extends MinimalApiProvider {
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   /** Opt in to receiving evaluation cancellation through CancellableEmbeddingProvider. */
   supportsEmbeddingCancellation?: boolean;
+  /** @internal Supports a request-scoped output default without changing instance config. */
+  readonly supportsDefaultOutputTokens?: boolean;
   config?: any;
   delay?: number;
   /** True when callApi applies delay itself and the evaluator should not wait again. */

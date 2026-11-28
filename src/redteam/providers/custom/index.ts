@@ -216,6 +216,7 @@ export class CustomProvider implements ApiProvider {
           provider: this.config.redteamProvider,
           preferSmallModel: false,
           jsonOnly: true,
+          purpose: 'attack',
         });
       }
     }
@@ -235,6 +236,7 @@ export class CustomProvider implements ApiProvider {
         this.scoringProvider = await redteamProviderManager.getProvider({
           provider: this.config.redteamProvider,
           preferSmallModel: false,
+          purpose: 'attack',
         });
       }
     }

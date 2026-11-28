@@ -25,6 +25,8 @@ import type { ProviderOptions } from '../../types/providers';
 import type { OpenAiCompletionOptions } from './types';
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
+  readonly supportsDefaultOutputTokens = true;
+
   static OPENAI_COMPLETION_MODELS = OPENAI_COMPLETION_MODELS;
 
   static OPENAI_COMPLETION_MODEL_NAMES = OPENAI_COMPLETION_MODELS.map((model) => model.id);
@@ -82,7 +84,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       prompt,
       seed: this.config.seed,
-      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      max_tokens:
+        this.config.max_tokens ??
+        callApiOptions?.defaultOutputTokens ??
+        getEnvInt('OPENAI_MAX_TOKENS', 1024),
       temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
       top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
       presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),

@@ -44,6 +44,8 @@ import type { MCPClient } from '../mcp/client';
 import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
+  readonly supportsDefaultOutputTokens = true;
+
   declare config: AzureChatResponsesOptions;
 
   private mcpClient: MCPClient | null = null;
@@ -226,6 +228,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
     const grokSamplingRestricted = this.isGrok4OrNewerModel();
 
+    if (callApiOptions?.defaultOutputTokens !== undefined) {
+      config.max_tokens ??= config.max_completion_tokens ?? callApiOptions.defaultOutputTokens;
+      config.max_completion_tokens ??= config.max_tokens;
+    }
     // Get max tokens based on model type
     const maxTokensDefault =
       config.omitDefaults || useModelDefaults
@@ -365,7 +371,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     }
     if (useModelDefaults) {
       const outputCap = resolveGpt6ChatOutputCap(this.config, context?.prompt?.config, false, {
-        maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
+        maxCompletionTokens:
+          callApiOptions?.defaultOutputTokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
         maxTokens: getEnvInt('OPENAI_MAX_TOKENS'),
       });
       if (outputCap === undefined) {

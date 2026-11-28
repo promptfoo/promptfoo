@@ -814,6 +814,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       agentProvider: await redteamProviderManager.getProvider({
         provider: this.agentProvider,
         jsonOnly: true,
+        purpose: 'attack',
       }),
       gradingProvider: await redteamProviderManager.getGradingProvider({
         provider: this.gradingProvider,

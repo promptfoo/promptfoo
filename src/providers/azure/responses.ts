@@ -33,6 +33,8 @@ import type { AzureProviderOptions, AzureResponsesOptions } from './types';
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
 export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesOptions> {
+  readonly supportsDefaultOutputTokens = true;
+
   declare config: AzureResponsesOptions;
 
   private functionCallbackHandler = new FunctionCallbackHandler();
@@ -132,7 +134,7 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
   async getAzureResponsesBody(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<Record<string, any>> {
     const config = {
       ...this.config,
@@ -169,6 +171,7 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
       config.max_output_tokens ??
+      callApiOptions?.defaultOutputTokens ??
       (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
     const temperatureDefault =

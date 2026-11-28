@@ -645,6 +645,7 @@ class RedteamIterativeProvider implements ApiProvider {
         provider: this.redteamProvider,
         preferSmallModel: false,
         jsonOnly: true,
+        purpose: 'attack',
       }),
       targetProvider: context.originalProvider,
       injectVar,

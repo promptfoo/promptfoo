@@ -214,6 +214,8 @@ function resolveGrok47Reasoning(reasoning: unknown, vars?: Record<string, unknow
  *   xai:responses:grok-4.20-0309-reasoning
  */
 export class XAIResponsesProvider implements ApiProvider {
+  readonly supportsDefaultOutputTokens = true;
+
   modelName: string;
   config: XAIResponsesConfig;
   env?: EnvOverrides;
@@ -302,7 +304,7 @@ export class XAIResponsesProvider implements ApiProvider {
   async getRequestBody(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ) {
     const promptConfig = context?.prompt?.config;
     const config = {
@@ -329,7 +331,7 @@ export class XAIResponsesProvider implements ApiProvider {
     }
 
     // Handle max_output_tokens
-    const maxOutputTokens = config.max_output_tokens ?? 4096;
+    const maxOutputTokens = config.max_output_tokens ?? callApiOptions?.defaultOutputTokens ?? 4096;
 
     // Handle temperature
     const temperature = config.temperature ?? 0.7;

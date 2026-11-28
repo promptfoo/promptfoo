@@ -15,10 +15,12 @@ import type {
 } from '../../types/index';
 
 export class AzureCompletionProvider extends AzureGenericProvider {
+  readonly supportsDefaultOutputTokens = true;
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
@@ -37,7 +39,10 @@ export class AzureCompletionProvider extends AzureGenericProvider {
     const body = {
       model: this.deploymentName,
       prompt,
-      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      max_tokens:
+        this.config.max_tokens ??
+        callApiOptions?.defaultOutputTokens ??
+        getEnvInt('OPENAI_MAX_TOKENS', 1024),
       temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
       top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
       presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
