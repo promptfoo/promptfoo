@@ -785,3 +785,11 @@ it('preserves nullable Chat response-format strictness in both portable schemas'
   expect(OpenAiChatConfigInputSchema.safeParse(invalid).success).toBe(false);
   expect(validate(invalid)).toBe(false);
 });
+
+it('accepts the reasoning override in the chat and responses contracts', () => {
+  for (const schema of [OpenAiChatConfigInputSchema, OpenAiResponsesConfigInputSchema]) {
+    expect(schema.safeParse({ isReasoningModel: true }).success).toBe(true);
+    expect(schema.safeParse({ isReasoningModel: false }).success).toBe(true);
+    expect(schema.safeParse({ isReasoningModel: 'false' }).success).toBe(false);
+  }
+});

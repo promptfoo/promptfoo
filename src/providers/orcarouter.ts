@@ -144,13 +144,14 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
     if (route !== undefined) {
       body.route = renderVarsInObject(route, context?.vars);
     }
-    // Always render reasoning_effort when set — for OpenAI-family OrcaRouter
-    // upstreams (e.g. orcarouter:openai/gpt-5.5), the base getOpenAiBody
-    // unconditionally overwrites `body.reasoning_effort` with the RAW config
-    // value at the end of body construction, clobbering the rendered version
-    // it set earlier. Re-render here so Nunjucks templates like `{{ effort }}`
-    // never reach the wire literal.
-    if (config.reasoning_effort !== undefined) {
+    // Preserve OrcaRouter's legacy support for reasoning_effort on non-OpenAI
+    // upstreams without re-adding it after an explicit false override or
+    // replacing the base builder's already-rendered value.
+    if (
+      config.isReasoningModel !== false &&
+      body.reasoning_effort === undefined &&
+      config.reasoning_effort !== undefined
+    ) {
       body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
 
@@ -162,7 +163,11 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
       (body.models as unknown[]).some(
         (m) => typeof m === 'string' && reasoningUpstreamRejectsTemperature(m),
       );
-    if ('temperature' in body && (!this.supportsTemperature() || anyFallbackRejectsTemperature)) {
+    if (
+      'temperature' in body &&
+      ((config.isReasoningModel !== false && !this.supportsTemperature()) ||
+        anyFallbackRejectsTemperature)
+    ) {
       delete body.temperature;
     }
 
