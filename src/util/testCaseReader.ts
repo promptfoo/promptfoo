@@ -67,6 +67,7 @@ function isRemoteTestCase(test: TestCaseWithVarsFile): boolean {
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = cliState.basePath || '',
+  loadedKeys?: Set<string>,
 ): Promise<Record<string, string | string[] | object>> {
   if (typeof pathOrGlobs === 'string') {
     pathOrGlobs = [pathOrGlobs];
@@ -82,8 +83,34 @@ export async function readTestFiles(
 
     for (const p of paths) {
       const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
-      const yamlData = maybeLoadConfigFromExternalFile(rawData);
-      Object.assign(ret, yamlData);
+      // Preserve structured values and glob handling from the existing vars-file loader.
+      const seen = new WeakMap<object, unknown>();
+      for (const [key, value] of Object.entries(rawData ?? {})) {
+        // An external structured value is data through test expansion and replay.
+        // Directly authored scalar package references still use the normal renderer.
+        // Top-level file references have always used the active config directory.
+        // Nested fields resolve from the vars file that declares them.
+        const referenceBase = typeof value === 'string' ? cliState.basePath : path.dirname(p);
+        const loaded = mapVarsFileReferences(
+          value,
+          (ref) => maybeLoadConfigFromExternalFile(ref, undefined, referenceBase),
+          seen,
+        );
+        if (
+          typeof value === 'object' ||
+          (typeof value === 'string' && value.startsWith('file://'))
+        ) {
+          loadedKeys?.add(key);
+        } else {
+          loadedKeys?.delete(key);
+        }
+        Object.defineProperty(ret, key, {
+          value: loaded,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      }
     }
   }
   return ret;
@@ -443,7 +470,14 @@ async function loadTestWithVars(
 ): Promise<TestCase> {
   const ret: TestCase = { ...testCase, vars: undefined };
   if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
-    ret.vars = await readTestFiles(testCase.vars, testBasePath);
+    const keys = new Set<string>();
+    ret.vars = await readTestFiles(testCase.vars, testBasePath, keys);
+    if (keys.size > 0) {
+      ret.metadata = {
+        ...ret.metadata,
+        __promptfoo: { ...ret.metadata?.__promptfoo, varsFileKeys: [...keys] },
+      };
+    }
   } else {
     ret.vars = testCase.vars;
   }
@@ -473,23 +507,77 @@ export async function readTestConfig(
   );
 }
 
-function resolveVarsFileReferences(value: unknown, basePath: string): unknown {
-  if (typeof value === 'string') {
-    if (!value.startsWith('file://')) {
-      return value;
-    }
-    const reference = renderEnvOnlyInObject(value);
-    return `file://${path.resolve(basePath, reference.slice(7))}`;
+function mapVarsFileReferences(
+  value: unknown,
+  resolveReference: (reference: string) => unknown,
+  seen = new WeakMap<object, unknown>(),
+): unknown {
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    return resolveReference(value);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  if (seen.has(value)) {
+    return seen.get(value);
   }
   if (Array.isArray(value)) {
-    return value.map((item) => resolveVarsFileReferences(item, basePath));
+    const result: unknown[] = [];
+    seen.set(value, result);
+    for (const item of value) {
+      result.push(mapVarsFileReferences(item, resolveReference, seen));
+    }
+    return result;
   }
-  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, resolveVarsFileReferences(item, basePath)]),
-    );
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return value;
   }
-  return value;
+  const result: Record<string, unknown> = Object.create(prototype);
+  seen.set(value, result);
+  for (const [key, item] of Object.entries(value)) {
+    Object.defineProperty(result, key, {
+      value: mapVarsFileReferences(item, resolveReference, seen),
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+  }
+  return result;
+}
+
+function absoluteVarsFileReference(value: string, basePath: string): string {
+  const reference = renderEnvOnlyInObject(value);
+  const referencePath = reference.slice(7);
+  // file:///C:/... is the canonical Windows form. Preserve POSIX paths.
+  const localPath =
+    process.platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(referencePath)
+      ? referencePath.slice(1)
+      : referencePath;
+  return `file://${path.resolve(basePath, localPath)}`;
+}
+
+function resolveNestedVarsFileReferences(
+  vars: TestCase['vars'],
+  basePath: string,
+  preloaded: readonly string[] = [],
+): TestCase['vars'] {
+  if (!vars) {
+    return vars;
+  }
+  const seen = new WeakMap<object, unknown>();
+  return Object.fromEntries(
+    Object.entries(vars).map(([key, value]) => [
+      key,
+      value && typeof value === 'object' && key !== '_conversation' && !preloaded.includes(key)
+        ? mapVarsFileReferences(
+            value,
+            (reference) => absoluteVarsFileReference(reference, basePath),
+            seen,
+          )
+        : value,
+    ]),
+  ) as TestCase['vars'];
 }
 
 async function readTestWithEnv(
@@ -500,6 +588,7 @@ async function readTestWithEnv(
   loadProviders = true,
   // Bare vars-file references and providers in imported rows use the tests file's directory.
   sourceBasePath = basePath,
+  nestedBasePath = sourceBasePath,
 ): Promise<TestCase> {
   if (typeof test === 'object' && isRemoteTestCase(test)) {
     return test as TestCase;
@@ -516,6 +605,13 @@ async function readTestWithEnv(
   } else {
     testCase = await loadTestWithVars(test, sourceBasePath);
   }
+
+  const preloaded = testCase.metadata?.__promptfoo?.varsFileKeys;
+  testCase.vars = resolveNestedVarsFileReferences(
+    testCase.vars,
+    typeof test === 'string' ? effectiveBasePath : nestedBasePath,
+    Array.isArray(preloaded) ? preloaded : [],
+  );
 
   const providerId =
     typeof testCase.provider === 'string' ? testCase.provider : testCase.provider?.id;
@@ -539,9 +635,23 @@ async function readTestWithEnv(
   }
 
   if (!loadProviders) {
-    testCase.vars = resolveVarsFileReferences(testCase.vars, basePath) as TestCase['vars'];
+    if (testCase.vars) {
+      const seen = new WeakMap<object, unknown>();
+      testCase.vars = Object.fromEntries(
+        Object.entries(testCase.vars).map(([key, value]) => [
+          key,
+          Array.isArray(preloaded) && preloaded.includes(key)
+            ? value
+            : mapVarsFileReferences(
+                value,
+                (reference) => absoluteVarsFileReference(reference, basePath),
+                seen,
+              ),
+        ]),
+      ) as TestCase['vars'];
+    }
     if (typeof testCase.provider === 'string' && testCase.provider.startsWith('file://')) {
-      testCase.provider = resolveVarsFileReferences(testCase.provider, effectiveBasePath) as string;
+      testCase.provider = absoluteVarsFileReference(testCase.provider, effectiveBasePath);
     } else if (
       typeof testCase.provider === 'object' &&
       typeof testCase.provider.id === 'string' &&
@@ -549,7 +659,7 @@ async function readTestWithEnv(
     ) {
       testCase.provider = {
         ...testCase.provider,
-        id: resolveVarsFileReferences(testCase.provider.id, effectiveBasePath) as string,
+        id: absoluteVarsFileReference(testCase.provider.id, effectiveBasePath),
       };
     }
   }
@@ -780,8 +890,19 @@ async function readTestsWithEnv(
       // Resolve local provider and vars references only for local sources.
       return tests;
     }
+    const { pathWithoutFunction } = getStandaloneTestsFileMetadata(source, basePath);
     return Promise.all(
-      tests.map((test) => readTestWithEnv(test, basePath, false, env, loadProviders)),
+      tests.map((test) =>
+        readTestWithEnv(
+          test,
+          basePath,
+          false,
+          env,
+          loadProviders,
+          basePath,
+          path.dirname(pathWithoutFunction),
+        ),
+      ),
     );
   };
 
@@ -975,9 +1096,17 @@ function collectNestedFileReferences(
         ? resolveTestsWatchPaths([{ vars: row.vars }], varsBasePath)
         : [],
     );
-    // Script providers use the row's directory; provider config files and inline
-    // vars still use the config directory. Rewrite only the script ID for collection.
+    // Nested var references follow the declaring row. Top-level paths and providers
+    // retain their existing resolution bases, including standalone scalar sources.
     const scopedRows = rows.map((row) => {
+      if (
+        row?.vars &&
+        !Array.isArray(row.vars) &&
+        typeof row.vars === 'object' &&
+        !isRemoteTestCase(row)
+      ) {
+        row = { ...row, vars: resolveNestedVarsFileReferences(row.vars, path.dirname(testsFile)) };
+      }
       const provider = row?.provider;
       const id = typeof provider === 'string' ? provider : provider?.id;
       if (typeof id !== 'string' || !id.startsWith('file://')) {
@@ -987,7 +1116,7 @@ function collectNestedFileReferences(
       if (!script.endsWith('.py') && !isJavascriptFile(script)) {
         return row;
       }
-      const resolvedId = resolveVarsFileReferences(id, varsBasePath);
+      const resolvedId = absoluteVarsFileReference(id, varsBasePath);
       return {
         ...row,
         provider: typeof provider === 'string' ? resolvedId : { ...provider, id: resolvedId },
@@ -1085,12 +1214,10 @@ export function resolveTestsWatchPaths(
           typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
         );
       }
-      // A mapping: only file:// values are file references, the rest are literal vars.
-      return Object.values(entry.vars).flatMap((value) =>
-        typeof value === 'string' && value.startsWith('file://')
-          ? resolveTestsFileReference(value, basePath)
-          : [],
-      );
+      // Remote rows are data. Only dependencies in authored variables belong in watch mode.
+      return entry.metadata?.__promptfoo?.remote
+        ? []
+        : collectConfigFileReferences(entry.vars, basePath);
     }
     return [];
   });
