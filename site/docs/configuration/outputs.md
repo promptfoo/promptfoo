@@ -67,17 +67,21 @@ Export complete evaluation data:
 promptfoo eval --output results.json
 ```
 
-**Structure:**
+**Selected fields from an export:**
 
 ```json
 {
-  "version": 3,
-  "timestamp": "2024-01-15T10:30:00Z",
   "results": {
-    "prompts": [...],
-    "providers": [...],
-    "outputs": [...],
-    "stats": {...}
+    "version": 3,
+    "timestamp": "2024-01-15T10:30:00Z",
+    "results": [
+      {
+        "provider": { "id": "echo" },
+        "response": { "output": "Hello" },
+        "success": true
+      }
+    ],
+    "stats": { "successes": 1, "failures": 0, "errors": 0 }
   }
 }
 ```
@@ -299,22 +303,20 @@ const fs = require('fs');
 // Load results
 const results = JSON.parse(fs.readFileSync('results.json', 'utf8'));
 
-// Analyze pass rates by provider
-const providerStats = {};
-results.results.outputs.forEach((output) => {
-  const provider = output.provider;
-  if (!providerStats[provider]) {
-    providerStats[provider] = { pass: 0, fail: 0 };
-  }
-
-  if (output.pass) {
-    providerStats[provider].pass++;
+// Count passing and non-passing rows by provider
+const providerStats = new Map();
+for (const row of results.results.results) {
+  const provider = row.provider.label || row.provider.id;
+  const counts = providerStats.get(provider) ?? { pass: 0, fail: 0 };
+  if (row.success) {
+    counts.pass++;
   } else {
-    providerStats[provider].fail++;
+    counts.fail++;
   }
-});
+  providerStats.set(provider, counts);
+}
 
-console.log('Pass rates by provider:', providerStats);
+console.log('Results by provider:', Object.fromEntries(providerStats));
 ```
 
 ### CSV Analysis with Pandas
