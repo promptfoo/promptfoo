@@ -1,4 +1,5 @@
 import { type Option as sqlParserOption } from 'node-sql-parser';
+import { importParser } from '../util/parserPackages';
 import { coerceString } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -117,16 +118,10 @@ type SqlParserModule = {
 };
 
 async function createSqlParser() {
-  let sqlParserModule: SqlParserModule;
-  try {
-    sqlParserModule = await import('node-sql-parser');
-  } catch {
-    throw new Error('node-sql-parser is not installed. Please install it first');
-  }
-
+  const sqlParserModule = (await importParser('node-sql-parser')) as SqlParserModule;
   const SqlParser = sqlParserModule.Parser ?? sqlParserModule.default?.Parser;
   if (!SqlParser) {
-    throw new Error('node-sql-parser is not installed. Please install it first');
+    throw new Error('node-sql-parser has no Parser export');
   }
   return new SqlParser();
 }
