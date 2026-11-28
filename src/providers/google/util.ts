@@ -1953,20 +1953,36 @@ function processImagesInContents(
 
   const base64ToMimeType = new Map<string, string>();
 
-  for (const value of Object.values(contextVars)) {
+  const seen = new WeakSet<object>();
+  const pending: unknown[] = Object.entries(contextVars || {})
+    .filter(([key]) => key !== '_conversation')
+    .map(([, value]) => value);
+  while (pending.length > 0) {
+    const value = pending.pop();
     if (typeof value === 'string') {
       let mimeType = getMimeTypeFromBase64(value);
       // Generic MP4 brands need audio provenance bound to the current loaded bytes.
       if (
         mimeType === 'video/mp4' &&
         !isDataUrl(value) &&
-        getLoadedFileMimeType(contextVars, value) === 'audio/mp4'
+        getLoadedFileMimeType(contextVars || {}, value) === 'audio/mp4'
       ) {
         mimeType = 'audio/mp4';
       }
       // An alias of the same raw bytes must not downgrade known M4A audio provenance.
       if (mimeType && (mimeType !== 'video/mp4' || base64ToMimeType.get(value) !== 'audio/mp4')) {
         base64ToMimeType.set(value, mimeType);
+      }
+    } else if (value && typeof value === 'object' && !seen.has(value)) {
+      if (
+        !Array.isArray(value) &&
+        ![null, Object.prototype].includes(Object.getPrototypeOf(value))
+      ) {
+        continue;
+      }
+      seen.add(value);
+      for (const item of Object.values(value)) {
+        pending.push(item);
       }
     }
   }
