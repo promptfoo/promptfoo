@@ -138,7 +138,10 @@ export class GolangProvider implements ApiProvider {
         const scriptDir = path.dirname(path.join(tempDir, relativeScriptPath));
         await fs.mkdir(scriptDir, { recursive: true });
 
-        const executablePath = path.join(tempDir, 'golang_wrapper');
+        const executablePath = path.join(
+          tempDir,
+          process.platform === 'win32' ? 'golang_wrapper.exe' : 'golang_wrapper',
+        );
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
         const goExecutable = this.config.goExecutable || 'go';
         const env = getProcessEnv();

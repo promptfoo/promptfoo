@@ -289,6 +289,27 @@ describe('GolangProvider', () => {
     }) as any);
   });
 
+  it.each([
+    ['win32', 'golang_wrapper.exe'],
+    ['linux', 'golang_wrapper'],
+    ['darwin', 'golang_wrapper'],
+  ])('builds and executes the wrapper for %s', async (platform, filename) => {
+    const platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue(platform);
+    try {
+      const provider = new GolangProvider('script.go');
+      const response = await provider.callApi('hello');
+      expect(response.output).toBe('test output');
+      const expectedPath = `/tmp/golang-provider-xyz/${filename}`;
+      const buildCall = mockExecFile.mock.calls.find(
+        ([file, args]) => file === 'go' && args[0] === 'build',
+      );
+      expect(buildCall?.[1]).toContain(expectedPath);
+      expect(mockExecFile.mock.calls.some(([file]) => file === expectedPath)).toBe(true);
+    } finally {
+      platformSpy.mockRestore();
+    }
+  });
+
   it('passes file defaults to Go tooling and the compiled provider', async () => {
     const provider = new GolangProvider('script.go');
     await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
