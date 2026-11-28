@@ -33,9 +33,101 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
+import type {
+  OpenAiAgentsOptions,
+  OpenAiAgentsSessionFactory,
+  OpenAiAgentToolCallRecord,
+} from './agents-types';
 
 type AgentExecutionOverrides = { model?: string; modelSettings?: ModelSettings };
+
+type AgentExecutionMode = OpenAiAgentToolCallRecord['executionMode'];
+
+function readSdkRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function readSdkCallId(raw: Record<string, unknown>): string | undefined {
+  for (const field of ['callId', 'call_id', 'id']) {
+    if (typeof raw[field] === 'string') {
+      return raw[field];
+    }
+  }
+  return undefined;
+}
+
+function readSdkFunctionItem(
+  item: unknown,
+  kind: 'tool_call_item' | 'tool_call_output_item',
+  rawKind: 'function_call' | 'function_call_result',
+): Record<string, unknown> | undefined {
+  const entry = readSdkRecord(item);
+  const raw = readSdkRecord(entry?.rawItem);
+  return entry?.type === kind && raw?.type === rawKind ? raw : undefined;
+}
+
+function parseFunctionArguments(
+  rawArguments: string | undefined,
+): Pick<OpenAiAgentToolCallRecord, 'argumentParseStatus' | 'arguments'> {
+  if (rawArguments === undefined) {
+    return { argumentParseStatus: 'missing' };
+  }
+  try {
+    return { argumentParseStatus: 'parsed', arguments: JSON.parse(rawArguments) };
+  } catch {
+    return { argumentParseStatus: 'invalid' };
+  }
+}
+
+/** Project only function-tool evidence, never SDK objects or output bodies. */
+function collectAgentFunctionToolCalls(
+  items: readonly unknown[] | undefined,
+  executionMode: AgentExecutionMode,
+): OpenAiAgentToolCallRecord[] {
+  const results = new Map<string, Array<Record<string, unknown>>>();
+  for (const item of items ?? []) {
+    const raw = readSdkFunctionItem(item, 'tool_call_output_item', 'function_call_result');
+    if (!raw) {
+      continue;
+    }
+    const callId = readSdkCallId(raw);
+    if (callId === undefined) {
+      continue;
+    }
+    const matches = results.get(callId) ?? [];
+    matches.push(raw);
+    results.set(callId, matches);
+  }
+
+  const calls: OpenAiAgentToolCallRecord[] = [];
+  for (const item of items ?? []) {
+    const raw = readSdkFunctionItem(item, 'tool_call_item', 'function_call');
+    if (!raw) {
+      continue;
+    }
+    const callId = readSdkCallId(raw);
+    if (callId === undefined || typeof raw.name !== 'string') {
+      continue;
+    }
+    const rawArguments = typeof raw.arguments === 'string' ? raw.arguments : undefined;
+    const matchedResults = results.get(callId) ?? [];
+    const resultStatus = matchedResults.length === 1 ? matchedResults[0].status : undefined;
+    const call: OpenAiAgentToolCallRecord = {
+      callId,
+      name: raw.name,
+      ...(rawArguments === undefined ? {} : { rawArguments }),
+      ...parseFunctionArguments(rawArguments),
+      ...(typeof raw.status === 'string' ? { callStatus: raw.status } : {}),
+      resultPresent: matchedResults.length > 0,
+      ...(typeof resultStatus === 'string' ? { resultStatus } : {}),
+      executionMode,
+    };
+    calls.push(call);
+  }
+  return calls;
+}
 /**
  * OpenAI Agents Provider
  *
@@ -267,6 +359,20 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         // The Agents SDK exposes aggregate usage, but a run can include handoffs to
         // agents with different models. Without per-model usage, no exact total is available.
         cost: undefined,
+        ...(this.agentConfig.includeToolCalls === true
+          ? {
+              metadata: {
+                toolCalls: collectAgentFunctionToolCalls(
+                  result.newItems,
+                  this.agentConfig.executeTools === false
+                    ? 'disabled'
+                    : this.agentConfig.executeTools === 'mock'
+                      ? 'mock'
+                      : 'real',
+                ),
+              },
+            }
+          : {}),
       };
 
       return response;

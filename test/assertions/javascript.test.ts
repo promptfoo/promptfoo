@@ -2617,6 +2617,76 @@ return s >= 0.5 && s <= 0.75;`,
       });
     }
 
+    it('judges SDK function-call evidence independently of identical final-answer text', async () => {
+      const assertion = `
+        const calls = context.metadata?.toolCalls;
+        return Array.isArray(calls) && calls.some(call =>
+          call.name === 'check_inventory' &&
+          call.arguments?.playerId === 'player1' &&
+          call.resultPresent === true &&
+          call.executionMode === 'real');
+      `;
+      const approved = {
+        toolCalls: [
+          {
+            callId: 'c1',
+            name: 'check_inventory',
+            arguments: { playerId: 'player1' },
+            resultPresent: true,
+            executionMode: 'real',
+          },
+        ],
+      };
+      await expect(runMetadataAssertion(assertion, approved)).resolves.toMatchObject({
+        pass: true,
+      });
+      await expect(runMetadataAssertion(assertion, { toolCalls: [] })).resolves.toMatchObject({
+        pass: false,
+      });
+      await expect(
+        runMetadataAssertion(assertion, {
+          toolCalls: [{ ...approved.toolCalls[0], resultPresent: false }],
+        }),
+      ).resolves.toMatchObject({ pass: false });
+      await expect(
+        runMetadataAssertion(assertion, {
+          toolCalls: [{ ...approved.toolCalls[0], executionMode: 'mock' }],
+        }),
+      ).resolves.toMatchObject({ pass: false });
+    });
+
+    it('can project structured SDK function calls into tool-call-f1 without changing the answer', async () => {
+      const metadata = {
+        toolCalls: [
+          { name: 'check_inventory', callId: 'c1', resultPresent: true },
+          { name: 'describe_scene', callId: 'c2', resultPresent: false },
+        ],
+      };
+      const base = {
+        prompt: 'Inventory',
+        provider,
+        assertion: {
+          type: 'tool-call-f1' as const,
+          value: ['check_inventory', 'describe_scene'],
+          transform: `return JSON.stringify({
+            tool_calls: context.metadata.toolCalls.map(call => ({ function: { name: call.name } }))
+          })`,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Done.', metadata },
+      };
+      const matched = await runAssertion(base);
+      expect(matched).toMatchObject({ pass: true, score: 1 });
+      const mismatched = await runAssertion({
+        ...base,
+        providerResponse: {
+          output: 'Done.',
+          metadata: { toolCalls: metadata.toolCalls.slice(0, 1) },
+        },
+      });
+      expect(mismatched).toMatchObject({ pass: false });
+    });
+
     it('should access metadata via context.metadata shortcut', async () => {
       const result = await runMetadataAssertion('context.metadata?.toolCalls <= 10', {
         toolCalls: 5,
