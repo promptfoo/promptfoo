@@ -72,8 +72,24 @@ async function processPromptFile(
       // File is executable
       return await processExecutableFile(filePath, prompt, functionName, labelPath);
     }
-  } catch (_e) {
-    // File doesn't exist or can't be accessed, fall through
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+    // Only a bare numeric version-like suffix falls back to a literal prompt. Any path
+    // syntax or nonnumeric suffix indicates an explicit file reference, which must keep
+    // erroring when the target is missing.
+    const rawPrompt = prompt.raw ?? '';
+    const isExplicitPath =
+      rawPrompt.startsWith('file://') ||
+      rawPrompt.includes('/') ||
+      rawPrompt.includes('\\') ||
+      /^[A-Za-z]:/.test(rawPrompt);
+    if (isExplicitPath || !/^\.\d+$/.test(extension ?? '')) {
+      return [];
+    }
+    logger.debug(`Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`);
+    return processString(prompt);
   }
   return [];
 }

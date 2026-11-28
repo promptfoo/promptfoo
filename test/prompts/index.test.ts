@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 
 import dedent from 'dedent';
 import { globSync } from 'glob/raw';
@@ -24,6 +25,14 @@ vi.mock('glob/raw', async () => {
 
 vi.mock('fs');
 
+vi.mock('fs/promises', async () => {
+  const actual = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+  return {
+    ...actual,
+    stat: vi.fn().mockImplementation(actual.stat),
+  };
+});
+
 vi.mock('python-shell');
 vi.mock('../../src/esm', async () => {
   const actual = await vi.importActual<typeof import('../../src/esm')>('../../src/esm');
@@ -42,14 +51,19 @@ vi.mock('../../src/prompts/utils', async () => {
   };
 });
 
+const actualFsPromises = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+
 describe('readPrompts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fsPromises.stat).mockReset();
+    vi.mocked(fsPromises.stat).mockImplementation(actualFsPromises.stat);
   });
   afterEach(() => {
     mockProcessEnv({ PROMPTFOO_STRICT_FILES: undefined });
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(fs.statSync).mockReset();
+    vi.mocked(fsPromises.stat).mockReset();
     vi.mocked(globSync).mockReset();
     vi.mocked(maybeFilePath).mockClear();
   });
@@ -97,7 +111,10 @@ describe('readPrompts', () => {
   it('should throw an error for an unsupported file format', async () => {
     vi.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     vi.mocked(maybeFilePath).mockReturnValueOnce(true);
-    mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
+    vi.mocked(fsPromises.stat).mockResolvedValueOnce({
+      isFile: () => true,
+      mode: 0o644,
+    } as fs.Stats);
     await expect(readPrompts(['unsupported.for.mat'])).rejects.toThrow(
       'There are no prompts in "unsupported.for.mat"',
     );
@@ -514,6 +531,65 @@ describe('readPrompts', () => {
     await expect(readPrompts('non-existent-file.txt*')).resolves.toEqual([
       { raw: 'non-existent-file.txt*', label: 'non-existent-file.txt*' },
     ]);
+  });
+
+  it('should treat a nonexistent version-suffixed prompt as a literal string', async () => {
+    expect(maybeFilePath('Summarize changes in 1.20')).toBe(true);
+    vi.mocked(fsPromises.stat).mockRejectedValueOnce(
+      Object.assign(
+        new Error("ENOENT: no such file or directory, stat 'Summarize changes in 1.20'"),
+        {
+          code: 'ENOENT',
+        },
+      ),
+    );
+    await expect(readPrompts('Summarize changes in 1.20')).resolves.toEqual([
+      { raw: 'Summarize changes in 1.20', label: 'Summarize changes in 1.20' },
+    ]);
+  });
+
+  it.each([
+    'file://./prompt-generator',
+    './prompt-generator',
+    'file://./version-like.20',
+    './bin/prompt-generator.out',
+    '../bin/prompt-generator.out',
+    'bin/prompt-generator.out',
+    'bin\\prompt-generator.out',
+    '.\\bin\\prompt-generator.out',
+    'C:\\bin\\prompt-generator.out',
+    'C:prompt-generator.com',
+    'prompt-generator.out',
+    '/tmp/missing-prompt-generator.out',
+  ])('should preserve errors for explicit file references: %s', async (promptPath) => {
+    vi.mocked(fsPromises.stat).mockRejectedValueOnce(
+      Object.assign(new Error(`ENOENT: no such file or directory, stat '${promptPath}'`), {
+        code: 'ENOENT',
+      }),
+    );
+    await expect(readPrompts(promptPath)).rejects.toThrow(
+      `There are no prompts in ${JSON.stringify(promptPath)}`,
+    );
+  });
+
+  it('should keep strict-file behavior for nonexistent heuristic file paths', async () => {
+    mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
+    vi.mocked(fs.statSync).mockImplementationOnce(() => {
+      throw Object.assign(
+        new Error("ENOENT: no such file or directory, stat 'Summarize changes in 1.20'"),
+        { code: 'ENOENT' },
+      );
+    });
+    await expect(readPrompts('Summarize changes in 1.20')).rejects.toThrow(
+      "ENOENT: no such file or directory, stat 'Summarize changes in 1.20'",
+    );
+  });
+
+  it('should propagate non-ENOENT stat errors for heuristic file paths', async () => {
+    vi.mocked(fsPromises.stat).mockRejectedValueOnce(
+      Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' }),
+    );
+    await expect(readPrompts('Summarize changes in 1.20')).rejects.toThrow('EACCES');
   });
 
   it('should handle a prompt with a function', async () => {
