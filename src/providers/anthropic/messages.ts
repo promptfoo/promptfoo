@@ -21,7 +21,15 @@ import { normalizeFinishReason } from '../../util/finishReason';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
-import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
+import {
+  formatMcpToolError,
+  getMcpErrorMessage,
+  getThrownMcpErrorMessage,
+  isMcpErrorResult,
+  joinMcpErrors,
+  MCP_FAILURE_METADATA,
+  normalizeMcpToolContent,
+} from '../mcp/util';
 import { transformToolChoice, transformTools } from '../shared';
 import {
   CLAUDE_CODE_IDENTITY_PROMPT,
@@ -601,7 +609,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         return {
           type: 'tool_result',
           tool_use_id: toolUse.id,
-          content: `MCP Tool Error (${toolUse.name}): ${getMcpErrorMessage(result)}`,
+          content: formatMcpToolError(toolUse.name, getMcpErrorMessage(result)),
           is_error: true,
         };
       }
@@ -615,9 +623,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       return {
         type: 'tool_result',
         tool_use_id: toolUse.id,
-        content: `MCP Tool Error (${toolUse.name}): ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        content: formatMcpToolError(toolUse.name, getThrownMcpErrorMessage(error)),
         is_error: true,
       };
     }
@@ -1122,6 +1128,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     const shouldUseResponseCache =
       isCacheEnabled() &&
+      this.mcpClient === null &&
       config.mcp?.enabled !== true &&
       this.shouldCacheResponses() &&
       !this.hasCustomHeaders() &&
@@ -1195,9 +1202,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       });
       const cost = this.calculateMessageCosts(config, responses);
 
-      // Only attach the key when a tool actually ran: an always-present empty array
-      // would break downstream filters that test `metadata?.toolCalls?.length > 0`.
-      const mcpMetadata = toolCalls.length > 0 ? { toolCalls } : undefined;
+      const mcpError = joinMcpErrors(
+        toolCalls.filter((call) => call.is_error).map((call) => String(call.output)),
+      );
+      const mcpMetadata =
+        toolCalls.length > 0 ? { toolCalls, ...(mcpError && MCP_FAILURE_METADATA) } : undefined;
 
       if (error) {
         // max_tool_calls was exceeded — tokens were still spent across the loop,
@@ -1249,9 +1258,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         processedOutputFormat,
         false,
       );
-      return mcpMetadata
-        ? { ...response, metadata: { ...response.metadata, ...mcpMetadata } }
-        : response;
+      if (mcpMetadata) {
+        response.metadata = { ...response.metadata, ...mcpMetadata };
+      }
+      if (mcpError) {
+        response.error ??= mcpError;
+      }
+      return response;
     } catch (err) {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,

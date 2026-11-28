@@ -1,5 +1,12 @@
 import logger from '../../logger';
 import { normalizeFinishReason } from '../../util/finishReason';
+import {
+  formatMcpToolError,
+  formatMcpToolResult,
+  getThrownMcpErrorMessage,
+  joinMcpErrors,
+  MCP_FAILURE_METADATA,
+} from '../mcp/util';
 import { formatOpenAiError, getOpenAICompletionTokenDetails } from '../openai/util';
 import { isRootFinalAnswer } from './stream';
 
@@ -18,6 +25,9 @@ import type {
  */
 function extractMetadata(data: any, processedOutput?: ProcessedOutput): Record<string, any> {
   const metadata: Record<string, any> = {};
+  if (processedOutput?.mcpError) {
+    Object.assign(metadata, MCP_FAILURE_METADATA);
+  }
 
   // Response ID - for linking to OpenAI dashboard
   if (typeof data.id === 'string' && data.id) {
@@ -121,23 +131,11 @@ export class ResponsesProcessor {
         data,
       );
 
-      if (processedOutput.isRefusal) {
-        return {
-          output: processedOutput.refusal,
-          tokenUsage: getResponsesTokenUsage(data, cached),
-          isRefusal: true,
-          cached,
-          ...(cost === undefined ? {} : { cost }),
-          raw: data,
-          metadata: extractMetadata(data, processedOutput),
-          ...(finishReason && { finishReason }),
-        };
-      }
+      const { isRefusal, mcpError } = processedOutput;
+      let finalOutput = isRefusal ? processedOutput.refusal : processedOutput.result;
 
-      let finalOutput: string | any = processedOutput.result;
-
-      // Handle JSON schema parsing
       if (
+        !isRefusal &&
         requestConfig.response_format?.type === 'json_schema' &&
         typeof finalOutput === 'string'
       ) {
@@ -153,6 +151,8 @@ export class ResponsesProcessor {
         tokenUsage: getResponsesTokenUsage(data, cached),
         cached,
         ...(cost === undefined ? {} : { cost }),
+        ...(mcpError && { error: mcpError }),
+        ...(isRefusal && { isRefusal: true }),
         raw: data,
         metadata: extractMetadata(data, processedOutput),
         ...(finishReason && { finishReason }),
@@ -160,7 +160,7 @@ export class ResponsesProcessor {
 
       // Add annotations if present (for deep research citations)
       // This maintains backwards compatibility for code reading result.raw.annotations
-      if (processedOutput.annotations && processedOutput.annotations.length > 0) {
+      if (!isRefusal && processedOutput.annotations?.length) {
         result.raw = { ...data, annotations: processedOutput.annotations };
       }
 
@@ -194,6 +194,7 @@ export class ResponsesProcessor {
     let refusal = '';
     let isRefusal = false;
     const annotations: any[] = [];
+    const mcpErrors: string[] = [];
 
     // Process all output items
     for (const item of output) {
@@ -203,6 +204,10 @@ export class ResponsesProcessor {
       }
 
       const processed = await this.processOutputItem(item, context);
+      if (processed.mcpError) {
+        mcpErrors.push(processed.mcpError);
+      }
+
       // A turn can pause for tools before the root produces a final answer.
       if (context.multiAgent && !isRootFinalAnswer(item)) {
         if (item.type === 'function_call' && processed.content) {
@@ -233,6 +238,7 @@ export class ResponsesProcessor {
       refusal,
       isRefusal,
       annotations: annotations.length > 0 ? annotations : undefined,
+      mcpError: joinMcpErrors(mcpErrors),
     };
   }
 
@@ -243,6 +249,7 @@ export class ResponsesProcessor {
     content?: string;
     isRefusal?: boolean;
     annotations?: any[];
+    mcpError?: string;
   }> {
     switch (item.type) {
       case 'function_call':
@@ -310,15 +317,14 @@ export class ResponsesProcessor {
       }
 
       case 'mcp_call': {
-        let content: string;
-
-        if (item.error) {
-          content = `MCP Tool Error (${item.name}): ${item.error}`;
-        } else {
-          content = `MCP Tool Result (${item.name}): ${item.output}`;
+        if (item.error || (item.status != null && item.status !== 'completed')) {
+          const detail = item.error
+            ? getThrownMcpErrorMessage(item.error)
+            : `tool call ${item.status}`;
+          const mcpError = formatMcpToolError(item.name, detail);
+          return Promise.resolve({ content: mcpError, mcpError });
         }
-
-        return Promise.resolve({ content });
+        return Promise.resolve({ content: formatMcpToolResult(item.name, item.output) });
       }
 
       case 'mcp_approval_request': {
@@ -337,13 +343,12 @@ export class ResponsesProcessor {
     context: ProcessorContext,
   ): Promise<{
     content?: string;
+    mcpError?: string;
   }> {
     const status = item.status ?? context.data.status;
     if (status === 'incomplete' || status === 'in_progress') {
       return { content: JSON.stringify(item) };
     }
-
-    let functionResult: string;
 
     // Check if this is a meaningful function call or just a status update
     if (
@@ -354,21 +359,23 @@ export class ResponsesProcessor {
       // This appears to be a status update with no meaningful arguments
       // This often happens when using Chat API tool format with Responses API
       // In this case, return the function call info instead of trying to execute with empty args
-      functionResult = JSON.stringify({
-        type: 'function_call',
-        name: item.name,
-        status: 'no_arguments_provided',
-        note: 'Function called but no arguments were extracted. Consider using the correct Responses API tool format.',
-      });
-    } else {
-      // Normal function call with arguments - execute the callback
-      functionResult = await this.config.functionCallbackHandler.processCalls(
-        item,
-        context.config.functionToolCallbacks,
-      );
+      return {
+        content: JSON.stringify({
+          type: 'function_call',
+          name: item.name,
+          status: 'no_arguments_provided',
+          note: 'Function called but no arguments were extracted. Consider using the correct Responses API tool format.',
+        }),
+      };
     }
 
-    return { content: functionResult };
+    // Normal function call with arguments - execute the callback.
+    const { output, mcpErrors } = await this.config.functionCallbackHandler.processCalls(
+      item,
+      context.config.functionToolCallbacks,
+    );
+    const mcpError = joinMcpErrors(mcpErrors);
+    return { content: output, ...(mcpError ? { mcpError } : {}) };
   }
 
   private async processMessage(
@@ -378,6 +385,7 @@ export class ResponsesProcessor {
     content?: string;
     isRefusal?: boolean;
     annotations?: any[];
+    mcpError?: string;
   }> {
     if (item.role !== 'assistant') {
       return {};
@@ -387,6 +395,7 @@ export class ResponsesProcessor {
     let isRefusal = false;
     let refusal = '';
     const annotations: any[] = [];
+    const messageMcpErrors: string[] = [];
 
     for (const contentItem of item.content ?? []) {
       if (!contentItem || typeof contentItem !== 'object') {
@@ -403,14 +412,19 @@ export class ResponsesProcessor {
       } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
         const status = contentItem.status ?? item.status ?? context.data.status;
         const incomplete = ['incomplete', 'in_progress'].includes(status);
-        const toolOutput = incomplete
-          ? content + JSON.stringify(contentItem)
-          : await this.config.functionCallbackHandler.processCalls(
-              contentItem,
-              context.config.functionToolCallbacks,
-            );
+        if (incomplete) {
+          if (!context.multiAgent) {
+            content += JSON.stringify(contentItem);
+          }
+          continue;
+        }
+        const { output, mcpErrors } = await this.config.functionCallbackHandler.processCalls(
+          contentItem,
+          context.config.functionToolCallbacks,
+        );
+        messageMcpErrors.push(...mcpErrors);
         if (!context.multiAgent) {
-          content = toolOutput;
+          content = output;
         }
       } else if (contentItem.type === 'refusal') {
         refusal = contentItem.refusal;
@@ -423,10 +437,12 @@ export class ResponsesProcessor {
       isRefusal = true;
     }
 
+    const mcpError = joinMcpErrors(messageMcpErrors);
     return {
       content: isRefusal ? refusal : content,
       isRefusal,
       annotations: annotations.length > 0 ? annotations : undefined,
+      ...(mcpError ? { mcpError } : {}),
     };
   }
 }

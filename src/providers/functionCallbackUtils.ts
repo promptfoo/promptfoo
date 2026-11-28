@@ -6,7 +6,13 @@ import {
   wrapError,
 } from '../util/functions/loadFunction';
 import { executeCallback, resolveCallback } from './functionCallbackExecutor';
-import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
+import {
+  formatMcpToolError,
+  formatMcpToolResult,
+  getMcpErrorMessage,
+  getThrownMcpErrorMessage,
+  isMcpErrorResult,
+} from './mcp/util';
 import { throwIfAborted, waitForPromiseWithAbort } from './shared';
 import { withGenAIToolSpan } from './tracing';
 
@@ -200,21 +206,22 @@ export class FunctionCallbackHandler {
   }
 
   /**
-   * Processes multiple function calls
+   * Processes multiple function calls.
    * @param calls Array of calls or a single call
    * @param callbacks Configuration mapping function names to callbacks
    * @param context Optional context to pass to callbacks
    * @param options Processing options
-   * @returns Processed output in appropriate format
+   * @returns The processed output plus any MCP tool-error messages so callers
+   *   can surface them on `ProviderResponse.error`.
    */
   async processCalls(
     calls: any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
     _options?: { returnRawOnError?: boolean },
-  ): Promise<any> {
+  ): Promise<{ output: any; mcpErrors: string[] }> {
     if (!calls) {
-      return calls;
+      return { output: calls, mcpErrors: [] };
     }
 
     const isArray = Array.isArray(calls);
@@ -224,28 +231,23 @@ export class FunctionCallbackHandler {
       callsArray.map((call) => this.processCall(call, callbacks, context)),
     );
 
-    // If any callback succeeded, return processed results
+    const mcpErrors = results.filter((r) => r.isMcpError).map((r) => String(r.output));
+    if (!isArray) {
+      return { output: results[0].output, mcpErrors };
+    }
+
+    // Keep the original array when no callback or MCP tool handled the calls.
     const hasSuccess = results.some(
       (r, index) => !r.isError && r.output !== JSON.stringify(callsArray[index]),
     );
-
-    if (hasSuccess) {
-      const outputs = results.map((r) => r.output);
-      // For single call with successful callback, return just the output
-      if (!isArray && outputs.length === 1) {
-        return outputs[0];
-      }
-      // For multiple calls, join string results
-      return outputs.every((o) => typeof o === 'string') ? outputs.join('\n') : outputs;
+    if (!hasSuccess && mcpErrors.length === 0) {
+      return { output: calls, mcpErrors };
     }
-
-    // All failed or no callbacks - return stringified results
-    if (!isArray && results.length === 1) {
-      return results[0].output;
-    }
-
-    // For arrays, return the original array
-    return calls;
+    const outputs = results.map((r) => r.output);
+    return {
+      output: outputs.every((o) => typeof o === 'string') ? outputs.join('\n') : outputs,
+      mcpErrors,
+    };
   }
 
   /**
@@ -337,19 +339,20 @@ export class FunctionCallbackHandler {
 
       if (isMcpErrorResult(result)) {
         return {
-          output: `MCP Tool Error (${toolName}): ${getMcpErrorMessage(result)}`,
+          output: formatMcpToolError(toolName, getMcpErrorMessage(result)),
           isError: true,
+          isMcpError: true,
         };
       }
 
-      const content = normalizeMcpToolContent(result?.content);
-      return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
+      return { output: formatMcpToolResult(toolName, result.content), isError: false };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = getThrownMcpErrorMessage(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
       return {
-        output: `MCP Tool Error (${toolName}): ${errorMessage}`,
+        output: formatMcpToolError(toolName, errorMessage),
         isError: true,
+        isMcpError: true,
       };
     }
   }

@@ -145,9 +145,7 @@ describe('MCP client HTTP redirects', () => {
     await client.initialize();
     expect(client.getAllTools()).toEqual([expect.objectContaining({ name: 'echo' })]);
     const result = await client.callTool('echo', { message: 'local-private-tool-input' });
-    expect(result).toMatchObject({
-      content: JSON.stringify([{ type: 'text', text: 'local-private-tool-input' }]),
-    });
+    expect(result.content).toBe('local-private-tool-input');
     const toolCall = origin.requests.find(
       (request) =>
         request.path === '/mcp' && request.body && JSON.parse(request.body).method === 'tools/call',

@@ -22,6 +22,7 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
+import { joinMcpErrors, MCP_FAILURE_METADATA } from '../mcp/util';
 import {
   applyGpt6RequestRules,
   getGpt6ChatReasoningEffort,
@@ -538,6 +539,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let flaggedOutput = false;
     let isRefusal = false;
     let output = '';
+    let mcpError: string | undefined;
     let logProbs: any;
     let finishReason: string;
 
@@ -607,10 +609,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               allCalls.push(functionCall);
             }
 
-            output = await this.functionCallbackHandler.processCalls(
+            const processed = await this.functionCallbackHandler.processCalls(
               allCalls.length === 1 ? allCalls[0] : allCalls,
               config.functionToolCallbacks,
             );
+            output = processed.output;
+            mcpError = joinMcpErrors(processed.mcpErrors);
           } else {
             // No callbacks configured, return raw tool/function calls
             // A confirmed content-filter block is intentionally empty, not a
@@ -637,6 +641,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       const completionDetails = data.usage && getOpenAICompletionTokenDetails(data.usage);
       return {
         output,
+        ...(mcpError ? { error: mcpError, metadata: { ...MCP_FAILURE_METADATA } } : {}),
         tokenUsage: cached
           ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
           : {
