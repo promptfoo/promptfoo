@@ -788,55 +788,43 @@ export function prepareRequestBody(
   return body;
 }
 
+// List price of a single image, or undefined when the model, size, and quality combination
+// has no published per-image rate.
+function getPerImageCost(model: string, size: string, quality?: string): number | undefined {
+  if (model === 'dall-e-2') {
+    return DALLE2_COSTS[size as DallE2Size];
+  }
+  if (model === 'dall-e-3') {
+    return DALLE3_COSTS[`${quality || 'standard'}_${size}`];
+  }
+
+  // Auto quality and size have no per-image rate; only use an exact table entry.
+  const costKey = `${quality}_${size}`;
+
+  if (isGptImage2(model)) {
+    return GPT_IMAGE2_COSTS[costKey];
+  }
+  if (isGptImage1(model)) {
+    return GPT_IMAGE1_COSTS[costKey];
+  }
+  if (isGptImage1Mini(model)) {
+    return GPT_IMAGE1_MINI_COSTS[costKey];
+  }
+  if (isGptImage15(model)) {
+    return GPT_IMAGE1_5_COSTS[costKey];
+  }
+
+  return undefined;
+}
+
 export function calculateImageCost(
   model: string,
   size: string,
   quality?: string,
   n: number = 1,
 ): number | undefined {
-  const imageQuality = quality || 'standard';
-  const gptImageQuality =
-    quality === 'medium' || quality === 'high' || quality === 'low' ? quality : 'low';
-
-  // Sunburst and Flare do not have fixed per-image prices.
-  if (isGptImage25(model) || isGptImage26(model)) {
-    return undefined;
-  }
-
-  if (model === 'dall-e-3') {
-    const costKey = `${imageQuality}_${size}`;
-    const costPerImage = DALLE3_COSTS[costKey] || DALLE3_COSTS['standard_1024x1024'];
-    return costPerImage * n;
-  } else if (model === 'dall-e-2') {
-    const costPerImage = DALLE2_COSTS[size as DallE2Size] || DALLE2_COSTS['1024x1024'];
-    return costPerImage * n;
-  } else if (isGptImage2(model)) {
-    if (quality !== 'medium' && quality !== 'high' && quality !== 'low') {
-      return undefined;
-    }
-
-    const costKey = `${gptImageQuality}_${size}`;
-    const costPerImage = GPT_IMAGE2_COSTS[costKey];
-    if (costPerImage === undefined) {
-      return undefined;
-    }
-
-    return costPerImage * n;
-  } else if (isGptImage1(model)) {
-    const costKey = `${gptImageQuality}_${size}`;
-    const costPerImage = GPT_IMAGE1_COSTS[costKey] || GPT_IMAGE1_COSTS['low_1024x1024'];
-    return costPerImage * n;
-  } else if (isGptImage1Mini(model)) {
-    const costKey = `${gptImageQuality}_${size}`;
-    const costPerImage = GPT_IMAGE1_MINI_COSTS[costKey] || GPT_IMAGE1_MINI_COSTS['low_1024x1024'];
-    return costPerImage * n;
-  } else if (isGptImage15(model)) {
-    const costKey = `${gptImageQuality}_${size}`;
-    const costPerImage = GPT_IMAGE1_5_COSTS[costKey] || GPT_IMAGE1_5_COSTS['low_1024x1024'];
-    return costPerImage * n;
-  }
-
-  return 0.04 * n;
+  const costPerImage = getPerImageCost(model, size, quality);
+  return typeof costPerImage === 'number' ? costPerImage * n : undefined;
 }
 
 function getImageTokenUsage(data: any, cached: boolean): TokenUsage | undefined {

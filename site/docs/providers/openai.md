@@ -912,6 +912,8 @@ providers:
 
 Set `size` to control the dimensions and `output_format` to choose the file type. For a transparent background, choose a model that supports transparency and use `background: transparent` with PNG or WebP. Supported sizes, formats, quality levels, and pricing depend on the model. [OpenAI image guide](https://developers.openai.com/api/docs/guides/image-generation) · [OpenAI pricing](https://developers.openai.com/api/docs/pricing)
 
+Promptfoo uses token usage to calculate image cost when rates are available. Otherwise, it uses the list price for the requested model, size, and quality. Without usage, cost is unavailable for GPT Image 2.5 and 2.6, automatic GPT Image settings, and unknown models. Cached responses cost zero.
+
 **GIF and SVG generation.** Select `openai:image:gpt-image-2.6-flare` or `openai:image:gpt-image-2.6-sunburst`. Both accept `complexity` (`low`, `medium`, or `high`) to control planning separately from rendering `quality`.
 
 - For a looping animation, describe the motion in the prompt and set `output_format: gif`. Use `frame_count` for the number of frames and `frame_duration_ms` for the time per frame.
