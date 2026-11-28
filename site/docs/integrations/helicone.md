@@ -7,13 +7,13 @@ description: Monitor and optimize LLM testing with Helicone integration in Promp
 
 [Helicone](https://helicone.ai/) is an open source observability platform that proxies your LLM requests and provides key insights into your usage, spend, latency and more.
 
-To reference prompts in Helicone:
+The `helicone://` prefix uses Helicone's [legacy Compile Prompt API](https://docs.helicone.ai/rest/prompt/post-v1prompt-compile) to render an existing prompt with variables from each test case.
 
-1. Log into [Helicone](https://www.helicone.ai) or create an account. Once you have an account, you can generate an [API key](https://helicone.ai/developer).
+1. Generate an [API key](https://us.helicone.ai/settings/api-keys) in the Helicone organization that owns the prompt.
 
 2. Set `HELICONE_API_KEY` in your shell, in a file passed with `--env-file`, or in your config's top-level `env` block.
 
-3. Use the `helicone://` prefix for your prompts, followed by the Helicone prompt id and version. For example:
+3. Use the prompt's user-defined ID after `helicone://`. Append `:major.minor` to select a specific version.
 
    ```yaml
    prompts:
@@ -26,7 +26,3 @@ To reference prompts in Helicone:
      - vars:
          # ...
    ```
-
-Variables from your promptfoo test cases will be automatically plugged into the Helicone prompt as variables.
-
-You can follow [this guide](https://docs.helicone.ai/features/prompts#prompts-and-experiments) to create a Prompt using Helicone
