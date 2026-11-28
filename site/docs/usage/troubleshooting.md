@@ -72,6 +72,10 @@ export PROMPTFOO_STRIP_METADATA=true
 
 You can use any combination of these variables to optimize memory usage while preserving the data you need.
 
+These flags apply to file exports, including evals that were not saved to the database and imported legacy results. They remove documented fields and transcript copies; they do not remove every occurrence of a value in free-form text. For example, stripping test variables preserves rendered prompt, response, and grading text. Prompt stripping also removes configured rubric prompts from test options, assertions, and grading results. Metadata stripping removes grading metadata; grading-result stripping also removes grading reasons.
+
+Export sanitization limits credential-bearing config, prompt, and variable fields to 64 nested object levels. Deeper content is replaced with `[...]`; fields that cannot be sanitized are omitted or replaced with a redaction marker. The original in-memory values remain available to hooks.
+
 ### Increase Node.js memory limit
 
 If you're still encountering memory issues after trying the above options, you can increase the amount of memory available to promptfoo by setting the `NODE_OPTIONS` environment variable:

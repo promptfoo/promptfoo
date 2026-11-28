@@ -11,6 +11,7 @@ import {
   projectPrompt,
   projectProviderResponse,
   projectTestCase,
+  projectTranscriptMetadata,
   redactSensitiveResultFieldsForDb,
   sanitizeForDb,
   sanitizeForDbWithSecrets,
@@ -432,6 +433,9 @@ export default class EvalResult {
     const response = projectProviderResponse(this.response, {
       stripMetadata: shouldStripMetadata,
       stripOutput: shouldStripResponseOutput,
+      stripPrompt: shouldStripPromptText,
+      stripVars: shouldStripTestVars,
+      stripGrading: shouldStripGradingResult,
     });
 
     const prompt = projectPrompt(this.prompt, shouldStripPromptText);
@@ -439,8 +443,8 @@ export default class EvalResult {
     const testCase = projectTestCase(this.testCase, {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
+      stripPrompt: shouldStripPromptText,
       stripOutput: shouldStripResponseOutput,
-      stripPromptText: shouldStripPromptText,
     });
     // Mirror the live accounting in the evaluator: a response counts as one provider
     // request even when it reports no token usage, and a grading result counts as one
@@ -464,7 +468,7 @@ export default class EvalResult {
       error: this.error || undefined,
       gradingResult: shouldStripGradingResult
         ? null
-        : projectGradingResult(this.gradingResult, shouldStripPromptText),
+        : projectGradingResult(this.gradingResult, shouldStripMetadata, shouldStripPromptText),
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,
@@ -487,11 +491,20 @@ export default class EvalResult {
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
       metadata: shouldStripMetadata
         ? {}
-        : projectOutputMetadata(
-            this.metadata,
-            shouldStripResponseOutput,
-            this.response?.metadata,
-            this.testCase.metadata,
+        : projectTranscriptMetadata(
+            projectOutputMetadata(
+              this.metadata,
+              shouldStripResponseOutput,
+              this.response?.metadata,
+              this.testCase?.metadata,
+            ),
+            {
+              stripPrompt: shouldStripPromptText,
+              stripOutput: shouldStripResponseOutput,
+              stripVars: shouldStripTestVars,
+              stripGrading: shouldStripGradingResult,
+            },
+            this.testCase?.metadata,
           ),
       failureReason: this.failureReason,
     };
@@ -510,13 +523,17 @@ export { getResultIndexKey } from '../evaluator/resultIndex';
 // Compatibility exports for existing source consumers. New callers use evaluator/resultProcessing.
 export {
   getStripFlags,
+  type OutputStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistRepeatMetadata,
   persistTraceMetadata,
   projectPrompt,
   projectTracesForOutput,
+  sanitizePromptForArtifact,
   sanitizeProvider,
   sanitizeResultForJsonlArtifact,
+  sanitizeSummaryForArtifact,
+  sanitizeTableForArtifact,
   stripRepeatLinkageFromMetadata,
   stripTraceLinkageFromMetadata,
   toSerializableProviderRef,

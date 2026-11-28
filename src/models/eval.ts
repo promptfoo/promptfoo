@@ -68,8 +68,9 @@ import EvalResult, {
   PROMPTFOO_METADATA_KEY,
   persistRepeatMetadata,
   persistTraceMetadata,
-  projectPrompt,
   projectTracesForOutput,
+  sanitizePromptForArtifact,
+  sanitizeSummaryForArtifact,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 import { generateIdFromPrompt } from './prompt';
@@ -102,17 +103,22 @@ export function createEvalId(createdAt: Date = new Date()) {
 
 type EvalRelationDb = Pick<Awaited<ReturnType<typeof getDb>>, 'insert'>;
 
-export async function insertEvalPrompts(tx: EvalRelationDb, evalId: string, prompts: Prompt[]) {
+export async function insertEvalPrompts(
+  tx: EvalRelationDb,
+  evalId: string,
+  prompts: Prompt[],
+  preserveIds = false,
+) {
   for (const prompt of prompts) {
     const label = prompt.label || prompt.display || prompt.raw;
-    const promptId = generateIdFromPrompt(prompt);
+    // Completed imports can share a stripped label but still refer to distinct result columns.
+    const promptId = (preserveIds && prompt.id) || generateIdFromPrompt(prompt);
     await tx
       .insert(promptsTable)
       .values({ id: promptId, prompt: label })
       .onConflictDoNothing()
       .run();
     await tx.insert(evalsToPromptsTable).values({ evalId, promptId }).onConflictDoNothing().run();
-    logger.debug(`Inserting prompt ${promptId}`);
   }
 }
 
@@ -567,7 +573,7 @@ export default class Eval {
         })
         .run();
 
-      await insertEvalPrompts(tx, evalId, renderedPrompts);
+      await insertEvalPrompts(tx, evalId, renderedPrompts, Boolean(opts?.completedPrompts));
 
       if (opts?.results && opts.results.length > 0) {
         const res = await tx
@@ -732,11 +738,11 @@ export default class Eval {
     return this.prompts;
   }
 
-  async getTable(): Promise<EvaluateTable> {
+  async getTable(stripFlags = getStripFlags(this.config.env)): Promise<EvaluateTable> {
     if (this.useOldResults()) {
       return this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] };
     }
-    return convertResultsToTable(await this.toResultsFile());
+    return convertResultsToTable(await this.toResultsFile(stripFlags));
   }
 
   async addResult(result: EvaluateResult) {
@@ -1507,7 +1513,9 @@ export default class Eval {
     return calculator.getSummary();
   }
 
-  async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
+  async toEvaluateSummary(
+    stripFlags = getStripFlags(this.config.env),
+  ): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       return {
@@ -1523,9 +1531,7 @@ export default class Eval {
     }
 
     const stats = await this.getStats();
-    const stripFlags = getStripFlags(this.config.env);
-
-    const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
+    const prompts = this.prompts.map((prompt) => sanitizePromptForArtifact(prompt, stripFlags));
 
     const calculator = new RepeatStabilityCalculator();
     const results = this.results.map((result) => {
@@ -1592,19 +1598,19 @@ export default class Eval {
     }
   }
 
-  async toResultsFile(): Promise<ResultsFile> {
+  async toResultsFile(stripFlags = getStripFlags(this.config.env)): Promise<ResultsFile> {
     const traces = await this.getTraces();
-    const stripFlags = getStripFlags(this.config.env);
+    const prompts = this.getPrompts();
 
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
-      results: await this.toEvaluateSummary(),
+      results: sanitizeSummaryForArtifact(await this.toEvaluateSummary(stripFlags), stripFlags),
       config: sanitizeConfigForOutput(this.config, stripFlags),
       author: this.author || null,
-      prompts: this.getPrompts().map((prompt) =>
-        projectPrompt(prompt, stripFlags.shouldStripPromptText),
-      ),
+      prompts: Array.isArray(prompts)
+        ? prompts.map((prompt) => sanitizePromptForArtifact(prompt, stripFlags))
+        : prompts,
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
       ...(traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),
