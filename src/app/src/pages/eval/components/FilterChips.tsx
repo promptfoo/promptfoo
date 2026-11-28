@@ -123,7 +123,7 @@ export function FilterChips() {
         operator: 'is_defined',
         value: '',
         field: metric,
-        logicOperator: 'or',
+        logicOperator: Object.keys(filters?.values ?? {}).length === 0 ? 'or' : undefined,
       });
     }
   };

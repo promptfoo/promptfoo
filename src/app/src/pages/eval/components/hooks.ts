@@ -153,20 +153,23 @@ export function useApplyFilterFromMetric() {
   return useCallback(
     (value: string) => {
       const asPolicy = isPolicyMetric(value);
+      // Let the store inherit the current operator; keep OR for the first metric.
+      const logicOperator =
+        filters?.values && Object.keys(filters.values).length > 0 ? undefined : ('or' as const);
       const filter = asPolicy
         ? {
             type: 'policy' as const,
             operator: 'equals' as const,
             value: deserializePolicyIdFromMetric(value),
             field: undefined,
-            logicOperator: 'or' as const,
+            logicOperator,
           }
         : {
             type: 'metric' as const,
             operator: 'is_defined' as const,
             value: '',
             field: value,
-            logicOperator: 'or' as const,
+            logicOperator,
           };
 
       // If this filter is already applied, do not re-apply it.
@@ -177,7 +180,6 @@ export function useApplyFilterFromMetric() {
             f.type === filter.type &&
             f.value === filter.value &&
             f.operator === filter.operator &&
-            f.logicOperator === filter.logicOperator &&
             f.field === filter.field,
         )
       ) {

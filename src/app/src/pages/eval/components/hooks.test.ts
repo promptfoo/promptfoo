@@ -1673,7 +1673,7 @@ describe('useApplyFilterFromMetric', () => {
       operator: 'is_defined',
       value: '',
       field: metricName,
-      logicOperator: 'or',
+      logicOperator: undefined,
     });
   });
 
