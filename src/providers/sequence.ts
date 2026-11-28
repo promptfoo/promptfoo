@@ -44,7 +44,7 @@ export class SequenceProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
 
-    const nunjucks = getNunjucksEngine();
+    const nunjucks = getNunjucksEngine(context.filters);
     const responses: string[] = [];
     const accumulatedTokenUsage = createEmptyTokenUsage();
 
