@@ -91,7 +91,7 @@ const ConfigSchema = z.object({
 
 const TextGenResponseSchema = z.object({
   model_id: z.string(),
-  model_version: z.string(),
+  model_version: z.string().optional(),
   created_at: z.string(),
   results: z.array(
     z.object({
