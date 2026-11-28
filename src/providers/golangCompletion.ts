@@ -79,9 +79,11 @@ export class GolangProvider implements ApiProvider {
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
+    // `__evalId` is new on every eval run, so keeping it in the key would prevent any cross-run hit.
+    const { __evalId, ...cacheVars } = context?.vars ?? {};
     const cacheKey = `golang:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
-    )}:${JSON.stringify(context?.vars)}`;
+    )}:${JSON.stringify(context?.vars && cacheVars)}`;
     const cache = await getCache();
     let cachedResult;
 
