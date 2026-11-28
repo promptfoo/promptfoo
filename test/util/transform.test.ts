@@ -194,6 +194,7 @@ describe('util', () => {
       const transformFunctionPath = 'file://transform.js:namedFunction';
       const transformedOutput = await transform(transformFunctionPath, output, context);
       expect(transformedOutput).toBe('HELLO NAMED');
+      expect(mockedImportModule).toHaveBeenCalledWith('transform.js', 'namedFunction');
     });
 
     it('transforms output using a named function from a Python file', async () => {
