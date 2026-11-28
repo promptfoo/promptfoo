@@ -1225,6 +1225,32 @@ describe('JavaScript file references', () => {
     expect(result.reason).not.toMatch(/\nundefined$/);
   });
 
+  it('should not xfail JavaScript execution errors', async () => {
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: () => {
+        throw new Error('boom');
+      },
+      xfail: true,
+    };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Custom function threw error: boom'),
+      metadata: { scriptError: true },
+    });
+    expect(result.metadata?.xfail).toBeUndefined();
+  });
+
   it('should serialize function-valued assertions returned inside a custom GradingResult', async () => {
     const output = 'Expected output';
     const assertion: Assertion = {
@@ -1502,7 +1528,7 @@ describe('JavaScript file references', () => {
     expect(result.reason).toContain('finite scores and weights. Got type object.');
     expect(result.reason).not.toContain('diagnostic-placeholder');
     expect(result.reason).not.toContain('requestHeaders');
-    expect(result.metadata).toBeUndefined();
+    expect(result.metadata).toEqual({ scriptError: true });
   });
 
   it.each([

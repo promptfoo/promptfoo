@@ -2125,6 +2125,25 @@ function usesExampleProvider(testSuite: TestSuite) {
   });
 }
 
+function usesAssertionXFail(tests: AtomicTestCase[]): boolean {
+  return tests.some((test) =>
+    (test.assert ?? []).some((assertion) => {
+      if (!assertion) {
+        return false;
+      }
+      if ('xfail' in assertion && assertion.xfail !== undefined) {
+        return true;
+      }
+      // Walk into assert-set entries
+      if ('assert' in assertion && Array.isArray((assertion as { assert?: unknown }).assert)) {
+        const nested = (assertion as { assert?: Array<{ xfail?: unknown }> }).assert ?? [];
+        return nested.some((child) => child && child.xfail !== undefined);
+      }
+      return false;
+    }),
+  );
+}
+
 interface EvaluationDeadline {
   startTime: number;
   maxEvalTimeMs: number;
@@ -3891,6 +3910,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     );
     await this.store.appendPrompts(prompts);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
+
+    if (usesAssertionXFail(tests)) {
+      telemetry.record('feature_used', { feature: 'assertion_xfail' });
+    }
 
     const varNames = await prepareTestVariables(tests, testSuite);
     // Preserve configured/transformed variable order before concurrent rows finish.

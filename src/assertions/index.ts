@@ -1,4 +1,3 @@
-import fs from 'fs/promises';
 import path from 'path';
 
 import async from 'async';
@@ -34,15 +33,16 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
+  isApiProvider,
   type TraceData,
   type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
+import { REDACTED, sanitizeUrlForLogging } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
-import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
@@ -355,6 +355,208 @@ export function renderMetricName(
   }
 }
 
+function getProviderIdentifiers(provider?: ApiProvider): string[] {
+  const identifiers = new Set<string>();
+
+  if (provider?.label) {
+    identifiers.add(provider.label);
+  }
+
+  try {
+    const providerId = provider?.id();
+    if (providerId) {
+      identifiers.add(providerId);
+    }
+  } catch {
+    // Ignore providers with non-callable or failing id implementations.
+  }
+
+  return Array.from(identifiers);
+}
+
+function redactXFailIdentifier(identifier: string): string {
+  const marker = /:\/\/|(?:^|[\s(])\//.exec(identifier);
+  if (!marker) {
+    return identifier;
+  }
+
+  let start = marker.index;
+  if (marker[0] === '://') {
+    // Find the scheme from its separator once, even after a long label.
+    while (start > 0 && /[a-z0-9+.-]/i.test(identifier[start - 1])) {
+      start--;
+    }
+    if (!/[a-z]/i.test(identifier[start])) {
+      return REDACTED;
+    }
+  } else {
+    start += marker[0].length - 1;
+  }
+
+  const wrapped = identifier[start - 1] === '(' && identifier.endsWith(')');
+  const url = identifier.slice(start, wrapped ? -1 : undefined);
+  // Whitespace can be part of a credential. With no reliable boundary between
+  // the URL and more label text, withhold the entire ambiguous suffix.
+  const displayUrl =
+    /\s/.test(url) || identifier.includes('://', marker.index + marker[0].length)
+      ? REDACTED
+      : sanitizeUrlForLogging(url);
+  return identifier.slice(0, start) + displayUrl + (wrapped ? ')' : '');
+}
+
+function getProviderDisplayName(provider?: ApiProvider): string {
+  return redactXFailIdentifier(getProviderIdentifiers(provider)[0] ?? 'unknown provider');
+}
+
+function providerIdentifierMatches(pattern: string, identifier: string): boolean {
+  if (pattern === identifier) {
+    return true;
+  }
+
+  // Only the most recent star needs to expand. Trying combinations of earlier
+  // stars makes a near miss exponentially expensive for a regular expression.
+  let patternIndex = 0;
+  let identifierIndex = 0;
+  let lastStar = -1;
+  let starEnd = 0;
+  while (identifierIndex < identifier.length) {
+    const token = pattern[patternIndex];
+    if (token === '*') {
+      lastStar = patternIndex++;
+      starEnd = identifierIndex;
+    } else if (token === '?' || token === identifier[identifierIndex]) {
+      patternIndex++;
+      identifierIndex++;
+    } else if (lastStar === -1) {
+      return false;
+    } else {
+      patternIndex = lastStar + 1;
+      identifierIndex = ++starEnd;
+    }
+  }
+  while (pattern[patternIndex] === '*') {
+    patternIndex++;
+  }
+  return patternIndex === pattern.length;
+}
+
+function getXFailProviderPatterns(assertion: Assertion): string[] | undefined {
+  const { xfail } = assertion;
+
+  if (xfail === true) {
+    return undefined;
+  }
+  if (!xfail) {
+    return [];
+  }
+  if (typeof xfail === 'string') {
+    return [xfail];
+  }
+  if (Array.isArray(xfail)) {
+    return xfail;
+  }
+  return Array.isArray(xfail.providers) ? xfail.providers : [xfail.providers];
+}
+
+function getXFailReason(assertion: Assertion): string | undefined {
+  const { xfail } = assertion;
+  return xfail && typeof xfail === 'object' && !Array.isArray(xfail) ? xfail.reason : undefined;
+}
+
+function getProviderXFailMatch(
+  assertion: Assertion,
+  provider?: ApiProvider,
+): { provider: string; pattern?: string; reason?: string } | undefined {
+  const patterns = getXFailProviderPatterns(assertion);
+  const reason = getXFailReason(assertion);
+
+  if (!patterns) {
+    return { provider: getProviderDisplayName(provider), reason };
+  }
+  if (patterns.length === 0) {
+    return undefined;
+  }
+
+  const identifiers = getProviderIdentifiers(provider);
+  const pattern = patterns.find(
+    (pattern) =>
+      pattern === '*' ||
+      identifiers.some((identifier) => providerIdentifierMatches(pattern, identifier)),
+  );
+
+  return pattern
+    ? {
+        provider: getProviderDisplayName(provider),
+        pattern: redactXFailIdentifier(pattern),
+        reason,
+      }
+    : undefined;
+}
+
+function applyProviderXFail(
+  assertion: Assertion,
+  result: GradingResult,
+  provider?: ApiProvider,
+): GradingResult {
+  if (assertion.weight === 0) {
+    return result;
+  }
+  if (
+    result.metadata?.graderError === true ||
+    result.metadata?.scriptError === true ||
+    result.metadata?.webhookError === true ||
+    result.metadata?.similarityProviderError === true
+  ) {
+    return result;
+  }
+
+  const match = getProviderXFailMatch(assertion, provider);
+  if (!match) {
+    return result;
+  }
+
+  const reasonSuffix = match.reason ? ` (${match.reason})` : '';
+  const normalizedNamedScores = result.namedScores
+    ? {
+        namedScores: Object.fromEntries(
+          Object.keys(result.namedScores).map((metric) => [metric, result.pass ? 0 : 1]),
+        ),
+      }
+    : {};
+  const metadata = {
+    ...result.metadata,
+    xfail: {
+      expected: true,
+      originalPass: result.pass,
+      originalReason: result.reason,
+      originalScore: result.score,
+      provider: match.provider,
+      ...(match.pattern && { pattern: match.pattern }),
+      ...(match.reason && { reason: match.reason }),
+    },
+  };
+
+  if (result.pass) {
+    return {
+      ...result,
+      ...normalizedNamedScores,
+      pass: false,
+      score: 0,
+      reason: `Assertion was expected to fail for provider "${match.provider}"${reasonSuffix}, but passed`,
+      metadata,
+    };
+  }
+
+  return {
+    ...result,
+    ...normalizedNamedScores,
+    pass: true,
+    score: 1,
+    reason: `Assertion failed as expected for provider "${match.provider}"${reasonSuffix}: ${result.reason}`,
+    metadata,
+  };
+}
+
 /**
  * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"
  * or "not-contains" is inverse of "contains".
@@ -443,6 +645,9 @@ async function runAssertionInternal({
   traceData?: TraceData | null;
   claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
+  const applyXFail = (result: GradingResult) =>
+    applyProviderXFail(assertion, result, isApiProvider(test.provider) ? test.provider : provider);
+
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
 
@@ -658,7 +863,7 @@ async function runAssertionInternal({
 
   // Check for redteam assertions first
   if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams, claimStoredGradingUsage);
+    return applyXFail(await handleRedteam(assertionParams, claimStoredGradingUsage));
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
@@ -676,7 +881,7 @@ async function runAssertionInternal({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    return applyAssertionWeight(result, assertion.weight);
+    return applyXFail(applyAssertionWeight(result, assertion.weight));
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);
@@ -939,17 +1144,7 @@ export async function runCompareAssertion(
   }));
 }
 
-export async function readAssertions(filePath: string): Promise<Assertion[]> {
-  try {
-    const assertions = loadYaml(await fs.readFile(filePath, 'utf-8')) as Assertion[];
-    if (!Array.isArray(assertions) || assertions[0]?.type === undefined) {
-      throw new Error('Assertions file must be an array of assertion objects');
-    }
-    return assertions;
-  } catch (err) {
-    throw new Error(`Failed to read assertions from ${filePath}:\n${err}`);
-  }
-}
+export { readAssertions } from './utils';
 
 // These exports are used by the node.js package (index.ts)
 export default {
