@@ -22,6 +22,12 @@ assert:
 
 This assertion will use a language model to grade the output based on the specified rubric.
 
+Keep grading rules separate from untrusted candidate text. Give the grader only the tools and data it needs. Use [deterministic assertions](/docs/configuration/expected-outputs/deterministic) for criteria you can enforce in code.
+
+Calibrate with labeled passes, failures, and edge cases. JSON parsing checks syntax. Inspect the raw grader's `pass`, `score`, and `reason` against each label. Without an explicit verdict, a positive score passes by default. A response with neither a verdict nor a finite score is a grader error. Track grader and provider errors separately from judged failures.
+
+Set the grader provider explicitly. Record the model, parameters, and rubric, and repeat the calibration whenever they change.
+
 ## How it works
 
 Under the hood, `llm-rubric` uses a model to evaluate the output based on the criteria you provide. By default, it uses different models depending on which API keys are available:
