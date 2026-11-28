@@ -1,5 +1,6 @@
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { getEnvBool } from '../envars';
+import { assertCheckpointBounds } from '../evaluator/checkpointMetadata';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { extractBlobHashesFromValue } from './blobRefs';
@@ -49,7 +50,7 @@ function getKindFromMimeType(mimeType: string): BlobKind {
  * @internal Exported for testing
  */
 export function normalizeAudioMimeType(format: string | undefined): string {
-  if (!format) {
+  if (typeof format !== 'string' || !format) {
     return 'audio/wav';
   }
 
@@ -115,8 +116,14 @@ type StoreOnce = (
   minSizeBytes?: number,
 ) => Promise<BlobRef | null>;
 
-function createStoreOnce(blobContext: BlobContext): StoreOnce {
-  const cache = new Map<string, Promise<BlobRef>>();
+type StoragePolicy = boolean | (() => Promise<boolean>);
+
+function createStoreOnce(
+  blobContext: BlobContext,
+  storageEnabled: StoragePolicy = isBlobStorageEnabled(),
+): StoreOnce {
+  const cache = new Map<string, Promise<BlobRef | null>>();
+  let resolvedPolicy: Promise<boolean> | undefined;
   return async (base64OrDataUrl, defaultMimeType, location, kind, minSizeBytes) => {
     const parsed = parseBinary(base64OrDataUrl, defaultMimeType);
     if (!parsed || !shouldExternalize(parsed.buffer, minSizeBytes)) {
@@ -129,16 +136,27 @@ function createStoreOnce(blobContext: BlobContext): StoreOnce {
       return existing;
     }
 
-    if (!isBlobStorageEnabled()) {
-      return null;
-    }
-
-    // Blob extraction is local-only. Remote synchronization happens when an eval is shared.
-    const pendingStore = storeBlob(parsed.buffer, parsed.mimeType || 'application/octet-stream', {
-      ...blobContext,
-      location,
-      kind,
-    }).then(({ ref }) => ref);
+    const pendingStore = (async () => {
+      // Resolve only for eligible bytes, once per extraction even when disabled
+      // or rejected. Deferring the callback lets the payload cache reserve first.
+      const enabled =
+        typeof storageEnabled === 'function'
+          ? await (resolvedPolicy ??= Promise.resolve().then(storageEnabled))
+          : storageEnabled;
+      if (!enabled) {
+        return null;
+      }
+      const { ref } = await storeBlob(
+        parsed.buffer,
+        parsed.mimeType || 'application/octet-stream',
+        {
+          ...blobContext,
+          location,
+          kind,
+        },
+      );
+      return ref;
+    })();
     cache.set(cacheKey, pendingStore);
 
     try {
@@ -195,6 +213,7 @@ async function storeRawSvgOutputPreview(
   metadata: ProviderResponse['metadata'],
   storeOnce: StoreOnce,
   context?: BlobContext,
+  location = 'response.output',
 ): Promise<{ metadata: ProviderResponse['metadata']; mutated: boolean }> {
   if (typeof output !== 'string') {
     return { metadata, mutated: false };
@@ -212,7 +231,7 @@ async function storeRawSvgOutputPreview(
     return { metadata, mutated: false };
   }
 
-  const stored = await storeOnce(preview.dataUrl, 'image/svg+xml', 'response.output', 'image', 0);
+  const stored = await storeOnce(preview.dataUrl, 'image/svg+xml', location, 'image', 0);
   if (!stored) {
     return { metadata, mutated: false };
   }
@@ -284,6 +303,7 @@ async function externalizeDataUrls(
 async function externalizeMetadataAudio(
   metadata: ProviderResponse['metadata'],
   storeOnce: StoreOnce,
+  location: string,
 ): Promise<{ value: ProviderResponse['metadata']; mutated: boolean }> {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
     return { value: metadata, mutated: false };
@@ -303,7 +323,7 @@ async function externalizeMetadataAudio(
   const stored = await storeOnce(
     audioRecord.data,
     normalizeAudioMimeType(typeof audioRecord.format === 'string' ? audioRecord.format : undefined),
-    'response.metadata.audio.data',
+    `${location}.audio.data`,
     'audio',
   );
   if (!stored) {
@@ -323,13 +343,51 @@ async function externalizeMetadataAudio(
   };
 }
 
-/**
- * Best-effort extraction of binary data from provider responses.
- * Currently focuses on audio.data fields and data URL outputs.
- */
-export async function extractAndStoreBinaryData(
+/** Completed target responses use the normal response media schema, not arbitrary metadata. */
+async function externalizeCompletedTargetResponses<T>(
+  metadata: T,
+  context: BlobContext,
+  storeOnce: StoreOnce,
+  location: string,
+): Promise<T> {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return metadata;
+  }
+  const record = metadata as Record<string, unknown>;
+  if (record.interruptedStrategy !== true || !Array.isArray(record.completedTargetResponses)) {
+    return metadata;
+  }
+  let mutated = false;
+  const completedTargetResponses = await Promise.all(
+    record.completedTargetResponses.map(async (entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        return entry;
+      }
+      const response = entry.response;
+      if (!response || typeof response !== 'object' || Array.isArray(response)) {
+        return entry;
+      }
+      const processed = await extractResponseBinaryData(
+        response,
+        context,
+        storeOnce,
+        `${location}.completedTargetResponses[${index}].response`,
+      );
+      if (processed === response) {
+        return entry;
+      }
+      mutated = true;
+      return { ...entry, response: processed };
+    }),
+  );
+  return (mutated ? { ...record, completedTargetResponses } : metadata) as T;
+}
+
+async function extractResponseBinaryData(
   response: ProviderResponse | null | undefined,
-  context?: BlobContext,
+  context: BlobContext,
+  storeOnce: StoreOnce,
+  location: string,
 ): Promise<ProviderResponse | null | undefined> {
   if (!response) {
     return response;
@@ -337,15 +395,13 @@ export async function extractAndStoreBinaryData(
 
   let mutated = false;
   const next: ProviderResponse = { ...response };
-  const blobContext = context || {};
-  const storeOnce = createStoreOnce(blobContext);
 
   // Audio at top level
   if (response.audio?.data && typeof response.audio.data === 'string') {
     const stored = await storeOnce(
       response.audio.data,
       normalizeAudioMimeType(response.audio.format),
-      'response.audio.data',
+      `${location}.audio.data`,
       'audio',
     );
     if (stored) {
@@ -360,16 +416,22 @@ export async function extractAndStoreBinaryData(
   }
 
   // Images array
-  if (response.images?.length) {
+  if (Array.isArray(response.images)) {
     const externalizedImages = await Promise.all(
       response.images.map(async (img, idx) => {
-        if (!img.data || typeof img.data !== 'string' || !isDataUrl(img.data)) {
+        if (
+          !img ||
+          typeof img !== 'object' ||
+          Array.isArray(img) ||
+          typeof img.data !== 'string' ||
+          !isDataUrl(img.data)
+        ) {
           return img;
         }
         const stored = await storeOnce(
           img.data,
           img.mimeType || 'image/png',
-          `response.images[${idx}].data`,
+          `${location}.images[${idx}].data`,
           'image',
         );
         if (stored) {
@@ -391,6 +453,7 @@ export async function extractAndStoreBinaryData(
     next.metadata || response.metadata,
     storeOnce,
     context,
+    `${location}.output`,
   );
   if (rawSvgPreview.mutated) {
     next.metadata = rawSvgPreview.metadata;
@@ -408,7 +471,7 @@ export async function extractAndStoreBinaryData(
           const stored = await storeOnce(
             turn.audio.data,
             normalizeAudioMimeType(turn.audio.format),
-            `response.turns[${idx}].audio.data`,
+            `${location}.turns[${idx}].audio.data`,
             'audio',
           );
           if (stored) {
@@ -437,7 +500,7 @@ export async function extractAndStoreBinaryData(
     const stored = await storeOnce(
       response.output,
       mimeType,
-      'response.output',
+      `${location}.output`,
       getKindFromMimeType(mimeType),
     );
     if (stored) {
@@ -465,7 +528,7 @@ export async function extractAndStoreBinaryData(
             const stored = await storeOnce(
               item.b64_json,
               'image/png',
-              'response.output.data[].b64_json',
+              `${location}.output.data[].b64_json`,
               'image',
             );
             if (stored) {
@@ -491,34 +554,88 @@ export async function extractAndStoreBinaryData(
     } catch (err) {
       logger.debug('[BlobExtractor] Failed to parse base64 JSON output', {
         error: err instanceof Error ? err.message : String(err),
-        location: 'response.output',
+        location: `${location}.output`,
       });
     }
   }
 
   const metadata = next.metadata || response.metadata;
   if (metadata) {
-    const { value: audioValue, mutated: audioMetadataMutated } = await externalizeMetadataAudio(
+    const checkpointMetadata = await externalizeCompletedTargetResponses(
       metadata,
+      context,
       storeOnce,
+      `${location}.metadata`,
+    );
+    const { value: audioValue, mutated: audioMetadataMutated } = await externalizeMetadataAudio(
+      checkpointMetadata,
+      storeOnce,
+      `${location}.metadata`,
     );
     const { value, mutated: dataUrlMetadataMutated } = await externalizeDataUrls(
       audioValue,
       storeOnce,
-      'response.metadata',
+      `${location}.metadata`,
     );
-    if (audioMetadataMutated || dataUrlMetadataMutated) {
+    if (checkpointMetadata !== metadata || audioMetadataMutated || dataUrlMetadataMutated) {
       next.metadata = value as ProviderResponse['metadata'];
       mutated = true;
     }
   }
 
-  const finalResponse = mutated ? next : response;
-  if (blobContext.evalId) {
-    await recordExistingBlobReferences(finalResponse, blobContext, 'response');
-  }
+  return mutated ? next : response;
+}
 
-  return finalResponse;
+/** Best-effort local extraction of provider response audio, images, and data URLs. */
+export async function extractAndStoreBinaryData(
+  response: ProviderResponse | null | undefined,
+  context: BlobContext = {},
+): Promise<ProviderResponse | null | undefined> {
+  assertCheckpointBounds(response?.metadata);
+  const processed = await extractResponseBinaryData(
+    response,
+    context,
+    createStoreOnce(context),
+    'response',
+  );
+  if (context.evalId) {
+    await recordExistingBlobReferences(processed, context, 'response');
+  }
+  return processed;
+}
+
+/**
+ * Persist response media and the independent result-level checkpoint copy together.
+ * Both copies share a store-once cache; unrelated result metadata stays untouched.
+ * A policy callback runs once per extraction, only if eligible media needs storage.
+ */
+export async function extractAndStoreResultMedia<T>(
+  fields: { response: ProviderResponse | null | undefined; metadata: T },
+  context: BlobContext,
+  storageEnabled: StoragePolicy = isBlobStorageEnabled(),
+): Promise<{ response: ProviderResponse | null | undefined; metadata: T }> {
+  assertCheckpointBounds(fields.metadata);
+  assertCheckpointBounds(fields.response?.metadata);
+  const storeOnce = createStoreOnce(context, storageEnabled);
+  const response = await extractResponseBinaryData(fields.response, context, storeOnce, 'response');
+  const metadata = await externalizeCompletedTargetResponses(
+    fields.metadata,
+    context,
+    storeOnce,
+    'metadata',
+  );
+  if (context.evalId) {
+    await recordExistingBlobReferences(response, context, 'response');
+    const checkpoint = metadata as Record<string, unknown> | null | undefined;
+    if (checkpoint?.interruptedStrategy === true) {
+      await recordExistingBlobReferences(
+        checkpoint.completedTargetResponses,
+        context,
+        'metadata.completedTargetResponses',
+      );
+    }
+  }
+  return { response, metadata };
 }
 
 export function isBlobStorageEnabled(): boolean {
