@@ -2,6 +2,8 @@ export interface AttributeSanitizationOptions {
   redactAttributes?: string[];
   sanitizeSensitiveAttributes?: boolean;
   truncateValues?: boolean;
+  redactedValues?: Set<string>;
+  truncatedValues?: Map<string, string>;
 }
 
 // Match normalized names; the cookie pattern also covers set-cookie.
@@ -55,7 +57,12 @@ export function sanitizeTraceAttributes(
 
   const sanitizeValue = (value: any): any => {
     if (typeof value === 'string') {
-      return truncateValues && value.length > 400 ? `${value.slice(0, 400)}…` : value;
+      if (truncateValues && value.length > 400) {
+        const truncated = `${value.slice(0, 400)}…`;
+        options.truncatedValues?.set(value, truncated);
+        return truncated;
+      }
+      return value;
     }
     if (Array.isArray(value)) {
       return value.map(sanitizeValue);
@@ -66,9 +73,29 @@ export function sanitizeTraceAttributes(
     return value;
   };
 
+  const collectRedactedValues = (value: unknown): void => {
+    if (!options.redactedValues) {
+      return;
+    }
+    const pending = [value];
+    const seen = new WeakSet<object>();
+    while (pending.length > 0) {
+      const item = pending.pop();
+      if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+        options.redactedValues.add(String(item));
+      } else if (item && typeof item === 'object' && !seen.has(item)) {
+        seen.add(item);
+        for (const value of Object.values(item)) {
+          pending.push(value);
+        }
+      }
+    }
+  };
+
   const sanitized: Record<string, any> = {};
   for (const [key, value] of Object.entries(attributes)) {
     if (customPatterns.some((pattern) => key.toLowerCase().includes(pattern))) {
+      collectRedactedValues(value);
       sanitized[key] = '[REDACTED]';
       continue;
     }
@@ -78,6 +105,7 @@ export function sanitizeTraceAttributes(
         !SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) &&
         SENSITIVE_ATTRIBUTE_PATTERN.test(lowerKey.replace(/[^a-z0-9]/g, ''))
       ) {
+        collectRedactedValues(value);
         sanitized[key] = '<redacted>';
         continue;
       }

@@ -1,0 +1,1 @@
+ALTER TABLE `spans` ADD `events` text;

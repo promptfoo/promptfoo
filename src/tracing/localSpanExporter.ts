@@ -22,6 +22,12 @@ function toStoredAttribute(value: unknown): unknown {
   return value;
 }
 
+function storeAttributes(attributes: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(attributes).map(([key, value]) => [key, toStoredAttribute(value)]),
+  );
+}
+
 /**
  * A span exporter that writes spans to the local TraceStore (SQLite).
  * This allows OTEL spans to be stored locally for analysis in the promptfoo UI.
@@ -66,11 +72,12 @@ export class LocalSpanExporter implements SpanExporter {
           name: span.name,
           startTime: startTimeMs,
           endTime: endTimeMs,
-          attributes: Object.fromEntries(
-            Object.entries({ ...span.resource.attributes, ...span.attributes }).map(
-              ([key, value]) => [key, toStoredAttribute(value)],
-            ),
-          ),
+          attributes: storeAttributes({ ...span.resource.attributes, ...span.attributes }),
+          events: span.events?.map((event) => ({
+            name: event.name,
+            timestamp: event.time[0] * 1e3 + event.time[1] / 1e6,
+            attributes: storeAttributes(event.attributes ?? {}),
+          })),
           statusCode: span.status.code,
           statusMessage: span.status.message,
         };
