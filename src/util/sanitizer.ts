@@ -1740,3 +1740,124 @@ export function sanitizeUrlForLogging(url: string): string {
     return unparseableUrlMightLeakSecret(url) || hasOpaquePath ? REDACTED : sanitized;
   }
 }
+
+const LOOSE_HTTP_SCHEME = /(^|[\s(=])(https?):[\\/]*(?=[^\\/\s])/gi;
+const URL_TAB_OR_NEWLINE = /[\t\n\r]/g;
+const HTTP_SCHEME_MARKER = /(?:^|[^a-z0-9+.-])https?:/i;
+
+/**
+ * Apply the input clean-up the WHATWG URL parser (and therefore `fetch` and the
+ * HTTP provider) performs before parsing: remove ASCII tab and newline anywhere
+ * and trim leading and trailing C0 control or space characters. Without this,
+ * an id like `https:<TAB>host/path?api_key=...` is a valid endpoint at request
+ * time but hides its scheme from the checks below.
+ */
+function normalizeLikeUrlParser(value: string): string {
+  const withoutTabOrNewline = value.replace(URL_TAB_OR_NEWLINE, '');
+  let start = 0;
+  let end = withoutTabOrNewline.length;
+  while (start < end && withoutTabOrNewline.charCodeAt(start) <= 0x20) {
+    start++;
+  }
+  while (end > start && withoutTabOrNewline.charCodeAt(end - 1) <= 0x20) {
+    end--;
+  }
+  return withoutTabOrNewline.slice(start, end);
+}
+
+/**
+ * Redact credential-looking path segments with the full parsed URL as context.
+ * Passing only `url.pathname` would let a path such as `//token/...` be re-read
+ * as a protocol-relative URL. Userinfo, query and fragment are dropped first
+ * since the judge display never shows them.
+ */
+function sanitizeParsedUrlPath(url: URL): string {
+  const pathOnly = new URL(url.href);
+  pathOnly.username = '';
+  pathOnly.password = '';
+  pathOnly.search = '';
+  pathOnly.hash = '';
+  return new URL(sanitizeUrlForLogging(pathOnly.href)).pathname;
+}
+
+/**
+ * Text without a URL we can split. Anything still carrying an `http:`/`https:`
+ * marker did not normalize into such a URL, so fail closed instead of echoing it.
+ */
+function plainJudgeText(part: string): string {
+  return HTTP_SCHEME_MARKER.test(part) ? REDACTED : part;
+}
+
+/**
+ * A raw HTTP provider can return spaces and parentheses inside its credential.
+ * Treat the remainder of the string as part of the URL, including for older
+ * composite IDs whose label and query cannot be distinguished.
+ */
+function sanitizeJudgePart(rawPart: string): string {
+  // The HTTP provider also accepts ids like `https:host/path`, which WHATWG URL
+  // parsing normalizes to `https://host/path`. Normalize them the same way so the
+  // authority and query are recognized instead of passing through as plain text.
+  const part = normalizeLikeUrlParser(rawPart).replace(LOOSE_HTTP_SCHEME, '$1$2://');
+  const separator = part.indexOf('://');
+  const pathStart = /(?:^|[\s(=])\//.exec(part);
+  let start: number;
+  if (separator >= 0) {
+    start = separator;
+    while (start > 0 && /[a-z0-9+.-]/i.test(part[start - 1])) {
+      start--;
+    }
+    if (!/[a-z]/i.test(part[start]) || (pathStart && pathStart.index < start)) {
+      return REDACTED;
+    }
+  } else {
+    if (!pathStart) {
+      return plainJudgeText(part);
+    }
+    start = pathStart.index + pathStart[0].length - 1;
+  }
+
+  const prefix = part.slice(0, start);
+  const wrapped = prefix.endsWith('(') && part.endsWith(')');
+  const value = part.slice(start, wrapped ? -1 : undefined);
+  const queryOrFragment = value.search(/[?#]/);
+  const beforeQuery = queryOrFragment < 0 ? value : value.slice(0, queryOrFragment);
+  const whitespace = beforeQuery.search(/\s/);
+  if (whitespace >= 0 && !beforeQuery.slice(whitespace).trimStart().startsWith('(')) {
+    // Raw userinfo and historical partially redacted credentials can contain spaces.
+    return REDACTED;
+  }
+  const endpoint = whitespace < 0 ? beforeQuery : beforeQuery.slice(0, whitespace);
+  if (
+    (whitespace >= 0 && beforeQuery.slice(whitespace).includes('@')) ||
+    (separator >= 0 && endpoint.includes('://', endpoint.indexOf('://') + 3))
+  ) {
+    // Ambiguous authorities may span whitespace or include another URL.
+    return REDACTED;
+  }
+
+  try {
+    const url = new URL(endpoint, DUMMY_BASE);
+    const authority =
+      separator >= 0
+        ? `${url.protocol}//${url.host}`
+        : value.startsWith('//')
+          ? `//${url.host}`
+          : '';
+    const path =
+      authority && url.pathname === '/' && !endpoint.endsWith('/')
+        ? ''
+        : sanitizeParsedUrlPath(url);
+    return prefix + authority + path + (wrapped ? ')' : '');
+  } catch {
+    return REDACTED;
+  }
+}
+
+/** Sanitize structured provider fields before adding any display punctuation. */
+export function sanitizeGradingProviderDisplay(id: string, label?: string): string {
+  const safeId = sanitizeJudgePart(id);
+  const displayLabel = typeof label === 'string' ? label.trim() : '';
+  return displayLabel && displayLabel !== id
+    ? `${safeId} (${sanitizeJudgePart(displayLabel)})`
+    : safeId;
+}
