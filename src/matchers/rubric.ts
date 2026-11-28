@@ -855,10 +855,16 @@ function deriveVerdictFromGrader(
     return { pass: hasThreshold ? score >= threshold : score > 0, score };
   }
 
-  let pass =
-    typeof parsed.pass === 'boolean'
-      ? parsed.pass
-      : /^(true|yes|pass|y)$/i.test(String(parsed.pass));
+  let pass: boolean;
+  if (typeof parsed.pass === 'boolean') {
+    pass = parsed.pass;
+  } else if (typeof parsed.pass === 'string' && /^(true|yes|pass|y)$/i.test(parsed.pass)) {
+    pass = true;
+  } else if (typeof parsed.pass === 'string' && /^(false|no|fail|n)$/i.test(parsed.pass)) {
+    pass = false;
+  } else {
+    return undefined;
+  }
   const numericScore = Number(parsed.score);
   const score =
     typeof parsed.score === 'number'
@@ -941,7 +947,9 @@ export async function runJsonGradingPrompt({
   const verdict = deriveVerdictFromGrader(parsed, threshold);
   if (!verdict) {
     return graderFailureFromResponse(
-      'Grader response contained neither a pass verdict nor a finite numeric score',
+      parsed.pass == null
+        ? 'Grader response contained neither a pass verdict nor a finite numeric score'
+        : 'Grader response contained an invalid pass verdict',
       resp,
     );
   }
