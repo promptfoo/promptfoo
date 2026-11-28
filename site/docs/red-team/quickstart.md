@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 sidebar_label: Getting started
-description: Start red teaming LLMs in minutes by scanning 50+ vulnerabilities including jailbreaks, prompt injection, and data exfiltration
+description: Set up Promptfoo to test an LLM application with red team plugins and strategies.
 ---
 
 import CodeBlock from '@theme/CodeBlock';
@@ -29,7 +29,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 ## Prerequisites
 
 - Install a [supported Node.js version](/docs/installation#nodejs-runtime-support)
-- Optional: Set your `OPENAI_API_KEY` environment variable
+- For local generation, configure credentials for a supported LLM provider, such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `MISTRAL_API_KEY`. Promptfoo selects a default model from the configured credentials.
 
 ## Initialize the project
 
@@ -90,7 +90,7 @@ Provider cards populate an editable target ID and configuration. Choose a hosted
 For llamafile, vLLM, and Text Generation WebUI, keep the `openai:chat:` prefix, enter the server's model name, and set `apiBaseUrl` including `/v1`. If your server requires authentication, set `apiKeyEnvar` to the name of an environment variable on the machine running Promptfoo. The native [llama.cpp provider](/docs/providers/llama.cpp/) uses `llama:` and reads its server URL from `LLAMA_BASE_URL` on the machine running Promptfoo.
 
 :::note
-The target defines the model being tested. Attack generation uses a separate provider (defaults to OpenAI). See [Providers](/docs/red-team/configuration/#providers) to configure a custom attack model.
+The target defines the model being tested. Attack generation uses a separate provider. Local generation selects from supported credentials when `redteam.provider` is unset. See [Providers](/docs/red-team/configuration/#providers) to configure a custom attack model.
 :::
 
 Because the Promptfoo scanner runs locally on your machine, it can attack any endpoint accessible from your machine or network.
@@ -254,7 +254,7 @@ Promptfoo hooks directly into your existing LLM app to attack targets via Python
 
 - [HTTP requests](/docs/red-team/configuration/#http-requests) to your API
 - [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
-- [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
+- [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [Ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
 
 ## Continuous improvement
 

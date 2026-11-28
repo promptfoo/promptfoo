@@ -585,6 +585,9 @@
         "PROMPTFOO_INSECURE_SSL": {
           "type": "string"
         },
+        "PROMPTFOO_JAILBREAK_TEMPERATURE": {
+          "type": "string"
+        },
         "PROMPTFOO_PYTHON": {
           "type": "string"
         },

@@ -268,4 +268,8 @@ export interface DefaultProviders {
   suggestionsProvider: ApiProvider;
   synthesizeProvider: ApiProvider;
   webSearchProvider?: ApiProvider;
+  /** Provider for local red team generation. */
+  redteamProvider?: ApiProvider;
+  /** Generation provider for strategies that require JSON output. */
+  redteamJsonProvider?: ApiProvider;
 }

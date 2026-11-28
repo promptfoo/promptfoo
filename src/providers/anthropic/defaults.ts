@@ -1,5 +1,6 @@
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
+import { withRedteamDefaults } from '../redteamDefaults';
 import { AnthropicMessagesProvider } from './messages';
 
 import type { EnvOverrides } from '../../types/env';
@@ -13,6 +14,8 @@ type AnthropicProviders = Pick<
   | 'gradingJsonProvider'
   | 'gradingProvider'
   | 'llmRubricProvider'
+  | 'redteamProvider'
+  | 'redteamJsonProvider'
   | 'suggestionsProvider'
   | 'synthesizeProvider'
   | 'webSearchProvider'
@@ -126,14 +129,22 @@ export function getAnthropicProviders(env?: EnvOverrides): AnthropicProviders {
     },
   });
 
-  const providers = {
-    gradingJsonProvider: gradingProvider,
-    gradingProvider,
-    llmRubricProvider,
-    suggestionsProvider: gradingProvider,
-    synthesizeProvider: gradingProvider,
-    webSearchProvider,
-  };
+  const providers = withRedteamDefaults(
+    {
+      gradingJsonProvider: gradingProvider,
+      gradingProvider,
+      llmRubricProvider,
+      suggestionsProvider: gradingProvider,
+      synthesizeProvider: gradingProvider,
+      webSearchProvider,
+    },
+    env,
+    (_env, temperature) =>
+      new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
+        env: resolvedEnv,
+        config: { temperature, showThinking: false },
+      }),
+  );
   if (scope) {
     scopedProviders.set(scope, { env: resolvedEnv, providers });
   }
