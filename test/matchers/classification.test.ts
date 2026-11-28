@@ -142,10 +142,11 @@ describe('matchesClassification', () => {
     },
   );
 
-  it('preserves cached tokens without recording a new classification request', async () => {
+  it('preserves provider metadata and cached tokens without trusting internal markers', async () => {
     const response: ProviderClassificationResponse = {
       classification: { classA: 0.625 },
       tokenUsage: { prompt: 12, completion: 4, cached: 16, numRequests: 0 },
+      metadata: { servedModel: 'classifier-fixture', cachedResponse: true, graderError: true },
     };
     const provider = createMockProvider({
       callClassificationApi: vi.fn().mockResolvedValue(response),
@@ -157,6 +158,7 @@ describe('matchesClassification', () => {
       pass: true,
       score: 0.625,
       reason: 'Maximum classification score 0.63 >= 0.5',
+      metadata: { servedModel: 'classifier-fixture' },
       tokensUsed: {
         total: 0,
         prompt: 12,
@@ -181,6 +183,7 @@ describe('matchesClassification', () => {
         ...response,
         cached,
         tokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
+        metadata: { servedModel: 'classifier-fixture', cachedResponse: true, graderError: false },
       };
       const provider = createMockProvider({
         callClassificationApi: vi.fn().mockResolvedValue(classificationResponse),
@@ -200,7 +203,11 @@ describe('matchesClassification', () => {
           numRequests: 1,
           completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         },
-        metadata: { graderError: true, ...(cached && { cachedResponse: true }) },
+        metadata: {
+          servedModel: 'classifier-fixture',
+          graderError: true,
+          ...(cached && { cachedResponse: true }),
+        },
       });
     },
   );

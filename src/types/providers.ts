@@ -141,6 +141,7 @@ export interface ApiProvider extends MinimalApiProvider {
   callClassificationApi?: (
     prompt: string,
     options?: CallApiOptionsParams,
+    context?: Pick<CallApiContextParams, 'vars'>,
   ) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   /** Opt in to receiving evaluation cancellation through CancellableEmbeddingProvider. */
@@ -199,6 +200,7 @@ export interface ApiClassificationProvider extends ApiProvider {
   callClassificationApi: (
     prompt: string,
     options?: CallApiOptionsParams,
+    context?: Pick<CallApiContextParams, 'vars'>,
   ) => Promise<ProviderClassificationResponse>;
 }
 
