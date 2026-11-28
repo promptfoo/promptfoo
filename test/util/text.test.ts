@@ -22,6 +22,15 @@ describe('ellipsize', () => {
     expect(ellipsize(str, 4)).toBe('h...');
   });
 
+  it('keeps surrogate pairs intact when adding an ellipsis', () => {
+    expect(ellipsize('abcd😀long', 8)).toBe('abcd...');
+    expect(ellipsize('abcd😀long', 9)).toBe('abcd😀...');
+  });
+
+  it('keeps surrogate pairs intact when there is no room for an ellipsis', () => {
+    expect(ellipsize('a😀bc', 2)).toBe('a');
+  });
+
   it('should return an empty string for negative maxLen', () => {
     expect(ellipsize('hello', -1)).toBe('');
     expect(ellipsize('hello', -5)).toBe('');
