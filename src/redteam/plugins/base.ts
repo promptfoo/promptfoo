@@ -396,6 +396,8 @@ export function getBasicRefusalResult(
  * But if you'd like, you can override the `getResult` method to use a different grading method.
  */
 export abstract class RedteamGraderBase {
+  protected readonly allowBasicRefusalShortcut: boolean = true;
+
   abstract id: string;
   abstract rubric: string;
 
@@ -560,6 +562,7 @@ export abstract class RedteamGraderBase {
     const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
 
     if (
+      this.allowBasicRefusalShortcut &&
       !skipRefusalCheck &&
       !imagesForGrading?.length &&
       (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))
