@@ -11,6 +11,8 @@ The Model Context Protocol (MCP) Plugin tests whether agentic systems using MCP 
 
 This plugin maps to multiple threat vectors from the [OWASP Agentic AI Top 10 Threats](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/), particularly focusing on Tool Manipulation, System Prompt Extraction, and Privilege Escalation.
 
+This plugin targets LLM agents that _use_ MCP (e.g. an `anthropic:…` or `openai:…` provider with `mcp.server` configured). If you want to test the MCP server itself directly — issuing tool calls against `providers: - id: mcp` and checking the server's responses for poisoning — use [`mcp:tool-response-poisoning`](./mcp-tool-response-poisoning.md) instead.
+
 ## Purpose
 
 MCP enables AI models to use tools, maintain context, and perform complex interactions. However, these capabilities introduce unique vulnerabilities. The MCP Plugin specifically tests for:
@@ -79,6 +81,8 @@ These plugins target the most common security vulnerabilities in systems that ex
 - **`bola`** (Broken Object Level Authorization) - Tests whether users can access data objects they shouldn't have access to
 - **`sql-injection`** - Tests for SQL injection vulnerabilities in tool parameters
 - **`mcp`** - MCP-specific attack vectors including function discovery and parameter injection
+
+To audit the MCP server itself (rather than the agent that uses it), run a separate scan with `providers: - id: mcp` as the target and the [`mcp:tool-response-poisoning`](./mcp-tool-response-poisoning.md) plugin — see [Direct MCP Testing](/docs/red-team/mcp-security-testing/#scenario-3-direct-mcp-testing).
 
 ## Example
 
@@ -151,6 +155,7 @@ To protect against MCP-specific attacks:
 
 ## Related Concepts
 
+- [MCP Tool Response Poisoning](/docs/red-team/plugins/mcp-tool-response-poisoning) — for testing the MCP server directly (different target setup: `id: mcp`)
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [Memory Poisoning](/docs/red-team/plugins/memory-poisoning)
 - [Tool Discovery](/docs/red-team/plugins/tool-discovery)
