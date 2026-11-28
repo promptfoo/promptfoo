@@ -1,0 +1,25 @@
+description: Tamper-evident eval lock smoke test
+
+providers:
+  - echo
+
+prompts:
+  - '{{answer}}'
+
+tests:
+  - vars: { answer: Paris }
+    assert:
+      - type: equals
+        value: Paris
+  - vars: { answer: '4' }
+    assert:
+      - type: equals
+        value: '4'
+  - vars: { answer: Tallinn }
+    assert:
+      - type: equals
+        value: Tallinn
+  - vars: { answer: '1' }
+    assert:
+      - type: equals
+        value: '2'

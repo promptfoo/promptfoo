@@ -12,6 +12,7 @@ import { geminiFormatAndSystemInstructions } from '../../src/providers/google/ut
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   type ApiProvider,
+  type AtomicTestCase,
   type CallApiContextParams,
   type Prompt,
   ResultFailureReason,
@@ -19,6 +20,7 @@ import {
 } from '../../src/types/index';
 import * as fileExtensions from '../../src/util/fileExtensions';
 import { sleep } from '../../src/util/time';
+import { mockProcessEnv } from '../util/utils';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
 
 const createEmptyEvaluationConfig = () => ({
@@ -86,6 +88,231 @@ describe('runEval', () => {
     expect(result.prompt.label).toBe('test-label');
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
   });
+
+  it('isolates locked grading criteria and variables from target-provider mutation', async () => {
+    const test: AtomicTestCase = {
+      vars: { expected: 'trusted' },
+      assert: [{ type: 'equals', value: '{{expected}}' }],
+    };
+    const provider: ApiProvider = {
+      id: () => 'mutating-provider',
+      callApi: vi.fn(async (_prompt, context) => {
+        (context!.test as AtomicTestCase).assert = [];
+        context!.vars.expected = 'attacker-controlled';
+        return { output: 'attacker-controlled' };
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test,
+      lockIntegrity: {
+        disableTemplating: false,
+        disableVarExpansion: false,
+        shortCircuitTestFailures: false,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.gradingResult?.pass).toBe(false);
+    expect(test.assert).toEqual([{ type: 'equals', value: '{{expected}}' }]);
+    expect(test.vars).toEqual({ expected: 'trusted' });
+  });
+
+  it('grades locked templates against committed test vars when a register overrides one', async () => {
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        vars: { expected: 'Committed output' },
+        assert: [{ type: 'equals', value: '{{expected}}' }],
+      },
+      registers: { expected: 'Test output' },
+      lockIntegrity: {
+        disableTemplating: false,
+        disableVarExpansion: false,
+        shortCircuitTestFailures: false,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.gradingResult?.reason).toContain('Committed output');
+  });
+
+  it.each([
+    'PROMPTFOO_DISABLE_TEMPLATING',
+    'PROMPTFOO_DISABLE_VAR_EXPANSION',
+    'PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES',
+  ] as const)('fails locked grading when a provider changes %s', async (setting) => {
+    const restoreInitialEnv = mockProcessEnv({ [setting]: undefined });
+    let restoreProviderEnv = () => {};
+    const provider: ApiProvider = {
+      id: () => 'environment-mutating-provider',
+      callApi: vi.fn(async () => {
+        restoreProviderEnv = mockProcessEnv({ [setting]: 'true' });
+        return { output: 'trusted' };
+      }),
+    };
+
+    try {
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: { assert: [{ type: 'equals', value: 'trusted' }] },
+        lockIntegrity: {
+          disableTemplating: false,
+          disableVarExpansion: false,
+          shortCircuitTestFailures: false,
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain(`${setting} changed after verification`);
+    } finally {
+      restoreProviderEnv();
+      restoreInitialEnv();
+    }
+  });
+
+  it('keeps target transforms from changing committed grading variables', async () => {
+    const test: AtomicTestCase = {
+      vars: { expected: 'trusted' },
+      assert: [{ type: 'equals', value: '{{expected}}' }],
+    };
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: {
+        id: () => 'transforming-target',
+        callApi: async () => ({ output: 'wrong' }),
+        transform: '(context.vars.expected = output, output)',
+      },
+      prompt: { raw: 'test', label: 'test' },
+      test,
+      lockIntegrity: {
+        disableTemplating: false,
+        disableVarExpansion: false,
+        shortCircuitTestFailures: false,
+      },
+    });
+    expect(result.success).toBe(false);
+    expect(result.gradingResult?.reason).toContain('trusted');
+    expect(test.vars).toEqual({ expected: 'trusted' });
+  });
+
+  it.each<NonNullable<AtomicTestCase['vars']>>([
+    { expected: 'Paris\n' },
+    { expected: '{{city}}', city: 'Paris\n' },
+  ])('normalizes committed grading variables without changing the source: %j', async (vars) => {
+    const test: AtomicTestCase = {
+      vars: { ...vars },
+      assert: [{ type: 'equals', value: '{{expected}}' }],
+    };
+    const provider: ApiProvider = {
+      id: () => 'normalization-target',
+      callApi: async (prompt) => ({ output: prompt }),
+    };
+    const options = {
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{expected}}', label: 'test' },
+      test,
+    };
+    const [unlocked] = await runEval(options);
+    const [locked] = await runEval({
+      ...options,
+      lockIntegrity: {
+        disableTemplating: false,
+        disableVarExpansion: false,
+        shortCircuitTestFailures: false,
+      },
+    });
+    expect(unlocked.success).toBe(true);
+    expect(locked.response?.output).toBe('Paris');
+    expect(locked.success).toBe(true);
+    expect(test.vars).toEqual(vars);
+  });
+
+  it.each([false, true])(
+    'grades reordered variable keys identically (locked: %s)',
+    async (locked) => {
+      const original = {
+        expected: '{{phrase}}',
+        phrase: '{{token}} {{token}} {{token}} {{token}} {{token}}',
+        token: 'ok',
+      };
+      const reversed = Object.fromEntries(Object.entries(original).reverse());
+      const results = [];
+      for (const vars of [original, reversed]) {
+        const [result] = await runEval({
+          ...defaultOptions,
+          provider: {
+            id: () => 'variable-order-target',
+            callApi: async () => ({ output: 'ok ok ok ok ok' }),
+          },
+          prompt: { raw: 'fixed prompt', label: 'test' },
+          test: { vars: { ...vars }, assert: [{ type: 'equals', value: '{{expected}}' }] },
+          ...(locked && {
+            lockIntegrity: {
+              disableTemplating: false,
+              disableVarExpansion: false,
+              shortCircuitTestFailures: false,
+            },
+          }),
+        });
+        results.push(result);
+      }
+      expect(results.map((result) => result.success)).toEqual([false, false]);
+      expect(results[0].gradingResult?.reason).toBe(results[1].gradingResult?.reason);
+      expect(original.expected).toBe('{{phrase}}');
+      expect(reversed.expected).toBe('{{phrase}}');
+    },
+  );
+
+  it.each([true, false])(
+    'enforces committed short-circuit mode %s after a transform changes the environment',
+    async (shortCircuitTestFailures) => {
+      const restoreInitialEnv = mockProcessEnv({
+        PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: String(shortCircuitTestFailures),
+      });
+      let restoreTransformEnv = () => {};
+      try {
+        const [result] = await runEval({
+          ...defaultOptions,
+          provider: {
+            id: () => 'aggregation-target',
+            callApi: async () => ({ output: 'actual' }),
+            transform: (output) => {
+              restoreTransformEnv = mockProcessEnv({
+                PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: String(!shortCircuitTestFailures),
+              });
+              return output;
+            },
+          },
+          prompt: { raw: 'test', label: 'test' },
+          test: {
+            threshold: 0.5,
+            assert: [
+              { type: 'equals', value: 'actual' },
+              { type: 'equals', value: 'wrong' },
+            ],
+          },
+          lockIntegrity: {
+            disableTemplating: false,
+            disableVarExpansion: false,
+            shortCircuitTestFailures,
+          },
+        });
+        expect(result.success).toBe(!shortCircuitTestFailures);
+      } finally {
+        restoreTransformEnv();
+        restoreInitialEnv();
+      }
+    },
+  );
 
   it('should expose eval runtime vars to prompt and provider rendering', async () => {
     await runEval({

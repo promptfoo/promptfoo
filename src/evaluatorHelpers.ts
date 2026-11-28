@@ -58,11 +58,14 @@ export function resolveVariables(
 ): Record<string, VarValue> {
   let resolved: boolean;
   const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
+  // Bounded substitutions must not depend on object insertion order, which
+  // evaluation-lock canonicalization intentionally ignores.
+  const keys = Object.keys(variables).sort();
 
   let iterations = 0;
   do {
     resolved = true;
-    for (const key of Object.keys(variables)) {
+    for (const key of keys) {
       if (
         skipResolveVars?.includes(key) ||
         varsResolvedFromSkipped?.has(key) ||
@@ -91,6 +94,22 @@ export function resolveVariables(
   } while (!resolved && iterations < 5);
 
   return variables;
+}
+
+export function normalizePromptVariables(
+  vars: Record<string, VarValue>,
+  skipRenderVars?: string[],
+): Set<string> {
+  // Keep normalization data-only so locked grading can apply it independently
+  // of prompt functions, target providers, and mutable runtime variables.
+  for (const key of Object.keys(vars)) {
+    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
+      vars[key] = (vars[key] as string).replace(/\n$/, '');
+    }
+  }
+  const varsResolvedFromSkipped = new Set<string>();
+  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  return varsResolvedFromSkipped;
 }
 
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
@@ -421,15 +440,7 @@ export async function renderPrompt(
     }
   }
 
-  // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
-  for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
-      vars[key] = (vars[key] as string).replace(/\n$/, '');
-    }
-  }
-  // Resolve variable mappings
-  const varsResolvedFromSkipped = new Set<string>();
-  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  const varsResolvedFromSkipped = normalizePromptVariables(vars, skipRenderVars);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);

@@ -1043,6 +1043,40 @@ describe('runAssertions with PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', () => {
     return peak;
   };
 
+  it.each([true, false])(
+    'uses an explicit short-circuit mode of %s for nested assertion sets',
+    async (shortCircuitTestFailures) => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: String(!shortCircuitTestFailures),
+      });
+      try {
+        const result = runAssertions({
+          providerResponse: { output: 'actual' },
+          shortCircuitTestFailures,
+          test: {
+            assert: [
+              {
+                type: 'assert-set',
+                threshold: 0.5,
+                assert: [
+                  { type: 'equals', value: 'actual' },
+                  { type: 'equals', value: 'different' },
+                ],
+              },
+            ],
+          },
+        });
+        if (shortCircuitTestFailures) {
+          await expect(result).rejects.toThrow();
+        } else {
+          await expect(result).resolves.toMatchObject({ pass: true, score: 0.5 });
+        }
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
+
   it('drains active assertions after a failure without starting queued assertions', async () => {
     mockProcessEnv({
       PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '2',

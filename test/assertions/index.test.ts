@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/index';
+import { getAssertionBaseType, isAssertionInverse, runAssertion } from '../../src/assertions/index';
+import { mockProcessEnv } from '../util/utils';
 
 describe('isAssertionInverse', () => {
   it('returns true if the assertion is inverse', () => {
@@ -30,5 +31,61 @@ describe('getAssertionBaseType', () => {
       type: 'not-equals' as const,
     };
     expect(getAssertionBaseType(assertion)).toBe('equals');
+  });
+});
+
+describe('locked template interpretation', () => {
+  it('forces enabled templating even when the ambient environment disables it', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+    try {
+      const result = await runAssertion({
+        assertion: { type: 'equals', value: '{{expected}}' },
+        disableTemplating: false,
+        providerResponse: { output: 'Paris' },
+        test: { vars: { expected: 'Paris' } },
+      });
+
+      expect(result.pass).toBe(true);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('forces disabled templating even when the ambient environment enables it', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
+    try {
+      const result = await runAssertion({
+        assertion: { type: 'equals', value: '{{expected}}' },
+        disableTemplating: true,
+        providerResponse: { output: '{{expected}}' },
+        test: { vars: { expected: 'Paris' } },
+      });
+
+      expect(result.pass).toBe(true);
+    } finally {
+      restoreEnv();
+    }
+  });
+});
+
+describe('locked JSON schema validation', () => {
+  it('keeps strict schema validation under a relaxed environment', async () => {
+    const restore = mockProcessEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: 'true' });
+    const options = {
+      assertion: { type: 'is-json' as const, value: { type: 'object', customAnnotation: true } },
+      test: {},
+      providerResponse: { output: '{}' },
+    };
+    try {
+      expect((await runAssertion(options)).pass).toBe(true);
+      await expect(
+        runAssertion({
+          ...options,
+          strictJsonSchema: true,
+        }),
+      ).rejects.toThrow('unknown keyword');
+    } finally {
+      restore();
+    }
   });
 });
