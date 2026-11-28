@@ -3,9 +3,9 @@ const { createWarningLoggerModule } = await vi.hoisted(
 );
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { addRetryTestCases, deduplicateTests } from '../../../src/redteam/strategies/retry';
+import { addRetryTestCases } from '../../../src/redteam/strategies/retry';
 
-import type { TestCase, TestCaseWithPlugin } from '../../../src/types/index';
+import type { TestCaseWithPlugin } from '../../../src/types/index';
 
 // Mock dependencies
 vi.mock('../../../src/database/index', () => ({
@@ -23,133 +23,6 @@ vi.mock('../../../src/util/cloud', () => ({
 }));
 
 vi.mock('../../../src/logger', () => createWarningLoggerModule());
-
-describe('deduplicateTests', () => {
-  it('should deduplicate test cases based on vars', () => {
-    const testCases: TestCase[] = [
-      {
-        vars: { a: '1', b: '2' },
-        assert: [],
-      },
-      {
-        vars: { a: '1', b: '2' }, // Duplicate
-        assert: [],
-      },
-      {
-        vars: { a: '2', b: '3' },
-        assert: [],
-      },
-    ];
-
-    const result = deduplicateTests(testCases);
-
-    expect(result).toHaveLength(2);
-    expect(result[0].vars).toEqual({ a: '1', b: '2' });
-    expect(result[1].vars).toEqual({ a: '2', b: '3' });
-  });
-
-  it('should handle empty test cases array', () => {
-    const result = deduplicateTests([]);
-    expect(result).toHaveLength(0);
-  });
-
-  it('should handle test cases with no vars', () => {
-    const testCases: TestCase[] = [
-      {
-        vars: {},
-        assert: [],
-      },
-      {
-        vars: {},
-        assert: [],
-      },
-    ];
-
-    const result = deduplicateTests(testCases);
-    expect(result).toHaveLength(1);
-  });
-
-  it('should preserve non-vars properties', () => {
-    const testCases: TestCase[] = [
-      {
-        vars: { a: '1' },
-        assert: [{ type: 'equals', value: 'test' }],
-        description: 'test case',
-      },
-      {
-        vars: { a: '1' },
-        assert: [{ type: 'equals', value: 'different' }],
-        description: 'another test case',
-      },
-    ];
-
-    const result = deduplicateTests(testCases);
-    expect(result).toHaveLength(1);
-    expect(result[0].assert).toEqual([{ type: 'equals', value: 'test' }]);
-    expect(result[0].description).toBe('test case');
-  });
-
-  it('should include strategyId in deduplication key', () => {
-    const testCases: TestCase[] = [
-      {
-        vars: { prompt: 'same prompt' },
-        assert: [],
-        metadata: { strategyId: undefined }, // plugin-only
-      },
-      {
-        vars: { prompt: 'same prompt' },
-        assert: [],
-        metadata: { strategyId: 'goat' }, // with goat strategy
-      },
-      {
-        vars: { prompt: 'same prompt' },
-        assert: [],
-        metadata: { strategyId: 'jailbreak:meta' }, // with jailbreak:meta strategy
-      },
-    ];
-
-    const result = deduplicateTests(testCases);
-    // All three should be kept because they have different strategyIds
-    expect(result).toHaveLength(3);
-  });
-
-  it('should deduplicate tests with same vars and strategyId', () => {
-    const testCases: TestCase[] = [
-      {
-        vars: { prompt: 'same prompt' },
-        assert: [],
-        metadata: { strategyId: 'goat', pluginId: 'bias:age' },
-      },
-      {
-        vars: { prompt: 'same prompt' },
-        assert: [],
-        metadata: { strategyId: 'goat', pluginId: 'bias:age' }, // Duplicate
-      },
-    ];
-
-    const result = deduplicateTests(testCases);
-    expect(result).toHaveLength(1);
-  });
-
-  it('should treat undefined and missing strategyId as the same', () => {
-    const testCases: TestCase[] = [
-      {
-        vars: { prompt: 'same prompt' },
-        assert: [],
-        metadata: { pluginId: 'bias:age' }, // No strategyId
-      },
-      {
-        vars: { prompt: 'same prompt' },
-        assert: [],
-        metadata: { strategyId: undefined, pluginId: 'bias:age' }, // Undefined strategyId
-      },
-    ];
-
-    const result = deduplicateTests(testCases);
-    // Both should be treated as 'none' strategyId, so deduplicated to 1
-    expect(result).toHaveLength(1);
-  });
-});
 
 describe('addRetryTestCases', () => {
   beforeEach(async () => {
@@ -523,4 +396,253 @@ describe('addRetryTestCases', () => {
     // Should be deduplicated to 1 test case
     expect(result).toHaveLength(1);
   });
+
+  it('preserves each plugin grader while deduplicating identical cases across targets', async () => {
+    const pluginIds = ['bias:age', 'pii'];
+    const limit = vi.fn();
+    for (const target of ['first', 'second']) {
+      for (const pluginId of pluginIds) {
+        const testCase = {
+          vars: { prompt: 'same attack', sessionId: 'same-session' },
+          assert: [{ type: 'equals', value: pluginId, metric: pluginId }],
+          metadata: { pluginId },
+        };
+        limit.mockResolvedValueOnce([{ provider: { id: target } }]).mockResolvedValueOnce([
+          { testCase, response: {}, evalId: `${target}-${pluginId}` },
+          {
+            testCase: { ...testCase },
+            response: {},
+            evalId: `duplicate-${target}-${pluginId}`,
+          },
+        ]);
+      }
+    }
+    const getDb = await getMockDb();
+    getDb.mockResolvedValue({
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit,
+    } as any);
+
+    const result = await addRetryTestCases(
+      pluginIds.map((pluginId) => ({ vars: { prompt: 'seed' }, metadata: { pluginId } })),
+      'prompt',
+      { targetIds: ['first', 'second'], numTests: 2 },
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.map((test) => test.metadata?.pluginId)).toEqual(pluginIds);
+    expect(result.map((test) => test.metadata?.originalEvalId)).toEqual([
+      'first-bias:age',
+      'first-pii',
+    ]);
+    expect(result.map((test) => test.assert)).toEqual(
+      pluginIds.map((pluginId) => [{ type: 'equals', value: pluginId, metric: pluginId }]),
+    );
+  });
+
+  it.each(['_query', '_context', '_conversation', 'sessionId'])(
+    'preserves distinct stored %s inputs when retrying',
+    async (variable) => {
+      const rows = ['first input', 'second input'].map((value) => ({
+        testCase: {
+          vars: { prompt: 'same attack', [variable]: value },
+          metadata: { pluginId: 'pii' },
+        },
+        response: {},
+        evalId: `eval-${value}`,
+      }));
+      const getDb = await getMockDb();
+      getDb.mockResolvedValue({
+        select: vi.fn().mockReturnThis(),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi
+          .fn()
+          .mockResolvedValueOnce([{ provider: { id: 'target' } }])
+          .mockResolvedValueOnce(rows),
+      } as any);
+
+      const result = await addRetryTestCases(
+        [{ vars: { prompt: 'seed' }, metadata: { pluginId: 'pii' } }],
+        'prompt',
+        { targetIds: ['target'], numTests: 2 },
+      );
+
+      expect(result.map((test) => test.vars?.[variable])).toEqual(['first input', 'second input']);
+    },
+  );
+
+  it('retains the requested plugin identity when cloud history omits plugin metadata', async () => {
+    const { cloudConfig } = await import('../../../src/globalConfig/cloud');
+    const { makeRequest } = await import('../../../src/util/cloud');
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(makeRequest).mockImplementation(async (path) => {
+      const pluginId = new URLSearchParams(path.split('?')[1]).get('pluginId');
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              testCase: {
+                vars: { prompt: 'same attack' },
+                metadata: { strategyId: 'base64' },
+                assert: [{ type: 'equals', value: pluginId }],
+              },
+              response: {},
+              evalId: `cloud-${pluginId}`,
+            },
+          ],
+        }),
+      );
+    });
+    const getDb = await getMockDb();
+    getDb.mockResolvedValue({
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi
+        .fn()
+        .mockResolvedValueOnce([{ provider: { id: 'target' } }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ provider: { id: 'target' } }])
+        .mockResolvedValueOnce([]),
+    } as any);
+    const pluginIds = ['bias:age', 'pii'];
+    const result = await addRetryTestCases(
+      pluginIds.map((pluginId) => ({ vars: { prompt: 'seed' }, metadata: { pluginId } })),
+      'prompt',
+      { targetIds: ['target'] },
+    );
+
+    expect(result.map((test) => test.metadata?.pluginId)).toEqual(pluginIds);
+    expect(result.map((test) => test.assert)).toMatchObject(
+      pluginIds.map((pluginId) => [{ type: 'equals', value: pluginId }]),
+    );
+  });
+
+  it.each(['mixed', 'empty', 'http-error', 'network-error'])(
+    'combines real SQLite history with %s cloud results',
+    async (scenario) => {
+      const actualDatabase = await vi.importActual<typeof import('../../../src/database/index')>(
+        '../../../src/database/index',
+      );
+      const db = await actualDatabase.getDb();
+      const getDb = await getMockDb();
+      getDb.mockResolvedValue(db);
+      const { runDbMigrations } = await import('../../../src/migrate');
+      await runDbMigrations();
+      const { evalsTable, evalResultsTable } = await import('../../../src/database/tables');
+      const { eq } = await import('drizzle-orm');
+      const { cloudConfig } = await import('../../../src/globalConfig/cloud');
+      const { makeRequest } = await import('../../../src/util/cloud');
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      const evalId = `retry-${scenario}`;
+      const targetId = `target-${scenario}`;
+      const cloudCase: TestCaseWithPlugin = {
+        vars: { prompt: 'same attack', sessionId: 'cloud-session', _conversation: ['cloud turn'] },
+        description: 'first occurrence',
+        assert: [{ type: 'equals', value: 'expected', metric: 'Bias/base64' }],
+        metadata: { pluginId: 'bias:age', strategyConfig: { stale: true } },
+      };
+      const cloudRows = [{ testCase: cloudCase, response: {}, evalId: 'cloud-eval' }];
+      if (scenario === 'network-error') {
+        vi.mocked(makeRequest).mockRejectedValue(new Error('cloud unavailable'));
+      } else {
+        vi.mocked(makeRequest).mockResolvedValue(
+          new Response(JSON.stringify({ results: scenario === 'empty' ? [] : cloudRows }), {
+            status: scenario === 'http-error' ? 503 : 200,
+          }),
+        );
+      }
+      await db.insert(evalsTable).values({ id: evalId, config: {}, results: {} }).run();
+      try {
+        const rows = [
+          {
+            prompt: 'same attack',
+            strategyId: undefined,
+            pluginId: 'bias:age',
+            targetId,
+            success: false,
+          },
+          {
+            prompt: 'different attack',
+            strategyId: undefined,
+            pluginId: 'bias:age',
+            targetId,
+            success: false,
+          },
+          {
+            prompt: 'same attack',
+            strategyId: 'base64',
+            pluginId: 'bias:age',
+            targetId,
+            success: false,
+          },
+          { prompt: 'wrong target', pluginId: 'bias:age', targetId: 'other', success: false },
+          { prompt: 'wrong plugin', pluginId: 'pii', targetId, success: false },
+          { prompt: 'passed', pluginId: 'bias:age', targetId, success: true },
+        ];
+        await db
+          .insert(evalResultsTable)
+          .values(
+            rows.map((row, index) => ({
+              id: `${evalId}-${index}`,
+              evalId,
+              promptIdx: 0,
+              testIdx: index,
+              updatedAt: 100 - index,
+              prompt: { raw: '{{prompt}}', label: 'fixture' },
+              provider: { id: row.targetId },
+              testCase: {
+                vars: {
+                  prompt: row.prompt,
+                  sessionId: 'local-session',
+                  _conversation: ['local turn'],
+                },
+                metadata: { pluginId: row.pluginId, strategyId: row.strategyId },
+              },
+              response: {},
+              success: row.success,
+              score: row.success ? 1 : 0,
+            })),
+          )
+          .run();
+        const result = await addRetryTestCases(
+          [{ vars: { prompt: 'seed' }, metadata: { pluginId: 'bias:age' } }],
+          'prompt',
+          { targetIds: [targetId], numTests: 10 },
+        );
+        expect(makeRequest).toHaveBeenCalledExactlyOnceWith(
+          `results/failed-tests?pluginId=bias%3Aage&targetId=${targetId}&limit=10`,
+          'GET',
+        );
+        expect(result.map((test) => [test.vars?.prompt, test.metadata?.strategyId])).toEqual([
+          ...(scenario === 'mixed' ? [['same attack', undefined]] : []),
+          ['same attack', undefined],
+          ['different attack', undefined],
+          ['same attack', 'base64'],
+        ]);
+        expect(result.every((test) => test.metadata?.retry === true)).toBe(true);
+        if (scenario === 'mixed') {
+          expect(result[0]).toMatchObject({
+            vars: cloudCase.vars,
+            description: 'first occurrence',
+            assert: [{ type: 'equals', value: 'expected', metric: 'Bias' }],
+            metadata: { originalEvalId: 'cloud-eval' },
+          });
+          expect(result[0].metadata?.strategyConfig).toBeUndefined();
+          expect(cloudCase.metadata?.strategyConfig).toEqual({ stale: true });
+        } else {
+          expect(result[0].metadata?.originalEvalId).toBe(evalId);
+        }
+      } finally {
+        await db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
+        await db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
+      }
+    },
+  );
 });
