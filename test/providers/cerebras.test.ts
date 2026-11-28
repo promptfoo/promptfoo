@@ -278,6 +278,55 @@ describe('Cerebras provider', () => {
       expect(JSON.stringify(body)).not.toContain('test-header');
     });
 
+    it('sends the model parameters the OpenAI provider resolved, not their raw copies', async () => {
+      const provider = createCerebrasProvider('cerebras:llama3.1-8b', {
+        config: {
+          config: {
+            apiKey: 'configured-key',
+            tools: [{ type: 'function', function: { name: '{{ toolName }}' } }],
+            response_format: { type: 'json_schema', json_schema: { name: '{{ schemaName }}' } },
+            temperature: 0.4,
+          },
+        },
+      }) as OpenAiChatCompletionProvider;
+      const { body } = await provider.getOpenAiBody('prompt', {
+        prompt: { raw: 'prompt', label: 'fixture' },
+        vars: { toolName: 'get_weather', schemaName: 'weather' },
+      });
+      expect(body.tools).toEqual([{ type: 'function', function: { name: 'get_weather' } }]);
+      expect(body.response_format).toEqual({
+        type: 'json_schema',
+        json_schema: { name: 'weather' },
+      });
+      expect(body.temperature).toBe(0.4);
+    });
+
+    it('validates function calls against the configured functions', () => {
+      const provider = createCerebrasProvider('cerebras:llama3.1-8b', {
+        config: {
+          config: {
+            functions: [
+              {
+                name: 'get_weather',
+                parameters: {
+                  type: 'object',
+                  properties: { city: { type: 'string' } },
+                  required: ['city'],
+                },
+              },
+            ],
+          },
+        },
+      }) as OpenAiChatCompletionProvider;
+
+      expect(() =>
+        provider.validateFunctionToolCall({ name: 'get_weather', arguments: '{"city":"Paris"}' }),
+      ).not.toThrow();
+      expect(() =>
+        provider.validateFunctionToolCall({ name: 'get_weather', arguments: '{}' }),
+      ).toThrow();
+    });
+
     it('should allow id and env options', async () => {
       const provider = createCerebrasProvider('cerebras:llama3.1-8b', {
         id: 'custom-id',

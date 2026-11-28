@@ -4,7 +4,7 @@ import { createNscaleImageProvider } from './nscale/image';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
-import { splitLocalOptions } from './openai/localOptions';
+import { CHAT_RESOLVED_OPTION_NAMES, splitLocalOptions } from './openai/localOptions';
 
 import type { ApiProvider } from '../types/index';
 import type { ProviderCreatorOptions } from './creator';
@@ -42,28 +42,32 @@ export function createNscaleProvider(
   const splits = providerPath.split(':');
 
   const config = providerOptions.config || {};
-  const { localOptions, modelParameters } = splitLocalOptions(config);
-
-  const nscaleConfig = {
-    ...providerOptions,
-    config: {
-      ...localOptions,
-      // Honor an explicit apiBaseUrl (private/regional Nscale endpoints) instead
-      // of silently ignoring it while still shipping it in the request body.
-      apiBaseUrl: localOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',
-      passthrough: { ...modelParameters, ...config.passthrough },
-    },
+  // Options the chat provider resolves itself stay at the top level, where it finds them.
+  const getNscaleConfig = (resolvedOptionNames: string[] = []) => {
+    const { localOptions, modelParameters } = splitLocalOptions(config, resolvedOptionNames);
+    return {
+      ...providerOptions,
+      config: {
+        ...localOptions,
+        // Honor an explicit apiBaseUrl (private/regional Nscale endpoints) instead
+        // of silently ignoring it while still shipping it in the request body.
+        apiBaseUrl: localOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',
+        passthrough: { ...modelParameters, ...config.passthrough },
+      },
+    };
   };
 
   if (splits[1] === 'chat') {
     const modelName = splits.slice(2).join(':');
-    return withNscaleCredentials(new OpenAiChatCompletionProvider(modelName, nscaleConfig));
+    return withNscaleCredentials(
+      new OpenAiChatCompletionProvider(modelName, getNscaleConfig(CHAT_RESOLVED_OPTION_NAMES)),
+    );
   } else if (splits[1] === 'completion') {
     const modelName = splits.slice(2).join(':');
-    return withNscaleCredentials(new OpenAiCompletionProvider(modelName, nscaleConfig));
+    return withNscaleCredentials(new OpenAiCompletionProvider(modelName, getNscaleConfig()));
   } else if (splits[1] === 'embedding' || splits[1] === 'embeddings') {
     const modelName = splits.slice(2).join(':');
-    return withNscaleCredentials(new OpenAiEmbeddingProvider(modelName, nscaleConfig));
+    return withNscaleCredentials(new OpenAiEmbeddingProvider(modelName, getNscaleConfig()));
   } else if (splits[1] === 'image') {
     return createNscaleImageProvider(providerPath, {
       config,
@@ -73,6 +77,8 @@ export function createNscaleProvider(
   } else {
     // If no specific type is provided, default to chat
     const modelName = splits.slice(1).join(':');
-    return withNscaleCredentials(new OpenAiChatCompletionProvider(modelName, nscaleConfig));
+    return withNscaleCredentials(
+      new OpenAiChatCompletionProvider(modelName, getNscaleConfig(CHAT_RESOLVED_OPTION_NAMES)),
+    );
   }
 }
