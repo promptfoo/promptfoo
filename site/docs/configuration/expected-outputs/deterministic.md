@@ -534,6 +534,8 @@ For example, `contains-xml` with `root.child` passes for `Text <root><child>Cont
 
 The `is-sql` assertion checks if the LLM output is a non-empty valid SQL statement. For simple column lists, it treats `SELECT a b FROM t` as a likely missing comma rather than implicit aliasing. This check also applies after leading modifiers such as `DISTINCT`.
 
+In MySQL, a backtick inside a quoted string or comment is ordinary text. For example, ``SELECT 'a`b' AS marker`` passes, while an unterminated backtick-quoted identifier fails. The same rules apply to SQL blocks checked by [`contains-sql`](#contains-sql). The negated assertions reverse the validity result.
+
 Example:
 
 ```yaml

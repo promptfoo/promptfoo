@@ -170,11 +170,6 @@ export const handleIsSql = async ({
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
     );
   }
-  if (/`/.test(normalizedSql) && (normalizedSql.match(/`/g)?.length ?? 0) % 2 !== 0) {
-    failureReasons.push(
-      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
-    );
-  }
   // node-sql-parser accepts a missing comma as implicit aliasing. Ignore leading
   // SELECT modifiers and SQL-looking text inside literals or comments, then check
   // the first two column tokens.
