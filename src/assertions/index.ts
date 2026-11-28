@@ -328,6 +328,12 @@ const ASSERTION_HANDLERS: Record<
 
 const nunjucks = getNunjucksEngine();
 
+function renderAssertionFile(reference: string, vars: Record<string, VarValue>) {
+  const rendered = nunjucks.renderString(reference, vars);
+  const contents = processFileReference(rendered, rendered !== reference);
+  return typeof contents === 'string' ? nunjucks.renderString(contents, vars) : contents;
+}
+
 /**
  * Renders a metric name template with test variables.
  * @param metric - The metric name, possibly containing Nunjucks template syntax
@@ -535,7 +541,7 @@ async function runAssertionInternal({
           return scriptFailure((error as Error).message);
         }
       } else {
-        renderedValue = processFileReference(renderedValue);
+        renderedValue = renderAssertionFile(renderedValue, resolvedVars);
       }
     } else if (isPackagePath(renderedValue)) {
       const basePath = cliState.basePath || '';
@@ -558,15 +564,13 @@ async function runAssertionInternal({
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
-    // Process each element in the array
-    renderedValue = renderedValue.map((v) => {
-      if (typeof v === 'string') {
-        if (v.startsWith('file://')) {
-          return processFileReference(v);
-        }
-        return nunjucks.renderString(v, resolvedVars);
+    renderedValue = renderedValue.map((value) => {
+      if (typeof value !== 'string') {
+        return value;
       }
-      return v;
+      return value.startsWith('file://')
+        ? renderAssertionFile(value, resolvedVars)
+        : nunjucks.renderString(value, resolvedVars);
     });
   }
 

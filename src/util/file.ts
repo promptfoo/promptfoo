@@ -315,7 +315,7 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: 'assertion' | 'assertions' | 'general' | 'test' | 'vars',
   basePath?: string,
 ): any {
   if (basePath !== undefined) {
@@ -339,8 +339,39 @@ export function maybeLoadConfigFromExternalFile(
       // This preserves file:// glob patterns for test case expansion
       const isVarsField = key === 'vars';
 
-      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+      const isTestAssertionValue = context === 'assertions' && key === 'value';
+      const isTestAssertionList =
+        key === 'assert' &&
+        (context === 'test' || (context === 'assertions' && config.type === 'assert-set'));
+      const inheritedContext = context === 'test' || context === 'assertions' ? 'general' : context;
+      const childContext = isTestAssertionList
+        ? 'assertions'
+        : isAssertionValue
+          ? 'assertion'
+          : isVarsField
+            ? 'vars'
+            : inheritedContext;
+
+      const resolveValue = (item: unknown) => {
+        // Assertion templates can use test variables unavailable to this file loader.
+        // Executable assertion paths retain their existing loading rules.
+        if (
+          isTestAssertionValue &&
+          !isAssertionValue &&
+          typeof item === 'string' &&
+          item.startsWith('file://') &&
+          /\{[{%]/.test(item) &&
+          !/\.(?:[cm]?[jt]sx?|py|rb)(?::[\w$-]+)?$/i.test(item)
+        ) {
+          return item;
+        }
+        return maybeLoadConfigFromExternalFile(item, childContext);
+      };
+      const rawValue = config[key];
+      const value =
+        isTestAssertionValue && Array.isArray(rawValue)
+          ? rawValue.map(resolveValue)
+          : resolveValue(rawValue);
 
       if (key === '__proto__') {
         Object.defineProperty(result, key, {
@@ -355,7 +386,10 @@ export function maybeLoadConfigFromExternalFile(
     }
     return result;
   }
-  return maybeLoadFromExternalFile(config, context);
+  return maybeLoadFromExternalFile(
+    config,
+    context === 'test' || context === 'assertions' ? 'general' : context,
+  );
 }
 
 /**
