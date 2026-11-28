@@ -8,17 +8,17 @@ keywords: [authentication, login, logout, promptfoo enterprise, promptfoo app, s
 
 # Authentication
 
-For customer-hosted deployments, see [On-Prem SSO](./sso.md) for identity-provider setup and team/role mapping.
-
 ## Setting Up SSO
 
-[Promptfoo Enterprise](/docs/enterprise/) supports both basic authentication and SSO through SAML 2.0 and OIDC. To configure SSO with Promptfoo Enterprise, reach out to the support team with your IdP information and the Promptfoo team will configure it. The authentication endpoint is `auth.promptfoo.app`.
+[Promptfoo Enterprise](/docs/enterprise/) supports SAML 2.0 and OIDC. For hosted deployments, contact support with your identity provider information.
+
+For on-prem deployments, sign in at your organization's Promptfoo URL. Organization administrators can [configure SSO and team assignments](./sso.md). Test those assignments before enabling synchronization. At login, synchronization can remove team memberships.
 
 ## Basic Authentication
 
-Promptfoo Enterprise supports basic authentication into the application through `auth.promptfoo.app`. When an organization is created, the global admin will receive an email from Promptfoo Enterprise to log in. Users, teams, and roles will be created in the Organization Settings of the Promptfoo Enterprise application, which is detailed further in the [Teams documentation](./teams.md).
+Hosted deployments using `auth.promptfoo.app` support password login. The organization's first administrator receives a login email and can manage users, [teams and roles](./teams.md) in Organization Settings.
 
-You can also authenticate into the application using a magic link. To do this, navigate to `auth.promptfoo.app` and click the "Login with a magic link" button. You will receive an email with a link to log in. If you do not receive an email, please be sure to check your spam folder.
+If enabled, **Login with a magic link** sends you a sign-in link by email. On-prem users can choose from the sign-in methods enabled on their deployment's login page.
 
 ## Authenticating Into the CLI
 
@@ -26,21 +26,24 @@ You may wish to authenticate into the CLI when using Promptfoo Enterprise. Follo
 
 1. Install the Promptfoo CLI. Read [getting started](/docs/getting-started/) for help installing the CLI.
 
-2. In the Promptfoo Enterprise app, select the "CLI Login Information" underneath your profile.
+2. In the Promptfoo Enterprise app, open your profile menu and select **CLI Login Information**.
 
-![CLI Login Information](/img/enterprise-docs/CLI-login-setting.png)
-
-3. Copy the first command and run in your CLI. Your CLI will then be authenticated to Promptfoo Enterprise, allowing you to share eval results run locally.
-
-![CLI Login Command](/img/enterprise-docs/CLI-login-key.png)
+3. Select **Generate CLI Token**, then copy and run the `promptfoo auth login` command in your terminal.
 
 4. Once authenticated, you can run `promptfoo eval --share` or `promptfoo share` to share eval results to your Promptfoo Enterprise organization.
 
-:::tip
-All of your evals are stored locally until you share them. If you were previously an open-source user, you can share your local evals to your Promptfoo Enterprise organization by running `promptfoo share`.
-:::
+For API key login on-prem, set `PROMPTFOO_API_KEY` to a Promptfoo key from your deployment. Pass its API base URL without `/api/v1` to `--host`. Use a trusted terminal because the key appears in the process arguments.
 
-Authenticating with your organization's account enables [team-based sharing](/docs/usage/sharing#enterprise-sharing), ensuring your evaluation results are only visible to members of your organization rather than being publicly accessible.
+```sh
+promptfoo auth login --host https://promptfoo.example.com --api-key "$PROMPTFOO_API_KEY"
+promptfoo auth whoami
+```
+
+For CI without a saved login, configure `PROMPTFOO_API_KEY` in your secret manager, `PROMPTFOO_CLOUD_API_URL` for the API base URL, and `PROMPTFOO_REMOTE_APP_BASE_URL` for the browser-facing app URL. A saved key and API host take precedence over these environment variables. See [Enterprise sharing](/docs/usage/sharing#enterprise-sharing) if your gateway uses a separate authentication header.
+
+:::tip
+CLI runs can upload results automatically after Enterprise login. Use `promptfoo share` to upload existing local evals, or see [disabling sharing](/docs/usage/sharing#disabling-sharing) to keep a CLI run local. Scans run on the server store their results in your deployment.
+:::
 
 ## Working with Multiple Teams
 
@@ -73,4 +76,4 @@ To switch organizations, run `promptfoo auth login --api-key <apiKey>` with a ke
 promptfoo auth teams current
 ```
 
-All operations (evaluations, red team scans, etc.) will use this team context until you switch to a different team.
+The CLI shares results with the selected team by default. When you run a saved scan configuration by ID, the team assigned to the run takes precedence. If you use an organization-wide template with another team's target, look for the report under the **target's team**.
