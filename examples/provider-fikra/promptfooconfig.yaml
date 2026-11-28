@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Fikra chat completion evaluation
+
+providers:
+  - id: fikra:deepseek-v4.1-flash
+    config:
+      temperature: 0.7
+      max_tokens: 500
+
+prompts:
+  - 'Answer clearly and concisely: {{question}}'
+
+tests:
+  - vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: contains
+        value: 'Paris'

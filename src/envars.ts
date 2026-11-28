@@ -337,6 +337,9 @@ type EnvVars = {
   // FAL
   FAL_KEY?: string;
 
+  // Fikra
+  FIKRA_API_KEY?: string;
+
   // GitHub
   GITHUB_TOKEN?: string;
 
