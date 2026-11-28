@@ -69,6 +69,11 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
       helpText:
         'Use a gateway model ID such as vercel:openai/gpt-6.2-astra. Set AI_GATEWAY_API_KEY on the Promptfoo server.',
     },
+    'codex-sdk': {
+      title: 'OpenAI Codex SDK',
+      helpText:
+        'Install @openai/codex-sdk on the Promptfoo server. Sign in to Codex or set OPENAI_API_KEY or CODEX_API_KEY. Relative working_dir paths resolve from the config file directory.',
+    },
     together: {
       title: 'Together AI',
       helpText: 'Use a Together-hosted model ID. Configure TOGETHER_API_KEY.',
