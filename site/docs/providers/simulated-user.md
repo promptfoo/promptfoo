@@ -50,6 +50,10 @@ For each turn:
    - The maximum number of turns is reached
    - The simulated user emits `###STOP###`
 
+## Cost Reporting
+
+The result `cost` sums the reported cost of every call across all turns, not only the final turn. `incurredCost` excludes calls served from the response cache: a cached call still counts toward `cost` at its reported price but adds nothing to `incurredCost`. Simulated-user calls follow the same accounting as token usage for this provider. Red team variants such as [Mischievous User](/docs/red-team/strategies/mischievous-user/) instead report simulated-user usage separately as attacker usage and exclude its cost from the target total. If no call reports a cost, `cost` stays unset.
+
 ## Configuration Options
 
 | Option            | Type                | Description                                                                                                                                                               |

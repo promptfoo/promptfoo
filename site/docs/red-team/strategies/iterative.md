@@ -52,6 +52,10 @@ That final turn has no `redteamHistory[].score`. The `highestScore` metadata cov
 This strategy is medium cost since it makes multiple API calls per test. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::
 
+## Cost Reporting
+
+The result `cost` sums the target cost of every iteration, not only the selected output, so cost assertions see the full target spend for the test case. `incurredCost` excludes iterations served from the response cache: a cached probe still counts toward `cost` at its reported price but adds nothing to `incurredCost`. Attacker and judge model spend is excluded from both totals and tracked separately in the token usage breakdown (`tokenUsage.attacker` and `tokenUsage.assertions`). If no target probe reports a cost, `cost` stays unset.
+
 ## Session Management
 
 When using `transformVars` with `context.uuid`, each iteration automatically gets a new UUID. This prevents conversation history from affecting subsequent attempts.

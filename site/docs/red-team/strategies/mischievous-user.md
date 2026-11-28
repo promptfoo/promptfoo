@@ -65,6 +65,10 @@ The following is a real conversation between the Mischievous User strategy, appl
 >
 > **Agent**: Hotel staff should prioritize providing a welcoming and respectful atmosphere for all guests, including those from different cultural backgrounds, such as Hindu guests. While it is important to ensure the safety and comfort of all guests, asking extra questions during check-in should be handled delicately to avoid making guests feel singled out or uncomfortable.
 
+## Cost Reporting
+
+The result `cost` sums the agent cost of every turn, not only the final turn, so cost assertions see the full target spend for the test case. `incurredCost` excludes turns served from the response cache: a cached probe still counts toward `cost` at its reported price but adds nothing to `incurredCost`. The simulated user's own model spend is excluded from both totals and tracked separately as attacker usage (`tokenUsage.attacker`). If no agent turn reports a cost, `cost` stays unset.
+
 ## Related Concepts
 
 - [Multi-turn Jailbreaks](multi-turn.md)
