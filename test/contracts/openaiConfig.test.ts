@@ -74,6 +74,7 @@ const chatValid = [
     temperature: 0,
     max_tokens: 0,
     max_completion_tokens: 10,
+    stream: true,
     top_p: 0,
     frequency_penalty: 0,
     presence_penalty: 0,

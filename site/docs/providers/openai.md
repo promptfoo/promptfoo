@@ -403,6 +403,28 @@ Cost estimates follow the published rates for the selected model, service tier, 
 
 For Daybreak on `api.openai.com`, standard estimates follow the [current alias pricing](https://developers.openai.com/api/docs/pricing): Blue uses Sol's rates above; Red uses $12.50 input, $1.25 cached input, $15.625 cache writes, and $75 output per million tokens. Red's model card limits input to 272,000 tokens; its pricing table has no long-context rates. Estimates require cache-write usage and remain unset for other tiers, regional endpoints, gateways, or unsupported usage unless complete explicit rates apply. These alias relationships were verified September 11, 2026 and may change as the aliases move.
 
+### Streaming Chat Completions
+
+Set `stream: true` to receive Chat Completions as a stream.
+
+```yaml
+providers:
+  - id: openai:chat:gpt-6-luna
+    config:
+      stream: true
+```
+
+Promptfoo assembles the response before grading. Structured output, refusals, tool
+callbacks, usage and cost follow the same path as ordinary Chat Completions.
+You can set `passthrough.stream_options`. Promptfoo always requests final usage.
+
+Streams are not stored in Promptfoo's response cache. Use `stream: false` for cached
+responses, audio output or custom tools. Streaming supports function tools.
+Malformed or incomplete streams fail the evaluation.
+Each stream is limited to 32 MiB, each event to 1 MiB, and choices and tools to 128 each.
+The request timeout covers both the HTTP request and reading the stream.
+The separate `openrouter:` provider does not support streaming and rejects `stream: true`.
+
 ### Generating multiple responses
 
 For Chat Completions models that support `n`, pass it through to the API:

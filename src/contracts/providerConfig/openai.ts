@@ -374,6 +374,7 @@ const ConversationFields = TextRequestFields.extend({
   omitDefaults: z.boolean().optional(),
 });
 const ChatFields = ConversationFields.extend({
+  stream: z.boolean().optional(),
   max_tokens: CompletionFields.shape.max_tokens,
   frequency_penalty: CompletionFields.shape.frequency_penalty,
   presence_penalty: CompletionFields.shape.presence_penalty,
