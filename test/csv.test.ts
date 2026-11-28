@@ -334,7 +334,7 @@ describe('testCaseFromCsvRow', () => {
       expect(result).toEqual({
         vars: {},
         assert: [
-          { type: 'similar', value: 'foo', threshold: 0.8 },
+          { type: 'similar', value: 'foo' },
           { type: 'similar', value: 'bar', threshold: 0.6 },
         ],
         options: {},
@@ -352,7 +352,7 @@ describe('testCaseFromCsvRow', () => {
       const result = testCaseFromCsvRow(row);
       expect(result).toEqual({
         vars: {},
-        assert: [{ type: 'similar', value: 'foo', threshold: 0.8 }],
+        assert: [{ type: 'similar', value: 'foo' }],
         options: {},
       });
       expect(logger.warn).toHaveBeenCalledWith(
@@ -885,63 +885,38 @@ describe('assertionFromString', () => {
 
   it('should handle legacy fn option', verifyFunctionAssertion);
 
-  it('should use DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD for similar assertion without threshold', () => {
-    const expected = 'similar:Expected output';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('similar');
-    expect(result.value).toBe('Expected output');
-    expect(result.threshold).toBe(0.8); // DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD
+  it('should leave a similar assertion without a threshold so the handler default applies', () => {
+    expect(assertionFromString('similar:Expected output')).toStrictEqual({
+      type: 'similar',
+      value: 'Expected output',
+    });
   });
 
-  it('should use 0.75 as default threshold for other assertions requiring threshold', () => {
-    const assertionTypes = [
-      'answer-relevance',
-      'classifier',
-      'context-faithfulness',
-      'context-recall',
-      'context-relevance',
-      'cost',
-      'latency',
-      'levenshtein',
-      'perplexity-score',
-      'perplexity',
-      'rouge-l',
-      'rouge-n',
-      'rouge-s',
-      'starts-with',
-    ];
-
-    for (const type of assertionTypes) {
-      const expected = `${type}:Expected output`;
-      const result: Assertion = assertionFromString(expected);
-      expect(result.type).toBe(type);
-      expect(result.value).toBe('Expected output');
-      expect(result.threshold).toBe(0.75);
-    }
-  });
-
-  it('should return complete assertion object structure for representative threshold-based assertion types', () => {
-    // All three genuinely consume `threshold` in their handlers (unlike e.g.
-    // starts-with, which receives the 0.75 default but ignores it), so the
-    // parsed default is meaningful for these types.
-    const representativeAssertions = ['answer-relevance', 'levenshtein', 'rouge-n'];
-
-    for (const type of representativeAssertions) {
-      const expected = `${type}:Expected output`;
-      const result: Assertion = assertionFromString(expected);
-
-      expect(result).toEqual({
-        type,
-        value: 'Expected output',
-        threshold: 0.75,
-      });
-    }
+  it.each([
+    'answer-relevance',
+    'classifier',
+    'context-faithfulness',
+    'context-recall',
+    'context-relevance',
+    'cost',
+    'latency',
+    'levenshtein',
+    'perplexity-score',
+    'perplexity',
+    'rouge-l',
+    'rouge-n',
+    'rouge-s',
+    'starts-with',
+  ])('should leave %s without a CSV threshold so its handler default applies', (type) => {
+    expect(assertionFromString(`${type}:Expected output`)).toStrictEqual({
+      type,
+      value: 'Expected output',
+    });
   });
 
   it('should use provided threshold when specified', verifySimilarityAssertion);
 
-  it('should keep an explicit threshold for types without a CSV default threshold', () => {
+  it('should keep an explicit threshold for any assertion type', () => {
     for (const type of [
       'bleu',
       'gleu',
@@ -962,14 +937,14 @@ describe('assertionFromString', () => {
     });
   });
 
-  it('should not add a threshold for types without a CSV default when none is specified', () => {
+  it('should not add a threshold when none is specified', () => {
     expect(assertionFromString('bleu:Expected output')).toStrictEqual({
       type: 'bleu',
       value: 'Expected output',
     });
   });
 
-  it('should preserve an explicit zero threshold for types without a CSV default', () => {
+  it('should preserve an explicit zero threshold', () => {
     expect(assertionFromString('bleu(0):Expected output')).toEqual({
       type: 'bleu',
       value: 'Expected output',
@@ -1019,7 +994,6 @@ describe('assertionFromString', () => {
     expect(assertionFromString('similar:cosine similarity text')).toEqual({
       type: 'similar',
       value: 'cosine similarity text',
-      threshold: 0.8,
     });
   });
 });
