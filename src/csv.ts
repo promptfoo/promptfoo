@@ -40,13 +40,25 @@ function parseFiniteNumber(value: string | undefined): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function isJavascriptFileReference(value: string): boolean {
+  if (!value.startsWith('file://')) {
+    return false;
+  }
+  const fileRef = value.slice('file://'.length);
+  const separatorIndex = fileRef.lastIndexOf(':');
+  return (
+    isJavascriptFile(fileRef) ||
+    (separatorIndex > 0 && isJavascriptFile(fileRef.slice(0, separatorIndex)))
+  );
+}
+
 export function assertionFromString(expected: string): Assertion {
   // Legacy options
   if (
     expected.startsWith('javascript:') ||
     expected.startsWith('fn:') ||
     expected.startsWith('eval:') ||
-    (expected.startsWith('file://') && isJavascriptFile(expected.slice('file://'.length)))
+    isJavascriptFileReference(expected)
   ) {
     // TODO(1.0): delete eval: legacy option
     let sliceLength = 0;

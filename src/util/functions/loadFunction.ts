@@ -151,6 +151,25 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
 }
 
 /**
+ * Assertion scripts also support Ruby methods and export names that contain colons.
+ * Keep these legacy name suffixes intact after parsing ordinary callback URLs.
+ */
+export function parseAssertionFileUrl(fileUrl: string) {
+  const { filePath, functionName } = parseFileUrl(fileUrl);
+  if (functionName === undefined) {
+    const separator = filePath.indexOf(':');
+    if (separator > 1) {
+      const scriptPath = filePath.slice(0, separator);
+      const isJavascript = isJavascriptFile(scriptPath);
+      if (isJavascript || scriptPath.endsWith('.py') || scriptPath.endsWith('.rb')) {
+        return { filePath: scriptPath, functionName: filePath.slice(separator + 1), isJavascript };
+      }
+    }
+  }
+  return { filePath, functionName, isJavascript: isJavascriptFile(filePath) };
+}
+
+/**
  * Build a wrapped Error that preserves the original error via the `cause`
  * property. We assign `cause` manually rather than using the ES2022
  * `new Error(msg, { cause })` form so the code typechecks under tsconfigs
