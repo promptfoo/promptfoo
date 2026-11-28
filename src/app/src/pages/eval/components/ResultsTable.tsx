@@ -1613,6 +1613,7 @@ function ResultsTable({
     evalId,
     table,
     setTable,
+    tableResultSet,
     config,
     version,
     filteredResultsCount,
@@ -1768,49 +1769,61 @@ function ResultsTable({
 
   const injectVarName = config?.redteam?.injectVar || 'prompt';
 
-  const variableColumnSizes = React.useMemo(
-    () =>
-      head.vars.map((varName, idx) =>
-        estimateMetadataColumnSize(
-          varName,
-          tableBody.map((row) =>
-            getVariableCellValue({
-              row,
-              varName,
-              injectVarName,
-              fallbackValue: row.vars[idx],
-            }),
-          ),
-        ),
-      ),
-    [head.vars, injectVarName, tableBody],
-  );
-
-  const transformDisplayVarColumnSizes = React.useMemo(() => {
-    return Object.fromEntries(
-      transformDisplayVarKeys.map((varName) => [
+  // Keep measured widths, never previous pages of result data.
+  const [sample, setSample] = React.useState<{
+    resultSet: typeof tableResultSet;
+    sizes: Record<string, number>;
+  }>();
+  const sampledSizes = sample?.resultSet === tableResultSet ? sample?.sizes : undefined;
+  const columnSizes = React.useMemo(() => {
+    const sizes = { ...sampledSizes };
+    for (const [idx, varName] of head.vars.entries()) {
+      sizes[`variable:${varName}`] ??= estimateMetadataColumnSize(
         varName,
-        estimateMetadataColumnSize(
-          varName.replace(/^__/, ''),
-          tableBody.map((row) => {
-            const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
-              | Record<string, string>
-              | undefined;
-            return transformVars?.[varName] || '';
+        tableBody.map((row) =>
+          getVariableCellValue({
+            row,
+            varName,
+            injectVarName,
+            fallbackValue: row.vars[idx],
           }),
         ),
-      ]),
-    ) as Record<string, number>;
-  }, [tableBody, transformDisplayVarKeys]);
-
-  const descriptionColumnSize = React.useMemo(
-    () =>
-      estimateMetadataColumnSize(
+      );
+    }
+    for (const varName of transformDisplayVarKeys) {
+      sizes[`transform:${varName}`] ??= estimateMetadataColumnSize(
+        varName.replace(/^__/, ''),
+        tableBody.map((row) => {
+          const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
+            | Record<string, string>
+            | undefined;
+          return transformVars?.[varName] || '';
+        }),
+      );
+    }
+    if (hasDescriptionColumn) {
+      sizes.description ??= estimateMetadataColumnSize(
         'Description',
-        hasDescriptionColumn ? body.map((row) => row.test.description || '') : [],
-      ),
-    [body, hasDescriptionColumn],
-  );
+        tableBody.map((row) => row.test.description || ''),
+      );
+    }
+    return sampledSizes && Object.keys(sizes).length === Object.keys(sampledSizes).length
+      ? sampledSizes
+      : sizes;
+  }, [
+    sampledSizes,
+    head.vars,
+    tableBody,
+    injectVarName,
+    transformDisplayVarKeys,
+    hasDescriptionColumn,
+  ]);
+
+  useEffect(() => {
+    if (tableBody.length && columnSizes !== sampledSizes) {
+      setSample({ resultSet: tableResultSet, sizes: columnSizes });
+    }
+  }, [tableBody.length, tableResultSet, columnSizes, sampledSizes]);
 
   const parseQueryParams = (queryString: string) => {
     return Object.fromEntries(new URLSearchParams(queryString));
@@ -1966,7 +1979,7 @@ function ResultsTable({
                   lightboxImage,
                   toggleLightbox,
                 }),
-              size: variableColumnSizes[idx],
+              size: columnSizes[`variable:${varName}`],
             }),
           ),
         }),
@@ -1982,7 +1995,7 @@ function ResultsTable({
     lightboxOpen,
     lightboxImage,
     injectVarName,
-    variableColumnSizes,
+    columnSizes,
   ]);
 
   // Extract transformDisplayVars from output metadata (used by per-turn layer transforms like indirect-web-pwn)
@@ -2022,13 +2035,13 @@ function ResultsTable({
                   </div>
                 );
               },
-              size: transformDisplayVarColumnSizes[varName],
+              size: columnSizes[`transform:${varName}`],
             },
           ),
         ),
       }),
     ];
-  }, [columnHelper, maxTextLength, transformDisplayVarColumnSizes, transformDisplayVarKeys]);
+  }, [columnHelper, maxTextLength, columnSizes, transformDisplayVarKeys]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -2152,11 +2165,11 @@ function ResultsTable({
             <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
           </div>
         ),
-        size: descriptionColumnSize,
+        size: columnSizes.description,
       };
     }
     return null;
-  }, [descriptionColumnSize, hasDescriptionColumn, maxTextLength]);
+  }, [columnSizes.description, hasDescriptionColumn, maxTextLength]);
 
   const columns = React.useMemo(() => {
     const cols: ColumnDef<EvaluateTableRow, unknown>[] = [];

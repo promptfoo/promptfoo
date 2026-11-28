@@ -1137,6 +1137,33 @@ describe('useTableStore', () => {
   });
 
   describe('fetchEvalData', () => {
+    it('shares a result set across pages until the query, count, or live data changes', async () => {
+      let count = 100;
+      vi.mocked(callApi).mockImplementation(async () =>
+        Response.json({
+          table: { head: { vars: [], prompts: [] }, body: [] },
+          totalCount: count,
+          filteredCount: count,
+        }),
+      );
+      const { fetchEvalData, setTable } = useTableStore.getState();
+      const load = async (options: Parameters<typeof fetchEvalData>[1]) => {
+        await fetchEvalData('eval', options);
+        return useTableStore.getState().tableResultSet;
+      };
+      const first = await load({});
+      expect(first).not.toBeNull();
+      expect(await load({ pageIndex: 1 })).toBe(first);
+      const second = await load({ searchText: 'second' });
+      expect(second).not.toBe(first);
+      count++;
+      const larger = await load({ searchText: 'second' });
+      expect(larger).not.toBe(second);
+      expect(await load({ searchText: 'second', skipLoadingState: true })).not.toBe(larger);
+      setTable(null);
+      expect(useTableStore.getState().tableResultSet).toBeNull();
+    });
+
     it('commits a foreground page before refreshing it and keeps that page if the refresh fails', async () => {
       let finishPage!: (response: Response) => void;
       vi.mocked(callApi)
@@ -1198,9 +1225,11 @@ describe('useTableStore', () => {
         .getState()
         .fetchEvalData('eval', { pageIndex: 1, skipLoadingState: true });
       await useTableStore.getState().fetchEvalData('eval', { pageIndex: 2 });
+      const currentSet = useTableStore.getState().tableResultSet;
       finishRefresh(response('page 2'));
       await refresh;
 
+      expect(useTableStore.getState().tableResultSet).toBe(currentSet);
       expect(useTableStore.getState().table?.body[0].vars).toEqual(['page 3']);
       expect(useTableStore.getState().activeEvalQuery?.options.pageIndex).toBe(2);
       expect(useTableStore.getState().isFetching).toBe(false);
