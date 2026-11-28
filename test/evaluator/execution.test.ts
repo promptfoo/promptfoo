@@ -106,6 +106,41 @@ describeEvaluator('evaluator execution control', () => {
     expect(sleep).toHaveBeenCalledWith(providerDelay ?? evalDelay);
   });
 
+  it('leaves an interrupted Echo delay eligible for resume', async () => {
+    const provider = new EchoProvider({ delay: 60_000 });
+    const started = createDeferred<void>();
+    const callApi = provider.callApi.bind(provider);
+    vi.spyOn(provider, 'callApi').mockImplementation((...args) => {
+      started.resolve();
+      return callApi(...args);
+    });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Echo pause test')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    useEvaluationTimers();
+    const controller = new AbortController();
+    const pending = evaluate(testSuite, evalRecord, {
+      maxConcurrency: 1,
+      abortSignal: controller.signal,
+      pauseSignal: controller.signal,
+    });
+    try {
+      await started.promise;
+      controller.abort(new Error('pause requested'));
+      await pending;
+      expect(await evalRecord.getResults()).toEqual([]);
+      expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(new Set());
+    } finally {
+      controller.abort();
+      await vi.runAllTimersAsync();
+      await pending;
+      vi.useRealTimers();
+    }
+  });
+
   it('evaluates with no provider delay', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
