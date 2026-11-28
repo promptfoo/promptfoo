@@ -28,6 +28,8 @@ The Tree-based Jailbreaks strategy works by:
 3. For each branch, generating new sub-branches based on hypothetical responses.
 4. Exploring this tree of possibilities to find the most effective single-shot prompts.
 
+The search stops after `maxNoImprovement` consecutive scored attempts fail to beat the highest score so far. The default is 25.
+
 :::warning
 This strategy is medium cost. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::

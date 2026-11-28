@@ -616,7 +616,6 @@ async function runRedteamConversation({
   const bestNode: TreeNode = createTreeNode(goal, 0, 0);
 
   let attempts = 0;
-  let bestScore = 0;
   let noImprovementCount = 0;
   let storedGraderResult: GradingResult | undefined = undefined;
   let bestGraderResult: GradingResult | undefined;
@@ -954,13 +953,8 @@ async function runRedteamConversation({
           // Track the transformed prompt for the best scoring turn (e.g., fetchPrompt)
           bestFinalAttackPrompt = finalInjectVar;
           bestTransformDisplayVars = lastTransformDisplayVars;
-          logger.debug(`[Depth ${depth}, Attempt ${attempts}] New max score: ${maxScore}`);
-        } else if (score > bestScore) {
-          bestScore = score;
           noImprovementCount = 0;
-          logger.debug(
-            `[Depth ${depth}, Attempt ${attempts}] New best score: ${score}. Max score: ${maxScore}`,
-          );
+          logger.debug(`[Depth ${depth}, Attempt ${attempts}] New max score: ${maxScore}`);
         } else {
           noImprovementCount++;
           if (noImprovementCount % 5 === 0) {
@@ -1242,7 +1236,7 @@ async function runRedteamConversation({
 
     currentBestNodes = await selectNodes(nextLevelNodes, MAX_WIDTH);
     logger.debug(
-      `[Depth ${depth}] Exploration complete. Selected ${currentBestNodes.length} diverse nodes for next depth. Current best score: ${bestScore}. Max score: ${maxScore}`,
+      `[Depth ${depth}] Exploration complete. Selected ${currentBestNodes.length} diverse nodes for next depth. Max score: ${maxScore}`,
     );
   }
 
@@ -1311,7 +1305,7 @@ async function runRedteamConversation({
   accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
 
   logger.debug(
-    `Red team conversation complete. Final best score: ${bestScore}, Max score: ${maxScore}, Total attempts: ${attempts}`,
+    `Red team conversation complete. Max score: ${maxScore}, Total attempts: ${attempts}`,
   );
 
   stoppingReason = 'MAX_DEPTH';
