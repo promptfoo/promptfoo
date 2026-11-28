@@ -555,6 +555,29 @@ describe('assertionFromString', () => {
 
   it('should create a similarity assertion', verifySimilarityAssertion);
 
+  // Regression tests for #12663: the threshold group in getAssertionRegex only
+  // accepted digits with an optional fraction, so .5, 1e1, 5e-1 and padded
+  // thresholds failed the match and silently became equals assertions.
+  it.each([
+    ['similar(.5):hello', 'similar', 0.5],
+    ['similar(5e-1):hello', 'similar', 0.5],
+    ['levenshtein(1e1):hello', 'levenshtein', 10],
+    ['rouge-n( 0.5 ):hello', 'rouge-n', 0.5],
+    ['not-similar(.9):hello', 'not-similar', 0.9],
+    ['javascript(.5):output.length', 'javascript', 0.5],
+  ])('should parse the threshold in %s', (expected, type, threshold) => {
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe(type);
+    expect(result.threshold).toBe(threshold);
+  });
+
+  it('should warn and fall back to equals when the threshold is not a number', () => {
+    const result: Assertion = assertionFromString('similar(abc):hello');
+    expect(result.type).toBe('equals');
+    expect(result.value).toBe('similar(abc):hello');
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('abc'));
+  });
+
   it('should create a contains assertion', () => {
     const expected = 'contains:substring';
 

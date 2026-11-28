@@ -10,6 +10,7 @@ import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } f
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
 let _assertionRegex: RegExp | null = null;
+let _assertionWithThresholdRegex: RegExp | null = null;
 function getAssertionRegex(): RegExp {
   if (!_assertionRegex) {
     // Longer names must be tried first. `similar` is a prefix of `similar:cosine`,
@@ -18,11 +19,26 @@ function getAssertionRegex(): RegExp {
     const assertionTypesRegex = [...BaseAssertionTypesSchema.options]
       .sort((a, b) => b.length - a.length)
       .join('|');
+    // The threshold group uses the same numeric grammar as parseFiniteNumber
+    // (sign, leading-dot decimals, trailing-dot decimals, exponents) and allows
+    // whitespace padding inside the parentheses, so `similar(.5):x`,
+    // `levenshtein(1e1):x`, and `rouge-n( 0.5 ):x` parse as assertions instead of
+    // silently falling back to `equals` on the literal cell text.
     _assertionRegex = new RegExp(
-      `^(not-)?(${assertionTypesRegex})(?:\\((\\d+(?:\\.\\d+)?)\\))?(?::([\\s\\S]*))?$`,
+      `^(not-)?(${assertionTypesRegex})(?:\\(\\s*([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)\\s*\\))?(?::([\\s\\S]*))?$`,
+    );
+    // Looser companion used only to detect `type(threshold):value` cells whose
+    // threshold is not a number, so they can warn instead of silently re-typing.
+    _assertionWithThresholdRegex = new RegExp(
+      `^(?:not-)?(?:${assertionTypesRegex})\\(([^)]*)\\)(?::[\\s\\S]*)?$`,
     );
   }
   return _assertionRegex;
+}
+
+function getAssertionWithThresholdRegex(): RegExp {
+  getAssertionRegex();
+  return _assertionWithThresholdRegex as RegExp;
 }
 
 /**
@@ -145,6 +161,18 @@ export function assertionFromString(expected: string): Assertion {
         ...(threshold === undefined ? {} : { threshold }),
       };
     }
+  }
+
+  // The cell looks like `type(threshold):value` but the threshold is not a
+  // number. Warn instead of silently re-typing it as an equals assertion on
+  // the literal cell text, which fails with a misleading reason.
+  const thresholdMatch = expected.match(getAssertionWithThresholdRegex());
+  if (thresholdMatch && !uniqueErrorMessages.has(expected)) {
+    uniqueErrorMessages.add(expected);
+    logger.warn(
+      `Could not parse threshold "${thresholdMatch[1]}" in assertion "${expected}". ` +
+        'Treating the cell as an equals assertion on the literal text.',
+    );
   }
 
   // Default to equality
