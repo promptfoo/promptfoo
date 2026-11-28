@@ -1,5 +1,8 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { format } from 'node:util';
 import { gunzipSync } from 'node:zlib';
@@ -197,6 +200,31 @@ describe.each([
       });
     },
   );
+
+  it('preserves static file size and replaces stale validators for invalid ranges', async ({
+    onTestFinished,
+  }) => {
+    const dir = mkdtempSync(join(tmpdir(), 'pf-static-'));
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+    const data = Buffer.from('fixture');
+    const size = data.length;
+    writeFileSync(join(dir, 'index.html'), data);
+    const app = express();
+    app.use(express.static(dir));
+    app.use(handler);
+
+    await withServer(app, async (port) => {
+      const url = `http://127.0.0.1:${port}/`;
+      const full = await fetch(url, { method: 'HEAD' });
+      const failed = await fetch(url, { headers: { Range: `bytes=${size}-` } });
+      expect(failed.status).toBe(416);
+      expect(failed.headers.get('content-range')).toBe(`bytes */${size}`);
+      expect(failed.headers.get('content-type')).toContain('application/json');
+      expect(failed.headers.get('last-modified')).toBeNull();
+      expect(failed.headers.get('etag')).not.toBe(full.headers.get('etag'));
+      expect(await failed.json()).toEqual({ error: 'Range Not Satisfiable' });
+    });
+  });
 
   it('uses statusCode after an invalid status and copies only valid response header values', async () => {
     const messages: string[] = [];

@@ -81,12 +81,18 @@ export function createHttpErrorHandler(
     for (const [name, value] of Object.entries(headers ?? {})) {
       res.setHeader(name, value);
     }
-    // These headers describe the discarded body, not the replacement JSON.
+    // A 416 uses Content-Range to report the selected file's size (RFC 9110 §15.5.17).
+    const range = res.getHeader('Content-Range');
+    if (responseStatus !== 416 || typeof range !== 'string' || !/^bytes \*\/\d+$/i.test(range)) {
+      res.removeHeader('Content-Range');
+    }
+    // Discard headers describing the body that JSON replaces.
     for (const name of [
       'Content-Encoding',
       'Content-Language',
-      'Content-Range',
       'Content-Length',
+      'ETag',
+      'Last-Modified',
     ]) {
       res.removeHeader(name);
     }
