@@ -22,10 +22,20 @@ export function restrictCloudAuthRedirects(
   dispatcher: Pick<Dispatcher, 'dispatch'> = getGlobalDispatcher(),
 ): Pick<Dispatcher, 'dispatch'> {
   const origin = new URL(url).origin;
-  const dispatch: Dispatcher['dispatch'] = (options, handler) => {
+  return guardFetchDispatch(dispatcher, (options) => {
     if (!options.origin || new URL(options.origin.toString()).origin !== origin) {
       throw new CloudAuthRedirectError();
     }
+  });
+}
+
+/** Check each actual destination, including hops followed internally by native fetch. */
+export function guardFetchDispatch(
+  dispatcher: Pick<Dispatcher, 'dispatch'> = getGlobalDispatcher(),
+  check: (options: Dispatcher.DispatchOptions) => void,
+): Pick<Dispatcher, 'dispatch'> {
+  const dispatch: Dispatcher['dispatch'] = (options, handler) => {
+    check(options);
     return dispatcher.dispatch(options, handler);
   };
   // Fetch also reads transport metadata, so preserve the caller's dispatcher properties.
