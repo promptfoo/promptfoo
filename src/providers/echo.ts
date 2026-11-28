@@ -1,6 +1,14 @@
+import { setTimeout as delayWithSignal } from 'node:timers/promises';
+
 import { sleep } from '../util/time';
 
-import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+  ProviderResponse,
+} from '../types/providers';
 
 export class EchoProvider implements ApiProvider {
   private options: ProviderOptions;
@@ -28,11 +36,13 @@ export class EchoProvider implements ApiProvider {
 
   async callApi(
     input: string,
-    _options?: Record<string, any>,
-    context?: any,
+    context?: Partial<CallApiContextParams> & Pick<ProviderResponse, 'metadata'>,
+    options?: CallApiOptionsParams & Pick<ProviderResponse, 'metadata'>,
   ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
+    signal?.throwIfAborted();
     if (this.delay && this.delay > 0) {
-      await sleep(this.delay);
+      await (signal ? delayWithSignal(this.delay, undefined, { signal }) : sleep(this.delay));
     }
 
     // Create a complete ProviderResponse object
@@ -48,7 +58,7 @@ export class EchoProvider implements ApiProvider {
         numRequests: 1,
       },
       isRefusal: false,
-      metadata: context?.metadata || {},
+      metadata: context?.metadata ?? options?.metadata ?? {},
     };
   }
 }
