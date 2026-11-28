@@ -171,6 +171,13 @@ type EnvVars = {
    * Example: "https://app.example.com,https://admin.example.com"
    */
   PROMPTFOO_CSRF_ALLOWED_ORIGINS?: string;
+  /**
+   * Comma-separated hostnames the local server accepts in the Host header of
+   * mutating requests. Blocks DNS-rebinding attacks against intentionally
+   * exposed deployments without also allowlisting their origins.
+   * Example: "pf.lan,eval.internal.example.com"
+   */
+  PROMPTFOO_CSRF_ALLOWED_HOSTS?: string;
 
   //=========================================================================
   // HTTP proxy settings
