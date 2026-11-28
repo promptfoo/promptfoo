@@ -1540,13 +1540,17 @@ Use it for translation or other tasks where a reference answer exists and some w
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
 :::info Installation Required
-METEOR requires the optional `natural` package. Install it before using METEOR assertions:
+METEOR requires `natural`, which is not included in the default installation. Install it with Promptfoo in your project:
 
 ```bash
-npm install natural@^8.2.6
+npm install promptfoo natural@^8.2.6
 ```
 
-If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
+For a global installation, use the same package manager for both packages. With npm, run `npm install -g promptfoo natural@^8.2.6`.
+
+For a one-off eval, run `npx --package=promptfoo --package=natural@^8.2.6 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml` from an empty directory outside an npm project. If either package is installed locally, use the project installation command above.
+
+If `natural` is missing or outside the supported `^8.2.6` range, METEOR assertions return `pass: false` and `score: 0`, with installation instructions in the reason. Other assertions work normally.
 :::
 
 #### How METEOR Works
@@ -1556,7 +1560,7 @@ METEOR evaluates text by:
 1. Matching unigrams (words) between the generated text and reference(s) using:
    - Exact matches (surface forms)
    - Word stems (e.g., "running" → "run")
-   - Semantic meanings
+   - WordNet synonyms
 2. Computing a final score (0.0 to 1.0) based on:
    - Unigram precision (accuracy of matched words)
    - Unigram recall (coverage of reference words)
@@ -1570,7 +1574,7 @@ assert:
     value: hello world # Reference text to compare against
 ```
 
-By default, METEOR uses a threshold of 0.5. Scores range from 0.0 (no match) to 1.0 (perfect match).
+By default, METEOR uses a threshold of 0.5. Scores range from 0 to 1. Identical short texts can score below 1 because the fragmentation penalty still applies.
 
 #### Custom Threshold
 

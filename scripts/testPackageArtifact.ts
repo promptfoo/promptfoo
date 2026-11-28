@@ -1689,6 +1689,15 @@ async function main(): Promise<void> {
         },
       }),
     );
+    await timeAsyncPhase('check optional Natural', () =>
+      runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
+        name: 'Natural',
+        package: 'natural',
+        version: '^8.2.6',
+        script: 'optional-meteor.mjs',
+        env: { PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' },
+      }),
+    );
     await timeAsyncPhase('check optional WatsonX SDKs', () =>
       runOptionalWatsonXChecks(
         consumerDir,
