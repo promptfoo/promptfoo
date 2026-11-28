@@ -285,6 +285,7 @@ describe('RedteamConfigSchema', () => {
     expect(result.injectVar).toBe('prompt');
     expect(result.purpose).toBe('Testing LLM robustness');
     expect(result.entities).toEqual(['Company A', 'Product B']);
+    expect(result.maxConcurrency).toBe(5);
     expect(result.delay).toBe(1000);
     expect(result.provider).toBe('openai:gpt-4');
   });

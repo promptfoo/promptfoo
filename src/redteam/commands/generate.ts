@@ -603,6 +603,7 @@ async function doGenerateRedteamInternal(
     maxConcurrency: explicitMaxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
     numTests: redteamConfig?.numTests ?? options.numTests,
     entities: redteamConfig?.entities,
+    contexts: redteamConfig?.contexts,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose ?? options.purpose,
@@ -670,7 +671,7 @@ async function doGenerateRedteamInternal(
   }
 
   // Check for contexts - if present, generate tests for each context
-  const contexts = redteamConfig?.contexts;
+  const contexts = parsedConfig.data.contexts;
   let redteamTests: any[] = [];
   let purpose: string;
   let entities: string[] = [];

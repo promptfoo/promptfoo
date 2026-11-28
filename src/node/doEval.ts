@@ -61,6 +61,7 @@ import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { isUuid } from '../util/uuid';
+import { RedteamConfigSchema } from '../validators/redteam';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
@@ -585,6 +586,17 @@ async function doEvalWithEnv(
       setupEnv(commandLineOptions.envPath, { processEnv: envFileOverrides });
     }
 
+    if (config.redteam) {
+      const parsedRedteamConfig = RedteamConfigSchema.safeParse(config.redteam);
+      if (!parsedRedteamConfig.success) {
+        throw new EvalRunError(
+          `Invalid redteam configuration:\n${z.prettifyError(parsedRedteamConfig.error)}`,
+        );
+      }
+      config.redteam = parsedRedteamConfig.data;
+      testSuite.redteam = parsedRedteamConfig.data;
+    }
+
     warnIfRedteamConfigHasNoTests(config, testSuite);
 
     // TODO(faizan): Crazy condition to see when we run the example redteam config.
@@ -666,15 +678,17 @@ async function doEvalWithEnv(
         commandLineOptions?.maxConcurrency ??
         evaluateOptions.maxConcurrency);
 
+    const redteamMaxConcurrency = config.redteam?.maxConcurrency;
+    if (redteamMaxConcurrency !== undefined) {
+      maxConcurrency = Math.min(maxConcurrency, redteamMaxConcurrency);
+    }
+    const providerMaxConcurrencyHint =
+      delay > 0 || explicitMaxConcurrency !== undefined || redteamMaxConcurrency !== undefined;
     if (delay > 0) {
       maxConcurrency = 1;
-      // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
-      cliState.maxConcurrency = 1;
       logger.info(
         `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
       );
-    } else if (explicitMaxConcurrency !== undefined) {
-      cliState.maxConcurrency = explicitMaxConcurrency;
     }
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
@@ -968,14 +982,20 @@ async function doEvalWithEnv(
         }
       }
 
-      ret = await evaluate(testSuite, evalRecord, {
-        ...options,
-        restorePromptColumns: Boolean(resumeEval),
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        abortSignal: evaluateOptions.abortSignal,
-        pauseSignal: isCliInvocation && cmdObj.write !== false ? abortController.signal : undefined,
-        isRedteam: Boolean(config.redteam),
-      });
+      const runEval = () =>
+        evaluate(testSuite, evalRecord, {
+          ...options,
+          restorePromptColumns: Boolean(resumeEval),
+          filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+          abortSignal: evaluateOptions.abortSignal,
+          pauseSignal:
+            isCliInvocation && cmdObj.write !== false ? abortController.signal : undefined,
+          isRedteam: Boolean(config.redteam),
+        });
+
+      ret = providerMaxConcurrencyHint
+        ? await cliState.withMaxConcurrency(maxConcurrency, runEval)
+        : await runEval();
 
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics

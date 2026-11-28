@@ -72,6 +72,11 @@ export const RedteamContextSchema = z.object({
     .describe(
       'Optional purpose/context for this context - used for generation and grading, or inherited from the root redteam purpose when omitted or blank',
     ),
+  maxConcurrency: z
+    .int()
+    .positive()
+    .optional()
+    .describe('Maximum number of concurrent eval test cases for this context'),
   vars: z
     .record(z.string(), z.string())
     .optional()
@@ -288,6 +293,10 @@ export const RedteamConfigSchema = z
       .describe('Names of people, brands, or organizations related to your LLM application'),
     contexts: z
       .array(RedteamContextSchema)
+      .refine(
+        (contexts) => new Set(contexts.map((context) => context.id)).size === contexts.length,
+        'Context IDs must be unique',
+      )
       .optional()
       .describe('Security contexts for testing multiple states - each context has its own purpose'),
     plugins: z
@@ -309,7 +318,7 @@ export const RedteamConfigSchema = z
       .int()
       .positive()
       .optional()
-      .describe('Maximum number of concurrent API calls'),
+      .describe('Maximum number of concurrent generation requests and eval test cases'),
     maxCharsPerMessage: z
       .int()
       .positive()
@@ -566,6 +575,7 @@ export const RedteamConfigSchema = z
       strategies,
       ...(frameworks ? { frameworks } : {}),
       ...(data.delay ? { delay: data.delay } : {}),
+      ...(data.maxConcurrency ? { maxConcurrency: data.maxConcurrency } : {}),
       ...(data.entities ? { entities: data.entities } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.language ? { language: data.language } : {}),

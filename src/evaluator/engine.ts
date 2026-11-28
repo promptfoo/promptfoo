@@ -1863,6 +1863,38 @@ function adjustConcurrencyForSerialFeatures({
   return { concurrency, usesConversationVar };
 }
 
+function getContextConcurrencyLimits(testSuite: TestSuite): Map<string, number> {
+  const limits = new Map<string, number>();
+  for (const context of testSuite.redteam?.contexts || []) {
+    const maxConcurrency = context.maxConcurrency;
+    if (
+      typeof maxConcurrency === 'number' &&
+      Number.isInteger(maxConcurrency) &&
+      maxConcurrency > 0
+    ) {
+      limits.set(context.id, maxConcurrency);
+    }
+  }
+  return limits;
+}
+
+function getRedteamEvalMaxConcurrency(testSuite: TestSuite): number | undefined {
+  const maxConcurrency = testSuite.redteam?.maxConcurrency;
+  return typeof maxConcurrency === 'number' &&
+    Number.isInteger(maxConcurrency) &&
+    maxConcurrency > 0
+    ? maxConcurrency
+    : undefined;
+}
+
+function getEvalStepContextConcurrencyLimit(
+  evalStep: RunEvalOptions,
+  contextConcurrencyLimits: Map<string, number>,
+) {
+  const contextId = evalStep.test.metadata?.contextId;
+  return typeof contextId === 'string' ? contextConcurrencyLimits.get(contextId) : undefined;
+}
+
 interface ProcessEvalStepOptions {
   deferGrading?: boolean;
   onRowsReady?: () => void;
@@ -2971,20 +3003,99 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts: CompletedPrompt[];
   }) {
     let lastPromptsFlush = 0;
+    const flushPromptsIfNeeded = async () => {
+      const now = Date.now();
+      if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
+        lastPromptsFlush = now;
+        await this.store.appendPrompts(prompts);
+      }
+    };
+    const processStep = async (evalStep: RunEvalOptions) => {
+      checkAbort();
+      const idx = evalStepIndexMap.get(evalStep)!;
+      await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+      processedIndices.add(idx);
+      await flushPromptsIfNeeded();
+    };
+    const contextConcurrencyLimits = getContextConcurrencyLimits(processingContext.testSuite);
+
+    if (contextConcurrencyLimits.size > 0) {
+      const pendingEvalSteps = [...concurrentRunEvalOptions];
+      const activeEvalSteps = new Set<Promise<void>>();
+      const activeByContext = new Map<string, number>();
+
+      const getRunnableEvalStepIndex = () =>
+        pendingEvalSteps.findIndex((evalStep) => {
+          const contextId = evalStep.test.metadata?.contextId;
+          const contextLimit = getEvalStepContextConcurrencyLimit(
+            evalStep,
+            contextConcurrencyLimits,
+          );
+          if (typeof contextId !== 'string' || contextLimit === undefined) {
+            return true;
+          }
+          return (activeByContext.get(contextId) ?? 0) < contextLimit;
+        });
+
+      const launchEvalStep = (evalStep: RunEvalOptions) => {
+        const contextId = evalStep.test.metadata?.contextId;
+        const contextLimit = getEvalStepContextConcurrencyLimit(evalStep, contextConcurrencyLimits);
+        const hasContextLimit = typeof contextId === 'string' && contextLimit !== undefined;
+        if (hasContextLimit) {
+          activeByContext.set(contextId, (activeByContext.get(contextId) ?? 0) + 1);
+        }
+
+        const task = (async () => {
+          try {
+            await processStep(evalStep);
+          } finally {
+            if (hasContextLimit) {
+              const nextActiveCount = (activeByContext.get(contextId) ?? 1) - 1;
+              if (nextActiveCount > 0) {
+                activeByContext.set(contextId, nextActiveCount);
+              } else {
+                activeByContext.delete(contextId);
+              }
+            }
+          }
+        })();
+
+        activeEvalSteps.add(task);
+        task.then(
+          () => activeEvalSteps.delete(task),
+          () => activeEvalSteps.delete(task),
+        );
+      };
+
+      while (pendingEvalSteps.length > 0 || activeEvalSteps.size > 0) {
+        checkAbort();
+        while (
+          pendingEvalSteps.length > 0 &&
+          activeEvalSteps.size < processingContext.concurrency
+        ) {
+          const runnableIndex = getRunnableEvalStepIndex();
+          if (runnableIndex === -1) {
+            break;
+          }
+          const [evalStep] = pendingEvalSteps.splice(runnableIndex, 1);
+          invariant(evalStep, 'Expected a runnable redteam eval step');
+          launchEvalStep(evalStep);
+        }
+
+        if (activeEvalSteps.size === 0) {
+          throw new Error(
+            'Unable to schedule redteam eval steps within context concurrency limits',
+          );
+        }
+        await Promise.race(activeEvalSteps);
+      }
+      return;
+    }
+
     await async.forEachOfLimit(
       concurrentRunEvalOptions,
       processingContext.concurrency,
-      async (evalStep) => {
-        checkAbort();
-        const idx = evalStepIndexMap.get(evalStep)!;
-        await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
-        processedIndices.add(idx);
-        const now = Date.now();
-        if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
-          lastPromptsFlush = now;
-          await this.store.appendPrompts(prompts);
-        }
-      },
+      processStep,
     );
   }
 
@@ -3899,6 +4010,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       vars.add(varName);
     }
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+    const redteamMaxConcurrency = getRedteamEvalMaxConcurrency(testSuite);
+    if (redteamMaxConcurrency !== undefined) {
+      concurrency = Math.min(concurrency, redteamMaxConcurrency);
+    }
     let runEvalOptions = await buildRunEvalOptions({
       concurrency,
       conversations: this.conversations,
@@ -4010,7 +4125,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
     const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
     const shouldGroupGradingByProvider =
-      concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
+      concurrency === 1 &&
+      !hasEvalStepTimeout &&
+      !usesConversationVar &&
+      redteamMaxConcurrency === undefined &&
+      getContextConcurrencyLimits(testSuite).size === 0;
 
     // Print info messages before starting progress bar
     if (!this.options.silent) {
