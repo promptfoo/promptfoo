@@ -246,7 +246,21 @@ export async function renderPrompt(
   provider?: ApiProvider,
   skipRenderVars?: string[],
 ): Promise<string> {
-  const nunjucks = getNunjucksEngine(nunjucksFilters);
+  const nunjucks = getNunjucksEngine();
+  let customFilterThrew = false;
+  for (const [name, filter] of Object.entries(nunjucksFilters ?? {})) {
+    nunjucks.addFilter(name, function (this: unknown, ...args: unknown[]) {
+      try {
+        const result = Reflect.apply(filter, this, args);
+        // An outer filter may have handled a nested filter's error.
+        customFilterThrew = false;
+        return result;
+      } catch (error) {
+        customFilterThrew = true;
+        throw error;
+      }
+    });
+  }
   const loadedMimeTypes = setLoadedFileMimeTypes(vars);
 
   let basePrompt = prompt.raw;
@@ -516,7 +530,11 @@ export async function renderPrompt(
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject(parsed, vars, nunjucks), null, 2);
-  } catch {
+  } catch (error) {
+    // Retrying with the whole prompt would run the failed custom filter again.
+    if (customFilterThrew) {
+      throw error;
+    }
     // Vars values can be template strings, so we need to render them first:
     const renderedVars = Object.fromEntries(
       Object.entries(vars).map(([key, value]) => {
