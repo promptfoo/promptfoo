@@ -99,31 +99,30 @@ export class ElevenLabsClient {
               : controller.signal,
             ...restOptions,
           });
+          if (!response.ok) {
+            await this.handleErrorResponse(response, attempt, effectiveRetries);
+            continue;
+          }
+
+          // Check if response is JSON or binary
+          const contentType = response.headers.get('content-type');
+          if (contentType?.includes('application/json')) {
+            const data = await response.json();
+            logger.debug('[ElevenLabs Client] JSON response received', {
+              status: response.status,
+            });
+            return data as T;
+          } else {
+            // Binary response (audio)
+            const data = await response.arrayBuffer();
+            logger.debug('[ElevenLabs Client] Binary response received', {
+              status: response.status,
+              size: data.byteLength,
+            });
+            return data as T;
+          }
         } finally {
           clearTimeout(timeoutId);
-        }
-
-        if (!response.ok) {
-          await this.handleErrorResponse(response, attempt, effectiveRetries);
-          continue;
-        }
-
-        // Check if response is JSON or binary
-        const contentType = response.headers.get('content-type');
-        if (contentType?.includes('application/json')) {
-          const data = await response.json();
-          logger.debug('[ElevenLabs Client] JSON response received', {
-            status: response.status,
-          });
-          return data as T;
-        } else {
-          // Binary response (audio)
-          const data = await response.arrayBuffer();
-          logger.debug('[ElevenLabs Client] Binary response received', {
-            status: response.status,
-            size: data.byteLength,
-          });
-          return data as T;
         }
       } catch (error) {
         lastError = error as Error;
@@ -170,16 +169,13 @@ export class ElevenLabsClient {
         ...restOptions,
       });
 
-      clearTimeout(timeoutId);
-
       if (!response.ok) {
         await this.handleErrorResponse(response, 0, 0);
       }
 
       return (await response.json()) as T;
-    } catch (error) {
+    } finally {
       clearTimeout(timeoutId);
-      throw error;
     }
   }
 
@@ -206,14 +202,11 @@ export class ElevenLabsClient {
         ...restOptions,
       });
 
-      clearTimeout(timeoutId);
-
       if (!response.ok) {
         await this.handleErrorResponse(response, 0, 0);
       }
-    } catch (error) {
+    } finally {
       clearTimeout(timeoutId);
-      throw error;
     }
   }
 
@@ -261,8 +254,6 @@ export class ElevenLabsClient {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
       if (!response.ok) {
         await this.handleErrorResponse(response, 0, 0);
       }
@@ -279,9 +270,8 @@ export class ElevenLabsClient {
         });
         return data as T;
       }
-    } catch (error) {
+    } finally {
       clearTimeout(timeoutId);
-      throw error;
     }
   }
 
