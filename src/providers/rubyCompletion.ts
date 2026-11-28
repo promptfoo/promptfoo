@@ -142,7 +142,6 @@ export class RubyProvider implements ApiProvider {
     const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
       this.options,
     )}:${safeJsonStringify(context?.vars)}`;
-    logger.debug(`RubyProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
     let cachedResult;
@@ -179,9 +178,7 @@ export class RubyProvider implements ApiProvider {
 
       const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
 
-      logger.debug(
-        `Running ruby script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
-      );
+      logger.debug(`Running ruby script ${absPath} with scriptPath ${this.scriptPath}`);
 
       const functionName = this.functionName || apiType;
       const result = await runRuby(absPath, functionName, args, {
@@ -196,7 +193,7 @@ export class RubyProvider implements ApiProvider {
       const hasError = hasScriptResultError(result);
 
       if (isCacheEnabled() && !hasError) {
-        logger.debug(`RubyProvider caching result: ${cacheKey}`);
+        logger.debug('RubyProvider caching result');
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(

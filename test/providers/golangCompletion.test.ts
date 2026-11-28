@@ -7,6 +7,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import logger from '../../src/logger';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 import { createBasePathOptions } from '../factories/literalFixtures';
 
@@ -298,6 +299,20 @@ describe('GolangProvider', () => {
     for (const call of mockExecFile.mock.calls) {
       expect(call[2]).toMatchObject({ env: { PROMPTFOO_REVIEW_ENV_PROBE: 'file' } });
     }
+  });
+
+  it('keeps the provider config out of log messages and context', async () => {
+    const secret = 'fake-api-key-for-this-test';
+    const provider = new GolangProvider('script.go', {
+      config: { connection: { opaque: secret } },
+    });
+
+    await provider.callApi('hello');
+
+    const calls = (['debug', 'info', 'warn', 'error'] as const).flatMap(
+      (level) => vi.mocked(logger[level]).mock.calls,
+    );
+    expect(JSON.stringify(calls)).not.toContain(secret);
   });
 
   describe('constructor', () => {
