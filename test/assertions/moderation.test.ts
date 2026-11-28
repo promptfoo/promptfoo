@@ -464,6 +464,19 @@ describe('handleModeration', () => {
     );
   });
 
+  it('moderates the assistant output when the final user message is empty', async () => {
+    mockedMatchesModeration.mockResolvedValue(createFlaggedModerationResult());
+    const result = await handleModeration({
+      ...baseParams,
+      prompt: JSON.stringify([{ role: 'user', content: '' }]),
+    });
+    expect(result.pass).toBe(false);
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      expect.objectContaining({ userPrompt: '', assistantResponse: 'output' }),
+      {},
+    );
+  });
+
   it('should extract the final user message from YAML chat prompts before moderation', async () => {
     mockedMatchesModeration.mockResolvedValue(createPassingGrade(1, 'Safe content'));
 

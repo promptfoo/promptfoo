@@ -709,6 +709,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'javascript',
   'latency',
   'levenshtein',
+  'llama-guard',
   'llm-rubric',
   'pi',
   'meteor',
