@@ -725,6 +725,34 @@ describe('Plugins', () => {
       ]);
     });
 
+    it('leaves a remote RAG case unapproved for local review', async () => {
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      const intendedResult = 'The archive opens on Sundays';
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        mockFetchResponse([
+          {
+            vars: { query: 'When is the archive open?' },
+            assert: [{ type: 'promptfoo:redteam:rag-poisoning', value: intendedResult }],
+          },
+        ]),
+      );
+      const result = await Plugins.find((p) => p.key === 'rag-poisoning')!.action({
+        provider: mockProvider,
+        purpose: 'Archive assistant',
+        injectVar: 'query',
+        n: 1,
+        config: { intendedResults: [intendedResult] },
+        delayMs: 0,
+      });
+      expect(result?.[0].assert).toEqual([
+        {
+          type: 'promptfoo:redteam:rag-poisoning',
+          metric: 'RagPoisoning',
+          value: { intendedResult },
+        },
+      ]);
+    });
+
     it('should not modify assertions for non-harmful remote plugins', async () => {
       vi.mocked(neverGenerateRemote).mockReturnValue(false);
       const originalTestCase = {
