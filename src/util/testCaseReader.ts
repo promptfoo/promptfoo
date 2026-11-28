@@ -338,6 +338,7 @@ function parseLocalCsv(fileContent: string, delimiter: string, relaxQuotes: bool
     bom: true,
     delimiter,
     relax_quotes: relaxQuotes,
+    skip_empty_lines: true,
   });
 }
 
