@@ -793,6 +793,17 @@ describe('MetaResponsesProvider request body shaping', () => {
     expect(body.max_output_tokens).toBe(4096);
   });
 
+  it('keeps a prompt completion limit over a Responses provider limit', async () => {
+    const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
+      config: { max_output_tokens: 4096 },
+    });
+    const { body } = await (provider as any).getOpenAiBody('Hello', {
+      prompt: { config: { max_completion_tokens: 32 } },
+    });
+    expect(body.max_output_tokens).toBe(32);
+    expect(body.max_completion_tokens).toBeUndefined();
+  });
+
   it('maps max_tokens onto max_output_tokens', async () => {
     const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
       config: { max_tokens: 2048 },

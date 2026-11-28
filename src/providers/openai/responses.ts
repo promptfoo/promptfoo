@@ -744,6 +744,18 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
   private readonly backgroundCacheScope = `provider:${++nextBackgroundProviderScope}`;
+  private chatOnlyOptionsWarningShown = false;
+
+  // These legacy Chat options are not translated by the Responses builder.
+  private static readonly CHAT_ONLY_OPTIONS = [
+    'frequency_penalty',
+    'presence_penalty',
+    'functions',
+    'function_call',
+    'seed',
+    'stop',
+    'tool_resources',
+  ] as const;
 
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
@@ -1071,6 +1083,27 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
+  private warnOnceForChatOnlyOptions(config: OpenAiResponsesConfig): void {
+    if (this.chatOnlyOptionsWarningShown) {
+      return;
+    }
+    const dropped = OpenAiResponsesProvider.CHAT_ONLY_OPTIONS.filter(
+      (option) =>
+        config[option] !== undefined ||
+        // The chat provider falls back to these env vars, so an env-only value is dropped here too.
+        (option === 'frequency_penalty' && getEnvString('OPENAI_FREQUENCY_PENALTY')) ||
+        (option === 'presence_penalty' && getEnvString('OPENAI_PRESENCE_PENALTY')),
+    );
+    if (dropped.length === 0) {
+      return;
+    }
+    this.chatOnlyOptionsWarningShown = true;
+    logger.warn(
+      '[OpenAI Responses] Ignoring unsupported Chat Completions options. Use Responses options or a compatible Chat Completions model.',
+      { provider: this.id(), model: this.modelName, options: dropped },
+    );
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -1081,7 +1114,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const passthrough: Record<string, unknown> | undefined = mergedConfig.passthrough
       ? { ...mergedConfig.passthrough }
       : undefined;
-    const config = { ...mergedConfig, passthrough };
+    // Resolve aliases by layer and return the effective explicit cap to compatible adapters.
+    const config = {
+      ...mergedConfig,
+      passthrough,
+      max_output_tokens:
+        promptConfig?.max_output_tokens ??
+        promptConfig?.max_completion_tokens ??
+        this.config.max_output_tokens ??
+        this.config.max_completion_tokens,
+    };
+    this.warnOnceForChatOnlyOptions(config);
     const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
     // Chat-format content parts are translated to their Responses equivalents so multimodal
@@ -1174,7 +1217,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             type: 'json_schema',
             name: schemaName,
             schema,
-            strict: true,
+            strict: responseFormat.json_schema?.strict ?? responseFormat.strict ?? false,
           },
         };
       } else {

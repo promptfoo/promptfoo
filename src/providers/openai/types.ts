@@ -158,14 +158,14 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
         type: 'json_schema';
         json_schema: {
           name: string;
-          strict: boolean;
           schema: {
             type: 'object';
             properties: Record<string, any>;
-            required?: string[];
-            additionalProperties: false;
           };
-        };
+        } & (
+          | { strict: true; schema: { additionalProperties: false; required: string[] } }
+          | { strict?: false; schema: { additionalProperties?: boolean; required?: string[] } }
+        );
       };
   stop?: string[];
   seed?: number;

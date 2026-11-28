@@ -290,10 +290,7 @@ const NestedResponseFormat = z.strictObject({
 const FlatResponseFormat = z.strictObject({
   type: z.literal('json_schema'),
   name: z.string().optional(),
-  strict: z
-    .literal(true)
-    .optional()
-    .describe('Responses config.response_format uses strict mode at runtime'),
+  strict: z.boolean().optional(),
   schema: SchemaDocument,
 });
 const BasicResponseFormat = z.strictObject({ type: z.enum(['text', 'json_object']) });
@@ -307,10 +304,7 @@ const ResponsesResponseFormat = z.union([
   BasicResponseFormat,
   NestedResponseFormat.extend({
     json_schema: NestedResponseFormat.shape.json_schema.omit({ description: true }).extend({
-      strict: z
-        .literal(true)
-        .optional()
-        .describe('Responses config.response_format uses strict mode at runtime'),
+      strict: z.boolean().optional(),
     }),
   }),
   FlatResponseFormat,
@@ -428,6 +422,12 @@ export const OpenAiResponsesConfigInputSchema = ConversationFields.extend({
   response_format: ResponsesResponseFormat.optional(),
   instructions: z.string().optional(),
   max_output_tokens: z.number().int().min(16).optional(),
+  max_completion_tokens: z
+    .number()
+    .int()
+    .min(16)
+    .optional()
+    .describe('Alias for max_output_tokens'),
   max_tool_calls: z.number().optional(),
   access_programs: z
     .strictObject({ cyber: z.enum(['standard', 'daybreak_blue', 'daybreak_red']).optional() })
