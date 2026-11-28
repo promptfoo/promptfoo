@@ -71,6 +71,9 @@ export type GetConfigResponse = z.infer<typeof GetConfigResponseSchema>;
 
 /** Grouped schemas for server-side validation. */
 export const ConfigSchemas = {
+  DefaultEval: {
+    Response: z.object({ config: z.record(z.string(), z.unknown()).nullable() }),
+  },
   List: {
     Query: ListConfigsQuerySchema,
     Response: ListConfigsResponseSchema,

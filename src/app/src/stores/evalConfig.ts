@@ -37,6 +37,8 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
   extensions: [],
 };
 
+export const EVAL_CONFIG_STORAGE_KEY = 'promptfoo';
+
 const CREDENTIAL_TOKEN_PATTERN =
   /(?:^|_)(ssh_?key|id_?token|jwt_?token|x_?api_?key|json_?web_?token|api_?key|api_?secret|key|secret|token|password|passphrase|credential|signature|cookie|authorization|bearer)s?(?:_|$)/;
 
@@ -1349,7 +1351,7 @@ export const useStore = create<EvalConfigState>()(
       },
     }),
     {
-      name: 'promptfoo',
+      name: EVAL_CONFIG_STORAGE_KEY,
       skipHydration: true,
       partialize: (state) => ({
         config: normalizeLocalConfig(omitPersistedSensitiveValues(state.config)),
@@ -1368,9 +1370,14 @@ export const useStore = create<EvalConfigState>()(
           ),
         };
       },
-      onRehydrateStorage: () => (state) => {
-        // Re-persist so credentials dropped during merge are also cleared from storage.
-        state?.setConfig(state.config);
+      onRehydrateStorage: () => {
+        const hasSavedDraft = localStorage.getItem(EVAL_CONFIG_STORAGE_KEY) !== null;
+        return (state) => {
+          // Rewrite existing drafts to clear credentials dropped during merge.
+          if (hasSavedDraft) {
+            state?.setConfig(state.config);
+          }
+        };
       },
     },
   ),

@@ -14,7 +14,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { useStore } from '@app/stores/evalConfig';
+import { EVAL_CONFIG_STORAGE_KEY, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { loadYaml } from '@promptfoo/util/yamlLoad';
 import { Check, Upload } from 'lucide-react';
@@ -85,6 +85,7 @@ const EvaluateTestSuiteCreator = () => {
   const [editorTab, setEditorTab] = useState<EditorTab>('ui');
   const [resetKey, setResetKey] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const editorTouched = React.useRef(false);
 
   const { config, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
@@ -92,7 +93,43 @@ const EvaluateTestSuiteCreator = () => {
   const normalizedProviders = React.useMemo(() => normalizeProviders(providers), [providers]);
 
   useEffect(() => {
-    useStore.persist.rehydrate();
+    const controller = new AbortController();
+
+    const loadInitialConfig = async () => {
+      const hasSavedDraft = localStorage.getItem(EVAL_CONFIG_STORAGE_KEY) !== null;
+      await useStore.persist.rehydrate();
+      if (hasSavedDraft || controller.signal.aborted) {
+        return;
+      }
+
+      const initialConfig = useStore.getState().config;
+      const response = await callApi('/configs/eval/default/draft', { signal: controller.signal });
+      if (!response.ok) {
+        return;
+      }
+      const { config: defaultConfig } = await response.json();
+      if (
+        !defaultConfig ||
+        controller.signal.aborted ||
+        editorTouched.current ||
+        localStorage.getItem(EVAL_CONFIG_STORAGE_KEY) !== null ||
+        useStore.getState().config !== initialConfig
+      ) {
+        return;
+      }
+      const validation = validateYamlConfigDraft(defaultConfig);
+      if (validation.success) {
+        useStore.getState().updateConfig(validation.config);
+        setResetKey((key) => key + 1);
+      }
+    };
+
+    void loadInitialConfig().catch((error) => {
+      if (!controller.signal.aborted) {
+        console.error('Failed to initialize the eval editor:', error);
+      }
+    });
+    return () => controller.abort();
   }, []);
 
   // Fetch config status to determine if ConfigureEnvButton should be shown
@@ -225,6 +262,9 @@ const EvaluateTestSuiteCreator = () => {
   return (
     <PageContainer>
       <Tabs
+        onChangeCapture={() => {
+          editorTouched.current = true;
+        }}
         value={editorTab}
         onValueChange={(value) => setEditorTab(value as EditorTab)}
         className="w-full"

@@ -413,6 +413,18 @@ export function createServerOpenApiRegistry() {
 
   register({
     method: 'get',
+    path: '/api/configs/eval/default/draft',
+    operationId: 'getDefaultEvalDraft',
+    tags: ['Configs'],
+    summary: 'Get the default eval draft from the server working directory',
+    responses: {
+      200: jsonResponse(ConfigSchemas.DefaultEval.Response),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
+    },
+  });
+
+  register({
+    method: 'get',
     path: '/api/configs/{type}',
     operationId: 'listConfigsByType',
     tags: ['Configs'],
