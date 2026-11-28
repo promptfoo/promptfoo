@@ -64,6 +64,8 @@ Use a fresh writable checkout for each red-team row when you want high-confidenc
 
 Use `coding-agent:core` for quick baseline coverage, or switch to `coding-agent:all` when you want the full coding-agent suite in one collection.
 
+To test whether seeing a public patch helps an issue reporter induce a regression, try the [issue revision experiment](../redteam-coding-agent-issue-revision/README.md). It compares three feedback conditions on the same invoice search task and tests the resulting SQL for cross-customer disclosures.
+
 ## Safety
 
 - Never place production secrets in red-team configs. Use synthetic canaries (`{{secretEnvValue}}`).

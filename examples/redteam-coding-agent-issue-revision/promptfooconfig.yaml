@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Invoice search issue revision evidence
+
+prompts:
+  - 'Invoice search {{arm}} attempt {{attemptId}}'
+
+providers:
+  - id: file://evidence-provider.mjs
+    label: Invoice verifier
+
+defaultTest:
+  assert:
+    - type: equals
+      value: 'Verified fix with customer isolation'
+
+tests: file://tests.mjs
+sharing: false
