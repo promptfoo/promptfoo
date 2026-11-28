@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import logger from '../../../logger';
-import { doEval } from '../../../node/doEval';
+import { applyTestFilters, doEval } from '../../../node/doEval';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
 import { filterPrompts } from '../../../util/eval/filterPrompts';
@@ -183,14 +183,36 @@ export function registerRunEvaluationTool(server: McpServer) {
         // to avoid process.exit(1) and maintain MCP backwards compatibility
         if (testCaseIndices !== undefined || promptFilter || providerFilter) {
           const configPaths = configPath ? [configPath] : ['promptfooconfig.yaml'];
-          const { config, testSuite } = await resolveConfigs(
+          const { config, testSuite, commandLineOptions } = await resolveConfigs(
             {
               config: configPaths,
             },
             defaultConfig,
+            'Evaluation',
           );
 
           const filteredTestSuite = { ...testSuite };
+          let testSelectionOptions: Pick<InternalEvaluateOptions, 'filterRange'> | undefined;
+          // Explicit indices address the authored top-level tests and override their defaults.
+          // Scenarios are outside that index space and keep their configured selection.
+          if (
+            testCaseIndices === undefined &&
+            (commandLineOptions?.filterFirstN !== undefined ||
+              commandLineOptions?.filterPattern !== undefined)
+          ) {
+            const filterRange =
+              commandLineOptions?.filterRange ?? config.evaluateOptions?.filterRange;
+            const consumedTopLevelRange = await applyTestFilters(filteredTestSuite, config, {
+              firstN: commandLineOptions?.filterFirstN,
+              pattern: commandLineOptions?.filterPattern,
+              range: filterRange,
+              sample: commandLineOptions?.filterSample,
+              sampleSeed: commandLineOptions?.filterSampleSeed,
+            });
+            testSelectionOptions = {
+              filterRange: consumedTopLevelRange ? undefined : filterRange,
+            };
+          }
 
           if (providerFilter) {
             const filters = Array.isArray(providerFilter) ? providerFilter : [providerFilter];
@@ -315,6 +337,7 @@ export function registerRunEvaluationTool(server: McpServer) {
 
           const evalRecord = await Eval.create(config, filteredTestSuite.prompts, {
             id: `mcp-eval-${Date.now()}`,
+            ...(testSelectionOptions ? { runtimeOptions: testSelectionOptions } : {}),
           });
 
           logger.debug(
@@ -327,6 +350,7 @@ export function registerRunEvaluationTool(server: McpServer) {
             maxConcurrency,
             timeoutMs,
             eventSource: 'mcp',
+            ...testSelectionOptions,
           });
           const endTime = Date.now();
 

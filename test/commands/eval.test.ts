@@ -39,6 +39,7 @@ import {
 import {
   deleteErrorResults,
   getErrorResultIds,
+  getReplacedErrorResultIds,
   recalculatePromptMetrics,
 } from '../../src/node/retry';
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
@@ -88,6 +89,7 @@ vi.mock('../../src/migrate');
 vi.mock('../../src/node/retry', () => ({
   deleteErrorResults: vi.fn(),
   getErrorResultIds: vi.fn(),
+  getReplacedErrorResultIds: vi.fn(),
   recalculatePromptMetrics: vi.fn(),
 }));
 vi.mock('../../src/providers');
@@ -225,6 +227,7 @@ describe('evalCommand', () => {
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
     vi.mocked(deleteErrorResults).mockResolvedValue(undefined);
     vi.mocked(getErrorResultIds).mockResolvedValue([]);
+    vi.mocked(getReplacedErrorResultIds).mockReset().mockResolvedValue([]);
     vi.mocked(recalculatePromptMetrics).mockResolvedValue(undefined);
   });
 
@@ -708,6 +711,7 @@ describe('evalCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: undefined }),
       cloudConfig,
+      'Evaluation',
     );
   });
 
@@ -1284,6 +1288,7 @@ describe('evalCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: ['/suite/promptfooconfig.yaml'] }),
       expect.objectContaining({ prompts: ['from-dir'] }),
+      'Evaluation',
     );
 
     statSpy.mockRestore();
@@ -1317,6 +1322,7 @@ describe('evalCommand', () => {
         config: ['/base.yaml', '/suite/promptfooconfig.yaml', '/override.yaml'],
       }),
       expect.objectContaining({ prompts: ['from-dir'] }),
+      'Evaluation',
     );
 
     statSpy.mockRestore();
@@ -1373,6 +1379,7 @@ describe('evalCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: ['/base.yaml'] }),
       expect.anything(),
+      'Evaluation',
     );
 
     loggerWarnSpy.mockClear();
@@ -2134,6 +2141,7 @@ describe('evalCommand', () => {
     latestEval.runtimeOptions = { providerFilter: 'selected-target' };
     const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
     vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
+    vi.mocked(getReplacedErrorResultIds).mockResolvedValueOnce(['result-1']);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
       config: {} as UnifiedConfig,
       testSuite: {
@@ -2163,7 +2171,9 @@ describe('evalCommand', () => {
         { filterProviders: 'selected-target' },
         latestEval.config,
       );
-      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
+      expect(getReplacedErrorResultIds).toHaveBeenCalledWith(latestEval, ['result-1', 'result-2']);
+      expect(deleteErrorResults).toHaveBeenCalledTimes(1);
+      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1']);
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
     } finally {
       latestSpy.mockRestore();
