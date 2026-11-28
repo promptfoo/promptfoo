@@ -1,4 +1,6 @@
 import { vi } from 'vitest';
+import * as pacing from '../../src/scheduler/cancellation';
+import { sleep } from '../../src/util/time';
 
 import type { ApiProvider, Prompt, ProviderResponse } from '../../src/types/index';
 
@@ -82,3 +84,22 @@ export {
   resetMockProviders,
   toPrompt,
 };
+
+export function useEvaluationTimers() {
+  // Cancellation unwinds provider promises through setImmediate; keep that real
+  // while controlling the evaluation deadlines and target delays.
+  vi.useFakeTimers({
+    toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+  });
+}
+
+export function recordPacing() {
+  const wait = pacing.sleepWithAbort;
+  return vi.spyOn(pacing, 'sleepWithAbort').mockImplementation(async (ms, signal) => {
+    if (vi.isFakeTimers()) {
+      return wait(ms, signal);
+    }
+    signal?.throwIfAborted();
+    await sleep(ms);
+  });
+}

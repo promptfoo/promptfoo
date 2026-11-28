@@ -7,6 +7,7 @@ import Clone from 'rfdc';
 import {
   getAssertionBaseType,
   MODEL_GRADED_ASSERTION_TYPES,
+  runAssertions,
   runCompareAssertion,
 } from '../assertions/index';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
@@ -16,6 +17,7 @@ import { getEnvBool, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from '../envars'
 import { runExtensionHook } from '../evaluatorHelpers';
 import logger, { isDebugEnabled } from '../logger';
 import { selectMaxScore } from '../matchers/comparison';
+import { getGradingProvider } from '../matchers/providers';
 import { CIProgressReporter } from '../progress/ciProgressReporter';
 import {
   cleanupProgressAfterError,
@@ -30,9 +32,11 @@ import { generateIdFromPrompt } from '../prompts/id';
 import { maybeEmitAzureOpenAiWarning } from '../providers/azure/warnings';
 import { providerRegistry } from '../providers/providerRegistry';
 import { isPromptfooSampleTarget } from '../providers/shared';
-import { redteamProviderManager } from '../redteam/providers/shared';
 import { RateLimitRegistry } from '../scheduler';
-import { withProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import {
+  runProviderCallWithAbort,
+  withProviderCallExecutionContext,
+} from '../scheduler/providerCallExecutionContext';
 import { type ProviderCallQueue, ProviderGroupedCallQueue } from '../scheduler/providerCallQueue';
 import { generatePrompts } from '../suggestions';
 import telemetry from '../telemetry';
@@ -110,15 +114,23 @@ import { TransformInputType, transform } from '../util/transform';
 import { compileDerivedMetricFormula } from './derivedMetricFormula';
 import { PromptSuggestionsRejectedError } from './errors';
 import { getResultIndexKey } from './resultIndex';
-import { PROMPTFOO_METADATA_KEY, sanitizeResultForJsonlArtifact } from './resultProcessing';
+import {
+  PROMPTFOO_METADATA_KEY,
+  redactSensitiveResultFieldsForDb,
+  sanitizeForDb,
+  sanitizeResultForJsonlArtifact,
+} from './resultProcessing';
 import {
   ABORTED_GRADING_PREFIX,
+  applyDeferredGradingError,
   applyGradingError,
+  applyGradingResult,
   CONVERSATION_VAR_NAME,
   deferredGradingPromises,
   getRepeatCacheNamespace,
   isGradingAbort,
   promptUsesConversationVariable,
+  resolveInvocationDelay,
   runEvalInternal,
 } from './runEval';
 
@@ -133,7 +145,7 @@ import type {
   Vars,
   VarValue,
 } from '../types/index';
-import type { InternalEvaluateOptions } from '../types/internal';
+import type { InternalEvaluateOptions, InternalRunEvalOptions } from '../types/internal';
 import type { CallApiContextParams } from '../types/providers';
 import type {
   EvaluationRecord,
@@ -303,6 +315,77 @@ function synchronizeLegacyTransportHeaders(
     return metadataWithoutHeaders;
   }
   return { ...metadataWithoutHeaders, headers: hookResponseMetadata.headers };
+}
+
+async function applyAfterEachHook(
+  row: EvaluateResult,
+  test: AtomicTestCase,
+  testSuite: TestSuite,
+): Promise<void> {
+  // Apply afterEach before persistence, with separate score and response containers.
+  if (testSuite.extensions?.length) {
+    const gradingMetadata = row.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY];
+    const interrupted = gradingMetadata?.assertionGradingInterrupted;
+    let metadataBeforeHook: unknown;
+    if (interrupted) {
+      try {
+        metadataBeforeHook = structuredClone([row.metadata ?? {}, row.response?.metadata ?? {}]);
+      } catch {
+        // If metadata cannot be compared safely, keep the hook output and require a rerun.
+      }
+    }
+    try {
+      const originalMetadata = row.metadata;
+      const originalResponseMetadata = row.response?.metadata;
+      const afterEachOut = await runExtensionHook(testSuite.extensions, 'afterEach', {
+        test,
+        result: {
+          ...row,
+          namedScores: { ...row.namedScores },
+          metadata: { ...row.metadata },
+          response: row.response
+            ? { ...row.response, metadata: { ...row.response.metadata } }
+            : row.response,
+        },
+      });
+      // runExtensionHook sanitizes namedScores via filterFiniteScores;
+      // re-sanitize here to also catch in-place mutations that bypass the merge.
+      row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
+      // If a hook replaced response.metadata, a legacy top-level metadata.headers copied
+      // from the old transport would otherwise persist as stale credentials. Re-sync it.
+      row.metadata = synchronizeLegacyTransportHeaders(
+        originalMetadata,
+        originalResponseMetadata,
+        afterEachOut.result.metadata,
+        afterEachOut.result.response?.metadata,
+      );
+      if (row.response && afterEachOut.result.response) {
+        row.response.metadata = afterEachOut.result.response.metadata;
+      }
+    } catch (error) {
+      logger.error(`afterEach extension hook failed, persisting row without hook modifications`, {
+        error,
+      });
+    } finally {
+      if (
+        interrupted &&
+        !isDeepStrictEqual(metadataBeforeHook, [row.metadata ?? {}, row.response?.metadata ?? {}])
+      ) {
+        // Never retain a hidden copy of data the hook may have deliberately redacted.
+        gradingMetadata.assertionGradingMetadataChanged = true;
+      }
+    }
+  }
+}
+
+type GradingState = Pick<
+  EvaluationStoreResult,
+  'success' | 'score' | 'failureReason' | 'error' | 'namedScores' | 'gradingResult'
+>;
+
+function getGradingState(result: GradingState): GradingState {
+  const { success, score, failureReason, error, namedScores, gradingResult } = result;
+  return { success, score, failureReason, error, namedScores, gradingResult };
 }
 
 function getNonTransientTargetStatus(row: EvaluateResult): number | undefined {
@@ -1484,9 +1567,10 @@ function createRunEvalOption({
   testIdx: number;
   testSuite: TestSuite;
   vars: Vars | undefined;
-}): RunEvalOptions {
+}): InternalRunEvalOptions {
   return {
-    delay: options.delay || 0,
+    delay: options.delay ?? 0,
+    delayOmitted: options.delay === undefined,
     provider,
     prompt: {
       ...prompt,
@@ -1805,23 +1889,16 @@ async function filterCompletedResumeSteps(
     return runEvalOptions;
   }
 
-  let pending = runEvalOptions;
-  try {
-    const completedPairs = await store.readCompletedIndexPairs({
-      excludeErrors: cliState.retryMode,
-    });
-    if (completedPairs.size === 0) {
-      return runEvalOptions;
-    }
-    pending = runEvalOptions.filter((step) => !completedPairs.has(getResultIndexKey(step)));
-    const skipped = runEvalOptions.length - pending.length;
-    if (skipped > 0) {
-      logger.info(`Resuming: skipping ${skipped} previously completed cases`);
-    }
-  } catch (err) {
-    logger.warn(
-      `Resume: failed to load completed results. Running full evaluation. ${String(err)}`,
-    );
+  const completedPairs = await store.readCompletedIndexPairs({
+    excludeErrors: cliState.retryMode,
+  });
+  if (!completedPairs.size) {
+    return runEvalOptions;
+  }
+  const pending = runEvalOptions.filter((step) => !completedPairs.has(getResultIndexKey(step)));
+  const skipped = runEvalOptions.length - pending.length;
+  if (skipped > 0) {
+    logger.info(`Resuming: skipping ${skipped} previously completed cases`);
   }
   return pending;
 }
@@ -1865,6 +1942,7 @@ function adjustConcurrencyForSerialFeatures({
 
 interface ProcessEvalStepOptions {
   deferGrading?: boolean;
+  onGradingStarted?: (row: EvaluateResult) => void;
   onRowsReady?: () => void;
   precomputedRows?: EvaluateResult[];
   providerCallQueue?: ProviderCallQueue;
@@ -1875,6 +1953,14 @@ interface GroupedRows {
   evalStep: RunEvalOptions;
   index: number;
   rows: EvaluateResult[];
+}
+
+interface PromptGradingMetricsContext {
+  derivedMetrics: PreparedDerivedMetrics;
+  evalStep: RunEvalOptions;
+  metrics: PromptMetrics;
+  promptEvalCount: number;
+  row: EvaluateResult;
 }
 
 interface EvalProcessingContext {
@@ -2201,10 +2287,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         current: data.current,
       });
     });
-
-    // Share rate limit registry with redteam provider manager
-    // This ensures redteam internal providers also benefit from rate limiting
-    redteamProviderManager.setRateLimitRegistry(this.rateLimitRegistry);
   }
 
   /**
@@ -2345,19 +2427,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private updatePromptMetricsForRow({
+  private updatePromptGradingMetrics({
     derivedMetrics,
     evalStep,
     metrics,
     promptEvalCount,
     row,
-  }: {
-    derivedMetrics: PreparedDerivedMetrics;
-    evalStep: RunEvalOptions;
-    metrics: PromptMetrics;
-    promptEvalCount: number;
-    row: EvaluateResult;
-  }): void {
+  }: PromptGradingMetricsContext): void {
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
       accumulateNamedMetric(metrics, {
@@ -2377,16 +2453,20 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
     metrics.assertFailCount +=
       row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
-    metrics.totalLatencyMs += row.latencyMs || 0;
-    accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
-      countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
-    });
-
     if (row.gradingResult?.tokensUsed) {
       accumulateGradingTokenUsage(metrics.tokenUsage, row.gradingResult.tokensUsed, {
         cached: row.gradingResult.metadata?.cachedResponse,
       });
     }
+  }
+
+  private updatePromptMetricsForRow(context: PromptGradingMetricsContext): void {
+    this.updatePromptGradingMetrics(context);
+    const { metrics, row } = context;
+    metrics.totalLatencyMs += row.latencyMs || 0;
+    accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
+      countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
+    });
 
     if (row.incurredCost !== undefined || metrics.incurredCost !== undefined) {
       metrics.incurredCost =
@@ -2395,12 +2475,193 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics.cost += row.cost || 0;
   }
 
+  private async resumeInterruptedGrading(
+    runEvalOptions: InternalRunEvalOptions[],
+    prompts: CompletedPrompt[],
+    testSuite: TestSuite,
+    derivedMetrics: PreparedDerivedMetrics,
+  ): Promise<void> {
+    if (!cliState.resume || !this.store.persisted || cliState.retryMode) {
+      return;
+    }
+    const interruptedPairs = await this.store.readCompletedIndexPairs({
+      interruptedGradingOnly: true,
+    });
+    const steps = new Map(runEvalOptions.map((step) => [getResultIndexKey(step), step]));
+    const testIndices = new Set(
+      runEvalOptions
+        .filter((step) => interruptedPairs.has(getResultIndexKey(step)))
+        .map((step) => step.testIdx),
+    );
+    for (const testIdx of testIndices) {
+      for (const result of await this.store.readResultsByTestIdx(testIdx)) {
+        if (
+          !result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY]?.assertionGradingInterrupted
+        ) {
+          continue;
+        }
+        const step = steps.get(getResultIndexKey(result));
+        if (step?.abortSignal?.aborted) {
+          return;
+        }
+        if (!step || result.response?.output == null) {
+          continue;
+        }
+        const row = this.store.toEvaluateResult(result, true);
+        let test = step.test;
+        const previousNamedScores = row.namedScores;
+        const metadataChanged =
+          result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY]?.assertionGradingMetadataChanged;
+        const outputChanged =
+          result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY]?.assertionGradingOutputChanged;
+        row.error = undefined;
+        row.failureReason = ResultFailureReason.NONE;
+        row.gradingResult = undefined;
+        const timeoutMs = this.options.timeoutMs ?? getEvalTimeoutMs();
+        const timeoutController = new AbortController();
+        const abortSignal = step.abortSignal
+          ? AbortSignal.any([step.abortSignal, timeoutController.signal])
+          : timeoutController.signal;
+        const timeout =
+          timeoutMs > 0 ? setTimeout(() => timeoutController.abort(), timeoutMs) : undefined;
+        try {
+          // A temporary workspace is removed after grading. A path found on disk
+          // later cannot prove that it still belongs to this result.
+          if (result.response.metadata?.workingDir) {
+            throw new Error(
+              'Cannot resume assertion grading: the original workspace is unavailable. Rerun the test.',
+            );
+          }
+          if (outputChanged) {
+            throw new Error(
+              'Cannot resume assertion grading: a transform changed the output. Rerun the test to grade the original inputs.',
+            );
+          }
+          if (metadataChanged) {
+            throw new Error(
+              'Cannot resume assertion grading: afterEach changed metadata. Rerun the test to grade the original inputs.',
+            );
+          }
+          const check = await runProviderCallWithAbort(
+            () =>
+              withCacheNamespace(
+                getRepeatCacheNamespace(step.repeatIndex, step.evaluateOptions),
+                () =>
+                  withProviderCallExecutionContext(
+                    {
+                      abortSignal,
+                      rateLimitRegistry: this.rateLimitRegistry,
+                      providerDelay: {
+                        provider: step.provider,
+                        delay: resolveInvocationDelay(
+                          step.provider,
+                          step.delayOmitted ? undefined : step.delay,
+                          step.evaluateOptions,
+                        ),
+                      },
+                    },
+                    async () => {
+                      const inputs = await this.store.resolveGradingInputs?.(
+                        result.response!,
+                        result.testCase,
+                        step.test,
+                        (provider) => getGradingProvider('text', provider, null),
+                        { testIdx: result.testIdx, promptIdx: result.promptIdx },
+                      );
+                      test = inputs?.test ?? result.testCase;
+                      const providerResponse = inputs?.providerResponse ?? result.response!;
+                      abortSignal.throwIfAborted();
+                      return runAssertions({
+                        prompt: result.prompt.raw,
+                        provider: step.provider,
+                        providerResponse: {
+                          ...providerResponse,
+                          providerTransformedOutput:
+                            providerResponse.providerTransformedOutput ?? providerResponse.output,
+                        },
+                        test,
+                        vars: test.vars ?? {},
+                        latencyMs: row.latencyMs,
+                        assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+                        traceId: row.traceId,
+                      });
+                    },
+                  ),
+              ),
+            abortSignal,
+          );
+          applyGradingResult(row, check);
+        } catch (error) {
+          applyDeferredGradingError(
+            row,
+            error,
+            abortSignal,
+            timeoutController.signal.aborted && !step.abortSignal?.aborted ? timeoutMs : undefined,
+          );
+        } finally {
+          clearTimeout(timeout);
+        }
+        if (metadataChanged || outputChanged) {
+          row.namedScores = previousNamedScores;
+        } else {
+          await applyAfterEachHook(row, test, testSuite);
+        }
+        // Export flags must not erase private recovery markers when grading stops again.
+        const persisted = {
+          ...row,
+          ...redactSensitiveResultFieldsForDb(
+            sanitizeForDb({
+              metadata: row.metadata,
+              response: row.response,
+              gradingResult: row.gradingResult,
+            }),
+          ),
+        };
+        Object.assign(result, getGradingState(persisted), {
+          metadata: persisted.metadata,
+          response: result.response && {
+            ...result.response,
+            metadata: persisted.response?.metadata,
+          },
+          error: persisted.error ?? null,
+          gradingResult: persisted.gradingResult ?? null,
+        });
+        const metrics = prompts[result.promptIdx]?.metrics;
+        if (metrics) {
+          metrics.testErrorCount--;
+          // An interrupted grading marker has no assertion contributions. Any named
+          // scores came from afterEach and must be replaced, not counted twice.
+          for (const [name, value] of Object.entries(previousNamedScores)) {
+            metrics.namedScores[name] -= value;
+            metrics.namedScoresCount[name]--;
+            if (metrics.namedScoreWeights) {
+              metrics.namedScoreWeights[name]--;
+            }
+          }
+          this.updatePromptGradingMetrics({
+            derivedMetrics,
+            evalStep: step,
+            metrics,
+            promptEvalCount:
+              metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount + 1,
+            row,
+          });
+        }
+        this.currentResultKeys.add(getResultIndexKey(row));
+        this.trackRowStats(row);
+        this.trackFinalJsonlResult(result);
+        await this.store.saveResult(result);
+      }
+    }
+  }
+
   private async processEvalStep(
     evalStep: RunEvalOptions,
     index: number,
     {
       deferGrading = false,
       onRowsReady,
+      onGradingStarted,
       precomputedRows,
       providerCallQueue,
       shouldSkipStaleRows,
@@ -2416,9 +2677,15 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             deferGrading,
             deferredGradingAbortSignal: context.deferredGradingAbortSignal,
             onRowsReady,
+            onGradingStarted,
             providerCallQueue,
             testSuite: context.testSuite,
           }));
+
+        if (rows.length === 0) {
+          // Let interruption handling keep this step unprocessed for resume or timeout results.
+          evalStep.abortSignal?.throwIfAborted();
+        }
 
         if (!deferGrading) {
           await this.processEvalRows(evalStep, index, rows, shouldSkipStaleRows, context);
@@ -2434,12 +2701,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       deferGrading,
       deferredGradingAbortSignal,
       onRowsReady,
+      onGradingStarted,
       providerCallQueue,
       testSuite,
     }: {
       deferGrading: boolean;
       deferredGradingAbortSignal?: AbortSignal;
       onRowsReady?: () => void;
+      onGradingStarted?: (row: EvaluateResult) => void;
       providerCallQueue?: ProviderCallQueue;
       testSuite: TestSuite;
     },
@@ -2455,7 +2724,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         deferGrading,
         providerCallQueue: deferGrading ? providerCallQueue : undefined,
       },
-      { abortSignal: deferredGradingAbortSignal, pauseSignal: this.options.pauseSignal },
+      {
+        abortSignal: deferredGradingAbortSignal,
+        pauseSignal: this.options.pauseSignal,
+        onGradingStarted,
+      },
     );
     onRowsReady?.();
     return rows;
@@ -2480,44 +2753,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       this.trackCompletedRow(evalStep, row, context);
       context.numComplete++;
 
-      // Apply afterEach hook mutations before persisting. Pass a shallow copy
-      // so in-place mutations don't corrupt the row on hook failure.
-      if (context.testSuite.extensions?.length) {
-        try {
-          const originalMetadata = row.metadata;
-          const originalResponseMetadata = row.response?.metadata;
-          const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
-            test: evalStep.test,
-            result: {
-              ...row,
-              namedScores: { ...row.namedScores },
-              metadata: { ...row.metadata },
-              response: row.response
-                ? { ...row.response, metadata: { ...row.response.metadata } }
-                : row.response,
-            },
-          });
-          // runExtensionHook sanitizes namedScores via filterFiniteScores;
-          // re-sanitize here to also catch in-place mutations that bypass the merge.
-          row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
-          // If a hook replaced response.metadata, a legacy top-level metadata.headers copied
-          // from the old transport would otherwise persist as stale credentials. Re-sync it.
-          row.metadata = synchronizeLegacyTransportHeaders(
-            originalMetadata,
-            originalResponseMetadata,
-            afterEachOut.result.metadata,
-            afterEachOut.result.response?.metadata,
-          );
-          if (row.response && afterEachOut.result.response) {
-            row.response.metadata = afterEachOut.result.response.metadata;
-          }
-        } catch (error) {
-          logger.error(
-            `afterEach extension hook failed, persisting row without hook modifications`,
-            { error },
-          );
-        }
-      }
+      await applyAfterEachHook(row, evalStep.test, context.testSuite);
 
       await this.persistEvalRow(row);
 
@@ -2591,7 +2827,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     context: EvalProcessingContext,
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
-    const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
+    const timeoutMs = context.options.timeoutMs ?? getEvalTimeoutMs();
 
     if (timeoutMs <= 0) {
       return await this.processEvalStep(
@@ -2612,6 +2848,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     let timeoutId: NodeJS.Timeout | undefined;
     let didTimeout = false;
+    let gradingRow: EvaluateResult | undefined;
     const clearEvalStepTimeout = () => {
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -2627,6 +2864,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           {
             deferGrading,
             onRowsReady: clearEvalStepTimeout,
+            onGradingStarted: (row) => {
+              gradingRow = row;
+            },
             providerCallQueue,
             shouldSkipStaleRows: () => didTimeout,
           },
@@ -2644,7 +2884,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (!didTimeout) {
         throw error;
       }
-      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      if (gradingRow) {
+        applyDeferredGradingError(
+          gradingRow,
+          new DOMException('Provider call cancelled', 'AbortError'),
+          abortController.signal,
+          timeoutMs,
+        );
+        await this.processEvalRows(evalStep, index, [gradingRow], undefined, context);
+      } else {
+        await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      }
     } finally {
       evalStep.test = evalStepWithSignal.test;
       clearEvalStepTimeout();
@@ -3235,8 +3485,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (!assertion) {
       return;
     }
+    let compareAssertion: Assertion = assertion;
     let gradingResults: GradingResult[];
     try {
+      if (providerAbortSignal?.aborted) {
+        throw new DOMException('Comparison grading cancelled', 'AbortError');
+      }
       const providers = this.comparisonProviders.get(getResultIndexKey(firstResult));
       // Persisted rows retain each column's hook-adjusted criteria and vars. Only grader
       // references and redacted credentials need to come from the current configuration.
@@ -3247,7 +3501,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           provider: undefined,
         },
       };
-      const compareAssertion = {
+      compareAssertion = {
         ...assertion,
         provider: restoreComparisonProvider(
           assertion.provider || savedTest.options?.provider,
@@ -3258,6 +3512,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
       const outputs = resultsToCompare.map((r) => r.response?.output || '');
+      const callApiContext = this.getComparisonCallApiContext(firstResult, repeatCacheContext);
+      const originalProvider = callApiContext.originalProvider;
       gradingResults = await withCacheNamespace(
         repeatCacheContext
           ? getRepeatCacheNamespace(
@@ -3267,14 +3523,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           : undefined,
         () =>
           withProviderCallExecutionContext(
-            { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
+            {
+              abortSignal: providerAbortSignal,
+              rateLimitRegistry: this.rateLimitRegistry,
+              providerDelay: originalProvider
+                ? {
+                    provider: originalProvider,
+                    delay: resolveInvocationDelay(
+                      originalProvider,
+                      this.options.delay,
+                      this.options,
+                    ),
+                  }
+                : undefined,
+            },
             () =>
-              runCompareAssertion(
-                comparisonTestCase,
-                compareAssertion,
-                outputs,
-                this.getComparisonCallApiContext(resultsToCompare[0], repeatCacheContext),
-              ),
+              runCompareAssertion(comparisonTestCase, compareAssertion, outputs, callApiContext),
           ),
       );
     } catch (error) {
@@ -3920,6 +4184,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
     }
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
+    await this.resumeInterruptedGrading(runEvalOptions, prompts, testSuite, derivedMetrics);
     runEvalOptions = await filterCompletedResumeSteps(runEvalOptions, this.store);
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
@@ -3970,7 +4235,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
-        originalProgressCallback(completed, total, index, evalStep, metrics);
+        const { delayOmitted: _delayOmitted, ...publicStep } = evalStep as InternalRunEvalOptions;
+        originalProgressCallback(completed, total, index, publicStep, metrics);
       }
 
       if (isWebUI) {
@@ -4008,7 +4274,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         concurrentRunEvalOptions.push(evalOption);
       }
     }
-    const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
+    const hasEvalStepTimeout = (options.timeoutMs ?? getEvalTimeoutMs()) > 0;
     const shouldGroupGradingByProvider =
       concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
 
@@ -4129,18 +4395,27 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         ? setTimeout(() => {
             // Preserve the first cause if the caller cancelled while rows were being saved.
             timedOut = !providerAbortSignal?.aborted;
-            timeoutController.abort();
+            timeoutController.abort(
+              new DOMException(
+                `Evaluation exceeded max duration of ${maxEvalTimeMs}ms`,
+                'AbortError',
+              ),
+            );
           }, maxEvalTimeMs)
         : undefined;
       try {
-        return await this.evaluateWithResources({
-          startTime,
-          maxEvalTimeMs,
-          providerAbortSignal,
-          deferredGradingAbortSignal,
-          globalTimeout,
-          isTimedOut: () => timedOut,
-        });
+        return await withProviderCallExecutionContext(
+          { rateLimitRegistry: this.rateLimitRegistry },
+          () =>
+            this.evaluateWithResources({
+              startTime,
+              maxEvalTimeMs,
+              providerAbortSignal,
+              deferredGradingAbortSignal,
+              globalTimeout,
+              isTimedOut: () => timedOut,
+            }),
+        );
       } finally {
         if (globalTimeout) {
           clearTimeout(globalTimeout);
@@ -4263,9 +4538,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
         // Clean up rate limit registry resources
         this.rateLimitRegistry?.dispose();
-
-        // Clear registry from redteam provider manager
-        redteamProviderManager.setRateLimitRegistry(undefined);
 
         // Reset cliState.maxConcurrency to prevent stale state between evaluations
         cliState.maxConcurrency = undefined;

@@ -69,7 +69,7 @@ interface CliState {
   readonly requestTracingConfig?: TestSuite['tracing'];
   readonly activeOtlpReceiver?: ActiveOtlpReceiver;
 
-  withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
+  withMaxConcurrency<T>(maxConcurrency: number | undefined, fn: () => Promise<T>): Promise<T>;
   /** The innermost environment scope, or the last config's env outside a scope. */
   readonly env?: EnvOverrides;
   readonly envFileOverrides?: EnvOverrides;
@@ -170,7 +170,7 @@ const state: CliState = {
     }
     globalMaxConcurrency = value;
   },
-  withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T> {
+  withMaxConcurrency<T>(maxConcurrency: number | undefined, fn: () => Promise<T>): Promise<T> {
     return maxConcurrencyContext.run({ maxConcurrency }, fn);
   },
   get env() {

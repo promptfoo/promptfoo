@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
-import { getEnvBool } from '../../envars';
+import { getEnvBool, getEnvFloat } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -13,10 +13,13 @@ import {
   getProviderCallTracingContext,
   getRateLimitKey,
   isRateLimitWrapped,
-  type RateLimitRegistry,
-  sleepWithAbort,
   wrapProviderWithRateLimiting,
 } from '../../scheduler';
+import {
+  callProviderWithContext,
+  getProviderCallAbortSignal,
+  runProviderCallWithAbort,
+} from '../../scheduler/providerCallExecutionContext';
 import {
   type ApiProvider,
   type Assertion,
@@ -53,7 +56,7 @@ import {
 } from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, DEFAULT_TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
@@ -161,7 +164,7 @@ async function loadRedteamProvider({
     logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
     ret = new OpenAiChatCompletionProvider(defaultModel, {
       config: {
-        temperature: TEMPERATURE,
+        temperature: getEnvFloat('PROMPTFOO_JAILBREAK_TEMPERATURE', DEFAULT_TEMPERATURE),
         response_format: jsonOnly ? { type: 'json_object' } : undefined,
       },
     });
@@ -176,23 +179,14 @@ class RedteamProviderManager {
   private multilingualProvider: ApiProvider | undefined;
   private gradingProvider: ApiProvider | undefined;
   private gradingJsonOnlyProvider: ApiProvider | undefined;
-  private rateLimitRegistry: RateLimitRegistry | undefined;
-
-  /**
-   * Set the rate limit registry to use for wrapping providers.
-   * When set, all providers returned by this manager will be wrapped
-   * with rate limiting.
-   */
-  setRateLimitRegistry(registry: RateLimitRegistry | undefined) {
-    this.rateLimitRegistry = registry;
-  }
 
   /**
    * Wrap a provider with rate limiting if a registry is configured.
    */
   private wrapProvider(provider: ApiProvider): ApiProvider {
-    if (this.rateLimitRegistry) {
-      return wrapProviderWithRateLimiting(provider, this.rateLimitRegistry);
+    const registry = getProviderCallExecutionContext()?.rateLimitRegistry;
+    if (registry) {
+      return wrapProviderWithRateLimiting(provider, registry);
     }
     return provider;
   }
@@ -204,8 +198,6 @@ class RedteamProviderManager {
     this.multilingualProvider = undefined;
     this.gradingProvider = undefined;
     this.gradingJsonOnlyProvider = undefined;
-    // Note: rateLimitRegistry is intentionally NOT cleared here
-    // as it's managed by the evaluator lifecycle
   }
 
   async setProvider(provider: RedteamFileConfig['provider']) {
@@ -519,7 +511,7 @@ function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): numb
   return configuredLimit;
 }
 
-/** Invoke a red-team target with the same tracing behavior across every strategy. */
+/** Invoke a red-team target with shared tracing, pacing, and cancellation behavior. */
 export function callTargetProvider(
   targetProvider: ApiProvider,
   targetPrompt: string,
@@ -527,7 +519,6 @@ export function callTargetProvider(
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
   const executionContext = getProviderCallExecutionContext();
-  const tracingContext = getProviderCallTracingContext();
   const invoke = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
     const targetOptions = onResponseHeaders
       ? {
@@ -538,14 +529,7 @@ export function callTargetProvider(
           ),
         }
       : options;
-    const call = async (callContext?: CallApiContextParams) => {
-      const response = await targetProvider.callApi(targetPrompt, callContext, targetOptions);
-      executionContext?.onTargetResponse?.(targetPrompt, response);
-      return response;
-    };
-    return tracingContext
-      ? tracingContext.withProviderSpan({ provider: targetProvider, callContext: context }, call)
-      : call(context);
+    return callProviderWithContext(targetProvider, targetPrompt, context, targetOptions);
   };
   const registry = executionContext?.rateLimitRegistry;
   const activeProvider = executionContext?.rateLimitProvider;
@@ -581,10 +565,20 @@ export function callGradingProvider(
   callContext?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
-  const invoke = (context?: CallApiContextParams) =>
-    options === undefined
-      ? provider.callApi(prompt, context)
-      : provider.callApi(prompt, context, options);
+  const signal = getProviderCallAbortSignal(options?.abortSignal);
+  // The enclosing call races cancellation while retaining the actual request.
+  const waitSignal = getProviderCallExecutionContext()?.providerCallOwned ? undefined : signal;
+  const callOptions = signal ? { ...options, abortSignal: signal } : options;
+  const invoke = async (context?: CallApiContextParams) => {
+    signal?.throwIfAborted();
+    return runProviderCallWithAbort(
+      () =>
+        callOptions === undefined
+          ? provider.callApi(prompt, context)
+          : provider.callApi(prompt, context, callOptions),
+      waitSignal,
+    );
+  };
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
     return invoke(callContext);
@@ -630,23 +624,6 @@ export async function getTargetResponse(
           error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
       },
     });
-  }
-  if (
-    !targetRespRaw.cached &&
-    targetProvider.delay &&
-    targetProvider.delay > 0 &&
-    !options?.abortSignal?.aborted
-  ) {
-    logger.debug(`Sleeping for ${targetProvider.delay}ms`);
-    try {
-      await sleepWithAbort(targetProvider.delay, options?.abortSignal);
-    } catch (error) {
-      // The target already completed. Only cancellation of this caller's delay
-      // may shorten pacing without replacing its response or accounting.
-      if (!isCallerAbortError(error, options?.abortSignal, { requireReasonMatch: true })) {
-        throw error;
-      }
-    }
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   const hasOutput =

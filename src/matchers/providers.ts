@@ -8,6 +8,7 @@ import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
   runProviderCallWithAbort,
+  withProviderCallExecutionContext,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 
@@ -67,7 +68,7 @@ export async function callEmbeddingProvider(
 /**
  * Apply tracing, rate limits, and grouped scheduling to every grading-provider modality.
  */
-export function callGradingProvider<T extends ProviderResponse>(
+export async function callGradingProvider<T extends ProviderResponse>(
   provider: ApiProvider,
   label: string,
   invoke: (
@@ -89,7 +90,10 @@ export function callGradingProvider<T extends ProviderResponse>(
       provider,
       async () => {
         const invokeProvider = (context: CallApiContextParams | undefined) =>
-          onResponseHeaders ? invoke(context, onResponseHeaders) : invoke(context);
+          withProviderCallExecutionContext({ ...executionContext, providerCallOwned: true }, () => {
+            executionContext?.abortSignal?.throwIfAborted();
+            return onResponseHeaders ? invoke(context, onResponseHeaders) : invoke(context);
+          });
         return tracingContext
           ? (tracingContext.withProviderSpan(
               { provider, callContext, operationName, role: 'grader', promptLabel: label },

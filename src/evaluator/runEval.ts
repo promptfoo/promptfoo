@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { LRUCache } from 'lru-cache';
 import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
@@ -14,6 +16,9 @@ import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLeng
 import { getSessionId } from '../redteam/util';
 import { createProviderRateLimitOptions, sleepWithAbort } from '../scheduler';
 import {
+  getProviderCallExecutionContext,
+  getProviderDelay,
+  runProviderCallWithAbort,
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
@@ -48,6 +53,7 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 import { transform } from '../util/transform';
+import { PROMPTFOO_METADATA_KEY } from './resultProcessing';
 import type winston from 'winston';
 
 import type {
@@ -56,7 +62,7 @@ import type {
   ScoringFunction,
   Vars,
 } from '../types/index';
-import type { InternalEvaluateOptions } from '../types/internal';
+import type { InternalEvaluateOptions, InternalRunEvalOptions } from '../types/internal';
 import type { CallApiContextParams, CallApiOptionsParams } from '../types/providers';
 
 export const CONVERSATION_VAR_NAME = '_conversation';
@@ -164,7 +170,7 @@ function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: T
 
 export const deferredGradingPromises = new WeakMap<EvaluateResult, Promise<void>>();
 
-function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
+export function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!checkResult.pass) {
     row.error = checkResult.reason;
     row.failureReason = ResultFailureReason.ASSERT;
@@ -223,6 +229,33 @@ export function applyGradingError(
   row.success = false;
   row.score = 0;
   row.namedScores = {};
+}
+
+// Track only the fact a transform redacted output. Never retain its original value.
+const changedGradingOutputs = new WeakSet<EvaluateResult>();
+export function applyDeferredGradingError(
+  row: EvaluateResult,
+  error: unknown,
+  abortSignal?: AbortSignal,
+  timeoutMs?: number,
+) {
+  applyGradingError(row, error, abortSignal);
+  if (isGradingAbort(error, abortSignal)) {
+    if (timeoutMs !== undefined) {
+      row.error = `Evaluation timed out after ${timeoutMs}ms`;
+    }
+    row.gradingResult = {
+      pass: false,
+      score: 0,
+      reason: row.error!,
+      metadata: {
+        [PROMPTFOO_METADATA_KEY]: {
+          assertionGradingInterrupted: true,
+          ...(changedGradingOutputs.has(row) && { assertionGradingOutputChanged: true }),
+        },
+      },
+    };
+  }
 }
 
 type RunEvalSetup = Pick<EvaluateResult, 'prompt' | 'vars'> & {
@@ -463,6 +496,7 @@ async function callProviderForRunEval({
   repeatIndex,
   test,
   testIndex,
+  promptIndex,
   testSuite,
   traceContext,
   vars,
@@ -482,6 +516,7 @@ async function callProviderForRunEval({
   promptForRender: Prompt;
   renderedPrompt: string;
   testIndex: number;
+  promptIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderCallResult> {
@@ -514,6 +549,7 @@ async function callProviderForRunEval({
         repeatIndex,
         test,
         testIndex,
+        promptIndex,
         testSuite,
         traceContext,
         vars,
@@ -639,6 +675,7 @@ async function callActiveProvider({
   repeatIndex,
   test,
   testIndex,
+  promptIndex,
   testSuite,
   traceContext,
   vars,
@@ -652,6 +689,7 @@ async function callActiveProvider({
   promptForRender: Prompt;
   renderedPrompt: string;
   testIndex: number;
+  promptIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderResponse> {
@@ -671,6 +709,7 @@ async function callActiveProvider({
     repeatIndex,
     test,
     testIndex,
+    promptIndex,
     traceContext,
     vars,
   });
@@ -695,7 +734,10 @@ async function callActiveProvider({
                   evalId: callApiContext.evaluationId,
                   testIndex,
                 },
-                async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
+                async (context) => {
+                  abortSignal?.throwIfAborted();
+                  return activeProvider.callApi(renderedPrompt, context, callApiOptions);
+                },
               )
             : await activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
           completedResponse = result;
@@ -708,6 +750,13 @@ async function callActiveProvider({
         abortSignal,
         rateLimitRegistry,
         rateLimitProvider: activeProvider,
+        providerCallOwned: true,
+        providerDelay: {
+          provider: originalProvider,
+          delay: getProviderDelay(provider),
+          queueKey: provider,
+          state: getProviderCallExecutionContext()?.providerDelay?.state,
+        },
         onTargetResponse: (prompt, response) => {
           completedTargets.push({ prompt, response });
         },
@@ -720,13 +769,17 @@ async function callActiveProvider({
   };
   let response: ProviderResponse;
   try {
-    response = rateLimitRegistry
-      ? await rateLimitRegistry.execute(
-          activeProvider,
-          callApi,
-          createProviderRateLimitOptions(abortSignal),
-        )
-      : await callApi();
+    response = await runProviderCallWithAbort(
+      () =>
+        rateLimitRegistry
+          ? rateLimitRegistry.execute(
+              activeProvider,
+              callApi,
+              createProviderRateLimitOptions(abortSignal),
+            )
+          : callApi(),
+      abortSignal,
+    );
   } catch (error) {
     if (!isCliPauseCancellation(error, abortSignal, pauseSignal)) {
       throw error;
@@ -784,6 +837,7 @@ function buildCallApiContext({
   repeatIndex,
   test,
   testIndex,
+  promptIndex,
   traceContext,
   vars,
 }: {
@@ -794,6 +848,7 @@ function buildCallApiContext({
   repeatIndex: number;
   test: AtomicTestCase;
   testIndex: number;
+  promptIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): CallApiContextParams {
@@ -807,6 +862,7 @@ function buildCallApiContext({
     getCache,
     repeatIndex,
     testIdx: testIndex,
+    promptIdx: promptIndex,
   };
 
   if (!isCacheEnabled()) {
@@ -878,10 +934,14 @@ async function applyProviderDelayIfNeeded(
   if (abortSignal?.aborted) {
     return;
   }
-  if (!response.cached && !provider.handlesOwnDelay && provider.delay && provider.delay > 0) {
-    logger.debug(`Sleeping for ${provider.delay}ms`);
+  const delay = getProviderDelay(provider);
+  const handled =
+    (provider.handlesOwnDelay && provider.delay != null) ||
+    getProviderCallExecutionContext()?.providerDelay?.state?.handled;
+  if (!response.cached && !handled && delay && delay > 0) {
+    logger.debug(`Sleeping for ${delay}ms`);
     try {
-      await sleepWithAbort(provider.delay, abortSignal);
+      await sleepWithAbort(delay, abortSignal);
     } catch (error) {
       // Cancellation ends the delay without discarding the completed response.
       if (!isCallerAbortError(error, abortSignal, { requireReasonMatch: true })) {
@@ -991,8 +1051,10 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
 
 async function applyRunEvalResponseOutcome({
   abortSignal,
+  pauseSignal,
   deferGrading,
   deferredGradingAbortSignal,
+  onGradingStarted,
   evalId,
   latencyMs,
   prompt,
@@ -1010,8 +1072,10 @@ async function applyRunEvalResponseOutcome({
   vars,
 }: {
   abortSignal?: AbortSignal;
+  pauseSignal?: AbortSignal;
   deferGrading?: boolean;
   deferredGradingAbortSignal?: AbortSignal;
+  onGradingStarted?: (row: EvaluateResult) => void;
   evalId?: string;
   latencyMs: number;
   prompt: Prompt;
@@ -1045,67 +1109,6 @@ async function applyRunEvalResponseOutcome({
     return;
   }
 
-  await gradeRunEvalResponse({
-    abortSignal,
-    deferGrading,
-    deferredGradingAbortSignal,
-    evalId,
-    latencyMs,
-    prompt,
-    promptIdx,
-    provider,
-    providerCallQueue,
-    rateLimitRegistry,
-    renderedPrompt,
-    response,
-    ret,
-    test,
-    testIdx,
-    testSuite,
-    traceContext,
-    vars,
-  });
-}
-
-async function gradeRunEvalResponse({
-  abortSignal,
-  deferGrading,
-  deferredGradingAbortSignal,
-  evalId,
-  latencyMs,
-  prompt,
-  promptIdx,
-  provider,
-  providerCallQueue,
-  rateLimitRegistry,
-  renderedPrompt,
-  response,
-  ret,
-  test,
-  testIdx,
-  testSuite,
-  traceContext,
-  vars,
-}: {
-  abortSignal?: AbortSignal;
-  deferGrading?: boolean;
-  deferredGradingAbortSignal?: AbortSignal;
-  evalId?: string;
-  latencyMs: number;
-  prompt: Prompt;
-  promptIdx: number;
-  provider: ApiProvider;
-  providerCallQueue?: ProviderCallQueue;
-  rateLimitRegistry?: RateLimitRegistryRef;
-  renderedPrompt: string;
-  response: ProviderResponse;
-  ret: EvaluateResult;
-  test: AtomicTestCase;
-  testIdx: number;
-  testSuite?: TestSuite;
-  traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
-  vars: Vars;
-}) {
   const { processedResponse, providerTransformedOutput } = await transformRunEvalResponse({
     evalId,
     prompt,
@@ -1135,50 +1138,74 @@ async function gradeRunEvalResponse({
 
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
-    ret.response = processedResponse;
-    const gradingPromise = withProviderCallExecutionContext(
-      { abortSignal: deferredGradingAbortSignal, providerCallQueue, rateLimitRegistry },
-      () =>
-        runAssertions({
-          prompt: renderedPrompt,
-          provider,
-          providerResponse: assertionProviderResponse,
-          test,
-          vars,
-          latencyMs: response.latencyMs ?? latencyMs,
-          assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-          traceId,
-        }).then((checkResult) => applyGradingResult(ret, checkResult)),
-    ).catch((error) => {
-      applyGradingError(ret, error, deferredGradingAbortSignal);
-    });
-    deferredGradingPromises.set(ret, gradingPromise);
-    return;
-  }
-
-  try {
-    const checkResult = await withProviderCallExecutionContext(
-      { abortSignal, rateLimitRegistry },
-      () =>
-        runAssertions({
-          prompt: renderedPrompt,
-          provider,
-          providerResponse: assertionProviderResponse,
-          test,
-          vars,
-          latencyMs: response.latencyMs ?? latencyMs,
-          assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-          traceId,
-        }),
-    );
-    applyGradingResult(ret, checkResult);
-  } catch (error) {
-    if (!isGradingAbort(error, abortSignal)) {
-      throw error;
-    }
-    applyGradingError(ret, error, abortSignal);
   }
   ret.response = processedResponse;
+  const outputChanged = !isDeepStrictEqual(providerTransformedOutput, processedResponse.output);
+  if (outputChanged) {
+    changedGradingOutputs.add(ret);
+  }
+  if (onGradingStarted) {
+    const gradingSnapshot: EvaluateResult = {
+      ...ret,
+      response: {
+        ...processedResponse,
+        metadata: { ...processedResponse.metadata },
+      },
+      testCase: { ...test, vars: { ...vars } },
+      tokenUsage: structuredClone(ret.tokenUsage),
+      namedScores: { ...ret.namedScores },
+      metadata: { ...ret.metadata },
+    };
+    if (outputChanged) {
+      changedGradingOutputs.add(gradingSnapshot);
+    }
+    onGradingStarted(gradingSnapshot);
+  }
+  // Keep completed grades. A hard cancellation before grading saves the
+  // transformed response for recovery without starting another assertion.
+  if (
+    abortSignal?.aborted &&
+    test.assert?.length &&
+    !isCliPauseCancellation(abortSignal.reason, abortSignal, pauseSignal)
+  ) {
+    applyDeferredGradingError(ret, abortSignal.reason, abortSignal);
+    ret.testCase = { ...test, vars: { ...vars } };
+    return;
+  }
+  const signal = deferGrading ? deferredGradingAbortSignal : abortSignal;
+  const gradingPromise = withProviderCallExecutionContext(
+    {
+      providerDelay: getProviderCallExecutionContext()?.providerDelay,
+      abortSignal: signal,
+      providerCallQueue,
+      rateLimitRegistry,
+    },
+    () =>
+      runAssertions({
+        prompt: renderedPrompt,
+        provider,
+        providerResponse: assertionProviderResponse,
+        test,
+        vars,
+        latencyMs: response.latencyMs ?? latencyMs,
+        assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+        traceId,
+      }).then((checkResult) => applyGradingResult(ret, checkResult)),
+  ).catch((error) => {
+    const interrupted = isGradingAbort(error, signal);
+    if (!deferGrading && !interrupted) {
+      throw error;
+    }
+    applyDeferredGradingError(ret, error, signal);
+    if (interrupted) {
+      ret.testCase = { ...test, vars: { ...vars } };
+    }
+  });
+  if (deferGrading) {
+    deferredGradingPromises.set(ret, gradingPromise);
+  } else {
+    await gradingPromise;
+  }
 }
 
 async function transformRunEvalResponse({
@@ -1302,13 +1329,51 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
-export async function runEvalInternal(
+type OrchestrationOptions = Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> & {
+  onGradingStarted?: (row: EvaluateResult) => void;
+};
+
+export function runEvalInternal(
+  options: InternalRunEvalOptions,
+  orchestrationOptions: OrchestrationOptions = { abortSignal: options.abortSignal },
+): Promise<EvaluateResult[]> {
+  const delay = resolveInvocationDelay(
+    options.provider,
+    options.delayOmitted ? undefined : options.delay,
+    options.evaluateOptions,
+  );
+  return withProviderCallExecutionContext(
+    {
+      ...getProviderCallExecutionContext(),
+      providerDelay: { provider: options.provider, delay, state: { handled: false } },
+    },
+    () => runEvalInContext(options, orchestrationOptions),
+  );
+}
+
+// Preserve omission so a nested provider can still use its own configured delay.
+export function resolveInvocationDelay(
+  provider: ApiProvider,
+  delay?: number,
+  evaluateOptions?: InternalEvaluateOptions,
+): number | undefined {
+  const effectiveDelay =
+    provider.delay ??
+    delay ??
+    (evaluateOptions?.delayResolved ? undefined : getEnvInt('PROMPTFOO_DELAY_MS'));
+  invariant(
+    effectiveDelay === undefined || typeof effectiveDelay === 'number',
+    `Invalid delay for ${provider.label}`,
+  );
+  return effectiveDelay;
+}
+
+async function runEvalInContext(
   {
     provider,
     prompt, // raw prompt
     test,
     testSuite,
-    delay,
     nunjucksFilters: filters,
     evaluateOptions,
     // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
@@ -1325,16 +1390,8 @@ export async function runEvalInternal(
     providerCallQueue,
     rateLimitRegistry,
   }: RunEvalOptions,
-  orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> = {
-    abortSignal,
-  },
+  orchestrationOptions: OrchestrationOptions,
 ): Promise<EvaluateResult[]> {
-  provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
-  invariant(
-    typeof provider.delay === 'number',
-    `Provider delay should be set for ${provider.label}`,
-  );
-
   const state = createRunEvalState({ provider, prompt, promptIndex, test });
   attachConversationVar({
     conversations,
@@ -1418,6 +1475,7 @@ export async function runEvalInternal(
             repeatIndex,
             test,
             testIndex,
+            promptIndex,
             testSuite,
             traceContext: executionTraceContext,
             vars: state.vars,
@@ -1441,7 +1499,7 @@ export async function runEvalInternal(
             responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
           });
           logger.debug(
-            `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
+            `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${getProviderDelay(provider) ?? 0}`,
           );
 
           await applyProviderDelayIfNeeded(provider, response, abortSignal);
@@ -1474,7 +1532,9 @@ export async function runEvalInternal(
           trackProviderUsage(provider, response);
           await applyRunEvalResponseOutcome({
             abortSignal,
+            pauseSignal: orchestrationOptions.pauseSignal,
             deferredGradingAbortSignal: orchestrationOptions.abortSignal,
+            onGradingStarted: orchestrationOptions.onGradingStarted,
             deferGrading,
             evalId,
             latencyMs,

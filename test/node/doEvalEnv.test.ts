@@ -2,8 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getEnvString } from '../../src/envars';
+import { evalCommand } from '../../src/commands/eval';
+import { getEnvOverrides, getEnvString } from '../../src/envars';
+import { addCommonOptionsRecursively } from '../../src/mainUtils';
 import { doEval } from '../../src/node/doEval';
 import { getEvalConfigFromCloud } from '../../src/util/cloud';
 import { mockProcessEnv } from '../util/utils';
@@ -31,6 +34,80 @@ describe('doEval environment files', () => {
     restoreEnv();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
+
+  it.each(['--env-file', '--env-path'])(
+    'retains %s parsed by the parent command as a file scope',
+    async (flag) => {
+      const envPath = path.join(tempDir, 'command.env');
+      fs.writeFileSync(envPath, 'PROMPTFOO_REVIEW_ENV_PROBE=file\n');
+      const observed: Array<string | undefined> = [];
+      const program = new Command();
+      evalCommand(
+        program,
+        {
+          prompts: ['hello'],
+          providers: [
+            async () => {
+              observed.push(getEnvOverrides('file')?.PROMPTFOO_REVIEW_ENV_PROBE);
+              return { output: 'ok' };
+            },
+          ],
+          tests: [{ assert: [{ type: 'equals', value: 'ok' }] }],
+        },
+        undefined,
+      );
+      addCommonOptionsRecursively(program);
+      await program.parseAsync([
+        'node',
+        'fixture',
+        'eval',
+        flag,
+        envPath,
+        '--no-cache',
+        '--no-write',
+        '--no-table',
+        '--no-share',
+        '--no-progress-bar',
+      ]);
+      expect(observed).toEqual(['file']);
+    },
+  );
+
+  it.each(['command', 'config'])(
+    'retains the CLI %s env file as a distinct priority layer',
+    async (source) => {
+      mockProcessEnv({ OPENAI_BASE_URL: undefined, OPENAI_API_HOST: 'host.example.invalid' });
+      const envPath = path.join(tempDir, 'cli.env');
+      fs.writeFileSync(envPath, 'OPENAI_BASE_URL=https://file.example.invalid/v1\n');
+      const result = await doEval(
+        {
+          write: false,
+          share: false,
+          table: false,
+          progressBar: false,
+          ...(source === 'command' && { envPath: [envPath] }),
+        },
+        {
+          prompts: ['hello'],
+          providers: [
+            async () => ({
+              output: getEnvOverrides('file')?.OPENAI_BASE_URL ?? 'missing file scope',
+            }),
+          ],
+          tests: [{ vars: {} }],
+          ...(source === 'config' && { commandLineOptions: { envPath: [envPath] } }),
+        },
+        undefined,
+        { eventSource: 'cli', cache: false },
+      );
+      const [row] = await result.getResults();
+      expect(row.success).toBe(true);
+      expect(row.response?.output).toBe('https://file.example.invalid/v1');
+      expect(process.env.OPENAI_BASE_URL).toBe('https://file.example.invalid/v1');
+      expect(process.env.OPENAI_API_HOST).toBe('host.example.invalid');
+      expect(getEnvOverrides('file')).toBeUndefined();
+    },
+  );
 
   it('isolates overlapping env files before cloud loading, provider loading, and evaluation', async () => {
     let release!: () => void;
