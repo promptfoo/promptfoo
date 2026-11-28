@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 import type { AddressInfo } from 'node:net';
 
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
@@ -21,7 +22,7 @@ const FIXTURE_DIR = path.resolve(__dirname, 'fixtures/sigterm-eval');
 type Exit = { code: number | null; signal: NodeJS.Signals | null };
 
 // Windows has no POSIX signals: `kill('SIGTERM')` terminates the child without running handlers.
-describe.skipIf(process.platform === 'win32')('SIGTERM during an eval', () => {
+describe.skipIf(process.platform === 'win32')('CLI signals during an eval', () => {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-sigterm-'));
   let child: ChildProcess | undefined;
   let receiver: http.Server | undefined;
@@ -48,7 +49,11 @@ describe.skipIf(process.platform === 'win32')('SIGTERM during an eval', () => {
    * Starts `args` under Node and resolves once the provider has written its "started" marker. The
    * provider runs in the child process, so the marker file is the only sign that its call began.
    */
-  async function startUntilProviderCalled(args: string[], env: NodeJS.ProcessEnv = {}) {
+  async function startUntilProviderCalled(
+    args: string[],
+    env: NodeJS.ProcessEnv = {},
+    onWatching?: () => void,
+  ) {
     run += 1;
     const runDir = path.join(workDir, String(run));
     fs.mkdirSync(runDir);
@@ -64,8 +69,17 @@ describe.skipIf(process.platform === 'win32')('SIGTERM during an eval', () => {
         SIGTERM_SMOKE_STARTED_PATH: startedPath,
         ...env,
       },
-      stdio: 'ignore',
+      stdio: ['ignore', onWatching ? 'pipe' : 'ignore', 'ignore'],
     });
+    if (onWatching && proc.stdout) {
+      const lines = createInterface({ input: proc.stdout });
+      lines.on('line', (line) => {
+        if (line.includes('Watching for file changes')) {
+          lines.close();
+          onWatching();
+        }
+      });
+    }
     child = proc;
     const exited = once(proc, 'exit').then(([code, signal]) => ({ code, signal }) as Exit);
     const watcher = fs.watch(runDir);
@@ -87,27 +101,60 @@ describe.skipIf(process.platform === 'win32')('SIGTERM during an eval', () => {
     return { proc, exited };
   }
 
-  async function signalAndWait(proc: ChildProcess, exited: Promise<Exit>) {
+  async function signalAndWait(
+    proc: ChildProcess,
+    exited: Promise<Exit>,
+    signal: 'SIGINT' | 'SIGTERM' = 'SIGTERM',
+  ) {
     const signalledAt = Date.now();
-    proc.kill('SIGTERM');
+    proc.kill(signal);
     const exit = await exited;
     return { exit, elapsedMs: Date.now() - signalledAt };
   }
 
-  it('ends the CLI on the signal while a provider call never returns', async () => {
-    expect(fs.existsSync(CLI_PATH), `Built CLI not found at ${CLI_PATH}`).toBe(true);
-    const { proc, exited } = await startUntilProviderCalled([
-      CLI_PATH,
-      'eval',
-      '-c',
-      'promptfooconfig.yaml',
-      '--no-cache',
-      '--no-table',
-    ]);
+  it.each([
+    { mode: 'saved', options: [], signal: 'SIGTERM' },
+    { mode: 'unsaved', options: ['--no-write'], signal: 'SIGINT' },
+  ] as const)(
+    'ends the $mode CLI run on $signal while a provider call never returns',
+    async ({ options, signal }) => {
+      expect(fs.existsSync(CLI_PATH), `Built CLI not found at ${CLI_PATH}`).toBe(true);
+      const { proc, exited } = await startUntilProviderCalled([
+        CLI_PATH,
+        'eval',
+        '-c',
+        'promptfooconfig.yaml',
+        '--no-cache',
+        '--no-table',
+        ...options,
+      ]);
 
-    const { exit, elapsedMs } = await signalAndWait(proc, exited);
+      const { exit, elapsedMs } = await signalAndWait(proc, exited, signal);
 
-    expect(exit).toEqual({ code: null, signal: 'SIGTERM' });
+      expect(exit).toEqual({ code: null, signal });
+      expect(elapsedMs).toBeLessThan(SIGTERM_CLEANUP_TIMEOUT_MS + 2_000);
+    },
+  );
+
+  it('preserves SIGINT when a file-triggered no-write watch rerun gets stuck', async () => {
+    const configPath = path.join(workDir, 'watch.yaml');
+    const config = { prompts: ['hello'], providers: ['echo'], tests: [{ description: 'local' }] };
+    fs.writeFileSync(configPath, JSON.stringify(config));
+    const { proc, exited } = await startUntilProviderCalled(
+      [CLI_PATH, 'eval', '-c', configPath, '--no-write', '--watch', '--no-cache', '--no-table'],
+      {},
+      () => {
+        fs.writeFileSync(
+          configPath,
+          JSON.stringify({
+            ...config,
+            providers: [`file://${path.join(FIXTURE_DIR, 'hanging-provider.mjs')}`],
+          }),
+        );
+      },
+    );
+    const { exit, elapsedMs } = await signalAndWait(proc, exited, 'SIGINT');
+    expect(exit).toEqual({ code: null, signal: 'SIGINT' });
     expect(elapsedMs).toBeLessThan(SIGTERM_CLEANUP_TIMEOUT_MS + 2_000);
   });
 
@@ -146,18 +193,27 @@ describe.skipIf(process.platform === 'win32')('SIGTERM during an eval', () => {
     expect(traces.received('sigterm-smoke-before-hang')).toBe(true);
   });
 
-  it('exports a span that ends when an in-flight call settles during the drain', async () => {
+  it.each([
+    { signal: 'SIGTERM', options: [] },
+    { signal: 'SIGINT', options: ['--no-write'] },
+  ] as const)('exports a span that ends during the $signal drain', async ({ signal, options }) => {
     const traces = await startTraceReceiver();
     const { proc, exited } = await startUntilProviderCalled(
-      [CLI_PATH, 'eval', '-c', 'promptfooconfig.tracing.yaml', '--no-cache', '--no-table'],
-      { ...traces.env, SIGTERM_SMOKE_SETTLE_AFTER_MS: '500' },
+      [
+        CLI_PATH,
+        'eval',
+        '-c',
+        'promptfooconfig.tracing.yaml',
+        '--no-cache',
+        '--no-table',
+        ...options,
+      ],
+      { ...traces.env, SIGTERM_SMOKE_SETTLE_AFTER_MS: '500', SIGTERM_SMOKE_SETTLE_SIGNAL: signal },
     );
 
-    // Once the call settles the eval may finish on its own, so how it exits is not the point.
-    const { elapsedMs } = await signalAndWait(proc, exited);
+    const { elapsedMs } = await signalAndWait(proc, exited, signal);
 
     expect(elapsedMs).toBeLessThan(SIGTERM_CLEANUP_TIMEOUT_MS + 2_000);
-    // The call ends this span half a second after SIGTERM, while the drain still waits for it.
     expect(traces.received('sigterm-smoke-settled-after-signal')).toBe(true);
   });
 });
