@@ -7,10 +7,13 @@ import Table from 'cli-table3';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
+import { withProviderCleanup } from '../providers/lifecycle';
+import { waitForPromiseWithAbort } from '../providers/shared';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
+import { waitForSettled } from '../util/time';
 import { loadYaml } from '../util/yamlLoad';
 import { RedteamConfigSchema } from '../validators/redteam';
 import {
@@ -962,27 +965,49 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
  */
-export async function synthesize({
-  abortSignal,
-  cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
-  delay,
-  entities: entitiesOverride,
-  injectVar,
-  inputs,
-  language,
-  maxCharsPerMessage,
-  maxConcurrency = 1,
-  plugins,
-  prompts,
-  provider,
-  purpose: purposeOverride,
-  redteamGenerationContext: inputRedteamGenerationContext,
-  strategies,
-  targetIds,
-  showProgressBar: showProgressBarOverride,
-  excludeTargetOutputFromAgenticAttackGeneration,
-  testGenerationInstructions,
-}: SynthesizeOptions): Promise<{
+export async function synthesize(options: SynthesizeOptions) {
+  return withProviderCleanup(async () => {
+    const controller = new AbortController();
+    const abortSignal = options.abortSignal
+      ? AbortSignal.any([options.abortSignal, controller.signal])
+      : controller.signal;
+    const calls = new Set<Promise<unknown>>();
+    const work = synthesizeInternal({ ...options, abortSignal }, calls);
+    try {
+      return await waitForPromiseWithAbort(work, options.abortSignal);
+    } catch (error) {
+      // Stop new calls and bound the wait even if a delegate ignores its signal.
+      controller.abort(error);
+      await waitForSettled([work, ...calls], 1000);
+      throw options.abortSignal?.aborted ? new Error('Operation cancelled') : error;
+    }
+  });
+}
+
+async function synthesizeInternal(
+  {
+    abortSignal,
+    cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
+    delay,
+    entities: entitiesOverride,
+    injectVar,
+    inputs,
+    language,
+    maxCharsPerMessage,
+    maxConcurrency = 1,
+    plugins,
+    prompts,
+    provider,
+    purpose: purposeOverride,
+    redteamGenerationContext: inputRedteamGenerationContext,
+    strategies,
+    targetIds,
+    showProgressBar: showProgressBarOverride,
+    excludeTargetOutputFromAgenticAttackGeneration,
+    testGenerationInstructions,
+  }: SynthesizeOptions,
+  calls: Set<Promise<unknown>>,
+): Promise<{
   purpose: string;
   entities: string[];
   testCases: TestCaseWithPlugin[];
@@ -1101,10 +1126,9 @@ export async function synthesize({
     prompt: 0,
     total: 0,
   };
-  const redteamProvider = trackGenerationTokenUsage(
-    providerSelection.provider,
-    generationTokenUsage,
-  );
+  const wrapGenerationProvider = (providerToWrap: ApiProvider) =>
+    trackGenerationTokenUsage(providerToWrap, generationTokenUsage, abortSignal, calls);
+  const redteamProvider = wrapGenerationProvider(providerSelection.provider);
   const trackedProviderSelection = {
     ...providerSelection,
     provider: redteamProvider,
@@ -1296,8 +1320,9 @@ export async function synthesize({
     }
   }
 
-  // Start the progress bar
+  checkAbort();
   let progressBar: cliProgress.SingleBar | null = null;
+  const stopProgress = () => progressBar?.stop();
   const isWebUI = Boolean(cliState.webUI);
 
   const showProgressBar =
@@ -1313,7 +1338,7 @@ export async function synthesize({
       },
       cliProgress.Presets.shades_classic,
     );
-    // Use totalTests to include both plugin and strategy tests in progress tracking
+    abortSignal?.addEventListener('abort', stopProgress, { once: true });
     progressBar.start(totalTests, 0, { task: 'Initializing' });
   }
 
@@ -1665,9 +1690,7 @@ export async function synthesize({
   // Apply retry strategy first if it exists
   const retryStrategy = strategies.find((s) => s.id === 'retry');
   if (retryStrategy) {
-    if (showProgressBar) {
-      progressBar?.update({ task: 'Applying retry strategy' });
-    }
+    progressBar?.update({ task: 'Applying retry strategy' });
     logger.debug('Applying retry strategy first');
     retryStrategy.config = {
       targetIds: redteamGenerationContext.providerTargetIds,
@@ -1682,14 +1705,11 @@ export async function synthesize({
       undefined,
       maxCharsPerMessage,
       redteamGenerationContext,
-      (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
+      wrapGenerationProvider,
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
-    // Update progress bar with retry strategy tests generated
-    if (showProgressBar) {
-      progressBar?.increment(retryTestCases.length);
-    }
+    progressBar?.increment(retryTestCases.length);
   }
 
   // Check for abort signal or apply non-basic strategies
@@ -1708,7 +1728,7 @@ export async function synthesize({
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,
       redteamGenerationContext,
-      (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
+      wrapGenerationProvider,
     );
 
   Object.assign(strategyResults, otherStrategyResults);
@@ -1724,7 +1744,8 @@ export async function synthesize({
   checkAbort();
 
   progressBar?.update({ task: 'Done.' });
-  progressBar?.stop();
+  abortSignal?.removeEventListener('abort', stopProgress);
+  stopProgress();
   if (progressBar) {
     // Newline after progress bar to avoid overlap
     logger.info('');

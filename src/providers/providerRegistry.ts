@@ -37,7 +37,11 @@ interface ResourceState {
   providers: Set<ProviderState>;
   registered: boolean;
   registration: number;
-  release?: { promise: Promise<void>; start: (force?: boolean) => Promise<void> };
+  release?: {
+    promise: Promise<void>;
+    start: (force?: boolean) => Promise<void>;
+    failure?: { error: unknown };
+  };
 }
 
 export class ProviderRegistry {
@@ -284,6 +288,24 @@ export class ProviderRegistry {
 
   has(resource: unknown): boolean {
     return this.resources.get(resource as CleanupProvider)?.registered === true;
+  }
+
+  /** Release an owned provider without interrupting another evaluation's use of it. */
+  async shutdown(provider: IdleCleanupProvider): Promise<void> {
+    const state = this.resources.get(provider as IdleCleanupProvider & CleanupProvider);
+    if (!state) {
+      if (!this.selfRegisteredProviders.has(provider)) {
+        await provider.cleanup?.();
+      }
+      return;
+    }
+    const pending = this.maybeReleaseResource(state);
+    const release = state.release;
+    await pending;
+    if (release?.failure) {
+      this.retainForProcessShutdown(state.resource);
+      throw release.failure.error;
+    }
   }
 
   /** Close the currently known resources; embedded callers can continue using the registry. */
@@ -607,6 +629,9 @@ export class ProviderRegistry {
           }
           void Promise.resolve(shutdown)
             .catch((error) => {
+              if (state.release) {
+                state.release.failure = { error };
+              }
               logger.warn('Error shutting down provider: ' + String(error));
             })
             .then(complete);

@@ -1,6 +1,7 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
+import { trackProvider } from '../providers/lifecycle';
 import { providerRegistry } from '../providers/providerRegistry';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
@@ -185,6 +186,10 @@ function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boo
   );
 }
 
+async function loadGradingProvider(...args: Parameters<typeof loadApiProvider>) {
+  return trackProvider(await loadApiProvider(...args));
+}
+
 export async function getGradingProvider(
   type: ProviderType,
   provider: GradingConfig['provider'],
@@ -199,7 +204,7 @@ export async function getGradingProvider(
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     // Defined as a string
-    finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath });
+    finalProvider = await loadGradingProvider(provider, { basePath: cliState.basePath });
   } else if (
     provider != null &&
     typeof provider === 'object' &&
@@ -213,12 +218,12 @@ export async function getGradingProvider(
       // Apply evaluation overrides only when the selected typed grader is loaded.
       // Capturing them in the test config would retain credentials across later runs.
       if (typeof typeValue === 'string') {
-        finalProvider = await loadApiProvider(typeValue, {
+        finalProvider = await loadGradingProvider(typeValue, {
           basePath: cliState.basePath,
           env: cliState.env,
         });
       } else if (typeof typeValue.id === 'string') {
-        finalProvider = await loadApiProvider(typeValue.id, {
+        finalProvider = await loadGradingProvider(typeValue.id, {
           options: typeValue as ProviderOptions,
           basePath: cliState.basePath,
           env: cliState.env,
@@ -227,7 +232,7 @@ export async function getGradingProvider(
         finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
       }
     } else if ('id' in provider && typeof provider.id === 'string' && provider.id) {
-      finalProvider = await loadApiProvider(provider.id, {
+      finalProvider = await loadGradingProvider(provider.id, {
         options: provider,
         basePath: cliState.basePath,
       });

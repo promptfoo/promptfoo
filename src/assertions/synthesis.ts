@@ -3,9 +3,11 @@ import cliState from '../cliState';
 import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
 import { loadApiProvider } from '../providers/index';
+import { trackProvider, withProviderCleanup } from '../providers/lifecycle';
 import { sampleArray } from '../util/generation';
 import invariant from '../util/invariant';
 import { extractJsonObjects } from '../util/json';
+import { waitForSettled } from '../util/time';
 import type { SingleBar } from 'cli-progress';
 
 import type { ApiProvider, Assertion, TestCase, TestSuite } from '../types/index';
@@ -424,15 +426,8 @@ interface GeneratedQuestion {
   question: string;
 }
 
-export async function synthesize({
-  prompts,
-  instructions,
-  numQuestions = 5,
-  tests,
-  provider,
-  type = 'pi',
-}: SynthesizeOptions): Promise<Assertion[]> {
-  if (prompts.length < 1) {
+export async function synthesize(options: SynthesizeOptions): Promise<Assertion[]> {
+  if (!options.prompts.length) {
     throw new Error('Assertion synthesis requires at least one prompt.');
   }
 
@@ -443,9 +438,20 @@ export async function synthesize({
       { gracefulExit: true },
       cliProgress.Presets.shades_classic,
     );
-    progressBar.start(1 + numQuestions, 0);
   }
 
+  try {
+    return await withProviderCleanup(() => synthesizeWithProvider(options, progressBar));
+  } finally {
+    progressBar?.stop();
+  }
+}
+
+async function synthesizeWithProvider(
+  { prompts, instructions, numQuestions = 5, tests, provider, type = 'pi' }: SynthesizeOptions,
+  progressBar?: SingleBar,
+): Promise<Assertion[]> {
+  progressBar?.start(1 + numQuestions, 0);
   logger.debug(`Starting assertion synthesis. We'll begin by generating a set of questions`);
 
   logger.debug(
@@ -456,7 +462,7 @@ export async function synthesize({
   if (typeof provider === 'undefined') {
     providerModel = (await getDefaultProviders()).synthesizeProvider;
   } else {
-    providerModel = await loadApiProvider(provider, { basePath: cliState.basePath });
+    providerModel = trackProvider(await loadApiProvider(provider, { basePath: cliState.basePath }));
   }
   let newQuestionsPrompt = generateNewQuestionsPrompt(prompts, tests, numQuestions);
   if (instructions) {
@@ -497,38 +503,39 @@ export async function synthesize({
     `Generated ${questions.length} question${questions.length === 1 ? '' : 's'}:\n${questions.map((p) => `  - ${p.question}`).join('\n')}`,
   );
 
-  if (progressBar) {
-    progressBar.increment();
-  }
+  progressBar?.increment();
   // Determine which dimensions should be objectively answered with python. If so, generate the python.
   providerModel.config = {
     maxTokens: 3000,
   };
-  const assertions = await Promise.all(
-    questions.map(async (q) => {
-      const pythonConvertPrompt = convertQuestionToPythonPrompt(prompts, q.question);
-      const resp = await providerModel.callApi(pythonConvertPrompt);
-      const output: string = resp.output;
-      if (progressBar) {
-        progressBar.increment();
-      }
+  const controller = new AbortController();
+  const conversions = questions.map(async (q) => {
+    const pythonConvertPrompt = convertQuestionToPythonPrompt(prompts, q.question);
+    const resp = await providerModel.callApi(pythonConvertPrompt, undefined, {
+      abortSignal: controller.signal,
+    });
+    const output: string = resp.output;
+    progressBar?.increment();
 
-      if (output.toLowerCase().trim() == 'none') {
-        return { type, metric: q.label, value: q.question };
-      } else {
-        return {
-          type: 'python' as Assertion['type'],
-          metric: q.label,
-          value: output,
-        };
-      }
-    }),
-  );
-  logger.debug(`Generated ${assertions.length} new assertions`);
-  if (progressBar) {
-    progressBar.stop();
+    if (output.toLowerCase().trim() == 'none') {
+      return { type, metric: q.label, value: q.question };
+    } else {
+      return {
+        type: 'python' as Assertion['type'],
+        metric: q.label,
+        value: output,
+      };
+    }
+  });
+  try {
+    const assertions = await Promise.all(conversions);
+    logger.debug(`Generated ${assertions.length} new assertions`);
+    return assertions;
+  } catch (error) {
+    controller.abort(error);
+    await waitForSettled(conversions, 1000);
+    throw error;
   }
-  return assertions;
 }
 
 export async function synthesizeFromTestSuite(
