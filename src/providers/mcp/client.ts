@@ -94,11 +94,9 @@ function getStdioEnv(server: MCPServerConfig): Record<string, string> {
   return server.env ? { ...parentEnv, ...server.env } : parentEnv;
 }
 
-async function loadMcpClientSdk(): Promise<
-  typeof import('@modelcontextprotocol/sdk/client/index.js')
-> {
+async function loadMcpClientSdk() {
   try {
-    return await import('@modelcontextprotocol/sdk/client/index.js');
+    return await import('./sdkClient');
   } catch (error) {
     if (isMissingPackageImportError(error, '@modelcontextprotocol/sdk')) {
       throw new Error(
@@ -210,9 +208,9 @@ export class MCPClient {
     signal: AbortSignal,
   ): Promise<void> {
     signal.throwIfAborted();
-    const { Client } = await loadMcpClientSdk();
+    const { PaginatedMcpClient } = await loadMcpClientSdk();
     signal.throwIfAborted();
-    const client = new Client({
+    const client = new PaginatedMcpClient({
       name: 'promptfoo-MCP',
       version: '1.0.0',
       description: 'Promptfoo MCP client for connecting to MCP servers during LLM evaluations',
@@ -353,11 +351,7 @@ export class MCPClient {
         }
       }
 
-      // List available tools
-      const toolsResult = await client.listTools(
-        undefined, // no pagination params
-        requestOptions,
-      );
+      const toolsResult = await client.listTools(undefined, requestOptions);
       const serverTools =
         toolsResult?.tools?.map((tool) => ({
           name: tool.name,
