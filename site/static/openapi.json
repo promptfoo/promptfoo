@@ -3458,6 +3458,81 @@
         }
       }
     },
+    "/api/providers": {
+      "get": {
+        "operationId": "getProviders",
+        "tags": ["Providers"],
+        "summary": "Get configured provider catalog",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": { "type": "boolean", "enum": [true] },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "providers": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": { "type": "string" },
+                                  "label": { "type": "string" }
+                                },
+                                "required": ["id", "label"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "hasCustomConfig": { "type": "boolean" }
+                          },
+                          "required": ["providers", "hasCustomConfig"]
+                        }
+                      },
+                      "required": ["success", "data"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": { "type": "string" },
+                        "details": {},
+                        "suggestion": { "type": "string" },
+                        "success": { "type": "boolean", "enum": [false] }
+                      },
+                      "required": ["error"],
+                      "additionalProperties": {}
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/providers/test": {
       "post": {
         "operationId": "testProvider",

@@ -7,6 +7,8 @@ import { loadYaml } from './yamlLoad';
 
 import type { ProviderOptions, ProviderOptionsMap } from '../types/providers';
 
+export const UI_CATALOG_PROVIDER_PREFIX = 'ui-catalog:';
+
 // Keys belonging to the ProviderOptions interface (src/types/providers.ts).
 // When an object's first key matches one of these, it is NOT treated as a
 // ProviderOptionsMap (where the key would be a provider ID like "openai:responses:gpt-5.4").
