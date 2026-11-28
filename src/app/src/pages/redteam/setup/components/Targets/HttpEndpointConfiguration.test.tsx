@@ -1,10 +1,15 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
+
+import type { ProviderOptions } from '../../types';
+
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 
 vi.mock('react-simple-code-editor', () => ({
   default: ({ value, onValueChange }: any) => (
@@ -24,6 +29,67 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => (
 const renderWithProviders = (ui: React.ReactElement) => {
   return render(ui, { wrapper: Wrapper });
 };
+
+describe('HttpEndpointConfiguration - Generated raw requests', () => {
+  beforeEach(() => {
+    resetCallApiMock();
+  });
+  afterEach(() => {
+    resetCallApiMock();
+  });
+
+  it.each([
+    [false, true, true],
+    [true, true, true],
+    [true, false, false],
+    [false, false, false],
+    [true, undefined, false],
+    [false, undefined, false],
+  ])('changes HTTPS from %s to generated %s', async (initialHttps, useHttps, expectedHttps) => {
+    const request = 'GET /ready HTTP/1.1\nHost: example.com\n\n';
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/providers/http-generator',
+        response: { id: 'http', config: { request, useHttps } },
+      },
+    ]);
+    let selected: ProviderOptions;
+    function Harness() {
+      const [target, setTarget] = React.useState<ProviderOptions>({
+        id: 'http',
+        config: { request: 'GET /old HTTP/1.1\nHost: example.com\n\n', useHttps: initialHttps },
+      });
+      selected = target;
+      return (
+        <HttpEndpointConfiguration
+          selectedTarget={target}
+          updateCustomTarget={(field, value) =>
+            setTarget((previous) => ({
+              ...previous,
+              config: { ...previous.config, [field]: value },
+            }))
+          }
+          bodyError={null}
+          urlError={null}
+          setBodyError={() => {}}
+          setUrlError={() => {}}
+        />
+      );
+    }
+    renderWithProviders(<Harness />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Import' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Auto-fill from Example' }));
+    await user.click(screen.getByRole('button', { name: 'Generate' }));
+    await user.click(await screen.findByRole('button', { name: 'Apply Configuration' }));
+    expect(selected!.config).toMatchObject({ request, useHttps: expectedHttps });
+    expect(screen.getByRole('switch', { name: 'Use HTTPS' })).toHaveAttribute(
+      'data-state',
+      expectedHttps ? 'checked' : 'unchecked',
+    );
+  });
+});
 
 describe('HttpEndpointConfiguration - Header Field Layout', () => {
   let mockUpdateCustomTarget: (field: string, value: unknown) => void;
