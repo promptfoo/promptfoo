@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('fs', async (importOriginal) => ({
   ...(await importOriginal<typeof import('fs')>()),
   createWriteStream: mocks.createWriteStream,
+  mkdirSync: vi.fn(),
 }));
 
 function createMockWriteStream({ destroyed = false }: { destroyed?: boolean } = {}) {
