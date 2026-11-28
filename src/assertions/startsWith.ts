@@ -8,10 +8,10 @@ export const handleStartsWith = ({
   outputString,
   inverse,
 }: AssertionParams): GradingResult => {
-  invariant(renderedValue, '"starts-with" assertion type must have a string value');
   invariant(
-    typeof renderedValue === 'string',
-    '"starts-with" assertion type must have a string value',
+    (typeof renderedValue === 'string' && renderedValue.length > 0) ||
+      Number.isFinite(renderedValue),
+    '"starts-with" assertion type must have a non-empty string or finite number value',
   );
   const pass = outputString.startsWith(String(renderedValue)) !== inverse;
   return {
