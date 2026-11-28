@@ -148,7 +148,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [rouge-s](/docs/configuration/expected-outputs/deterministic/#rouge-s)                                             | Rouge-S (skip-bigram) score is at least the threshold (default 0.75)            |
 | [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU >= threshold (default 0.5); blank references are ignored                   |
 | [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU >= threshold (default 0.5); empty output scores 0                          |
-| [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Levenshtein distance is below a threshold                                       |
+| [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Edit distance from a string or numeric reference is within a threshold          |
 | [latency](/docs/configuration/expected-outputs/deterministic/#latency)                                             | Latency is below a threshold (milliseconds)                                     |
 | [meteor](/docs/configuration/expected-outputs/deterministic/#meteor)                                               | METEOR score is above a given threshold (default 0.5); requires `natural`       |
 | [perplexity](/docs/configuration/expected-outputs/deterministic/#perplexity)                                       | Perplexity is below a threshold                                                 |
