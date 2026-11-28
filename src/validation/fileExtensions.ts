@@ -65,3 +65,17 @@ export function isAudioFile(filePath: string): boolean {
   const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
   return audioExtensions.includes(fileExtension);
 }
+
+/**
+ * Splits an extension reference on its colons, keeping the colon of a Windows drive letter
+ * (file://C:/path/to/hooks.js:beforeAll or file:///C:/path/to/hooks.js:beforeAll) inside the
+ * file path, as the runtime does.
+ */
+export function splitExtensionReference(value: string): string[] {
+  const driveLetter = /^file:\/\/\/?[a-zA-Z]:(?=[\\/])/.exec(value);
+  if (!driveLetter) {
+    return value.split(':');
+  }
+  const [filePath, ...rest] = value.slice(driveLetter[0].length).split(':');
+  return ['file', `${driveLetter[0].slice('file:'.length)}${filePath}`, ...rest];
+}

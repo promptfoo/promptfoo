@@ -3,6 +3,7 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
+import { normalizeFilePath } from './functions/loadFunction';
 import { safeJoin } from './pathUtils';
 import { getProcessShim } from './processShim';
 import { isSafeMode, SafeModeError } from './safeMode';
@@ -115,7 +116,7 @@ function getPythonTransformFunction(
  */
 async function getFileTransformFunction(filePath: string): Promise<Function> {
   const [actualFilePath, functionName] = parseFilePathAndFunctionName(
-    filePath.slice('file://'.length),
+    normalizeFilePath(filePath.slice('file://'.length)),
   );
 
   const fullPath = safeJoin(cliState.basePath || '', actualFilePath);
