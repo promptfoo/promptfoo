@@ -34,6 +34,15 @@ describe('normalizeFinishReason', () => {
     });
   });
 
+  describe('Amazon Bedrock mappings', () => {
+    it('should normalize Bedrock InvokeModel and Converse reasons to standard values', () => {
+      expect(normalizeFinishReason('content_filtered')).toBe('content_filter');
+      expect(normalizeFinishReason('FINISH')).toBe('stop');
+      expect(normalizeFinishReason('COMPLETE')).toBe('stop');
+      expect(normalizeFinishReason('ERROR_TOXIC')).toBe('content_filter');
+    });
+  });
+
   describe('Vercel AI SDK mappings', () => {
     it('should map hyphenated AI SDK reasons to standard values', () => {
       expect(normalizeFinishReason('tool-calls')).toBe('tool_calls');
