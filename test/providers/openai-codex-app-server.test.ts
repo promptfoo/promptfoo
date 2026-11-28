@@ -1726,6 +1726,11 @@ describe('OpenAICodexAppServerProvider', () => {
       content: { project: 'promptfoo', severity: 'low' },
       _meta: { source: 'promptfoo-test' },
     };
+    const elicitationPolicy = {
+      ...elicitationResponse,
+      allowed_server_names: ['forms'],
+      allowed_messages: ['Provide project metadata'],
+    };
 
     const provider = new OpenAICodexAppServerProvider({
       config: {
@@ -1737,7 +1742,7 @@ describe('OpenAICodexAppServerProvider', () => {
             permissions: permissionGrant,
             scope: 'session',
           },
-          mcp_elicitation: elicitationResponse,
+          mcp_elicitation: elicitationPolicy,
         },
       },
     });
@@ -1820,6 +1825,70 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(elicitation.result).toEqual(elicitationResponse);
 
     server.send({
+      id: 504,
+      method: 'mcpServer/elicitation/request',
+      params: {
+        threadId: 'thr_advanced_policy',
+        turnId: 'turn_advanced_policy',
+        serverName: 'forms',
+        mode: 'form',
+        message: 'Provide unrelated metadata',
+        requestedSchema: { type: 'object', properties: {} },
+      },
+    });
+    const disallowedMessageElicitation = await waitForMessage(
+      server,
+      (message) => message.id === 504 && message.result,
+    );
+    expect(disallowedMessageElicitation.result).toEqual({
+      action: 'decline',
+      content: null,
+      _meta: null,
+    });
+
+    server.send({
+      id: 505,
+      method: 'mcpServer/elicitation/request',
+      params: {
+        threadId: 'thr_advanced_policy',
+        turnId: 'turn_advanced_policy',
+        serverName: 'untrusted-forms',
+        mode: 'form',
+        message: 'Provide project metadata',
+        requestedSchema: { type: 'object', properties: {} },
+      },
+    });
+    const disallowedServerElicitation = await waitForMessage(
+      server,
+      (message) => message.id === 505 && message.result,
+    );
+    expect(disallowedServerElicitation.result).toEqual({
+      action: 'decline',
+      content: null,
+      _meta: null,
+    });
+
+    server.send({
+      id: 506,
+      method: 'mcpServer/elicitation/request',
+      params: {
+        threadId: 'thr_advanced_policy',
+        turnId: 'turn_advanced_policy',
+        mode: 'form',
+        requestedSchema: { type: 'object', properties: {} },
+      },
+    });
+    const missingAllowlistFieldsElicitation = await waitForMessage(
+      server,
+      (message) => message.id === 506 && message.result,
+    );
+    expect(missingAllowlistFieldsElicitation.result).toEqual({
+      action: 'decline',
+      content: null,
+      _meta: null,
+    });
+
+    server.send({
       method: 'item/agentMessage/delta',
       params: {
         threadId: 'thr_advanced_policy',
@@ -1854,7 +1923,44 @@ describe('OpenAICodexAppServerProvider', () => {
         method: 'mcpServer/elicitation/request',
         response: elicitationResponse,
       }),
+      expect.objectContaining({
+        id: 504,
+        method: 'mcpServer/elicitation/request',
+        response: { action: 'decline', content: null, _meta: null },
+      }),
+      expect.objectContaining({
+        id: 505,
+        method: 'mcpServer/elicitation/request',
+        response: { action: 'decline', content: null, _meta: null },
+      }),
+      expect.objectContaining({
+        id: 506,
+        method: 'mcpServer/elicitation/request',
+        response: { action: 'decline', content: null, _meta: null },
+      }),
     ]);
+  });
+
+  it.each([
+    [
+      'server-name',
+      { allowed_server_names: ['forms'] },
+      { serverName: 'forms', message: 'Any message' },
+    ],
+    [
+      'message',
+      { allowed_messages: ['Provide project metadata'] },
+      { serverName: 'any-server', message: 'Provide project metadata' },
+    ],
+  ])('applies a standalone %s elicitation allowlist', (_name, allowlist, params) => {
+    const provider = new OpenAICodexAppServerProvider({});
+
+    expect(
+      (provider as any).buildMcpElicitationResponse(params, {
+        action: 'accept',
+        ...allowlist,
+      }),
+    ).toEqual({ action: 'accept', content: null, _meta: null });
   });
 
   it('uses thread/resume and normalizes structured prompt input items', async () => {
@@ -5604,6 +5710,32 @@ describe('OpenAICodexAppServerProvider', () => {
         },
       },
     });
+    const disclosure =
+      'Assistant response: Fixture marker: PROMPTFOO_UI_ONLY_CANARY_7F3A [75avxXdDADETIargR+qbomOTs76Ag6DLrgU0M3LZ+kU=]';
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_sanitize',
+        turnId: 'turn_sanitize',
+        item: {
+          type: 'mcpToolCall',
+          id: 'fixture-state',
+          server: 'computer-use',
+          tool: 'get_app_state',
+          status: 'completed',
+          arguments: {},
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: disclosure,
+              },
+            ],
+          },
+          error: null,
+        },
+      },
+    });
     server.send({
       method: 'item/agentMessage/delta',
       params: {
@@ -5624,6 +5756,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const result = await resultPromise;
     const metadataJson = JSON.stringify(result.metadata);
     expect(metadataJson).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');
+    expect(metadataJson).toContain(disclosure);
     expect(metadataJson).toContain('[REDACTED]');
 
     const rawJson = result.raw as string;
