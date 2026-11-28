@@ -200,7 +200,7 @@ export class MCPClient {
       }
       usedKeys.add(serverKey);
       logger.info(`connecting to server ${serverKey}`);
-      await this.connectToServer(server, serverKey, signal);
+      await waitForPromiseWithAbort(this.connectToServer(server, serverKey, signal), signal);
     }
   }
 
@@ -228,7 +228,7 @@ export class MCPClient {
     const close = () => {
       if (!closePromise || closingTransport !== transport) {
         closingTransport = transport;
-        closePromise = this.closeConnection(client, transport);
+        closePromise = this.closeConnection(client, transport, signal);
       }
       return closePromise;
     };
@@ -320,10 +320,11 @@ export class MCPClient {
           logger.debug(
             `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
           );
+          signal.throwIfAborted();
           // The failed HTTP transport is not stored in the connection maps.
           // Release it before replacing it with the fallback transport.
           if (transport) {
-            await transport.close().catch(() => undefined);
+            await this.closeConnection(undefined, transport, signal);
             transport = undefined;
           }
           signal.throwIfAborted();
@@ -353,6 +354,7 @@ export class MCPClient {
         }
       }
 
+      signal.throwIfAborted();
       // List available tools
       const toolsResult = await client.listTools(
         undefined, // no pagination params
@@ -407,15 +409,21 @@ export class MCPClient {
   }
 
   private async closeConnection(
-    client: Client,
+    client: Client | undefined,
     transport?: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport,
+    startupSignal?: AbortSignal,
   ): Promise<void> {
-    // A transport close failure must not skip closing the client.
+    // Share one deadline. Even after cancellation, initiate both closes and observe late errors.
+    const timeout = AbortSignal.timeout(3000);
+    const signal = startupSignal ? AbortSignal.any([startupSignal, timeout]) : timeout;
     for (const resource of [transport, client]) {
+      if (!resource) {
+        continue;
+      }
       try {
-        await resource?.close();
+        await waitForPromiseWithAbort(resource.close(), signal);
       } catch (error) {
-        if (this.isDebugEnabled) {
+        if (this.isDebugEnabled && !startupSignal?.aborted) {
           logger.error(
             `Error during cleanup: ${error instanceof Error ? error.message : String(error)}`,
           );
@@ -546,7 +554,8 @@ export class MCPClient {
 
   private async cleanupInternal(): Promise<void> {
     this.startupController.abort();
-    await Promise.all([...this.pendingConnections].map((close) => close()));
+    const pending = [...this.pendingConnections].map((close) => close());
+    this.pendingConnections.clear();
     const connections = [...this.clients].map(([serverKey, client]) => ({
       client,
       transport: this.transports.get(serverKey),
@@ -554,8 +563,9 @@ export class MCPClient {
     this.clients.clear();
     this.transports.clear();
     this.tools.clear();
-    for (const { client, transport } of connections) {
-      await this.closeConnection(client, transport);
-    }
+    await Promise.all([
+      ...pending,
+      ...connections.map(({ client, transport }) => this.closeConnection(client, transport)),
+    ]);
   }
 }
