@@ -34,9 +34,10 @@ function textLength(node: React.ReactNode): number {
 export interface TruncatedTextProps {
   text: string | number | React.ReactNode;
   maxLength: number;
+  renderAfter?: (visibleText: React.ReactNode) => React.ReactNode;
 }
 
-function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
+function TruncatedText({ text: rawText, maxLength, renderAfter }: TruncatedTextProps) {
   const textId = React.useId();
   // Normalize without destroying arrays/element structure
   const text: React.ReactNode =
@@ -154,6 +155,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
           </span>
         )}
       </div>
+      {renderAfter?.(truncatedText)}
     </div>
   );
 }
