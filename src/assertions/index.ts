@@ -143,6 +143,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
 
 const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
   'javascript',
+  'promptfoo:redteam:cross-agent-injection',
   'python',
   'ruby',
   'trace-error-spans',

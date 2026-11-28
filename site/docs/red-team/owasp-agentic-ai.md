@@ -210,6 +210,7 @@ Multi-agent systems face spoofed identities, replayed messages, and tampering in
 ```yaml
 redteam:
   plugins:
+    - cross-agent-injection
     - indirect-prompt-injection
     - hijacking
     - imitation
