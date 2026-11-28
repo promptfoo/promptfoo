@@ -56,8 +56,6 @@ export const AuthorChip = ({
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save';
       showToast(message, 'error');
-      setEmail(author || '');
-      setIsEditing(false);
     } finally {
       setIsLoading(false);
     }

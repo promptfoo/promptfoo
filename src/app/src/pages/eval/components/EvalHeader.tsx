@@ -114,15 +114,23 @@ export default function EvalHeader({
     }
   };
 
-  const handleEditAuthor = async (newAuthor: string) => {
+  const authorVersion = React.useRef(0);
+  React.useLayoutEffect(() => {
     if (evalId) {
-      try {
-        await updateEvalAuthor(evalId, newAuthor);
-        setAuthor(newAuthor);
-      } catch (error) {
-        console.error('Failed to update author:', error);
-        throw error;
-      }
+      return () => {
+        authorVersion.current++;
+      };
+    }
+  }, [evalId]);
+
+  const handleEditAuthor = async (newAuthor: string) => {
+    if (!evalId) {
+      return;
+    }
+    const version = ++authorVersion.current;
+    await updateEvalAuthor(evalId, newAuthor);
+    if (version === authorVersion.current && useTableStore.getState().evalId === evalId) {
+      setAuthor(newAuthor || null);
     }
   };
 
@@ -251,6 +259,7 @@ export default function EvalHeader({
                     </Chip>
                   )}
                   <AuthorChip
+                    key={evalId}
                     author={author}
                     onEditAuthor={handleEditAuthor}
                     currentUserEmail={currentUserEmail}

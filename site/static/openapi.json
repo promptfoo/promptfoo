@@ -1437,7 +1437,14 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": { "author": { "type": "string", "format": "email" } },
+                "properties": {
+                  "author": {
+                    "oneOf": [
+                      { "type": "string", "enum": [""] },
+                      { "type": "string", "format": "email" }
+                    ]
+                  }
+                },
                 "required": ["author"]
               }
             }
