@@ -1357,6 +1357,9 @@ export async function runEvalInternal(
   let setup = state.setup;
   let latencyMs = 0;
   let providerCallCompleted = false;
+  let providerAccounting:
+    | Pick<EvaluateResult, 'cost' | 'incurredCost' | 'latencyMs' | 'tokenUsage' | 'response'>
+    | undefined;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
   // The step's copy_working_dir workspace, removed once its assertions have run.
   let workspace: AgentWorkspace | undefined;
@@ -1472,6 +1475,32 @@ export async function runEvalInternal(
           invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
           trackProviderUsage(provider, response);
+          if (response.tokenUsage) {
+            accumulateResponseTokenUsage(ret.tokenUsage, response);
+          }
+          // A failed transform can leave sensitive output and metadata unprocessed.
+          const {
+            cached,
+            cost,
+            incurredCost,
+            latencyMs: responseLatency,
+            sessionId,
+            tokenUsage,
+          } = response;
+          providerAccounting = {
+            cost: ret.cost,
+            ...(incurredCost !== undefined && { incurredCost }),
+            latencyMs: ret.latencyMs,
+            tokenUsage: ret.tokenUsage,
+            response: {
+              cached,
+              cost,
+              incurredCost,
+              latencyMs: responseLatency,
+              sessionId,
+              tokenUsage,
+            },
+          };
           await applyRunEvalResponseOutcome({
             abortSignal,
             deferredGradingAbortSignal: orchestrationOptions.abortSignal,
@@ -1492,11 +1521,6 @@ export async function runEvalInternal(
             traceContext: executionTraceContext,
             vars: persistedVars,
           });
-
-          // Update token usage stats
-          if (response.tokenUsage) {
-            accumulateResponseTokenUsage(ret.tokenUsage, response);
-          }
 
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
             // Save the output in a register for later use
@@ -1564,6 +1588,7 @@ export async function runEvalInternal(
         testCase: test,
         promptId: prompt.id || '',
         metadata,
+        ...providerAccounting,
         ...getTraceLinkage(traceContext, evalId),
       },
     ];
