@@ -821,8 +821,20 @@ export default class Eval {
 
   async *fetchResultsBatched(batchSize: number = 100) {
     if (!this.persisted) {
-      for (let offset = 0; offset < this.results.length; offset += batchSize) {
-        yield this.results.slice(offset, offset + batchSize);
+      // As in the database path, keep every prompt for a test in the same batch.
+      // In-memory results can arrive out of order when providers run concurrently.
+      const batches = new Map<number, EvalResult[]>();
+      for (const result of this.results) {
+        const key = Math.floor(result.testIdx / batchSize);
+        const batch = batches.get(key);
+        if (batch) {
+          batch.push(result);
+        } else {
+          batches.set(key, [result]);
+        }
+      }
+      for (const key of [...batches.keys()].sort((a, b) => a - b)) {
+        yield batches.get(key)!;
       }
       return;
     }

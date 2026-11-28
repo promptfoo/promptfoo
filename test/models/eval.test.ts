@@ -339,6 +339,21 @@ describe('evaluator', () => {
       ]);
     });
 
+    it('keeps each test together and yields in-memory batches by test index', async () => {
+      const evaluation = new Eval({});
+      await evaluation.addResult(createEvaluateResult({ testIdx: 12, promptIdx: 0 }));
+      await evaluation.addResult(createEvaluateResult({ testIdx: 0, promptIdx: 0 }));
+      await evaluation.addResult(createEvaluateResult({ testIdx: 2, promptIdx: 0 }));
+      await evaluation.addResult(createEvaluateResult({ testIdx: 0, promptIdx: 1 }));
+
+      const batches: number[][] = [];
+      for await (const batch of evaluation.fetchResultsBatched(1)) {
+        batches.push(batch.map((result) => result.testIdx));
+      }
+
+      expect(batches).toEqual([[0, 0], [2], [12]]);
+    });
+
     it('advances across sparse test indices for persisted evals', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
       const results = [150, 275].map((testIdx) => {
