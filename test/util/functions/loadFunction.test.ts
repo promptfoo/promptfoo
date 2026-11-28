@@ -356,6 +356,9 @@ describe('parseFileUrl', () => {
     expect(parseFileUrl('file://callbacks/2026-05-27T12:00:00.js')).toEqual({
       filePath: 'callbacks/2026-05-27T12:00:00.js',
     });
+    expect(parseFileUrl('file://helpers.js:backup/cb.js')).toEqual({
+      filePath: 'helpers.js:backup/cb.js',
+    });
     expect(parseFileUrl('file://foo:bar/cb.js')).toEqual({
       filePath: 'foo:bar/cb.js',
     });

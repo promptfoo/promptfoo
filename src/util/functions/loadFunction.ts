@@ -128,7 +128,8 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
   const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
 
-  if (lastColonIndex > 1) {
+  // A colon in a parent directory cannot introduce the callback's named export.
+  if (lastColonIndex > 1 && path.basename(urlWithoutProtocol).includes(':')) {
     const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
 
     // Only executable function files support a :functionName suffix. This preserves
