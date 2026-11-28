@@ -293,7 +293,7 @@ describe('GolangProvider', () => {
     ['win32', 'golang_wrapper.exe'],
     ['linux', 'golang_wrapper'],
     ['darwin', 'golang_wrapper'],
-  ])('builds and executes the wrapper for %s', async (platform, filename) => {
+  ] as const)('builds and executes the wrapper for %s', async (platform, filename) => {
     const platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue(platform);
     try {
       const provider = new GolangProvider('script.go');
