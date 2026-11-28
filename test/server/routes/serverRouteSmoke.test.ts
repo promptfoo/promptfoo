@@ -885,6 +885,20 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     }
   });
 
+  it('rejects comparison exports across datasets', async () => {
+    mocks.evalModel.findById
+      .mockResolvedValueOnce({ datasetId: 'a' })
+      .mockResolvedValueOnce({ datasetId: 'b' });
+    const response = await sendRequest(app, {
+      method: 'get',
+      openApiPath: '/api/eval/{id}/table',
+      path: '/api/eval/eval-1/table?comparisonEvalIds=eval-2&format=csv',
+      expectedStatus: 400,
+    });
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: 'Comparison evals must use the same dataset' });
+  });
+
   it('handles malformed JSON before route dispatch and keeps the app healthy', async () => {
     const canary = 'malformed-request-body-canary';
     const environment = app.get('env');

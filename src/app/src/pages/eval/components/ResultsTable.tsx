@@ -66,6 +66,7 @@ import type {
   CellContext,
   ColumnDef,
   ColumnSizingState,
+  PaginationState,
   Row,
   VisibilityState,
 } from '@tanstack/react-table';
@@ -1472,6 +1473,7 @@ interface ResultsTableProps {
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   zoom: number;
+  onPaginationChange?: (pagination: PaginationState | null) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -1608,6 +1610,7 @@ function ResultsTable({
   showStats,
   onFailureFilterToggle,
   zoom,
+  onPaginationChange,
 }: ResultsTableProps) {
   const {
     evalId,
@@ -1620,7 +1623,7 @@ function ResultsTable({
     isFetching,
     filters,
   } = useTableStore();
-  const { inComparisonMode, comparisonEvalIds, renderMarkdown, stickyHeader, setStickyHeader } =
+  const { inComparisonMode, renderMarkdown, stickyHeader, setStickyHeader } =
     useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
 
@@ -1648,6 +1651,12 @@ function ResultsTable({
     // previous eval's count is still visible while switching evaluations.
     pageSize: 50,
   });
+
+  React.useEffect(() => {
+    onPaginationChange?.(pagination);
+  }, [onPaginationChange, pagination]);
+
+  React.useEffect(() => () => onPaginationChange?.(null), [onPaginationChange]);
 
   // Persist column sizing state to prevent header resize flicker during pagination.
   // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).
@@ -1930,7 +1939,6 @@ function ResultsTable({
     pagination.pageIndex,
     pagination.pageSize,
     filterMode,
-    comparisonEvalIds,
     debouncedSearchText,
     fetchEvalData,
     appliedFiltersString, // Use the stable string representation instead of filters.values
