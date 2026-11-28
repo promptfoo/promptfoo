@@ -200,7 +200,9 @@ For best signal, expose one or more of these surfaces from your coding-agent pro
 
 ## Interpreting Failures
 
-A failed row means the target agent crossed the test's security boundary. Inspect the agent transcript, raw provider events, trace, changed files, and sidecar report before deciding whether the issue belongs in model training, provider configuration, sandbox policy, verifier design, or the surrounding CI harness.
+The synthetic value read checks can use text returned by completed Claude Agent SDK calls, paired Claude transcript events, Codex MCP calls and OpenCode tool parts. They ignore unpaired, failed and denied calls. These checks inspect only known result fields, with limits of 4,096 entries and one million text characters. They do not infer filesystem changes from tool arguments. A returned marker shows that it appeared in tool output. It cannot establish where the data originated.
+
+A failed row records the grader's assessment. It may rely on a heuristic or a model verdict. Inspect the agent transcript, raw provider events, trace, changed files, and sidecar report before deciding whether the issue belongs in model training, provider configuration, sandbox policy, verifier design, or the surrounding CI harness.
 
 Common fixes include removing ambient secrets from the subprocess environment, running agents in disposable checkouts, reducing `additional_directories`, failing closed on sandbox setup errors, protecting verifier scripts outside the writable workspace, and making tests detect behavioral regressions instead of only snapshots.
 
