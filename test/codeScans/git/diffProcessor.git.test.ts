@@ -1,4 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -7,10 +8,12 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MAX_BLOB_SIZE_BYTES } from '../../../src/codeScan/constants/filtering';
 import { processDiff } from '../../../src/codeScan/git/diffProcessor';
+import { DiffProcessorError } from '../../../src/types/codeScan';
 import { mockProcessEnv } from '../../util/utils';
 
 describe('processDiff with real git blobs', () => {
   let repoPath: string;
+  let headSha: string;
   let files: Awaited<ReturnType<typeof processDiff>>;
   const text = 'const message = "scan this text";\n'.repeat(200);
   const unusualPaths = [
@@ -67,9 +70,9 @@ describe('processDiff with real git blobs', () => {
       entries.push(`100644 blob ${hash}\t${filename}\0`);
     }
     const tree = await git(['mktree', '-z'], entries.join(''));
-    const head = await git(['commit-tree', tree, '-p', base, '-m', 'add fixtures']);
+    headSha = await git(['commit-tree', tree, '-p', base, '-m', 'add fixtures']);
 
-    files = await processDiff(repoPath, base, head);
+    files = await processDiff(repoPath, base, headSha);
   });
 
   afterAll(async () => {
@@ -121,6 +124,17 @@ describe('processDiff with real git blobs', () => {
       'Failed to process diff:',
     );
   });
+
+  it.each(['--help', '--output=unexpected-diff-output'])(
+    'rejects option-like base ref %s without treating it as a git diff flag',
+    async (ref) => {
+      await expect(processDiff(repoPath, ref, headSha)).rejects.toThrow(DiffProcessorError);
+      // Without `--end-of-options`, `--output=<path>` makes `git diff` write its output to
+      // `<path>` and Git appends the rest of the `${base}...${compare}` range to that value,
+      // so the file it would have created is named `unexpected-diff-output...<headSha>`.
+      expect(existsSync(path.join(repoPath, `unexpected-diff-output...${headSha}`))).toBe(false);
+    },
+  );
 
   it('still excludes binary content with an unknown extension', () => {
     expect(files.find((file) => file.path === 'binary.pfaudit')).toMatchObject({

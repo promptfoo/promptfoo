@@ -16,7 +16,13 @@ export async function readGitBlob(
 ): Promise<Buffer> {
   const { stdout } = await runCommand(
     'git',
-    [...(noReplaceObjects ? ['--no-replace-objects'] : []), 'cat-file', 'blob', sha],
+    [
+      ...(noReplaceObjects ? ['--no-replace-objects'] : []),
+      'cat-file',
+      'blob',
+      '--end-of-options',
+      sha,
+    ],
     {
       cwd: repoPath,
       encoding: 'buffer',

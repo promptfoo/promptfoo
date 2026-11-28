@@ -78,8 +78,17 @@ async function discoverChangedFiles(
   const range = `${base}...${compare}`;
   // Scope to this checkout directory but retain repository-relative paths for GitHub comments.
   const scope = fullScan
-    ? ['--no-renames', '--no-relative', '--no-textconv', '--no-ext-diff', range, '--', '.']
-    : [range];
+    ? [
+        '--no-renames',
+        '--no-relative',
+        '--no-textconv',
+        '--no-ext-diff',
+        '--end-of-options',
+        range,
+        '--',
+        '.',
+      ]
+    : ['--end-of-options', range];
   // Run git diff --raw and --numstat in parallel
   const [raw, numstat] = await Promise.all([
     runGit(repoPath, [
@@ -320,6 +329,7 @@ async function generatePatchForFile(
               '-z',
             ]
           : []),
+        '--end-of-options',
         `${base}...${compare}`,
         '--',
         ...paths,

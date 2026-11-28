@@ -53,13 +53,22 @@ describe('processDiff', () => {
     expect(mockRunCommand).toHaveBeenNthCalledWith(
       1,
       'git',
-      ['diff', '--raw', '-z', '--no-color', '--no-ext-diff', '--no-abbrev', 'base...head'],
+      [
+        'diff',
+        '--raw',
+        '-z',
+        '--no-color',
+        '--no-ext-diff',
+        '--no-abbrev',
+        '--end-of-options',
+        'base...head',
+      ],
       { cwd: '/repo' },
     );
     expect(mockRunCommand).toHaveBeenNthCalledWith(
       2,
       'git',
-      ['diff', '--numstat', '-z', 'base...head'],
+      ['diff', '--numstat', '-z', '--end-of-options', 'base...head'],
       {
         cwd: '/repo',
       },
@@ -72,6 +81,35 @@ describe('processDiff', () => {
         cwd: '/repo',
         input: files.map(({ sha }) => sha).join('\n'),
       },
+    );
+  });
+
+  it('passes --end-of-options before the range when generating a per-file patch', async () => {
+    const sha = '1'.repeat(40);
+    const rawDiff = [`:000000 100644 ${'0'.repeat(40)} ${sha} A`, 'fixture.ts', ''].join('\0');
+
+    mockRunCommand
+      .mockResolvedValueOnce({ stdout: rawDiff })
+      .mockResolvedValueOnce({ stdout: '1\t0\tfixture.ts\0' })
+      .mockResolvedValueOnce({ stdout: `${sha} blob 4` })
+      .mockResolvedValueOnce({ stdout: 'diff --git a/fixture.ts b/fixture.ts\n+text\n' });
+
+    await processDiff('/repo', 'base', 'head');
+
+    expect(mockRunCommand).toHaveBeenCalledWith(
+      'git',
+      [
+        'diff',
+        '--patch',
+        '--unified=3',
+        '--no-color',
+        '--no-ext-diff',
+        '--end-of-options',
+        'base...head',
+        '--',
+        'fixture.ts',
+      ],
+      expect.objectContaining({ cwd: '/repo' }),
     );
   });
 });
