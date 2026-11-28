@@ -169,7 +169,9 @@ describe('RubyProvider', () => {
         filters: { uppercase: () => '' },
       };
 
+      context.vars = { context };
       await provider.callApi('test prompt', context);
+      expect(context.vars.context).toBe(context);
 
       expect(context.originalProvider).toBe(originalProvider);
       expect(context.logger).toBeDefined();
@@ -179,7 +181,7 @@ describe('RubyProvider', () => {
       expect(mockRunRuby).toHaveBeenCalledWith(
         expect.any(String),
         'call_api',
-        ['test prompt', { config: {} }, { someContext: true }],
+        ['test prompt', { config: {} }, { someContext: true, vars: { context: undefined } }],
         { rubyExecutable: undefined },
       );
     });

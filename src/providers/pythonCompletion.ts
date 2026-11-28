@@ -10,7 +10,6 @@ import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
 import { sanitizeScriptContext } from './scriptContext';
 import {
@@ -238,11 +237,11 @@ export class PythonProvider implements ApiProvider {
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
+    const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
     // Create cache key including the function name to ensure different functions don't share caches
     const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
-    )}:${JSON.stringify(context?.vars)}`;
-    logger.debug(`PythonProvider cache key: ${cacheKey}`);
+    )}:${JSON.stringify(sanitizedContext?.vars)}`;
 
     const cache = await getCache();
     let cachedResult;
@@ -264,8 +263,6 @@ export class PythonProvider implements ApiProvider {
 
       return applyCachedCallApiMetadata(apiType, parsedResult, 'Python');
     } else {
-      const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
-
       // Create a new options object with processed file references included in the config
       // This ensures any file:// references are replaced with their actual content
       const optionsWithProcessedConfig = {
@@ -278,10 +275,6 @@ export class PythonProvider implements ApiProvider {
 
       const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
 
-      logger.debug(
-        `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
-      );
-
       const functionName = this.functionName || apiType;
       // Use worker pool instead of runPython
       const result = await this.pool!.execute(functionName, args);
@@ -292,7 +285,6 @@ export class PythonProvider implements ApiProvider {
       const hasError = hasScriptResultError(result);
 
       if (isCacheEnabled() && !hasError) {
-        logger.debug(`PythonProvider caching result: ${cacheKey}`);
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(
