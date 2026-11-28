@@ -537,6 +537,66 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     },
   );
 
+  it.each([false, true])(
+    'resumes redacted columns with live credentials and positional metrics (restore: %s)',
+    async (restorePromptColumns) => {
+      const provider = createMockProvider({ id: 'https://example.test/?api_key=target-fixture' });
+      const prompts = [0, 1].map((temperature) => ({
+        ...toPrompt('Test prompt'),
+        config: { apiKey: 'prompt-fixture', temperature },
+      }));
+      const record = await Eval.create({}, prompts, {
+        id: randomUUID(),
+        completedPrompts: prompts.map((prompt, index) => ({
+          ...prompt,
+          id: generateIdFromPrompt(prompt),
+          provider: provider.id(),
+          metrics: createPromptMetrics({ testPassCount: index + 1 }),
+        })),
+      });
+      const saved = (await Eval.findById(record.id))!;
+      expect(JSON.stringify(saved.prompts)).not.toContain('-fixture');
+
+      cliState.resume = true;
+      await evaluate({ providers: [provider], prompts, tests: [{}] }, saved, {
+        restorePromptColumns,
+        maxConcurrency: 1,
+      });
+
+      expect(provider.callApi.mock.calls.map(([, context]) => context?.prompt.config)).toEqual(
+        prompts.map((prompt) => prompt.config),
+      );
+      const reloaded = (await Eval.findById(record.id))!;
+      expect(reloaded.prompts.map((prompt) => prompt.metrics?.testPassCount)).toEqual([2, 3]);
+      expect(JSON.stringify(reloaded.prompts)).not.toContain('-fixture');
+    },
+  );
+
+  it.each(['provider', 'prompt'])('rejects ambiguous redacted %s columns', async (kind) => {
+    const providers = (kind === 'provider' ? ['first', 'second'] : ['first']).map((key) =>
+      createMockProvider({ id: `https://example.test/?api_key=${key}` }),
+    );
+    const prompts = (kind === 'prompt' ? ['first', 'second'] : ['first']).map((apiKey) => ({
+      ...toPrompt('same'),
+      config: { apiKey },
+    }));
+    const record = await Eval.create({}, prompts, {
+      id: randomUUID(),
+      completedPrompts: providers.flatMap((provider) =>
+        prompts.map((prompt) => ({ ...prompt, provider: provider.id() })),
+      ),
+    });
+    const saved = (await Eval.findById(record.id))!;
+    cliState.resume = true;
+
+    await expect(
+      evaluate({ providers, prompts, tests: [{}] }, saved, { restorePromptColumns: true }),
+    ).rejects.toThrow(/ambiguous after redaction/);
+    for (const provider of providers) {
+      expect(provider.callApi).not.toHaveBeenCalled();
+    }
+  });
+
   it('evaluate with test-level providers filter', async () => {
     const mockProvider1: ApiProvider = {
       id: () => 'provider-1',

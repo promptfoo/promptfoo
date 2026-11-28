@@ -161,6 +161,11 @@ export const SECRET_FIELD_NAMES = new Set([
   'refreshtoken',
   'idtoken',
   'bearertoken',
+  'apibearertoken',
+  'cfaigtoken',
+  'useraccesstoken',
+  'authpassword',
+  'devicetoken',
   'authtoken',
   'clientsecret',
   'webhooksecret',
@@ -183,7 +188,6 @@ export const SECRET_FIELD_NAMES = new Set([
   'authorization',
   'auth',
   'bearer',
-  'apikeyenvar', // environment variable name for API key
 
   // Header-specific patterns (normalized: hyphens removed)
   'xapikey', // x-api-key
@@ -196,6 +200,9 @@ export const SECRET_FIELD_NAMES = new Set([
   // keys, so the vendor prefix keeps them out of the generic 'apikey' match.
   'portkeyapikey', // portkeyApiKey config field
   'portkeyvirtualkey', // portkeyVirtualKey config field
+  'portkeyawsaccesskeyid',
+  'portkeyawssecretaccesskey',
+  'portkeyawssessiontoken',
   'xportkeyapikey', // x-portkey-api-key
   'xportkeyvirtualkey', // x-portkey-virtual-key
   'xportkeyawsaccesskeyid', // x-portkey-aws-access-key-id
@@ -207,6 +214,9 @@ export const SECRET_FIELD_NAMES = new Set([
   'session', // session
   'cookie',
   'setcookie', // set-cookie
+
+  'azureclientsecret', // azureClientSecret
+  'sastoken', // Azure Shared Access Signature token
 
   // Certificate and encryption
   'certificatepassword',
@@ -697,6 +707,37 @@ export function sanitizeTracingConfigForPersistence(
   };
 }
 
+const PROVIDER_OPTION_FIELDS = [
+  'id',
+  'label',
+  'config',
+  'env',
+  'transform',
+  'delay',
+  'inputs',
+  'prompts',
+];
+
+/** A provider ID can itself be any option name, including "prompts". */
+function isProviderOptionsMap(providers: object): boolean {
+  const record = providers as Record<string, unknown>;
+  if (typeof record.id === 'function' || typeof record.toJSON === 'function') {
+    return false;
+  }
+  return Object.entries(Object.getOwnPropertyDescriptors(providers)).every(([key, entry]) => {
+    if (!entry.enumerable || (entry.value === REDACTED && isSecretField(key))) {
+      return true;
+    }
+    const value = entry.value;
+    return (
+      !!value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Object.keys(value).every((field) => PROVIDER_OPTION_FIELDS.includes(field))
+    );
+  });
+}
+
 /** Project direct providers and provider/type maps without changing their local configuration. */
 export function stripProviderPromptSelectors<T>(providers: T): T {
   if (Array.isArray(providers)) {
@@ -713,7 +754,7 @@ export function stripProviderPromptSelectors<T>(providers: T): T {
     // Serialize live providers before copying so prototype serializers remain effective.
     const projected =
       typeof record.id === 'function' || typeof record.toJSON === 'function'
-        ? sanitizeObject(provider, {
+        ? sanitizeObject(JSON.parse(safeStringify(provider)), {
             context: 'provider output',
             sanitizeUrls: true,
             maxDepth: Number.POSITIVE_INFINITY,
@@ -726,7 +767,8 @@ export function stripProviderPromptSelectors<T>(providers: T): T {
     const { prompts: _prompts, ...rest } = projected;
     return rest;
   };
-  if (isProviderTypeMap(providers)) {
+  const optionsMap = isProviderOptionsMap(providers);
+  if (!optionsMap && isProviderTypeMap(providers)) {
     const projected: Record<string, unknown> = { ...providers };
     for (const type of GRADING_PROVIDER_TYPE_KEYS) {
       if (Object.prototype.hasOwnProperty.call(providers, type)) {
@@ -736,16 +778,7 @@ export function stripProviderPromptSelectors<T>(providers: T): T {
     return projected as T;
   }
   // Runtime serialization can remove id() and absent selectors from an options object.
-  const isOptions = [
-    'id',
-    'label',
-    'config',
-    'env',
-    'transform',
-    'delay',
-    'inputs',
-    'prompts',
-  ].some((key) => key in providers);
+  const isOptions = !optionsMap && PROVIDER_OPTION_FIELDS.some((key) => key in providers);
   return (
     isOptions
       ? omitSelectors(providers)
@@ -1160,6 +1193,34 @@ export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T 
   return restoreAzureBlobSasTokensWithResult(value, storedValue).value;
 }
 
+/** Keep prompt formatting only when every JSON token survived sanitization.
+ * Comparing decoded objects could restore credentials hidden by duplicate keys.
+ */
+function retainJsonWhitespace(source: string, encoded: string): string {
+  if (source.length <= encoded.length) {
+    return encoded;
+  }
+  let quoted = false;
+  let index = 0;
+  for (let offset = 0; offset < source.length; offset++) {
+    const ch = source[offset];
+    // JSON.parse already validated the input. Only whitespace between tokens is optional.
+    if (!quoted && source.charCodeAt(offset) <= 0x20) {
+      continue;
+    }
+    if (ch !== encoded[index++]) {
+      return encoded;
+    }
+    if (ch === '"') {
+      quoted = !quoted;
+    }
+    if (quoted && ch === '\\' && source[++offset] !== encoded[index++]) {
+      return encoded;
+    }
+  }
+  return index === encoded.length ? source : encoded;
+}
+
 /**
  * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
@@ -1168,37 +1229,56 @@ function sanitizeJsonString(
   depth: number,
   maxDepth: number,
   sanitizeUrls = false,
+  redactStringValues = true,
+  isEnvMap = false,
 ): string {
   const redactedAzureBlobUri = redactAzureBlobSasToken(str);
   if (redactedAzureBlobUri !== str) {
     return redactedAzureBlobUri;
   }
 
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(str);
-    if (parsed && typeof parsed === 'object') {
-      const sanitized = recursiveSanitize(parsed, depth, maxDepth, sanitizeUrls);
-      return JSON.stringify(sanitized);
-    }
-    if (typeof parsed === 'string') {
-      // Bound string unwrapping even when object traversal has no depth limit.
-      if (depth >= maxDepth || depth >= 64) {
-        return JSON.stringify(REDACTED);
-      }
-      return JSON.stringify(sanitizeJsonString(parsed, depth + 1, maxDepth, sanitizeUrls));
-    }
+    parsed = JSON.parse(str);
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {
-      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
+      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str, redactStringValues);
       if (sanitizedUrlEncoded !== str) {
         return sanitizedUrlEncoded;
       }
     }
 
     // Not JSON - check if it looks like a secret
-    if (looksLikeSecret(str)) {
+    if (redactStringValues && looksLikeSecret(str)) {
       return REDACTED;
     }
+    return str;
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    try {
+      const sanitized = recursiveSanitize(
+        parsed,
+        depth,
+        maxDepth,
+        sanitizeUrls,
+        isEnvMap,
+        redactStringValues,
+      );
+      const encoded = JSON.stringify(sanitized);
+      return redactStringValues ? encoded : retainJsonWhitespace(str, encoded);
+    } catch {
+      return REDACTED;
+    }
+  }
+  if (typeof parsed === 'string') {
+    // Bound nested JSON strings even when object traversal has no depth limit.
+    if (depth >= maxDepth || depth >= 64) {
+      return JSON.stringify(REDACTED);
+    }
+    return JSON.stringify(
+      sanitizeJsonString(parsed, depth + 1, maxDepth, sanitizeUrls, redactStringValues, isEnvMap),
+    );
   }
   return str;
 }
@@ -1248,7 +1328,10 @@ function decodeFormComponent(component: string): string | undefined {
  * the value is JSON but contains no secrets (so callers can preserve the
  * original byte-for-byte).
  */
-function redactNestedJsonValue(decoded: string | undefined): string | null {
+function redactNestedJsonValue(
+  decoded: string | undefined,
+  redactStringValues: boolean,
+): string | null {
   if (decoded === undefined) {
     return null;
   }
@@ -1267,11 +1350,11 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
   }
   const sanitized = sanitizeObject(parsed, {
     sanitizeUrls: true,
+    redactStringValues,
     maxDepth: Number.POSITIVE_INFINITY,
   });
-  const originalSerialized = JSON.stringify(parsed);
-  const sanitizedSerialized = JSON.stringify(sanitized);
-  return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;
+  const encoded = JSON.stringify(sanitized);
+  return retainJsonWhitespace(trimmed, encoded) === trimmed ? null : encoded;
 }
 
 // Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it
@@ -1286,7 +1369,7 @@ function isPureTemplateValue(value: string): boolean {
   return value.includes('{{') && value.replace(NUNJUCKS_PLACEHOLDER, '').trim() === '';
 }
 
-export function sanitizeUrlEncodedString(value: string): string {
+export function sanitizeUrlEncodedString(value: string, redactStringValues = true): string {
   if (!value.includes('=')) {
     return value;
   }
@@ -1329,7 +1412,7 @@ export function sanitizeUrlEncodedString(value: string): string {
     // Recurse into JSON-shaped values so credentials buried in a
     // form-encoded JSON payload (e.g. `data=%7B%22password%22%3A...%7D`) get
     // redacted at the leaf rather than leaked as opaque bytes.
-    const nestedJson = redactNestedJsonValue(decodedValue);
+    const nestedJson = redactNestedJsonValue(decodedValue, redactStringValues);
     if (nestedJson !== null) {
       changed = true;
       return `${separator}${rawKey}=${encodeURIComponent(nestedJson)}`;
@@ -1340,7 +1423,8 @@ export function sanitizeUrlEncodedString(value: string): string {
     // `key=AAAA+BBBB...` where the raw 64-char chunk matches but the
     // space-bearing decoded form doesn't).
     const valueLooksSecret =
-      looksLikeSecret(rawValue) || (decodedValue !== undefined && looksLikeSecret(decodedValue));
+      redactStringValues &&
+      (looksLikeSecret(rawValue) || (decodedValue !== undefined && looksLikeSecret(decodedValue)));
 
     if (valueLooksSecret) {
       changed = true;
@@ -1361,6 +1445,7 @@ function sanitizePlainObject(
   maxDepth: number,
   sanitizeUrls: boolean,
   isEnvMap: boolean,
+  redactStringValues: boolean,
 ): any {
   const sanitized: any = {};
   let keySuffix = 0;
@@ -1374,9 +1459,22 @@ function sanitizePlainObject(
     ) {
       key = `${redactedKey}#${++keySuffix}`;
     }
+    if (key === '__proto__') {
+      // Shadow the inherited setter before writing the sanitized value.
+      Object.defineProperty(sanitized, key, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+      });
+    }
     if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
-    } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
+    } else if (
+      redactStringValues &&
+      key.toLowerCase() === 'headers' &&
+      value &&
+      typeof value === 'object'
+    ) {
       sanitized[key] = Object.fromEntries(
         Object.entries(value).map(([name, item]) => [
           name,
@@ -1410,7 +1508,7 @@ function sanitizePlainObject(
         (isEnvMap && key.toUpperCase().endsWith('_URL') && !/^OPENAI_(?:API_)?BASE_URL$/i.test(key))
           ? sanitizeUrl(value)
           : sanitizeUrlForLogging(value);
-    } else if (typeof value === 'string' && looksLikeSecret(value)) {
+    } else if (redactStringValues && typeof value === 'string' && looksLikeSecret(value)) {
       // Redact opaque credential values before trying URL-specific handling.
       sanitized[key] = REDACTED;
     } else {
@@ -1422,6 +1520,7 @@ function sanitizePlainObject(
         maxDepth,
         sanitizeUrls,
         key === 'env',
+        redactStringValues,
       );
       sanitized[key] =
         typeof sanitizedValue === 'string' &&
@@ -1443,6 +1542,7 @@ function recursiveSanitize(
   maxDepth = MAX_DEPTH,
   sanitizeUrls = false,
   isEnvMap = false,
+  redactStringValues = true,
 ): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
@@ -1452,7 +1552,7 @@ function recursiveSanitize(
   if (typeof obj === 'string') {
     return sanitizeUrls && URL_REFERENCE.test(obj)
       ? sanitizeUrl(obj)
-      : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls);
+      : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls, redactStringValues, isEnvMap);
   }
 
   // Handle primitives and null/undefined
@@ -1467,7 +1567,9 @@ function recursiveSanitize(
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth, sanitizeUrls));
+    return obj.map((item) =>
+      recursiveSanitize(item, depth + 1, maxDepth, sanitizeUrls, isEnvMap, redactStringValues),
+    );
   }
 
   // Handle class instances
@@ -1477,7 +1579,100 @@ function recursiveSanitize(
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth, sanitizeUrls, isEnvMap);
+  return sanitizePlainObject(obj, depth, maxDepth, sanitizeUrls, isEnvMap, redactStringValues);
+}
+
+function hasUnsafeJsonSerializer(value: unknown): boolean {
+  if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
+    return false;
+  }
+  if (hasPropertyGetter(value, 'toJSON')) {
+    return true;
+  }
+  if (typeof (value as any).toJSON !== 'function') {
+    return false;
+  }
+  return !(
+    (Buffer.isBuffer(value) && value.toJSON === Buffer.prototype.toJSON) ||
+    (value instanceof URL && value.toJSON === URL.prototype.toJSON) ||
+    (value instanceof Date &&
+      value.toJSON === Date.prototype.toJSON &&
+      !hasPropertyGetter(value, 'toISOString') &&
+      value.toISOString === Date.prototype.toISOString)
+  );
+}
+
+function hasPropertyGetter(value: object, key: string): boolean {
+  let target: object | null = value;
+  while (target) {
+    const descriptor = Object.getOwnPropertyDescriptor(target, key);
+    if (descriptor) {
+      return Boolean(descriptor.get);
+    }
+    target = Object.getPrototypeOf(target);
+  }
+  return false;
+}
+
+// JSON.stringify reads enumerable getters before its replacer runs. Snapshot data
+// descriptors first so a getter cannot rename or expose a credential while being
+// serialized. Keep built-ins with trusted serializers intact for the replacer below.
+export function snapshotJsonData(
+  value: unknown,
+  seen = new WeakMap<object, unknown>(),
+  throwOnAccessor = false,
+  redactErrorMessages?: boolean,
+): unknown {
+  if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
+    return value;
+  }
+  if (hasUnsafeJsonSerializer(value)) {
+    return value instanceof Error ? { name: REDACTED, message: REDACTED } : REDACTED;
+  }
+  if (typeof value === 'function') {
+    // JSON drops ordinary functions but invokes their custom toJSON before the replacer.
+    return undefined;
+  }
+  // sanitizeObject retains only standard error text. Persistence snapshots instead
+  // recurse through enumerable error properties, like regular JSON serialization.
+  if (value instanceof Error && redactErrorMessages !== undefined) {
+    const field = (key: 'name' | 'message') =>
+      !redactErrorMessages && !hasPropertyGetter(value, key) && typeof value[key] === 'string'
+        ? value[key]
+        : REDACTED;
+    return { name: field('name'), message: field('message') };
+  }
+  if (value instanceof URL || Buffer.isBuffer(value) || value instanceof Date) {
+    return value;
+  }
+  const existing = seen.get(value);
+  if (existing) {
+    return existing;
+  }
+  const copy = (Array.isArray(value) ? Array(value.length) : Object.create(null)) as Record<
+    string,
+    unknown
+  >;
+  seen.set(value, copy);
+  for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
+    if (!descriptor.enumerable) {
+      continue;
+    }
+    if (!('value' in descriptor)) {
+      if (throwOnAccessor) {
+        throw new Error('Unsafe JSON accessor');
+      }
+      copy[key as keyof typeof copy] = REDACTED;
+      continue;
+    }
+    copy[key as keyof typeof copy] = snapshotJsonData(
+      descriptor.value,
+      seen,
+      throwOnAccessor,
+      redactErrorMessages,
+    );
+  }
+  return copy;
 }
 
 /**
@@ -1490,6 +1685,10 @@ export function sanitizeObject(
   obj: any,
   options: {
     context?: string;
+    // Preserve arbitrary input text while still redacting secret-named fields.
+    redactStringValues?: boolean;
+    redactErrorMessages?: boolean;
+    omitCircularRefs?: boolean;
     throwOnError?: boolean;
     maxDepth?: number;
     // Config output and provider configs can carry credentials in any URL string or map key.
@@ -1498,6 +1697,9 @@ export function sanitizeObject(
 ): any {
   const {
     context = 'object',
+    redactStringValues = true,
+    redactErrorMessages = false,
+    omitCircularRefs = false,
     throwOnError = false,
     maxDepth = MAX_DEPTH,
     sanitizeUrls = false,
@@ -1511,46 +1713,58 @@ export function sanitizeObject(
 
     // Handle strings - check if they're JSON and sanitize if so
     if (typeof obj === 'string') {
-      return recursiveSanitize(obj, 0, maxDepth, sanitizeUrls);
+      return recursiveSanitize(obj, 0, maxDepth, sanitizeUrls, false, redactStringValues);
     }
 
     // Handle other primitives
     if (typeof obj !== 'object') {
-      return obj;
+      return hasUnsafeJsonSerializer(obj) ? REDACTED : obj;
+    }
+    if (obj instanceof URL && obj.toJSON === URL.prototype.toJSON) {
+      return sanitizeUrl(URL.prototype.toString.call(obj));
+    }
+    if (hasUnsafeJsonSerializer(obj)) {
+      return REDACTED;
     }
 
-    // Use safeStringify only to handle circular references
-    // Custom replacer to handle Error objects which don't serialize properly
-    // (Error objects have no enumerable properties, so JSON.stringify returns "{}")
+    const ancestors: object[] = [];
     const safeObj = JSON.parse(
-      safeStringify(
-        obj,
-        (_key, val) => {
-          if (val instanceof Error) {
-            return {
-              name: val.name,
-              message: val.message,
-            };
+      JSON.stringify(
+        snapshotJsonData(obj, new WeakMap<object, unknown>(), throwOnError, redactErrorMessages),
+        function (this: Record<string, unknown>, key, val) {
+          const descriptor = Object.getOwnPropertyDescriptor(this, key);
+          // Keep original credential fields when toJSON would hide their names.
+          const originalValue = descriptor?.value;
+          const value =
+            originalValue instanceof URL && originalValue.toJSON === URL.prototype.toJSON
+              ? sanitizeUrl(URL.prototype.toString.call(originalValue))
+              : val;
+          if (typeof value === 'bigint') {
+            return value.toString();
           }
-          return val;
-        },
-        undefined,
-        {
-          depthLimit: Number.MAX_SAFE_INTEGER,
-          edgesLimit: Number.MAX_SAFE_INTEGER,
+          if (typeof value === 'object' && value !== null) {
+            while (ancestors.length && ancestors[ancestors.length - 1] !== this) {
+              ancestors.pop();
+            }
+            if (ancestors.includes(value)) {
+              return omitCircularRefs ? undefined : '[Circular]';
+            }
+            ancestors.push(value);
+          }
+          return value;
         },
       ),
     );
 
     // Apply recursive sanitization with depth limiting
-    return recursiveSanitize(safeObj, 0, maxDepth, sanitizeUrls);
+    return recursiveSanitize(safeObj, 0, maxDepth, sanitizeUrls, false, redactStringValues);
   } catch (error) {
     if (throwOnError) {
       throw error;
     }
 
     // Can't use logger here as it would create circular dependency
-    console.error(`Error sanitizing ${context}:`, error);
+    console.error(`Error sanitizing ${context}`);
 
     return REDACTED;
   }
@@ -1619,7 +1833,7 @@ export function sanitizeUrl(url: string): string {
       return sanitizeTemplatedUrl(url);
     }
 
-    const nestedJson = redactNestedJsonValue(url);
+    const nestedJson = redactNestedJsonValue(url, true);
     if (nestedJson !== null) {
       return nestedJson;
     }
@@ -1654,7 +1868,7 @@ export function sanitizeUrl(url: string): string {
         ) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         } else {
-          const nestedJson = redactNestedJsonValue(value);
+          const nestedJson = redactNestedJsonValue(value, true);
           if (nestedJson !== null) {
             sanitizedUrl.searchParams.set(key, nestedJson);
           }

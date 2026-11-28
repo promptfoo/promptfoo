@@ -16,7 +16,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import Eval, { createEvalId, insertEvalDatasetAndTags, insertEvalPrompts } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
-import { getStripFlags } from '../models/evalResult';
+import { getStripFlags, sanitizeLegacyResults } from '../models/evalResult';
 import {
   type EvaluateSummaryV2,
   type EvaluateTable,
@@ -63,7 +63,7 @@ export async function writeResultsToDatabase(
         author: getAuthor(),
         description: config.description,
         config: sanitizeTracingConfigForPersistence(config),
-        results,
+        results: sanitizeLegacyResults(results),
         isRedteam: config.redteam !== undefined,
       })
       .onConflictDoNothing()
