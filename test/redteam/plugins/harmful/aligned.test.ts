@@ -94,13 +94,17 @@ describe('AlignedHarmfulPlugin', () => {
   });
 
   describe('test case generation', () => {
-    const mockPrompts = [{ __prompt: 'Test prompt 1' }, { __prompt: 'Test prompt 2' }];
+    const mockPrompts = [
+      { __prompt: 'Test prompt 1', metadata: { source: 'custom', harmCategory: 'other' } },
+      { __prompt: 'Test prompt 2' },
+    ];
 
     it('should create properly structured test cases', async () => {
       const testCases = await plugin['promptsToTestCases'](mockPrompts);
       const expectedMetric = categoryAliases[harmCategory] || harmCategory;
 
       expect(testCases).toHaveLength(2);
+      expect(testCases[0].metadata?.source).toBe('custom');
       testCases.forEach((testCase) => {
         expect(testCase).toMatchObject({
           vars: {
