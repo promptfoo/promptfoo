@@ -7,6 +7,8 @@ interface AdaptiveMultiTurnStrategyDefinition {
   providerName: string;
   metricSuffix: string;
   strategyId: string;
+  defaults?: Record<string, unknown>;
+  forwardPluginInputs?: boolean;
 }
 
 type AdaptiveMultiTurnStrategy = (
@@ -22,16 +24,23 @@ export function createAdaptiveMultiTurnStrategy(
   definition: AdaptiveMultiTurnStrategyDefinition,
   generateScanId = true,
 ): AdaptiveMultiTurnStrategy {
-  const { providerName, metricSuffix, strategyId } = definition;
+  const {
+    providerName,
+    metricSuffix,
+    strategyId,
+    defaults,
+    forwardPluginInputs = true,
+  } = definition;
 
   return (testCases, injectVar, config) => {
     const scanId = generateScanId ? crypto.randomUUID() : undefined; // Generate once for all tests in this scan
 
     return testCases.map((testCase) => {
       const originalText = String(testCase.vars![injectVar]);
-      // Get inputs from plugin config if available
-      const pluginConfig = testCase.metadata?.pluginConfig as Record<string, unknown> | undefined;
-      const inputs = pluginConfig?.inputs as Inputs | undefined;
+      const metadata: TestCase['metadata'] = { ...testCase.metadata, strategyId, originalText };
+      const inputs = forwardPluginInputs
+        ? (metadata.pluginConfig as { inputs?: Inputs } | undefined)?.inputs
+        : undefined;
 
       return {
         ...testCase,
@@ -40,17 +49,14 @@ export function createAdaptiveMultiTurnStrategy(
           config: {
             injectVar,
             ...(generateScanId ? { scanId } : {}),
+            ...defaults,
             ...config,
             // Pass inputs from plugin config to the selected provider
             ...(inputs && { inputs }),
           },
         },
         assert: appendMetricSuffix(testCase, metricSuffix),
-        metadata: {
-          ...testCase.metadata,
-          strategyId,
-          originalText,
-        },
+        metadata,
       };
     });
   };

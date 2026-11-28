@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { appendMetricSuffix } from './assertions';
+import { createAdaptiveMultiTurnStrategy } from './hydra';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
@@ -9,23 +9,13 @@ export async function addAuthoritativeMarkupInjectionTestCases(
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   logger.debug('Adding Authoritative Markup Injection test cases');
-  return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
-    return {
-      ...testCase,
-      provider: {
-        id: 'promptfoo:redteam:authoritative-markup-injection',
-        config: {
-          injectVar,
-          ...config,
-        },
-      },
-      assert: appendMetricSuffix(testCase, 'AuthoritativeMarkupInjection'),
-      metadata: {
-        ...testCase.metadata,
-        strategyId: 'authoritative-markup-injection',
-        originalText,
-      },
-    };
-  });
+  return createAdaptiveMultiTurnStrategy(
+    {
+      providerName: 'promptfoo:redteam:authoritative-markup-injection',
+      metricSuffix: 'AuthoritativeMarkupInjection',
+      strategyId: 'authoritative-markup-injection',
+      forwardPluginInputs: false,
+    },
+    false,
+  )(testCases, injectVar, config);
 }

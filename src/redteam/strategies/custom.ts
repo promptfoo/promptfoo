@@ -1,4 +1,4 @@
-import { appendMetricSuffix } from './assertions';
+import { createAdaptiveMultiTurnStrategy } from './hydra';
 
 import type { TestCase } from '../../types/index';
 
@@ -12,25 +12,14 @@ export function addCustom(
   const variant = strategyId.includes(':') ? strategyId.split(':')[1] : '';
   const displayName = variant ? `Custom:${variant}` : 'Custom';
 
-  return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
-    return {
-      ...testCase,
-      provider: {
-        id:
-          strategyId === 'custom' ? 'promptfoo:redteam:custom' : `promptfoo:redteam:${strategyId}`,
-        config: {
-          injectVar,
-          variant,
-          ...config,
-        },
-      },
-      assert: appendMetricSuffix(testCase, displayName),
-      metadata: {
-        ...testCase.metadata,
-        strategyId,
-        originalText,
-      },
-    };
-  });
+  return createAdaptiveMultiTurnStrategy(
+    {
+      providerName: `promptfoo:redteam:${strategyId}`,
+      metricSuffix: displayName,
+      strategyId,
+      defaults: { variant },
+      forwardPluginInputs: false,
+    },
+    false,
+  )(testCases, injectVar, config);
 }
