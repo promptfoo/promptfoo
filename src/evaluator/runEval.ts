@@ -1,5 +1,9 @@
 import { LRUCache } from 'lru-cache';
-import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
+import {
+  hasTraceAwareAssertions,
+  runAssertions,
+  validateFinancialAssertions,
+} from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
@@ -1362,6 +1366,7 @@ export async function runEvalInternal(
   let workspace: AgentWorkspace | undefined;
 
   try {
+    validateFinancialAssertions(test, provider);
     const rendered = await renderRunEvalPrompt({
       filters,
       isRedteam,
