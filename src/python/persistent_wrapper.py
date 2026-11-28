@@ -98,11 +98,17 @@ def load_user_module(script_path):
     if script_dir not in sys.path:
         sys.path.insert(0, script_dir)
 
+    # Preserve modules already imported by the wrapper, such as json.
+    while module_name in sys.modules:
+        module_name = f"_promptfoo_{module_name}"
+
     spec = importlib.util.spec_from_file_location(module_name, script_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load module from {script_path}")
 
     module = importlib.util.module_from_spec(spec)
+    # Register before execution so dataclasses, self-imports, and pickle can resolve it.
+    sys.modules[module_name] = module
     spec.loader.exec_module(module)
 
     return module
