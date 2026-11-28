@@ -1,8 +1,8 @@
 import fs from 'node:fs';
-import { builtinModules } from 'node:module';
+import { isBuiltin } from 'node:module';
 import path from 'node:path';
 
-import { globSync } from 'glob/raw';
+import { escape as escapeGlob, globSync } from 'glob/raw';
 import { type Node, parseSync, Visitor } from 'oxc-parser';
 
 export interface LayerDefinition {
@@ -47,6 +47,8 @@ export interface LayerConfig {
   maxStronglyConnectedComponentSize?: number;
 }
 
+const DEFAULT_SOURCE_ROOTS = ['src', 'packages'];
+
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
 const DECLARATION_EXTENSIONS = ['.d.ts', '.d.mts', '.d.cts'];
 const DIRECTORY_INDEXES = TYPESCRIPT_EXTENSIONS.map((extension) => `index${extension}`);
@@ -55,12 +57,28 @@ const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
   '.mjs': ['.mts', '.d.mts'],
   '.cjs': ['.cts', '.d.cts'],
 };
-const BUILTIN_MODULES = new Set(
-  builtinModules.flatMap((moduleName) => [moduleName, moduleName.replace(/^node:/, '')]),
-);
-
 export function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
+}
+
+function normalizeSourceRoot(repoRoot: string, root: unknown): string {
+  if (typeof root !== 'string' || !root.trim() || path.isAbsolute(root)) {
+    throw new Error(
+      `Architecture root "${String(root)}" must be a nonempty repository-relative path.`,
+    );
+  }
+  const relative = normalizePath(path.relative(repoRoot, path.resolve(repoRoot, root)));
+  if (!relative || relative === '..' || relative.startsWith('../')) {
+    throw new Error(`Architecture root "${root}" must be inside the repository.`);
+  }
+  let current = repoRoot;
+  for (const segment of relative.split('/').filter(Boolean)) {
+    current = path.join(current, segment);
+    if (fs.lstatSync(current, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      throw new Error(`Architecture root "${root}" must not traverse a symbolic link.`);
+    }
+  }
+  return relative;
 }
 
 function validateLayerDefinition(
@@ -101,9 +119,10 @@ function validateLayerDefinition(
     );
   }
 
-  return layer.roots.map((root: unknown) => {
-    if (typeof root !== 'string' || !fs.existsSync(path.join(repoRoot, root))) {
-      throw new Error(`Architecture layer "${layer.name}" root "${String(root)}" does not exist.`);
+  layer.roots = layer.roots.map((root: unknown) => normalizeSourceRoot(repoRoot, root));
+  return layer.roots.map((root) => {
+    if (!fs.existsSync(path.join(repoRoot, root))) {
+      throw new Error(`Architecture layer "${layer.name}" root "${root}" does not exist.`);
     }
     return { layerName: layer.name, root };
   });
@@ -260,17 +279,47 @@ export function getSourceFiles(
   repoRoot: string,
   includeApp = true,
   ignoredRoots: string[] = [],
+  additionalRoots: string[] = [],
 ): string[] {
-  return globSync('src/**/*.{ts,tsx,mts,cts}', {
-    cwd: repoRoot,
-    ignore: [
-      'src/**/*.d.{ts,mts,cts}',
-      'src/**/node_modules/**',
-      ...(includeApp ? [] : ['src/app/**']),
-      ...ignoredRoots.map((root) => `${normalizePath(root)}/**`),
-    ],
-    nodir: true,
-  }).map(normalizePath);
+  const roots = [
+    ...new Set(
+      [...DEFAULT_SOURCE_ROOTS, ...additionalRoots].map((root) =>
+        normalizeSourceRoot(repoRoot, root),
+      ),
+    ),
+  ];
+  return globSync(
+    roots.flatMap((root) => {
+      const literalRoot = escapeGlob(root);
+      return fs.statSync(path.join(repoRoot, root), { throwIfNoEntry: false })?.isFile()
+        ? TYPESCRIPT_EXTENSIONS.includes(path.extname(root))
+          ? [literalRoot]
+          : []
+        : TYPESCRIPT_EXTENSIONS.map((extension) => `${literalRoot}/**/*${extension}`);
+    }),
+    {
+      cwd: repoRoot,
+      nobrace: true,
+      dot: true,
+      ignore: [
+        ...['ts', 'mts', 'cts'].map((extension) => `**/*.d.${extension}`),
+        '**/node_modules/**',
+        'packages/**/dist/**',
+        ...(includeApp ? [] : ['src/app/**']),
+        ...ignoredRoots.flatMap((root) => {
+          const literalRoot = escapeGlob(normalizeSourceRoot(repoRoot, root));
+          return [literalRoot, `${literalRoot}/**`];
+        }),
+      ],
+      nodir: true,
+    },
+  )
+    .map(normalizePath)
+    .sort();
+}
+
+function getArchitectureRoots(config: LayerConfig): string[] {
+  return config.layers.flatMap((layer) => layer.roots);
 }
 
 function isWithinRoot(relativePath: string, root: string): boolean {
@@ -428,7 +477,11 @@ export function resolveInternalModule(
   importerRelativePath: string,
   specifier: string,
   aliases: Record<string, string> = {},
+  additionalRoots: string[] = [],
 ): string | undefined {
+  if (isBuiltin(specifier)) {
+    return undefined;
+  }
   const matchingAlias = Object.keys(aliases)
     .sort((left, right) => right.length - left.length)
     .find((alias) => specifier === alias || specifier.startsWith(`${alias}/`));
@@ -436,15 +489,7 @@ export function resolveInternalModule(
     ? `${aliases[matchingAlias]}${specifier.slice(matchingAlias.length)}`
     : undefined;
 
-  if (
-    !specifier.startsWith('.') &&
-    specifier !== 'src' &&
-    !specifier.startsWith('src/') &&
-    !aliasedPath
-  ) {
-    return undefined;
-  }
-
+  const sourceRoots = [...DEFAULT_SOURCE_ROOTS, ...additionalRoots];
   let unresolvedPath: string;
   if (aliasedPath) {
     unresolvedPath = path.resolve(repoRoot, aliasedPath);
@@ -474,7 +519,8 @@ export function resolveInternalModule(
     if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
       const relativeCandidate = normalizePath(path.relative(repoRoot, candidate));
       if (
-        relativeCandidate.startsWith('src/') &&
+        sourceRoots.some((root) => isWithinRoot(relativeCandidate, root)) &&
+        !relativeCandidate.split('/').includes('node_modules') &&
         TYPESCRIPT_EXTENSIONS.includes(path.extname(relativeCandidate))
       ) {
         return relativeCandidate;
@@ -507,8 +553,7 @@ export function getExternalModuleName(specifier: string): string | undefined {
 
 /** The npm package name a specifier imports, or undefined for relative imports and Node builtins. */
 export function getPackageName(specifier: string): string | undefined {
-  const moduleName = getExternalModuleName(specifier);
-  return moduleName && !BUILTIN_MODULES.has(moduleName) ? moduleName : undefined;
+  return isBuiltin(specifier) ? undefined : getExternalModuleName(specifier);
 }
 
 export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'leaf-external' | 'path';
@@ -549,7 +594,8 @@ export function scanArchitectureSources(
   options: { includeFacade?: boolean } = {},
 ): ArchitectureSourceScan {
   const publicFacade = normalizePath(config.publicFacade);
-  const sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots);
+  const sourceRoots = getArchitectureRoots(config);
+  const sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots, sourceRoots);
   const references: ArchitectureModuleReference[] = [];
   const computedReferences: ArchitectureSourceScan['computedReferences'] = [];
 
@@ -566,7 +612,13 @@ export function scanArchitectureSources(
         computedReferences.push({ ...reference, importer, importerLayer });
         continue;
       }
-      const resolvedImport = resolveInternalModule(repoRoot, importer, specifier, config.aliases);
+      const resolvedImport = resolveInternalModule(
+        repoRoot,
+        importer,
+        specifier,
+        config.aliases,
+        sourceRoots,
+      );
       references.push({
         ...reference,
         importer,
@@ -590,7 +642,7 @@ export function scanArchitectureSources(
 export function findUnclassifiedFiles(
   repoRoot: string,
   config: LayerConfig,
-  sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots),
+  sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots, getArchitectureRoots(config)),
 ): string[] {
   return sourceFiles.filter((sourceFile) => getLayerForFile(sourceFile, config) === 'unclassified');
 }
