@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import cliState from '../../../../src/cliState';
 import * as resultFormatter from '../../../../src/commands/mcp/lib/resultFormatter';
 import { AnthropicMessagesProvider } from '../../../../src/providers/anthropic/messages';
@@ -78,6 +79,56 @@ describe('runEvaluation tool', () => {
     vi.restoreAllMocks();
   });
 
+  it.each([undefined, 7500])('forwards the per-test timeout (%s)', async (timeoutMs) => {
+    const { doEval } = await import('../../../../src/node/doEval');
+    const { handler } = await getRunEvaluationTool();
+    const result = await handler({ timeoutMs });
+
+    expect(result.isError).toBe(false);
+    expect(doEval).toHaveBeenCalledWith(
+      expect.anything(),
+      {},
+      'promptfooconfig.yaml',
+      expect.objectContaining({ timeoutMs, defaultTimeoutMs: 30000, eventSource: 'mcp' }),
+    );
+  });
+
+  it.each([
+    { testCaseIndices: -1 },
+    { testCaseIndices: 0.5 },
+    { testCaseIndices: [] },
+    { testCaseIndices: [0, 1.5] },
+    { testCaseIndices: [-1, 0] },
+    { testCaseIndices: { start: 0.5, end: 2 } },
+    { testCaseIndices: { start: 0, end: 2.5 } },
+    { testCaseIndices: { start: -1, end: 2 } },
+    { maxConcurrency: 1.5 },
+    { repeat: 1.5 },
+    { resultLimit: 1.5 },
+    { resultOffset: 0.5 },
+    { promptFilter: [] },
+    { providerFilter: [] },
+    { promptFilter: '' },
+    { providerFilter: '   ' },
+    { promptFilter: ['Hello', ' \t'] },
+    { providerFilter: ['Target', ''] },
+  ])('rejects invalid counts or selections: %j', async (args) => {
+    const { schema } = await getRunEvaluationTool();
+    expect(z.object(schema).safeParse(args).success).toBe(false);
+  });
+
+  it.each([
+    { testCaseIndices: 0 },
+    { testCaseIndices: [0, 2] },
+    { testCaseIndices: { start: 0, end: 2 } },
+    { maxConcurrency: 2, repeat: 2, resultLimit: 1, resultOffset: 0 },
+    { promptFilter: ['0', '2'], providerFilter: ['echo'] },
+    { promptFilter: [' hello .*'], providerFilter: ' target ' },
+  ])('accepts supported counts and selections: %j', async (args) => {
+    const { schema } = await getRunEvaluationTool();
+    expect(z.object(schema).parse(args)).toMatchObject(args);
+  });
+
   it.each([false, true])(
     'keeps the actual Anthropic provider when using its advertised filter (mixed: %s)',
     async (mixed) => {
@@ -108,6 +159,7 @@ describe('runEvaluation tool', () => {
           JSON.stringify({
             prompts: ['{{topic}}'],
             providers: ['anthropic:messages:claude-sonnet-5', 'echo'],
+            evaluateOptions: { timeoutMs: 12500 },
             tests: [
               {
                 vars: { topic: 'offline fixture' },
@@ -132,6 +184,7 @@ describe('runEvaluation tool', () => {
         expect(result.isError).toBe(false);
         expect(response.success).toBe(true);
         expect(response.data.configuration.providers.ids).toEqual(expectedProviders);
+        expect(response.data.configuration.options.timeoutMs).toBe(12500);
         expect(response.data.results.stats).toMatchObject({
           successes: expectedProviders.length,
           failures: 0,

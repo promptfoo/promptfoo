@@ -297,11 +297,13 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
+type EvalInvocationOptions = InternalEvaluateOptions & { defaultTimeoutMs?: number };
+
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
-  evaluateOptions: InternalEvaluateOptions,
+  evaluateOptions: EvalInvocationOptions,
 ): Promise<Eval> {
   const envFileOverrides = isCliEventSource(evaluateOptions) ? undefined : {};
   setupEnv(cmdObj.envPath, { processEnv: envFileOverrides });
@@ -314,10 +316,11 @@ async function doEvalWithEnv(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
-  evaluateOptions: InternalEvaluateOptions,
+  { defaultTimeoutMs, ...evaluateOptions }: EvalInvocationOptions,
   envFileOverrides: EnvOverrides | undefined,
 ): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
+  const callerTimeoutMs = evaluateOptions.timeoutMs;
   const inputCommand = cmdObj;
   const initialEnvFileOverrides = envFileOverrides && { ...envFileOverrides };
 
@@ -794,6 +797,7 @@ async function doEvalWithEnv(
     } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
+      timeoutMs: callerTimeoutMs ?? config.evaluateOptions?.timeoutMs ?? defaultTimeoutMs,
       showProgressBar:
         getLogLevel() === 'debug'
           ? false

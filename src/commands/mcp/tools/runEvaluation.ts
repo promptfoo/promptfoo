@@ -12,30 +12,12 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Command } from 'commander';
 
 import type { CommandLineOptions } from '../../../types/index';
-import type { InternalEvaluateOptions } from '../../../types/internal';
 
-/**
- * Run an eval from a promptfoo config with optional test case filtering
- *
- * Use this tool to:
- * - Test specific test cases from a promptfoo configuration
- * - Debug individual test scenarios without running full evals
- * - Validate changes to prompts, providers, or assertions quickly
- * - Run targeted evals during development and testing
- *
- * Features:
- * - Load any promptfoo configuration file
- * - Select specific test cases by index or range
- * - Filter by specific prompts and/or providers
- * - Run full eval pipeline with all assertions and scoring
- * - Return detailed results with metrics and grading information
- *
- * Perfect for:
- * - Debugging failing test cases
- * - Testing prompt variations quickly
- * - Validating assertion configurations
- * - Development iteration and experimentation
- */
+const DEFAULT_TIMEOUT_MS = 30_000;
+const filterValue = z.string().regex(/\S/, 'Filter cannot be blank');
+const filter = z.union([filterValue, z.array(filterValue).min(1)]).optional();
+
+/** Run a config with optional test, prompt, and provider filters. */
 export function registerRunEvaluationTool(server: McpServer) {
   server.tool(
     'run_evaluation',
@@ -52,11 +34,11 @@ export function registerRunEvaluationTool(server: McpServer) {
         ),
       testCaseIndices: z
         .union([
-          z.number(),
-          z.array(z.number()),
+          z.number().int().nonnegative(),
+          z.array(z.number().int().nonnegative()).min(1),
           z.object({
-            start: z.number().describe('Start index (inclusive)'),
-            end: z.number().describe('End index (exclusive)'),
+            start: z.number().int().nonnegative().describe('Start index (inclusive)'),
+            end: z.number().int().nonnegative().describe('End index (exclusive)'),
           }),
         ])
         .optional()
@@ -69,26 +51,21 @@ export function registerRunEvaluationTool(server: McpServer) {
             If not specified, runs all test cases.
           `,
         ),
-      promptFilter: z
-        .union([z.string(), z.array(z.string())])
-        .optional()
-        .describe(
-          dedent`
-            Filter prompts by id/label (regex match) or index (numeric strings).
-            Examples: "my-prompt", "prompt.*", ["morning", "evening"], "0", ["0", "2"]
-          `,
-        ),
-      providerFilter: z
-        .union([z.string(), z.array(z.string())])
-        .optional()
-        .describe(
-          dedent`
-            Filter to specific providers by ID.
-            Examples: "openai:gpt-5.6", ["openai:gpt-5.6", "anthropic:claude-sonnet-5"]
-          `,
-        ),
+      promptFilter: filter.describe(
+        dedent`
+          Filter prompts by id/label (regex match) or index (numeric strings).
+          Examples: "my-prompt", "prompt.*", ["morning", "evening"], "0", ["0", "2"]
+        `,
+      ),
+      providerFilter: filter.describe(
+        dedent`
+          Filter providers by ID or label.
+          Examples: "openai:gpt-5.6", ["openai:gpt-5.6", "anthropic:claude-sonnet-5"]
+        `,
+      ),
       maxConcurrency: z
         .number()
+        .int()
         .min(1)
         .max(20)
         .optional()
@@ -98,9 +75,12 @@ export function registerRunEvaluationTool(server: McpServer) {
         .min(1000)
         .max(300000)
         .optional()
-        .describe('Timeout per eval in milliseconds (1s-5min, default: 30s)'),
+        .describe(
+          'Timeout per test in milliseconds (1s-5min). Defaults to the configured timeout or 30s.',
+        ),
       repeat: z
         .number()
+        .int()
         .min(1)
         .max(10)
         .optional()
@@ -111,12 +91,14 @@ export function registerRunEvaluationTool(server: McpServer) {
       share: z.boolean().optional().prefault(false).describe('Create shareable URL for results'),
       resultLimit: z
         .number()
+        .int()
         .min(1)
         .max(100)
         .optional()
         .describe('Maximum number of results to return (1-100, default: 20)'),
       resultOffset: z
         .number()
+        .int()
         .min(0)
         .optional()
         .describe('Number of results to skip for pagination (default: 0)'),
@@ -129,7 +111,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           promptFilter,
           providerFilter,
           maxConcurrency = 4,
-          timeoutMs = 30000,
+          timeoutMs,
           repeat = 1,
           delay,
           cache = true,
@@ -322,10 +304,12 @@ export function registerRunEvaluationTool(server: McpServer) {
           );
 
           // Run the evaluation
+          const effectiveTimeoutMs =
+            timeoutMs ?? config.evaluateOptions?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
           const startTime = Date.now();
           const result = await evaluate(filteredTestSuite, evalRecord, {
             maxConcurrency,
-            timeoutMs,
+            timeoutMs: effectiveTimeoutMs,
             eventSource: 'mcp',
           });
           const endTime = Date.now();
@@ -373,7 +357,7 @@ export function registerRunEvaluationTool(server: McpServer) {
               },
               options: {
                 maxConcurrency,
-                timeoutMs,
+                timeoutMs: effectiveTimeoutMs,
                 repeat,
                 delay,
                 cache,
@@ -409,23 +393,17 @@ export function registerRunEvaluationTool(server: McpServer) {
             share,
           };
 
-          // Prepare evaluate options
-          const evaluateOptions: InternalEvaluateOptions = {
-            maxConcurrency,
-            eventSource: 'mcp',
-            showProgressBar: false, // Disable for MCP usage
-          };
-
           logger.debug(`Running evaluation with config: ${configPath || 'promptfooconfig.yaml'}`);
 
           // Run the evaluation using the existing doEval function
           const startTime = Date.now();
-          const evalResult = await doEval(
-            cmdObj,
-            defaultConfig,
-            defaultConfigPath,
-            evaluateOptions,
-          );
+          const evalResult = await doEval(cmdObj, defaultConfig, defaultConfigPath, {
+            maxConcurrency,
+            timeoutMs,
+            defaultTimeoutMs: DEFAULT_TIMEOUT_MS,
+            eventSource: 'mcp',
+            showProgressBar: false,
+          });
           const endTime = Date.now();
 
           // Get summary data
@@ -457,7 +435,7 @@ export function registerRunEvaluationTool(server: McpServer) {
               },
               options: {
                 maxConcurrency,
-                timeoutMs,
+                timeoutMs: evalResult.runtimeOptions?.timeoutMs ?? timeoutMs ?? DEFAULT_TIMEOUT_MS,
                 repeat,
                 delay,
                 cache,
