@@ -530,6 +530,100 @@ describe('suite environment loading', () => {
     },
   );
 
+  it.each(['yaml', 'json', 'jsonl'])(
+    'keeps external %s assertion scripts scoped to their config during evaluation and replay',
+    async (extension) => {
+      const configs = ['first', 'second'].map((name) => {
+        const config = writeConfig(name, {
+          tests: `cases.${extension}`,
+          prompts: ['{{ expected }}'],
+        });
+        const dir = path.dirname(config);
+        fs.writeFileSync(path.join(dir, 'check.cjs'), `exports.check = () => '${name}';`);
+        const row = {
+          vars: { expected: name },
+          assert: [{ type: 'equals', value: 'file://check.cjs:check' }],
+        };
+        fs.writeFileSync(
+          path.join(dir, `cases.${extension}`),
+          JSON.stringify(extension === 'jsonl' ? row : [row]),
+        );
+        return config;
+      });
+      const resolved = await resolveConfigs({ config: configs }, {});
+      const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(resolved.config)));
+      for (const { testSuite } of [resolved, replay]) {
+        const result = await evaluateResolved(testSuite, new Eval({}), { cache: false });
+        expect((await result.getResults()).map((row) => row.success)).toEqual([true, true]);
+      }
+    },
+  );
+
+  it('keeps explicit --tests assertion scripts relative to the working directory', async () => {
+    const config = writeConfig('cli-tests', { prompts: ['{{ expected }}'] });
+    fs.writeFileSync(path.join(tempDir, 'check.cjs'), `exports.check = () => 'x';`);
+    fs.writeFileSync(
+      path.join(tempDir, 'cases.json'),
+      JSON.stringify([
+        {
+          vars: { expected: 'x' },
+          assert: [{ type: 'equals', value: 'file://check.cjs:check' }],
+        },
+      ]),
+    );
+    const previousCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const resolved = await resolveConfigs({ config: [config], tests: 'cases.json' }, {});
+      const result = await evaluateResolved(resolved.testSuite, new Eval({}), { cache: false });
+      expect((await result.getResults()).map((row) => row.success)).toEqual([true]);
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
+  it.each(['inline scenario', 'scenario tests file', 'inline default', 'default file'])(
+    'keeps later config assertion scripts in a %s through combination and replay',
+    async (location) => {
+      const assertion = { type: 'equals', value: 'file://check.cjs:expected' } as const;
+      const row = { assert: [assertion] };
+      const scenario = location.includes('scenario');
+      const configs = ['first', 'second'].map((name) => {
+        const settings: Partial<UnifiedConfig> = {};
+        if (name === 'second') {
+          if (scenario) {
+            settings.scenarios = [
+              {
+                config: [{}],
+                tests:
+                  location === 'inline scenario'
+                    ? [row]
+                    : (['file://nested/cases.yaml'] as unknown as TestCase[]),
+              },
+            ];
+          } else {
+            settings.tests = [{ vars: {} }];
+            settings.defaultTest = location === 'default file' ? 'file://nested/default.yaml' : row;
+          }
+        }
+        const config = writeConfig(name, { ...settings, prompts: ['second'] });
+        const dir = path.dirname(config);
+        fs.mkdirSync(path.join(dir, 'nested'));
+        fs.writeFileSync(path.join(dir, 'nested', 'cases.yaml'), JSON.stringify([row]));
+        fs.writeFileSync(path.join(dir, 'nested', 'default.yaml'), JSON.stringify(row));
+        fs.writeFileSync(path.join(dir, 'check.cjs'), `exports.expected = () => '${name}';`);
+        return config;
+      });
+      const combined = await combineConfigs(configs);
+      const resolved = await resolveConfigs({ config: configs }, {});
+      for (const snapshot of [combined, resolved.config]) {
+        const { testSuite } = await resolveConfigs({}, JSON.parse(JSON.stringify(snapshot)));
+        const result = await evaluateResolved(testSuite, new Eval({}), { cache: false });
+        expect((await result.getResults()).map((row) => row.success)).toEqual([true]);
+      }
+    },
+  );
+
   it('preserves non-plain scenario values when templating is disabled', async () => {
     const configPath = path.join(tempDir, 'classes.cjs');
     fs.writeFileSync(
