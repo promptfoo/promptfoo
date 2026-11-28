@@ -406,14 +406,24 @@ export function fetchWithTimeout(
   });
 }
 /**
- * Check if a response indicates rate limiting
+ * Check if a response indicates rate limiting.
+ *
+ * A 2xx response is never rate limited: it succeeded, and the provider has
+ * usually already billed it. Its `remaining: 0` headers describe the next
+ * request, which the scheduler paces from the observed headers. Retrying it
+ * would discard the result and pay for it again.
  */
 export function isRateLimited(response: Response): boolean {
   // These checks helps make sure we set up tests correctly.
   invariant(response.headers, 'Response headers are missing');
   invariant(response.status, 'Response status is missing');
 
-  // Check for OpenAI specific rate limit headers and status codes
+  if (response.status >= 200 && response.status < 300) {
+    return false;
+  }
+
+  // Check for OpenAI specific rate limit headers and status codes. Some APIs
+  // reject with a non-429 status (e.g. 403) and `X-RateLimit-Remaining: 0`.
   return (
     response.headers.get('X-RateLimit-Remaining') === '0' ||
     response.status === 429 ||
@@ -719,11 +729,9 @@ async function handleRateLimitedResponse(
   signal?: AbortSignal | null,
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<void> {
-  // Only the 429 path produces a structured error. A 200 OK with
-  // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
-  // sleep and retry, but constructing a "Rate limit exceeded: HTTP 200 OK"
-  // error on retry exhaustion would be misleading and pointlessly buffers a
-  // 64 KB body peek on every successful call.
+  // Only the 429 path produces a structured error. A non-429 rejection with
+  // `X-RateLimit-Remaining=0` (e.g. a 403) is retried after the reset wait, but
+  // its body is not classified as a rate-limit error.
   const isHardRateLimit = response.status === 429;
   const safeUrl = urlForLog(url);
 

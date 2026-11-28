@@ -1284,14 +1284,23 @@ describe('fetchWithTimeout', () => {
 });
 
 describe('isRateLimited', () => {
-  it('should detect standard rate limit headers', () => {
+  it('should detect standard rate limit headers on a rejected response', () => {
     const response = createMockResponse({
       headers: new Headers({
         'X-RateLimit-Remaining': '0',
       }),
-      status: 200,
+      status: 403,
     });
     expect(isRateLimited(response)).toBe(true);
+  });
+
+  it.each([
+    'X-RateLimit-Remaining',
+    'x-ratelimit-remaining-requests',
+    'x-ratelimit-remaining-tokens',
+  ])('should not treat a successful response with %s: 0 as rate limited', (header) => {
+    const response = createMockResponse({ headers: new Headers({ [header]: '0' }), status: 200 });
+    expect(isRateLimited(response)).toBe(false);
   });
 
   it('should detect 429 status code', () => {
@@ -1301,11 +1310,12 @@ describe('isRateLimited', () => {
     expect(isRateLimited(response)).toBe(true);
   });
 
-  it('should detect OpenAI specific rate limits', () => {
+  it('should detect OpenAI specific rate limits on a rejected response', () => {
     const response = createMockResponse({
       headers: new Headers({
         'x-ratelimit-remaining-requests': '0',
       }),
+      status: 403,
     });
     expect(isRateLimited(response)).toBe(true);
 
@@ -1313,6 +1323,7 @@ describe('isRateLimited', () => {
       headers: new Headers({
         'x-ratelimit-remaining-tokens': '0',
       }),
+      status: 403,
     });
     expect(isRateLimited(tokenResponse)).toBe(true);
   });
@@ -1807,6 +1818,47 @@ describe('fetchWithRetries', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(result).toBe(successResponse);
     // handleRateLimit invokes sleep exactly once for the single retry before success.
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'X-RateLimit-Remaining',
+    'x-ratelimit-remaining-requests',
+    'x-ratelimit-remaining-tokens',
+  ])('returns a successful response with %s: 0 instead of re-sending it', async (header) => {
+    // A 1-RPM deployment reports `remaining: 0` on every success. The response is
+    // complete and already billed, so it must be returned, not retried.
+    const body = { choices: [{ message: { content: '391' } }] };
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { [header]: '0', 'x-ratelimit-reset-requests': '60s' },
+      }),
+    );
+    const observe = vi.fn();
+
+    const result = await fetchWithRetries('https://example.com', {}, 1000, 4, observe);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe(200);
+    expect(await result.json()).toEqual(body);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(observe).not.toHaveBeenCalled();
+  });
+
+  it('still retries a non-429 rejection that reports X-RateLimit-Remaining: 0', async () => {
+    const rejected = createMockResponse({
+      status: 403,
+      statusText: 'Forbidden',
+      headers: new Headers({ 'X-RateLimit-Remaining': '0', 'Retry-After': '0' }),
+    });
+    const successResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch).mockResolvedValueOnce(rejected).mockResolvedValueOnce(successResponse);
+
+    const result = await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(result).toBe(successResponse);
     expect(sleep).toHaveBeenCalledTimes(1);
   });
 
