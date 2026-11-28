@@ -987,6 +987,25 @@ describe('sanitizeObject', () => {
       expect(sanitizeObject(JSON.stringify(secret))).toBe('"[REDACTED]"');
     });
 
+    it('retains JSON prompt whitespace and escaped quotes when tokens are unchanged', () => {
+      const prompt =
+        '  ' + JSON.stringify([{ role: 'user', content: 'say "a  b" \\ twice' }], null, 2) + '\n';
+      expect(sanitizeObject({ prompt })).toEqual({ prompt });
+      expect(sanitizeObject(JSON.stringify(prompt))).toBe(JSON.stringify(prompt));
+    });
+
+    it.each([
+      '{ "apiKey":"private-value" }',
+      '{ "api\\u004bey":"private-value" }',
+      '{ "key":"private-value", "key":"public" }',
+      '{ "item": {"apiKey":"private-value"}, "item":{} }',
+    ])('does not restore hidden credentials or overwritten keys', (source) => {
+      expect(sanitizeObject(source)).not.toContain('private-value');
+      const form = `payload=${encodeURIComponent(source)}`;
+      expect(sanitizeObject(form)).not.toContain('private-value');
+      expect(sanitizeUrl(`https://example.org/?${form}`)).not.toContain('private-value');
+    });
+
     it('bounds nested JSON-encoded string sanitization', () => {
       const nested = Array.from({ length: 10 }, () => '"').reduce(
         (value) => JSON.stringify(value),
