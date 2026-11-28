@@ -1,7 +1,7 @@
 ---
 title: Install Promptfoo
-description: Learn how to install promptfoo using npm, npx, or Homebrew. Set up promptfoo for command-line usage or as a library in your project.
-keywords: [install, installation, npm, npx, homebrew, windows, setup, promptfoo]
+description: Learn how to install promptfoo using npm, npx, Homebrew, or pip. Set up promptfoo for command-line usage or as a library in your project.
+keywords: [install, installation, npm, npx, pip, homebrew, windows, setup, promptfoo]
 sidebar_position: 4
 ---
 
@@ -11,7 +11,7 @@ import TabItem from '@theme/TabItem';
 
 # Installation
 
-Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nodejs.org/en/download), or [Homebrew](https://brew.sh) (Mac, Linux):
+Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nodejs.org/en/download), [Homebrew](https://brew.sh) (Mac, Linux), or [pip](https://pypi.org/project/promptfoo/).
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npm" label="npm" default>
@@ -28,6 +28,14 @@ Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nod
     ```bash
     brew install promptfoo
     ```
+  </TabItem>
+  <TabItem value="pip" label="pip">
+    ```bash
+    python -m pip install promptfoo
+    ```
+
+    The [Python wrapper](https://github.com/promptfoo/promptfoo-python) runs the npm CLI. It requires Python 3.10 or newer, a [supported Node.js version](#nodejs-runtime-support), and npm and npx on your `PATH`.
+
   </TabItem>
 </Tabs>
 
@@ -71,53 +79,11 @@ To use promptfoo as a library in your project, run `npm install promptfoo --save
 
 ## Verify Installation
 
-To verify that promptfoo is installed correctly, run:
-
-<Tabs groupId="promptfoo-command">
-  <TabItem value="npm" label="npm" default>
-    ```bash
-    promptfoo --version
-    ```
-  </TabItem>
-  <TabItem value="npx" label="npx">
-    ```bash
-    npx promptfoo@latest --version
-    ```
-  </TabItem>
-  <TabItem value="brew" label="brew">
-    ```bash
-    promptfoo --version
-    ```
-  </TabItem>
-</Tabs>
-
-This should display the current version number of promptfoo.
+With npm, Homebrew, or pip, run `promptfoo --version` to check the CLI version. With npx, run `npx promptfoo@latest --version`.
 
 ## Run Promptfoo
 
-After installation, you can start using promptfoo by running:
-
-<Tabs groupId="promptfoo-command">
-  <TabItem value="npm" label="npm" default>
-    ```bash
-    promptfoo init
-    ```
-  </TabItem>
-  <TabItem value="npx" label="npx">
-    ```bash
-    npx promptfoo@latest init
-    ```
-  </TabItem>
-  <TabItem value="brew" label="brew">
-    ```bash
-    promptfoo init
-    ```
-  </TabItem>
-</Tabs>
-
-This will guide you through the process of creating a `promptfooconfig.yaml` file.
-
-For a guide on running your first evaluation, please refer to our [Getting Started guide](./getting-started.md).
+Run `promptfoo init` (or `npx promptfoo@latest init` with npx) to create a `promptfooconfig.yaml` file. See [Getting Started](./getting-started.md) to run your first evaluation.
 
 ## Uninstall Promptfoo
 
@@ -138,6 +104,14 @@ If you installed promptfoo with more than one method (for example, both npm and 
     ```bash
     brew uninstall promptfoo
     ```
+  </TabItem>
+  <TabItem value="pip" label="pip">
+    Run this in the same Python environment you used to install the wrapper.
+
+    ```bash
+    python -m pip uninstall promptfoo
+    ```
+
   </TabItem>
 </Tabs>
 
