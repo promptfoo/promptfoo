@@ -3478,6 +3478,53 @@ describe('runAssertion', () => {
         reason: 'Assertion passed',
       });
     });
+
+    it('should project llm-rubric evidence after applying the assertion transform', async () => {
+      const capturedPrompt = vi.fn<ApiProvider['callApi']>(async () => ({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'graded' }),
+      }));
+      const capturingGrader = createMockProvider({
+        id: 'capturing-grader',
+        callApi: capturedPrompt,
+      });
+
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'Did the change match the request?',
+        provider: capturingGrader,
+        transform: 'output.summary',
+        evidence: [{ from: 'metadata.fileChanges', label: 'Repository changes', maxBytes: 1000 }],
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output: {
+            raw: 'raw provider output',
+            summary: 'transformed candidate output',
+          },
+          metadata: {
+            fileChanges: [{ path: 'src/index.ts', status: 'modified' }],
+            secret: 'must not be exposed',
+          },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+      const gradingPrompt = capturedPrompt.mock.calls[0]?.[0] as string;
+      expect(gradingPrompt).toContain('transformed candidate output');
+      expect(gradingPrompt).not.toContain('raw provider output');
+      // Evidence now flows through the structured {{ evidence }} template var
+      // in the default prompt — it appears inside <Evidence> tags alongside
+      // the candidate <Output> and <Rubric>.
+      expect(gradingPrompt).toContain('<Evidence>');
+      expect(gradingPrompt).toContain('Repository changes');
+      expect(gradingPrompt).toContain('src/index.ts');
+      expect(gradingPrompt).not.toContain('must not be exposed');
+    });
   });
 
   describe('inline function transforms (Node.js package)', () => {

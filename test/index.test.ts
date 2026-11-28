@@ -114,6 +114,7 @@ describe('index.ts exports', () => {
     'normalizeInputs',
     'ProbeLimitExceededError',
     'redteam',
+    'validateEvidencePath',
   ];
 
   const expectedSchemaExports = [
