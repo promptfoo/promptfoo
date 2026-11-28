@@ -7,8 +7,10 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
-import { recordGenerationTokenUsage } from '../generationTokenUsage';
+import {
+  recordFailedGenerationTokenUsage,
+  recordGenerationTokenUsage,
+} from '../generationTokenUsage';
 import { normalizeMcpToolCall, stringifyMcpToolCall } from '../mcpToolCall';
 import {
   getRemoteGenerationHeaders,
@@ -88,9 +90,11 @@ export async function fetchRemoteGeneration(
       'json',
     );
 
-    if (provider) {
+    const tokenUsage = (response.data as { tokenUsage?: ProviderResponse['tokenUsage'] })
+      ?.tokenUsage;
+    if (provider && tokenUsage && !response.coalesced) {
       recordGenerationTokenUsage(provider, {
-        tokenUsage: (response.data as { tokenUsage?: ProviderResponse['tokenUsage'] })?.tokenUsage,
+        tokenUsage,
         cached: response.cached,
       });
       responseRecorded = true;
@@ -100,7 +104,7 @@ export async function fetchRemoteGeneration(
     return parsedResponse.result;
   } catch (error) {
     if (provider && !responseRecorded) {
-      recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(error) });
+      recordFailedGenerationTokenUsage(provider, error);
     }
     logger.warn(`Error using remote generation for task '${task}': ${error}`);
     throw error;

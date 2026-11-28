@@ -269,6 +269,40 @@ describe('Plugins', () => {
       });
     });
 
+    it('records a coalesced remote plugin request only once', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      const tokenUsage = { total: 28, prompt: 18, completion: 10, numRequests: 2 };
+      const response = {
+        data: { result: [{ vars: { testVar: 'shared prompt' } }], tokenUsage },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce(response)
+        .mockResolvedValueOnce({ ...response, coalesced: true });
+      const generationUsage = {};
+      const provider = trackGenerationTokenUsage(mockProvider, generationUsage);
+      const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
+      expect(plugin).toBeDefined();
+      if (!plugin) {
+        throw new Error('Expected the SSRF plugin to be registered');
+      }
+      const options = {
+        provider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      };
+
+      await Promise.all([plugin.action(options), plugin.action(options)]);
+
+      expect(generationUsage).toMatchObject(tokenUsage);
+    });
+
     it('preserves usage reported by failed remote generation requests', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
       vi.mocked(neverGenerateRemote).mockReturnValue(false);
@@ -291,14 +325,19 @@ describe('Plugins', () => {
       expect(generationUsage).toMatchObject({ ...tokenUsage, numRequests: 1 });
     });
 
-    it('counts failed remote generation requests when token usage is unavailable', async () => {
+    it('does not invent model requests when remote generation fails without usage', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
       vi.mocked(neverGenerateRemote).mockReturnValue(false);
       vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('remote generation timed out'));
       const generationUsage = {};
       const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
 
-      await plugin?.action({
+      expect(plugin).toBeDefined();
+      if (!plugin) {
+        throw new Error('Expected the SSRF plugin to be registered');
+      }
+
+      await plugin.action({
         provider: trackGenerationTokenUsage(mockProvider, generationUsage),
         purpose: 'test',
         injectVar: 'testVar',
@@ -307,7 +346,7 @@ describe('Plugins', () => {
         delayMs: 0,
       });
 
-      expect(generationUsage).toMatchObject({ total: 0, numRequests: 1 });
+      expect(generationUsage).toEqual({});
     });
   });
 
