@@ -1,5 +1,6 @@
 import { LRUCache } from 'lru-cache';
 import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
+import { getBlobByHash, isBlobAllowedForShare } from '../blobs';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
@@ -1125,30 +1126,36 @@ async function gradeRunEvalResponse({
     await flushOtel();
   }
 
-  const assertionProviderResponse = {
-    ...processedResponse,
-    // Keep generated audio available to graders after persistence replaces its
-    // inline bytes with a blob reference in the saved result.
-    ...(response.audio?.data ? { audio: response.audio } : {}),
-    providerTransformedOutput,
-  };
+  const grade = () =>
+    runAssertions({
+      prompt: renderedPrompt,
+      provider,
+      providerResponse: {
+        ...processedResponse,
+        // Keep generated audio available after persistence replaces its inline bytes.
+        ...(response.audio?.data ? { audio: response.audio } : {}),
+        providerTransformedOutput,
+      },
+      test,
+      vars,
+      latencyMs: response.latencyMs ?? latencyMs,
+      assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+      traceId,
+      async resolveImageBlob(hash) {
+        if (!evalId || !(await isBlobAllowedForShare(hash, evalId, { testIdx, promptIdx }))) {
+          throw new Error('Image blob is not authorized for this result.');
+        }
+        const blob = await getBlobByHash(hash);
+        return { data: blob.data, mimeType: blob.metadata.mimeType };
+      },
+    });
 
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
       { abortSignal: deferredGradingAbortSignal, providerCallQueue, rateLimitRegistry },
-      () =>
-        runAssertions({
-          prompt: renderedPrompt,
-          provider,
-          providerResponse: assertionProviderResponse,
-          test,
-          vars,
-          latencyMs: response.latencyMs ?? latencyMs,
-          assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-          traceId,
-        }).then((checkResult) => applyGradingResult(ret, checkResult)),
+      () => grade().then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, deferredGradingAbortSignal);
     });
@@ -1159,17 +1166,7 @@ async function gradeRunEvalResponse({
   try {
     const checkResult = await withProviderCallExecutionContext(
       { abortSignal, rateLimitRegistry },
-      () =>
-        runAssertions({
-          prompt: renderedPrompt,
-          provider,
-          providerResponse: assertionProviderResponse,
-          test,
-          vars,
-          latencyMs: response.latencyMs ?? latencyMs,
-          assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-          traceId,
-        }),
+      grade,
     );
     applyGradingResult(ret, checkResult);
   } catch (error) {

@@ -57,6 +57,7 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
     shouldGenerateRemote: vi.fn().mockReturnValue(false),
   };
 });
+const mockBlobResolver = vi.fn();
 // Create mock functions that can be configured in tests - use vi.hoisted for mock factory access
 const { mockExistsSync, mockReadFileSync } = vi.hoisted(() => ({
   mockExistsSync: vi.fn(),
@@ -411,7 +412,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
+      createImageRubricContext('data:image/png;base64,YWJjMTIz', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -424,7 +425,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,YWJjMTIz' } },
         ],
       },
     ]);
@@ -443,6 +444,237 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('should accept URL-safe base64 image outputs and canonicalize them to standard base64', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    // `q-_z` is valid base64url; canonicalized to standard base64 it is `q+/z`.
+    const result = await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: 'Grade this output: {{ output }}',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'q-_z', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    const imagePart = JSON.parse(prompt)[0].content.at(-1);
+    expect(imagePart).toEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,q+/z' },
+    });
+    expect(result.metadata?.renderedGradingPromptImages).toBe(1);
+    expect(provider.callApi).toHaveBeenCalled();
+  });
+
+  it('should pad unpadded standard base64 image outputs', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      { rubricPrompt: 'Grade this output: {{ output }}', provider },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'qg', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    expect(JSON.parse(prompt)[0].content.at(-1)).toEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,qg==' },
+    });
+  });
+
+  it.each(['a=', 'a==', 'YWJj='])('rejects incomplete base64 padding: %s', async (data) => {
+    const provider = createMockProvider();
+    await expect(
+      matchesLlmRubric('An image is attached.', 'image', { provider }, {}, undefined, {
+        providerResponse: { images: [{ data, mimeType: 'image/png' }] },
+      }),
+    ).rejects.toThrow('not valid base64');
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it.each(['uri array', 'base64 objects', 'data wrapper'])(
+    'replaces image-only structured output: %s',
+    async (shape) => {
+      const images = [
+        { data: 'data:image/png;base64,YWJj', mimeType: 'image/png' },
+        { data: 'data:image/png;base64,ZGVm', mimeType: 'image/png' },
+      ];
+      const parts = images.map(({ data }) => ({ b64_json: data.split(',')[1] }));
+      const output = JSON.stringify(
+        shape === 'uri array'
+          ? images.map(({ data }) => data)
+          : shape === 'data wrapper'
+            ? { data: parts }
+            : parts,
+      );
+      const provider = createMockProvider({ response: { output: '{"pass":true,"score":1}' } });
+      const result = await matchesLlmRubric(
+        'An image is attached.',
+        output,
+        { provider },
+        {},
+        undefined,
+        {
+          providerResponse: { output, images },
+        },
+      );
+      expect(result.metadata?.renderedGradingPrompt).toContain('[Image output attached.');
+      expect(result.metadata?.renderedGradingPrompt).not.toContain('YWJj');
+      expect(result.metadata?.renderedGradingPromptImages).toBe(2);
+    },
+  );
+
+  it.each([
+    { output: 'data:image/png;base64,qg==', data: 'qg' },
+    { output: 'qg', data: 'data:image/png;base64,qg==' },
+    { output: 'q-_z', data: 'data:image/png;base64,q+/z' },
+    { output: 'data:image/png;base64, q g = = ', data: 'qg==' },
+    { output: JSON.stringify([{ b64_json: 'qg' }]), data: 'qg==' },
+  ])('replaces equivalent image encodings in output: $output', async ({ output, data }) => {
+    const provider = createMockProvider({ response: { output: '{"pass":true,"score":1}' } });
+    const result = await matchesLlmRubric(
+      'An image is attached.',
+      output,
+      { provider },
+      {},
+      undefined,
+      { providerResponse: { output, images: [{ data, mimeType: 'image/png' }] } },
+    );
+    expect(result.pass).toBe(true);
+    expect(result.metadata?.renderedGradingPrompt).toContain('[Image output attached.');
+    expect(result.metadata?.renderedGradingPromptImages).toBe(1);
+  });
+
+  it.each(['scalar', 'array', 'object'])(
+    'preserves accompanying image description: %s',
+    async (shape) => {
+      const uri = `promptfoo://blob/${'a'.repeat(64)}`;
+      const description = 'The bicycle has a blue frame.';
+      const output =
+        shape === 'scalar'
+          ? `${uri}\n${description}`
+          : JSON.stringify(shape === 'array' ? [uri, description] : { b64_json: uri, description });
+      const provider = createMockProvider({ response: { output: '{"pass":true,"score":1}' } });
+      const result = await matchesLlmRubric(
+        'Describe the bicycle.',
+        output,
+        { provider },
+        {},
+        undefined,
+        {
+          providerResponse: { output, images: [{ data: uri }] },
+          resolveImageBlob: async () => ({ data: Buffer.from('abc'), mimeType: 'image/png' }),
+        },
+      );
+      expect(result.metadata?.renderedGradingPrompt).toContain(description);
+    },
+  );
+
+  it.each([
+    { shape: 'plain', payload: 'q+/zQUJD' },
+    { shape: 'plain', payload: 'q+/z\nQUJD' },
+    { shape: 'quoted', payload: 'q+/z\nQUJD' },
+    { shape: 'json', payload: 'q+/z\nQUJD' },
+  ])('preserves captions without inline image bytes in $shape text', async ({ shape, payload }) => {
+    const caption = 'A blue bicycle.';
+    const other = 'data:image/webp;base64,rQ==';
+    const text = `data:image/png;base64,${payload}\n${caption} ${other}`;
+    const output = shape === 'plain' ? text : JSON.stringify(shape === 'json' ? { text } : text);
+    const provider = createMockProvider({ response: { output: '{"pass":true,"score":1}' } });
+    const result = await matchesLlmRubric(
+      'Check the image',
+      output,
+      { provider, rubricPrompt: 'Grade {{ output }}' },
+      {},
+      undefined,
+      {
+        providerResponse: { output, images: [{ data: 'q-_zQUJD' }] },
+      },
+    );
+    const content = JSON.parse(provider.callApi.mock.calls[0][0] as string)[0].content;
+    expect(content[0].text).not.toContain('q+/z');
+    expect(content).toContainEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,q+/zQUJD' },
+    });
+    expect(result.metadata?.renderedGradingPrompt).not.toMatch(/q\+\/z|QUJD/);
+    expect(result.metadata?.renderedGradingPrompt).toContain(caption);
+    expect(result.metadata?.renderedGradingPrompt).toContain(other);
+  });
+
+  it('redacts only attached images in mixed JSON output', async () => {
+    const output = JSON.stringify({
+      data: [{ b64_json: 'q+/z', revised_prompt: 'A blue bicycle' }, { b64_json: 'other' }],
+    });
+    const provider = createMockProvider({ response: { output: '{"pass":true,"score":1}' } });
+    const result = await matchesLlmRubric('Check the image', output, { provider }, {}, undefined, {
+      providerResponse: { output, images: [{ data: 'q-_z' }] },
+    });
+    const prompt = result.metadata?.renderedGradingPrompt;
+    expect(prompt).not.toContain('q+/z');
+    expect(prompt).toContain('A blue bicycle');
+    expect(prompt).toContain('other');
+    expect(prompt).toContain('[Image output attached.');
+  });
+
+  it('should accept URL-safe base64 inside a data URI image output', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    const result = await matchesLlmRubric(
+      'Does the image match?',
+      'Generated image',
+      {
+        rubricPrompt: 'Grade this output: {{ output }}',
+        provider,
+      },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'Generated image',
+          images: [{ data: 'data:image/png;base64,q-_z', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    const imagePart = JSON.parse(prompt)[0].content.at(-1);
+    expect(imagePart).toEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,q+/z' },
+    });
+    expect(result.metadata?.renderedGradingPromptImages).toBe(1);
+  });
+
   it('should replace image data URI text output when attaching image outputs to the grading provider prompt', async () => {
     const provider = createMockProvider({
       response: {
@@ -450,7 +682,7 @@ describe('matchesLlmRubric', () => {
       },
     });
 
-    const imageOutput = 'data:image/png;base64,abc123';
+    const imageOutput = 'data:image/png;base64,YWJjMTIz';
 
     const result = await matchesLlmRubric(
       'Does the image match?',
@@ -500,7 +732,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      createImageRubricContext('abc123', 'image/webp'),
+      createImageRubricContext('YWJjMTIz', 'image/webp'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -514,7 +746,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { type: 'image_url', image_url: { url: 'data:image/webp;base64,abc123' } },
+          { type: 'image_url', image_url: { url: 'data:image/webp;base64,YWJjMTIz' } },
         ],
       },
     ]);
@@ -541,7 +773,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      createImageRubricContext('abc123', 'image/webp'),
+      createImageRubricContext('YWJjMTIz', 'image/webp'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -555,7 +787,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { type: 'image_url', image_url: { url: 'data:image/webp;base64,abc123' } },
+          { type: 'image_url', image_url: { url: 'data:image/webp;base64,YWJjMTIz' } },
         ],
       },
     ]);
@@ -578,7 +810,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
+      createImageRubricContext('data:image/png;base64,YWJjMTIz', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -587,7 +819,7 @@ describe('matchesLlmRubric', () => {
       source: {
         type: 'base64',
         media_type: 'image/png',
-        data: 'abc123',
+        data: 'YWJjMTIz',
       },
     });
   });
@@ -615,7 +847,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
+      createImageRubricContext('data:image/png;base64,YWJjMTIz', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -624,7 +856,7 @@ describe('matchesLlmRubric', () => {
       source: {
         type: 'base64',
         media_type: 'image/png',
-        data: 'abc123',
+        data: 'YWJjMTIz',
       },
     });
   });
@@ -648,7 +880,7 @@ describe('matchesLlmRubric', () => {
         },
         {},
         undefined,
-        createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
+        createImageRubricContext('data:image/png;base64,YWJjMTIz', 'image/png'),
       );
 
       const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -661,7 +893,7 @@ describe('matchesLlmRubric', () => {
               type: 'text',
               text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
             },
-            { inlineData: { mimeType: 'image/png', data: 'abc123' } },
+            { inlineData: { mimeType: 'image/png', data: 'YWJjMTIz' } },
           ],
         },
       ]);
@@ -694,7 +926,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      createImageRubricContext('abc123', 'image/png'),
+      createImageRubricContext('YWJjMTIz', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -709,7 +941,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { inlineData: { mimeType: 'image/png', data: 'abc123' } },
+          { inlineData: { mimeType: 'image/png', data: 'YWJjMTIz' } },
         ],
       },
     ]);
@@ -754,7 +986,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      createImageRubricContext('abc123', 'image/png'),
+      createImageRubricContext('YWJjMTIz', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -778,7 +1010,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { inlineData: { mimeType: 'image/png', data: 'abc123' } },
+          { inlineData: { mimeType: 'image/png', data: 'YWJjMTIz' } },
         ],
       },
     ]);
@@ -801,7 +1033,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
+      createImageRubricContext('data:image/png;base64,YWJjMTIz', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -814,7 +1046,7 @@ describe('matchesLlmRubric', () => {
             type: 'input_text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { type: 'input_image', image_url: 'data:image/png;base64,abc123' },
+          { type: 'input_image', image_url: 'data:image/png;base64,YWJjMTIz' },
         ],
       },
     ]);
@@ -846,13 +1078,13 @@ describe('matchesLlmRubric', () => {
         },
         {},
         undefined,
-        createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
+        createImageRubricContext('data:image/png;base64,YWJjMTIz', 'image/png'),
       );
 
       const prompt = provider.callApi.mock.calls[0][0] as string;
       expect(JSON.parse(prompt)[0].content).toContainEqual({
         type: 'input_image',
-        image_url: 'data:image/png;base64,abc123',
+        image_url: 'data:image/png;base64,YWJjMTIz',
       });
     },
   );
@@ -877,13 +1109,13 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
+      createImageRubricContext('data:image/png;base64,YWJjMTIz', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
     expect(JSON.parse(prompt)[0].content).toContainEqual({
       type: 'image_url',
-      image_url: { url: 'data:image/png;base64,abc123' },
+      image_url: { url: 'data:image/png;base64,YWJjMTIz' },
     });
   });
 
@@ -913,7 +1145,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      createImageRubricContext('abc123', 'image/png'),
+      createImageRubricContext('YWJjMTIz', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -928,7 +1160,7 @@ describe('matchesLlmRubric', () => {
             type: 'input_text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { type: 'input_image', image_url: 'data:image/png;base64,abc123' },
+          { type: 'input_image', image_url: 'data:image/png;base64,YWJjMTIz' },
         ],
       },
     ]);
@@ -950,7 +1182,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
+      createImageRubricContext('data:image/png;base64,YWJjMTIz', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -963,7 +1195,7 @@ describe('matchesLlmRubric', () => {
             type: 'text',
             text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
           },
-          { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,YWJjMTIz' } },
         ],
       },
     ]);
@@ -1032,8 +1264,61 @@ describe('matchesLlmRubric', () => {
     expect(provider.callApi).not.toHaveBeenCalled();
   });
 
-  it('should reject blob-backed image outputs before grading', async () => {
+  it('should resolve blob-backed image outputs and attach them to the grader', async () => {
     const hash = 'a'.repeat(64);
+    mockBlobResolver.mockResolvedValue({ data: Buffer.from('hello'), mimeType: 'image/png' });
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    const result = await matchesLlmRubric(
+      'Does the image match?',
+      // The evaluator externalizes the output to a blob URI for large images.
+      `promptfoo://blob/${hash}`,
+      { rubricPrompt: 'Grade this output: {{ output }}', provider },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: `promptfoo://blob/${hash}`,
+          images: [
+            {
+              mimeType: 'image/png',
+              blobRef: {
+                uri: `promptfoo://blob/${hash}`,
+                hash,
+                mimeType: 'image/png',
+                sizeBytes: 5,
+                provider: 'filesystem',
+              },
+            },
+          ],
+        },
+        resolveImageBlob: mockBlobResolver,
+      },
+    );
+
+    expect(mockBlobResolver).toHaveBeenCalledWith(hash);
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    const content = JSON.parse(prompt)[0].content;
+    // The resolved blob is attached as an image part...
+    expect(content.at(-1)).toEqual({
+      type: 'image_url',
+      image_url: { url: `data:image/png;base64,${Buffer.from('hello').toString('base64')}` },
+    });
+    // ...and the blob-URI text output is replaced with the placeholder.
+    expect(content[0]).toEqual({
+      type: 'text',
+      text: 'Grade this output: [Image output attached. Inspect the attached image directly for visual grading.]',
+    });
+    expect(result.metadata?.renderedGradingPromptImages).toBe(1);
+  });
+
+  it('should fail clearly when a blob-backed image output cannot be resolved', async () => {
+    const hash = 'b'.repeat(64);
+    mockBlobResolver.mockRejectedValue(new Error('blob not found'));
     const provider = createMockProvider({
       response: {
         output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
@@ -1044,10 +1329,7 @@ describe('matchesLlmRubric', () => {
       matchesLlmRubric(
         'Does the image match?',
         'Generated image',
-        {
-          rubricPrompt: 'Grade this output',
-          provider,
-        },
+        { rubricPrompt: 'Grade this output', provider },
         {},
         undefined,
         {
@@ -1065,12 +1347,255 @@ describe('matchesLlmRubric', () => {
               },
             ],
           },
+          resolveImageBlob: mockBlobResolver,
         },
       ),
-    ).rejects.toThrow(
-      'Blob-backed image outputs are not supported for multimodal grading yet. Configure the image provider to return base64 or data URI image output.',
-    );
+    ).rejects.toThrow('Failed to load blob-backed image output for multimodal grading');
     expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  const blobRefFor = (hash: string, sizeBytes: number) => ({
+    uri: `promptfoo://blob/${hash}`,
+    hash,
+    mimeType: 'image/png',
+    sizeBytes,
+    provider: 'filesystem',
+  });
+
+  it('should reject too many blob-backed images before reading any blob', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_MAX_IMAGES: '1' });
+    const provider = createMockProvider({
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
+    });
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          { rubricPrompt: 'Grade this output', provider },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [
+                { blobRef: blobRefFor('a'.repeat(64), 5) },
+                { blobRef: blobRefFor('b'.repeat(64), 5) },
+              ],
+            },
+            resolveImageBlob: mockBlobResolver,
+          },
+        ),
+      ).rejects.toThrow('Too many images for multimodal grading: received 2, maximum is 1.');
+    } finally {
+      restoreEnv();
+    }
+    expect(mockBlobResolver).not.toHaveBeenCalled();
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should reject a blob image whose declared sizeBytes exceeds the limit before reading it', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_IMAGE_MAX_BYTES: '10' });
+    const provider = createMockProvider({
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
+    });
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          { rubricPrompt: 'Grade this output', provider },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [{ blobRef: blobRefFor('c'.repeat(64), 30) }],
+            },
+            resolveImageBlob: mockBlobResolver,
+          },
+        ),
+      ).rejects.toThrow(
+        'Image output exceeds multimodal grading size limit: 30 bytes, maximum is 10.',
+      );
+    } finally {
+      restoreEnv();
+    }
+    expect(mockBlobResolver).not.toHaveBeenCalled();
+  });
+
+  it('should reject a blob whose actual read size exceeds the limit even if sizeBytes under-reports', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_IMAGE_MAX_BYTES: '10' });
+    mockBlobResolver.mockResolvedValue({ data: Buffer.alloc(30), mimeType: 'image/png' });
+    const provider = createMockProvider({
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
+    });
+    const hash = 'd'.repeat(64);
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          { rubricPrompt: 'Grade this output', provider },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [{ blobRef: blobRefFor(hash, 1) }],
+            },
+            resolveImageBlob: mockBlobResolver,
+          },
+        ),
+      ).rejects.toThrow(
+        'Image output exceeds multimodal grading size limit: 30 bytes, maximum is 10.',
+      );
+    } finally {
+      restoreEnv();
+    }
+    expect(mockBlobResolver).toHaveBeenCalledWith(hash);
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should include inline bytes in the cumulative limit before encoding a blob', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_GRADING_IMAGE_MAX_BYTES: '10',
+      PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES: '9',
+    });
+    const blob = Buffer.alloc(5);
+    const toStringSpy = vi.spyOn(blob, 'toString');
+    mockBlobResolver.mockResolvedValue({ data: blob, mimeType: 'image/png' });
+    const provider = createMockProvider({
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
+    });
+    const hash = 'e'.repeat(64);
+
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          { rubricPrompt: 'Grade this output', provider },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [
+                { data: Buffer.alloc(5).toString('base64'), mimeType: 'image/png' },
+                { blobRef: blobRefFor(hash, 1) },
+              ],
+            },
+            resolveImageBlob: mockBlobResolver,
+          },
+        ),
+      ).rejects.toThrow(
+        'Image outputs exceed multimodal grading total size limit: 10 bytes, maximum is 9.',
+      );
+      expect(toStringSpy).not.toHaveBeenCalledWith('base64');
+    } finally {
+      restoreEnv();
+      toStringSpy.mockRestore();
+    }
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should enforce cumulative raw characters before encoding a blob', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS: '30',
+      PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS: '38',
+    });
+    const blob = Buffer.alloc(3);
+    const toStringSpy = vi.spyOn(blob, 'toString');
+    mockBlobResolver.mockResolvedValue({ data: blob, mimeType: 'image/png' });
+    const provider = createMockProvider({
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
+    });
+    const hash = 'f'.repeat(64);
+
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          { rubricPrompt: 'Grade this output', provider },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              images: [{ data: 'AAAA', mimeType: 'image/png' }, { blobRef: blobRefFor(hash, 3) }],
+            },
+            resolveImageBlob: mockBlobResolver,
+          },
+        ),
+      ).rejects.toThrow(
+        'Image outputs raw data exceeds multimodal grading total size limit: 39 characters, maximum is 38.',
+      );
+      expect(toStringSpy).not.toHaveBeenCalledWith('base64');
+    } finally {
+      restoreEnv();
+      toStringSpy.mockRestore();
+    }
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should count mimeType length in the raw-char cap for raw base64 image outputs', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS: '20' });
+    const provider = createMockProvider({
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
+    });
+    try {
+      await expect(
+        matchesLlmRubric(
+          'Does the image match?',
+          'Generated image',
+          { rubricPrompt: 'Grade this output', provider },
+          {},
+          undefined,
+          {
+            providerResponse: {
+              output: 'Generated image',
+              // Tiny base64 payload, huge mimeType: only caught once mimeType counts toward the cap.
+              images: [{ data: 'abc', mimeType: `image/${'x'.repeat(30)}` }],
+            },
+          },
+        ),
+      ).rejects.toThrow('Image output raw data exceeds multimodal grading size limit');
+    } finally {
+      restoreEnv();
+    }
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should replace a raw base64url output that matches an attached image with the placeholder', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      },
+    });
+
+    const result = await matchesLlmRubric(
+      'Does the image match?',
+      'q-_z',
+      { rubricPrompt: 'Grade this output: {{ output }}', provider },
+      {},
+      undefined,
+      {
+        providerResponse: {
+          output: 'q-_z',
+          images: [{ data: 'q-_z', mimeType: 'image/png' }],
+        },
+      },
+    );
+
+    const prompt = provider.callApi.mock.calls[0][0] as string;
+    const content = JSON.parse(prompt)[0].content;
+    expect(content[0]).toEqual({
+      type: 'text',
+      text: 'Grade this output: [Image output attached. Inspect the attached image directly for visual grading.]',
+    });
+    expect(result.metadata?.renderedGradingPromptImages).toBe(1);
   });
 
   it('should normalize whitespace-padded base64 image output before grading', async () => {
@@ -1100,7 +1625,7 @@ describe('matchesLlmRubric', () => {
     const prompt = provider.callApi.mock.calls[0][0] as string;
     expect(JSON.parse(prompt)[0].content).toContainEqual({
       type: 'image_url',
-      image_url: { url: 'data:image/png;base64,abc123' },
+      image_url: { url: 'data:image/png;base64,abc123==' },
     });
   });
 
@@ -1154,7 +1679,7 @@ describe('matchesLlmRubric', () => {
           {
             providerResponse: {
               output: 'Generated image',
-              images: [{ data: `abc123${' '.repeat(20)}`, mimeType: 'image/png' }],
+              images: [{ data: `YWJjMTIz${' '.repeat(20)}`, mimeType: 'image/png' }],
             },
           },
         ),
@@ -1188,7 +1713,7 @@ describe('matchesLlmRubric', () => {
             providerResponse: {
               output: 'Generated image',
               images: [
-                { data: 'abc123', mimeType: 'image/png' },
+                { data: 'YWJjMTIz', mimeType: 'image/png' },
                 { data: 'def456', mimeType: 'image/png' },
               ],
             },
@@ -1691,7 +2216,7 @@ describe('matchesLlmRubric', () => {
       provider: {
         id: 'openai:gpt-4o-mini',
         config: {
-          apiKey: 'abc123',
+          apiKey: 'YWJjMTIz',
           temperature: 3.1415926,
         },
       },
@@ -1700,7 +2225,7 @@ describe('matchesLlmRubric', () => {
     const mockCallApi = vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi');
     mockCallApi.mockImplementation(function (this: OpenAiChatCompletionProvider) {
       expect(this.config.temperature).toBe(3.1415926);
-      expect(this.getApiKey()).toBe('abc123');
+      expect(this.getApiKey()).toBe('YWJjMTIz');
       return Promise.resolve({
         output: JSON.stringify({ pass: true, reason: 'Grading passed' }),
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
@@ -2437,7 +2962,7 @@ Evaluate the response
     const result = await matchesLlmRubric(rubric, llmOutput, grading, vars, undefined, {
       providerResponse: {
         output: llmOutput,
-        images: [{ data: 'abc123', mimeType: 'image/webp' }],
+        images: [{ data: 'YWJjMTIz', mimeType: 'image/webp' }],
       },
     });
 
@@ -2446,7 +2971,7 @@ Evaluate the response
       rubric,
       output: llmOutput,
       vars,
-      images: [{ data: 'data:image/webp;base64,abc123', mimeType: 'image/webp' }],
+      images: [{ data: 'data:image/webp;base64,YWJjMTIz', mimeType: 'image/webp' }],
     });
     expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
     expect(result.reason).toBe('Remote multimodal grading passed');
@@ -2454,7 +2979,7 @@ Evaluate the response
 
   it('should replace image data URI text output for remote multimodal grading', async () => {
     const rubric = 'Does the image match?';
-    const llmOutput = 'data:image/webp;base64,abc123';
+    const llmOutput = 'data:image/webp;base64,YWJjMTIz';
     const grading = {};
 
     const remoteGeneration = await import('../../src/redteam/remoteGeneration');
@@ -2476,7 +3001,7 @@ Evaluate the response
       rubric,
       output: '[Image output attached. Inspect the attached image directly for visual grading.]',
       vars: {},
-      images: [{ data: 'data:image/webp;base64,abc123', mimeType: 'image/webp' }],
+      images: [{ data: 'data:image/webp;base64,YWJjMTIz', mimeType: 'image/webp' }],
     });
   });
 
@@ -2499,7 +3024,7 @@ Evaluate the response
     const result = await matchesLlmRubric(rubric, llmOutput, grading, {}, undefined, {
       providerResponse: {
         output: llmOutput,
-        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
       },
     });
 
@@ -2513,7 +3038,7 @@ Evaluate the response
           content: expect.arrayContaining([
             {
               type: 'image_url',
-              image_url: { url: 'data:image/png;base64,abc123' },
+              image_url: { url: 'data:image/png;base64,YWJjMTIz' },
             },
           ]),
         }),
