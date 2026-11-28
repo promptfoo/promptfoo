@@ -66,14 +66,14 @@ To speed triage, also include:
 When researching or disclosing vulnerabilities:
 
 - Do not exploit beyond minimal testing needed to demonstrate the issue
-- Do not disclose publicly or to third parties before resolution
+- Coordinate public or third-party disclosure as described below
 - Allow reasonable time for investigation and remediation
 
 ## Coordinated Disclosure
 
 We ask that you keep details private until:
 
-- A fix is released, or
+- A fix or mitigation is available, or
 - We agree on a disclosure date
 
 See also [OpenAI's Coordinated Vulnerability Disclosure Policy](https://openai.com/policies/coordinated-vulnerability-disclosure-policy/).
@@ -86,6 +86,7 @@ If you act in good faith and follow this policy, we will not pursue legal action
 - Avoids service disruption
 - Is limited to what is necessary to demonstrate the vulnerability
 - Does not involve accessing data that is not your own
+- Limits testing to Promptfoo-owned assets, or systems and accounts you own or are explicitly authorized to test (do not test third-party services, infrastructure, or other users' accounts)
 
 ## Out-of-Scope
 
