@@ -7,8 +7,8 @@ import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { safeJsonStringify } from './util/json';
+import { type RequestLogOptions, requestLogContext, sanitizeLogContext } from './util/logContext';
 import { getLogFiles } from './util/logFiles';
-import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
 // Named construction also works when the CommonJS bundle loads Chalk as an ES module.
 const chalk = new Chalk();
@@ -357,25 +357,6 @@ export function setLogger(customLogger: Pick<StrictLogger, 'debug' | 'info' | 'w
 }
 
 /**
- * Sanitizes context object for logging using generic sanitization
- */
-function sanitizeContext(context: SanitizedLogContext): Record<string, unknown> {
-  // Special handling for URLs to preserve the URL-specific sanitization logic
-  const contextWithSanitizedUrls: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(context)) {
-    if (key === 'url' && typeof value === 'string') {
-      contextWithSanitizedUrls[key] = sanitizeUrl(value);
-    } else {
-      contextWithSanitizedUrls[key] = value;
-    }
-  }
-
-  // Apply generic object sanitization to handle all sensitive fields
-  return sanitizeObject(contextWithSanitizedUrls, { context: 'log context' });
-}
-
-/**
  * Creates a log method that accepts an optional context parameter.
  * If context is provided, it will be sanitized and formatted.
  *
@@ -401,7 +382,7 @@ function createLogMethodWithContext(
       return;
     }
 
-    const sanitized = sanitizeContext(context);
+    const sanitized = sanitizeLogContext(context);
 
     if (useStructuredLogging) {
       // Structured mode: pass object with message field for cloud logging systems
@@ -437,43 +418,9 @@ const logger = {
   },
 };
 
-/**
- * Logs request/response details in a formatted way
- * @param url - Request URL
- * @param requestBody - Request body object
- * @param response - Response object (optional)
- * @param error - Whether to log as error (true) or debug (false)
- */
-export async function logRequestResponse(options: {
-  url: string;
-  requestBody: BodyInit | null | undefined;
-  requestMethod: string;
-  response?: Response | null;
-  error?: boolean;
-}): Promise<void> {
-  const { url, requestBody, requestMethod, response, error } = options;
-
-  const logMethod = error ? logger.error : logger.debug;
-
-  let responseText = '';
-  if (response) {
-    try {
-      responseText = await response.clone().text();
-    } catch {
-      responseText = 'Unable to read response';
-    }
-  }
-  const logObject = {
-    message: 'API request',
-    url: sanitizeUrl(url),
-    method: requestMethod,
-    requestBody: sanitizeObject(requestBody, { context: 'request body' }),
-    ...(response && {
-      status: response.status,
-      statusText: response.statusText,
-    }),
-    ...(responseText && { response: responseText }),
-  };
+export async function logRequestResponse(options: RequestLogOptions): Promise<void> {
+  const logMethod = options.error ? logger.error : logger.debug;
+  const logObject = await requestLogContext(options);
 
   if (useStructuredLogging) {
     // Pass message and context separately to use the wrapper's structured logging path.

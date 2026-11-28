@@ -11,11 +11,17 @@ import {
 } from '../../../src/providers/bedrock/runtimeOpenai';
 import { awsProviderFactories } from '../../../src/providers/families/aws';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/cache')>()),
   fetchWithCache: vi.fn(),
+}));
+
+vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/util/fetch/index')>()),
+  fetchWithRetries: vi.fn(),
 }));
 
 const chatReply = {
@@ -1922,10 +1928,14 @@ describe('Runtime Responses terminal stream policy', () => {
       usage: reported ? responsesReply.usage : undefined,
     },
   });
-  const sse = (events: unknown[]) =>
-    events
+  function mockStream(events: unknown[]) {
+    const body = events
       .map((item) => `data: ${item === '[DONE]' ? item : JSON.stringify(item)}\r\n\r\n`)
       .join('');
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      new Response(body, { headers: { 'Content-Type': 'text/event-stream' } }),
+    );
+  }
 
   it.each([
     { name: 'delta-only EOF', events: [delta], reported: false },
@@ -1975,12 +1985,7 @@ describe('Runtime Responses terminal stream policy', () => {
     },
   ])('rejects $name before output or callbacks', async ({ events, reported }) => {
     const callback = vi.fn().mockResolvedValue('TOOL_OK');
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: sse(events),
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    });
+    mockStream(events);
     const provider = new BedrockRuntimeResponsesProvider('us.xai.grok-4.6', {
       config: {
         apiKey: 'fixture',
@@ -2007,12 +2012,7 @@ describe('Runtime Responses terminal stream policy', () => {
   });
 
   it('enforces the policy when passthrough enables streaming', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: sse([delta]),
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    });
+    mockStream([delta]);
     const provider = new BedrockRuntimeResponsesProvider('us.xai.grok-4.6', {
       config: { apiKey: 'fixture', stream: false, passthrough: { stream: true } },
     });
@@ -2032,12 +2032,7 @@ describe('Runtime Responses terminal stream policy', () => {
           ? { error: { code: 'server_error', message: 'FIXTURE_FAILED' } }
           : {}),
       };
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: sse([{ type: `response.${status}`, response }]),
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      });
+      mockStream([{ type: `response.${status}`, response }]);
       const result = await new BedrockRuntimeResponsesProvider('us.xai.grok-4.6', {
         config: {
           apiKey: 'fixture',
@@ -2065,12 +2060,7 @@ describe('Runtime Responses terminal stream policy', () => {
     ['OpenAI', OpenAiResponsesProvider, 'gpt-4.1'],
     ['Mantle', BedrockOpenAiResponsesProvider, 'openai.gpt-5.6-sol'],
   ] as const)('keeps the existing %s delta fallback unchanged', async (_name, Provider, model) => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: sse([delta]),
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    });
+    mockStream([delta]);
     const result = await new Provider(model, {
       config: { apiKey: 'fixture', stream: true },
     }).callApi('hello');

@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import logger from '../../../../src/logger';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
+import { fetchWithRetries } from '../../../../src/util/fetch/index';
 import { getOpenAiMissingApiKeyMessage } from '../shared';
 
 describe('OpenAiResponsesProvider error handling', () => {
@@ -32,13 +33,16 @@ describe('OpenAiResponsesProvider error handling', () => {
         ? { usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 } }
         : {}),
     };
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      ...createMockFetchResponse(
-        `data: ${JSON.stringify({ type: testCase.event, response })}\n\n`,
-        { status: 201, statusText: 'Created' },
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        new TextEncoder().encode(`data: ${JSON.stringify({ type: testCase.event, response })}\n\n`),
+        {
+          status: 201,
+          statusText: 'Created',
+          headers: { 'x-fixture-response': 'stream' },
+        },
       ),
-      headers: { 'x-fixture-response': 'stream' },
-    });
+    );
     const provider = new StrictStreamProvider('gpt-4.1', {
       config: { apiKey: 'test-key', stream: true, inputCost: 0.01, outputCost: 0.02 },
     });
@@ -67,7 +71,7 @@ describe('OpenAiResponsesProvider error handling', () => {
   });
 
   it('keeps foreground transport-error defaults before a response arrives', async () => {
-    vi.mocked(cache.fetchWithCache).mockRejectedValue(new Error('Transport fixture failed'));
+    vi.mocked(fetchWithRetries).mockRejectedValue(new Error('Transport fixture failed'));
     const provider = new OpenAiResponsesProvider('gpt-4.1', {
       config: { apiKey: 'test-key', stream: true },
     });
@@ -78,6 +82,34 @@ describe('OpenAiResponsesProvider error handling', () => {
     expect(result.metadata?.http).toEqual({ status: 0, statusText: 'Error', headers: {} });
     expect(result.tokenUsage).toBeUndefined();
     expect(result.cost).toBeUndefined();
+  });
+
+  it.each([false, true])('bounds non-2xx stream bodies with background=%s', async (background) => {
+    const cancel = vi.fn();
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                JSON.stringify({
+                  access_token: 'private-prefix',
+                  data: 'a'.repeat(64 * 1024) + 'private-tail',
+                }),
+              ),
+            );
+          },
+          cancel,
+        }),
+        { status: 400 },
+      ),
+    );
+    const result = await new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', stream: true, background },
+    }).callApi('Hello');
+    expect(result.error).toContain('400');
+    expect(result.error).not.toContain('private-');
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('does not reuse a creation status after a background poll transport failure', async () => {

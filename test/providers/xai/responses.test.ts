@@ -1184,6 +1184,55 @@ describe('XAIResponsesProvider', () => {
     expect(result.output).toBe('final answer');
   });
 
+  it.each([200, 400])('stops reading the %s stream on caller cancellation', async (status) => {
+    const controller = new AbortController();
+    const cancel = vi.fn();
+    const response = new Response(
+      new ReadableStream(
+        {
+          pull() {
+            controller.abort();
+          },
+          cancel,
+        },
+        { highWaterMark: 0 },
+      ),
+      { status },
+    );
+    mockFetchWithProxy.mockResolvedValueOnce(response);
+    const provider = new XAIResponsesProvider(DEFAULT_TEST_MODEL, {
+      config: { apiKey: 'test-key', stream: true },
+    });
+    await expect(
+      provider.callApi('hello', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.body?.locked).toBe(false);
+  });
+
+  it('aborts the owned transport after a parser error without changing that error', async () => {
+    let signal: AbortSignal | undefined;
+    const response = new Response(
+      createSSEStream('data: {"type":"error","message":"fixture failure"}\n\n'),
+    );
+    const loggingRead = response.clone().text();
+    mockFetchWithProxy.mockImplementationOnce(async (_url, options) => {
+      signal = options.signal;
+      return response;
+    });
+
+    try {
+      const result = await new XAIResponsesProvider(DEFAULT_TEST_MODEL, {
+        config: { apiKey: 'test-key', stream: true },
+      }).callApi('hello');
+      expect(result.error).toContain('fixture failure');
+      expect(result.error).not.toContain('timed out');
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      await loggingRead;
+    }
+  });
+
   it('prefers streamed final-answer deltas over completed reasoning summaries', async () => {
     mockFetchWithProxy.mockResolvedValueOnce({
       status: 200,

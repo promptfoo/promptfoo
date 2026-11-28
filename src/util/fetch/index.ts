@@ -25,10 +25,13 @@ import {
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './requestSignal';
+import { readBoundedText } from './responseBody';
 import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 
 import type { FetchOptions } from './types';
+
+export { readBoundedErrorBody, readBoundedText } from './responseBody';
 
 export type FetchRateLimitObservation = {
   headers: Record<string, string>;
@@ -575,59 +578,6 @@ async function peekRateLimitBody(
     }
     return text;
   }
-}
-
-/**
- * Drain a Response's body into a string, but stop reading once `maxBytes`
- * have been collected. Each streamed chunk is bounded to the remaining
- * budget *before* it enters the in-memory buffer, so a single oversized
- * chunk cannot exceed `maxBytes` of retained memory. `requireStream` skips
- * streamless polyfills to guarantee bounded buffering for rate-limit peeking.
- * Other callers retain the legacy text fallback, which buffers before truncation.
- */
-export async function readBoundedText(
-  response: Response,
-  maxBytes: number,
-  options: { requireStream?: boolean } = {},
-): Promise<string> {
-  if (!response.body) {
-    const contentLength = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
-    if (options.requireStream || (Number.isFinite(contentLength) && contentLength > maxBytes)) {
-      return '';
-    }
-    const text = await response.text();
-    return text.length > maxBytes ? text.slice(0, maxBytes) : text;
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (total < maxBytes) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      const room = maxBytes - total;
-      // Use `.slice()` (copy), not `.subarray()` (view), so the upstream
-      // buffer for an oversized chunk can be released after this iteration.
-      const bounded = value.byteLength <= room ? value : value.slice(0, room);
-      chunks.push(bounded);
-      total += bounded.byteLength;
-    }
-  } finally {
-    try {
-      await reader.cancel();
-    } catch {
-      // Reader cancellation can fail if the stream is already closed; safe to ignore.
-    }
-  }
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(merged);
 }
 
 /**

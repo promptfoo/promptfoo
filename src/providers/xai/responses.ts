@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
+import { fetchWithProxy, readBoundedErrorBody } from '../../util/fetch/index';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
@@ -13,7 +13,7 @@ import { getOpenAiEffectiveServiceTier } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { normalizeResponsesInput } from '../responses/input';
 import { readResponsesStream } from '../responses/stream';
-import { getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs, throwIfAborted } from '../shared';
 import {
   assertXAIServiceTier,
   calculateXAICost,
@@ -424,6 +424,8 @@ export class XAIResponsesProvider implements ApiProvider {
       };
     }
 
+    const abortSignal = callApiOptions?.abortSignal;
+    throwIfAborted(abortSignal);
     const request = await this.getRequestBody(prompt, context, callApiOptions).catch(
       (error: unknown) => {
         if (error instanceof XAIRequestConfigError) {
@@ -435,6 +437,7 @@ export class XAIResponsesProvider implements ApiProvider {
     if ('error' in request) {
       return request;
     }
+    throwIfAborted(abortSignal);
     const { body, config } = request;
 
     logger.debug(`[xAI Responses] Calling ${this.getApiUrl()}/responses`, {
@@ -452,6 +455,9 @@ export class XAIResponsesProvider implements ApiProvider {
       if (body.stream) {
         const timeoutMs = getRequestTimeoutMs();
         const controller = new AbortController();
+        const signal = abortSignal
+          ? AbortSignal.any([abortSignal, controller.signal])
+          : controller.signal;
         const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
         try {
           const response = await fetchWithProxy(`${this.getApiUrl()}/responses`, {
@@ -462,7 +468,7 @@ export class XAIResponsesProvider implements ApiProvider {
               ...config.headers,
             },
             body: JSON.stringify(body),
-            signal: controller.signal,
+            signal,
           });
 
           status = response.status;
@@ -470,19 +476,15 @@ export class XAIResponsesProvider implements ApiProvider {
           // Streaming bypasses fetchWithCache, so cache-hit telemetry is always false.
           cached = false;
           if (status < 200 || status >= 300) {
-            const text = await response.text();
-            try {
-              data = JSON.parse(text);
-            } catch {
-              data = text;
-            }
+            data = await readBoundedErrorBody(response, signal);
           } else {
-            data = await readResponsesStream(response, 'xAI', logger);
+            data = await readResponsesStream(response, 'xAI', logger, undefined, { signal });
           }
         } catch (err) {
-          if (err instanceof Error && err.name === 'AbortError') {
+          if (controller.signal.aborted) {
             throw new Error(`xAI streaming response timed out after ${timeoutMs}ms`);
           }
+          controller.abort();
           throw err;
         } finally {
           clearTimeout(timeoutHandle);
@@ -515,6 +517,7 @@ export class XAIResponsesProvider implements ApiProvider {
         return this.handleUnsuccessfulResponse(data, status, statusText, cached, config);
       }
     } catch (err) {
+      throwIfAborted(abortSignal);
       const errorMessage = err instanceof Error ? err.message : String(err);
 
       // Handle common xAI errors
@@ -529,6 +532,7 @@ export class XAIResponsesProvider implements ApiProvider {
       };
     }
 
+    throwIfAborted(abortSignal);
     if (data.error) {
       return {
         error: `xAI API error: ${typeof data.error === 'string' ? data.error : JSON.stringify(data.error)}`,
