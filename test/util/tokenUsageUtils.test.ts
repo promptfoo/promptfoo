@@ -817,6 +817,74 @@ describe('tokenUsageUtils', () => {
       expect(target.numRequests).toBe(0);
     });
 
+    it.each([
+      { total: 12, prompt: 9, completion: 3, numRequests: 1 },
+      { numRequests: 2 },
+      { completionDetails: { reasoning: 5 } },
+    ])('retains incurred generation with zero logical usage: %j', (incurredTokenUsage) => {
+      const target = createEmptyTokenUsage();
+      target.total = 10;
+      target.numRequests = 1;
+      expect(
+        accumulateGenerationTokenUsage(target, {
+          total: 0,
+          numRequests: 0,
+          incurredTokenUsage,
+        }),
+      ).toBe(true);
+      expect(target).toMatchObject({
+        total: 10,
+        numRequests: 1,
+        generation: { total: 0, numRequests: 0 },
+        incurredTokenUsage: { total: 10, numRequests: 1, generation: incurredTokenUsage },
+      });
+    });
+
+    it('attributes nested billed usage only to generation', () => {
+      const target = createEmptyTokenUsage();
+      expect(
+        accumulateGenerationTokenUsage(target, {
+          incurredTokenUsage: {
+            attacker: { prompt: 3, numRequests: 1 },
+            assertions: { total: 2 },
+            generation: { completionDetails: { reasoning: 1 } },
+          },
+        }),
+      ).toBe(true);
+      expect(target.incurredTokenUsage).toMatchObject({
+        total: 0,
+        numRequests: 0,
+        generation: { total: 5, numRequests: 1, completionDetails: { reasoning: 1 } },
+      });
+    });
+
+    it.each([
+      { total: -1, numRequests: -1 },
+      { total: 10, attacker: { completionDetails: { reasoning: -1 } } },
+    ])('rejects negative billed counters without changing totals', (incurredTokenUsage) => {
+      const target = createEmptyTokenUsage();
+      expect(accumulateGenerationTokenUsage(target, { incurredTokenUsage })).toBe(false);
+      expect(target).toEqual(createEmptyTokenUsage());
+    });
+
+    it('retains incurred generation when logical usage is absent', () => {
+      const target = createEmptyTokenUsage();
+      expect(accumulateGenerationTokenUsage(target, { incurredTokenUsage: { total: 12 } })).toBe(
+        true,
+      );
+      expect(target.incurredTokenUsage?.generation?.total).toBe(12);
+      expect(target.total).toBe(0);
+    });
+
+    it.each([{}, { total: 0, numRequests: 0 }, { completionDetails: { reasoning: 0 } }])(
+      'ignores empty incurred generation: %j',
+      (incurredTokenUsage) => {
+        const target = createEmptyTokenUsage();
+        expect(accumulateGenerationTokenUsage(target, { incurredTokenUsage })).toBe(false);
+        expect(target).toEqual(createEmptyTokenUsage());
+      },
+    );
+
     it('preserves logical and incurred cached generation as separate scan buckets', () => {
       const target = createEmptyTokenUsage();
       target.total = 10;
