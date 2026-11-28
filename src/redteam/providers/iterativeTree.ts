@@ -25,8 +25,11 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
+  accumulatedCostFields,
   accumulateGradingResponseTokenUsage,
+  accumulateResponseCost,
   accumulateResponseTokenUsage,
+  createCostAccumulator,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { withGradingUsage } from '../grading/storedResult';
@@ -308,6 +311,8 @@ export async function getNewPrompt(
   if (totalTokenUsage) {
     accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
   }
+  // Attacker spend stays out of the target cost total, matching the token
+  // accounting above and the target-only contract for ProviderResponse cost.
   TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
   if (redteamProvider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
@@ -626,6 +631,7 @@ async function runRedteamConversation({
       : storedGraderResult;
 
   const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
+  const totalCost = createCostAccumulator();
 
   let bestResponse = '';
 
@@ -664,6 +670,7 @@ async function runRedteamConversation({
           }),
         },
         tokenUsage: totalTokenUsage,
+        ...accumulatedCostFields(totalCost),
         guardrails: finalTargetResponse?.guardrails,
         ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
       },
@@ -734,6 +741,7 @@ async function runRedteamConversation({
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
+            ...accumulatedCostFields(totalCost),
           };
         }
 
@@ -882,6 +890,7 @@ async function runRedteamConversation({
         });
         // Count the target request even when the target returns an error.
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+        accumulateResponseCost(totalCost, targetResponse);
         // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
         if (targetResponse.error) {
           logger.info(
@@ -1116,6 +1125,7 @@ async function runRedteamConversation({
               }),
             },
             tokenUsage: totalTokenUsage,
+            ...accumulatedCostFields(totalCost),
             guardrails: targetResponse?.guardrails,
           };
         }
@@ -1159,6 +1169,7 @@ async function runRedteamConversation({
               }),
             },
             tokenUsage: totalTokenUsage,
+            ...accumulatedCostFields(totalCost),
             guardrails: targetResponse?.guardrails,
           };
         }
@@ -1203,6 +1214,7 @@ async function runRedteamConversation({
               }),
             },
             tokenUsage: totalTokenUsage,
+            ...accumulatedCostFields(totalCost),
             guardrails: targetResponse?.guardrails,
           };
         }
@@ -1309,6 +1321,7 @@ async function runRedteamConversation({
     options,
   );
   accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
+  accumulateResponseCost(totalCost, finalTargetResponse);
 
   logger.debug(
     `Red team conversation complete. Final best score: ${bestScore}, Max score: ${maxScore}, Total attempts: ${attempts}`,

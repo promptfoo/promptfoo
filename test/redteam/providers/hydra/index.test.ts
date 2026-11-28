@@ -345,6 +345,75 @@ describe('HydraProvider', () => {
       expect(result.tokenUsage?.attacker).toMatchObject({ total: 200, numRequests: 2 });
     });
 
+    it('should accumulate target cost across turns', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target defended',
+        cost: 0.03,
+        tokenUsage: { total: 50, prompt: 25, completion: 25 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 2,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(result.metadata?.hydraRoundsCompleted).toBe(2);
+      expect(result.cost).toBeCloseTo(0.06);
+      expect(result.incurredCost).toBeUndefined();
+    });
+
+    it('should exclude agent cost from the target cost total', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        cost: 0.1,
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target defended',
+        cost: 0.03,
+        tokenUsage: { total: 50, prompt: 25, completion: 25 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 2,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(result.metadata?.hydraRoundsCompleted).toBe(2);
+      expect(result.cost).toBeCloseTo(0.06);
+      expect(result.incurredCost).toBeUndefined();
+    });
+
     it('should execute an attack when the agent returns a prompt object', async () => {
       mockAgentProvider.callApi.mockResolvedValue({
         output: { prompt: 'Structured attack message' },

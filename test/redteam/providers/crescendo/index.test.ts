@@ -1582,6 +1582,97 @@ describe('CrescendoProvider', () => {
     expect(result.metadata?.crescendoResult).toBe(false);
   });
 
+  it('should accumulate target cost across rounds', async () => {
+    crescendoProvider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 2,
+      maxBacktracks: 10,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+    });
+
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+      cost: 0.02,
+      tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: false,
+        metadata: 50,
+        rationale: 'test rationale',
+      }),
+    });
+
+    const result = await crescendoProvider.callApi(prompt, context);
+    expect(result.metadata?.crescendoRoundsCompleted).toBe(2);
+    expect(result.cost).toBeCloseTo(0.04);
+    expect(result.incurredCost).toBeUndefined();
+  });
+
+  it('should exclude attacker cost from the target cost total', async () => {
+    crescendoProvider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 2,
+      maxBacktracks: 10,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+    });
+
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+      cost: 0.1,
+      tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+      cost: 0.02,
+      tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: false,
+        metadata: 50,
+        rationale: 'test rationale',
+      }),
+      cost: 0.05,
+    });
+
+    const result = await crescendoProvider.callApi(prompt, context);
+    expect(result.metadata?.crescendoRoundsCompleted).toBe(2);
+    expect(result.cost).toBeCloseTo(0.04);
+    expect(result.incurredCost).toBeUndefined();
+  });
+
   it('should handle provider errors gracefully', async () => {
     const prompt = 'test prompt';
     const context = {

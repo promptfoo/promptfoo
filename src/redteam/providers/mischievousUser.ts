@@ -2,7 +2,11 @@ import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import { REDTEAM_SIMULATED_USER_TASK_ID } from '../../providers/promptfoo';
 import { type Message, SimulatedUser } from '../../providers/simulatedUser';
 import invariant from '../../util/invariant';
-import { accumulateAttackerTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulatedCostFields,
+  type CostAccumulator,
+} from '../../util/tokenUsageUtils';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
@@ -46,9 +50,12 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
 
   protected accumulateSimulatedUserTokenUsage(
     tokenUsage: TokenUsage,
+    _costs: CostAccumulator,
     response: ProviderResponse,
   ): void {
     accumulateAttackerTokenUsage(tokenUsage, response);
+    // Attacker spend stays out of the target cost total, matching the token
+    // accounting above and the target-only contract for ProviderResponse cost.
   }
 
   serializeOutput(
@@ -56,12 +63,14 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
     tokenUsage: TokenUsage,
     finalTargetResponse: ProviderResponse | undefined,
     sessionId: string,
+    costs?: CostAccumulator,
   ) {
     const finalPrompt = getLastMessageContent(messages, 'user') || '';
     return {
       output: getLastMessageContent(messages, 'assistant') || '',
       prompt: finalPrompt,
       tokenUsage,
+      ...(costs ? accumulatedCostFields(costs) : {}),
       metadata: {
         redteamFinalPrompt: finalPrompt,
         messages,

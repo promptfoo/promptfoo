@@ -143,6 +143,63 @@ describe('SimulatedUser', () => {
       expect(result.tokenUsage?.total).toBe(103); // 15+18+30+40
     });
 
+    it('should accumulate cost from target calls across turns', async () => {
+      const paidAgent = createMockProvider({ id: 'paid-agent' });
+      paidAgent.callApi.mockReset().mockResolvedValue({
+        output: 'agent response',
+        cost: 0.01,
+        tokenUsage: { prompt: 10, completion: 10, total: 20, numRequests: 1 },
+      });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: paidAgent,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // maxTurns is 2, so two paid target calls at $0.01 each.
+      expect(paidAgent.callApi).toHaveBeenCalledTimes(2);
+      expect(result.cost).toBeCloseTo(0.02);
+      expect(result.incurredCost).toBeUndefined();
+    });
+
+    it('should keep cost undefined when no call reports one', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.cost).toBeUndefined();
+      expect(result.incurredCost).toBeUndefined();
+    });
+
+    it('should exclude cached target calls from incurred cost', async () => {
+      const cachedAgent = createMockProvider({ id: 'cached-agent' });
+      cachedAgent.callApi
+        .mockReset()
+        .mockResolvedValueOnce({
+          output: 'fresh response',
+          cost: 0.01,
+          tokenUsage: { prompt: 10, completion: 10, total: 20, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'cached response',
+          cached: true,
+          cost: 0.01,
+          tokenUsage: { prompt: 10, completion: 10, total: 20, numRequests: 0, cached: 20 },
+        });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: cachedAgent,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.cost).toBeCloseTo(0.02);
+      expect(result.incurredCost).toBeCloseTo(0.01);
+    });
+
     it('should stringify non-string agent outputs before adding them to message history', async () => {
       const objectOutputProvider = createMockProvider({ id: 'object-output-agent' });
       objectOutputProvider.callApi

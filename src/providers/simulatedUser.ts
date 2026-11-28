@@ -5,7 +5,14 @@ import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulatedCostFields,
+  accumulateResponseCost,
+  accumulateResponseTokenUsage,
+  type CostAccumulator,
+  createCostAccumulator,
+  createEmptyTokenUsage,
+} from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 import type {
@@ -229,17 +236,26 @@ export class SimulatedUser implements ApiProvider {
   /**
    * Accumulate usage for the model that simulates the user. Red-team subclasses can
    * override this hook to keep attack generation separate from target usage.
+   * Cost follows the same routing as tokens: a subclass that separates
+   * attacker tokens must also keep attacker cost out of the target total.
    */
   protected accumulateSimulatedUserTokenUsage(
     tokenUsage: TokenUsage,
+    costs: CostAccumulator,
     response: ProviderResponse,
   ): void {
     accumulateResponseTokenUsage(tokenUsage, response);
+    accumulateResponseCost(costs, response);
   }
 
   /** Preserve logical target usage while separately recording cache-missed requests. */
-  private accumulateTargetTokenUsage(tokenUsage: TokenUsage, response: ProviderResponse): void {
+  private accumulateTargetTokenUsage(
+    tokenUsage: TokenUsage,
+    costs: CostAccumulator,
+    response: ProviderResponse,
+  ): void {
     accumulateResponseTokenUsage(tokenUsage, response);
+    accumulateResponseCost(costs, response);
   }
 
   private async sendMessageToAgent(
@@ -327,6 +343,7 @@ export class SimulatedUser implements ApiProvider {
     const maxTurns = this.maxTurns;
 
     const tokenUsage = createEmptyTokenUsage();
+    const costs = createCostAccumulator();
 
     let agentResponse: ProviderResponse | undefined;
 
@@ -338,13 +355,14 @@ export class SimulatedUser implements ApiProvider {
       );
       agentResponse = await this.sendMessageToAgent(prompt, messages, targetProvider, context);
 
-      this.accumulateTargetTokenUsage(tokenUsage, agentResponse);
+      this.accumulateTargetTokenUsage(tokenUsage, costs, agentResponse);
 
       // Check for errors from agent response
       if (agentResponse.error) {
         return {
           error: agentResponse.error,
           tokenUsage,
+          ...accumulatedCostFields(costs),
         };
       }
 
@@ -357,13 +375,14 @@ export class SimulatedUser implements ApiProvider {
       // The simulated-user provider generates the next attack turn and may signal completion.
       const userResult = await this.sendMessageToUser(messages, userProvider);
 
-      this.accumulateSimulatedUserTokenUsage(tokenUsage, userResult.response);
+      this.accumulateSimulatedUserTokenUsage(tokenUsage, costs, userResult.response);
 
       // Check for errors from remote generation disable
       if (userResult.response.error) {
         return {
           error: userResult.response.error,
           tokenUsage,
+          ...accumulatedCostFields(costs),
         };
       }
 
@@ -388,13 +407,14 @@ export class SimulatedUser implements ApiProvider {
         context,
       );
 
-      this.accumulateTargetTokenUsage(tokenUsage, agentResponse);
+      this.accumulateTargetTokenUsage(tokenUsage, costs, agentResponse);
 
       // Check for errors from agent response
       if (agentResponse.error) {
         return {
           error: agentResponse.error,
           tokenUsage,
+          ...accumulatedCostFields(costs),
         };
       }
 
@@ -406,6 +426,7 @@ export class SimulatedUser implements ApiProvider {
       tokenUsage,
       agentResponse,
       getSessionId(agentResponse, context),
+      costs,
     );
   }
 
@@ -418,6 +439,7 @@ export class SimulatedUser implements ApiProvider {
     tokenUsage: TokenUsage,
     finalTargetResponse: ProviderResponse | undefined,
     sessionId?: string,
+    costs?: CostAccumulator,
   ) {
     return {
       output: messages
@@ -426,6 +448,7 @@ export class SimulatedUser implements ApiProvider {
         )
         .join('\n---\n'),
       tokenUsage,
+      ...(costs ? accumulatedCostFields(costs) : {}),
       metadata: {
         messages,
         sessionId,

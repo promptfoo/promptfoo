@@ -32,6 +32,10 @@ The Tree-based Jailbreaks strategy works by:
 This strategy is medium cost. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::
 
+## Cost Reporting
+
+The result `cost` sums the target cost of every explored branch plus the final probe of the selected prompt, not only the winning branch, so cost assertions see the full target spend for the test case. `incurredCost` excludes probes served from the response cache: a cached probe still counts toward `cost` at its reported price but adds nothing to `incurredCost`. Attacker and judge model spend is excluded from both totals and tracked separately in the token usage breakdown (`tokenUsage.attacker` and `tokenUsage.assertions`). If no target probe reports a cost, `cost` stays unset.
+
 ## Session Management
 
 When using `transformVars` with `context.uuid`, each branch exploration automatically gets a new UUID, maintaining the single-shot nature of each prompt variation.

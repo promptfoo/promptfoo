@@ -1453,6 +1453,32 @@ describe('RedteamGoatProvider', () => {
       expect(result.tokenUsage?.numRequests).toBe(1);
     });
 
+    it('should accumulate target cost across turns', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+      });
+
+      const targetProvider = createMockTargetProvider(
+        'target response',
+        {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          numRequests: 1,
+        },
+        { cost: 0.02 },
+      );
+
+      const context = createMockContext(targetProvider);
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.tokenUsage?.numRequests).toBe(2);
+      expect(result.cost).toBeCloseTo(0.04);
+      expect(result.incurredCost).toBeUndefined();
+    });
+
     it('keeps attack-generation usage and internal requests separate from target probes', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

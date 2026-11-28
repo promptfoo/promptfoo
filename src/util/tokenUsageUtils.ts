@@ -507,6 +507,71 @@ export function accumulateResponseTokenUsage(
 }
 
 /**
+ * Running target-cost totals for a provider that makes several billable
+ * target calls per test case. `cost` sums every reported target cost;
+ * `incurredCost` excludes response-cache replays. Both stay undefined until
+ * a target call reports one, so callers never invent a $0 total.
+ *
+ * Attacker, grading, and other internal model spend must never be added
+ * here: ProviderResponse cost is target-provider cost only (see
+ * src/contracts/providers.ts), mirroring how token accounting keeps
+ * attacker and grading usage in separate breakdowns.
+ */
+export interface CostAccumulator {
+  cost?: number;
+  incurredCost?: number;
+}
+
+export function createCostAccumulator(): CostAccumulator {
+  return {};
+}
+
+/**
+ * Add one target response's cost to a running total, mirroring the
+ * accounting in the evaluator's pause path (runEval.ts), which sums
+ * completed target responses only: logical cost sums every reported cost,
+ * while incurred cost prefers an explicit incurredCost and treats a cached
+ * replay as free. Callers must pass target responses only; attacker and
+ * grading responses belong in the token breakdowns, not in this total.
+ * Mutates {@code target}.
+ */
+export function accumulateResponseCost(
+  target: CostAccumulator,
+  response: { cached?: boolean; cost?: number; incurredCost?: number } | undefined,
+): void {
+  if (!response) {
+    return;
+  }
+
+  if (response.cost !== undefined) {
+    target.cost = (target.cost ?? 0) + response.cost;
+  }
+
+  const incurredCost = response.incurredCost ?? (response.cached ? 0 : response.cost);
+  if (incurredCost !== undefined) {
+    target.incurredCost = (target.incurredCost ?? 0) + incurredCost;
+  }
+}
+
+/**
+ * Spread-ready cost fields for a ProviderResponse. Omits cost when no call
+ * reported one, and omits incurredCost when it adds no information beyond
+ * cost (the same convention as bestOfN).
+ */
+export function accumulatedCostFields(accumulated: CostAccumulator): {
+  cost?: number;
+  incurredCost?: number;
+} {
+  return {
+    ...(accumulated.cost !== undefined && { cost: accumulated.cost }),
+    ...(accumulated.incurredCost !== undefined &&
+      accumulated.incurredCost !== accumulated.cost && {
+        incurredCost: accumulated.incurredCost,
+      }),
+  };
+}
+
+/**
  * Record generation-time provider tokens separately from target usage and probes.
  * Returns whether the payload contained observable generation usage.
  */

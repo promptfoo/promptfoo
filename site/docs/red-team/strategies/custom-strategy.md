@@ -270,6 +270,10 @@ If the target refuses to answer:
 
 This helps find alternative paths to the objective.
 
+## Cost Reporting
+
+The result `cost` sums the target cost of every round, including backtracked turns and unblocking probes, not only the final turn, so cost assertions see the full target spend for the test case. `incurredCost` excludes rounds served from the response cache: a cached probe still counts toward `cost` at its reported price but adds nothing to `incurredCost`. Attacker and scoring model spend is excluded from both totals and tracked separately in the token usage breakdown (`tokenUsage.attacker` and `tokenUsage.assertions`). If no target probe reports a cost, `cost` stays unset.
+
 ## Best Practices
 
 ### DO

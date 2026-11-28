@@ -80,6 +80,10 @@ Hydra keeps a per-scan memory so later test cases can reuse successful tactics d
 
 Hydra is most effective when paired with plugin suites like `harmful`, `pii`, or `rbac` that define concrete failure conditions via graders.
 
+## Cost Reporting
+
+The result `cost` sums the target cost of every turn, not only the final turn, so cost assertions see the full target spend for the test case. `incurredCost` excludes turns served from the response cache: a cached probe still counts toward `cost` at its reported price but adds nothing to `incurredCost`. Agent coordination, learning-update, and grading model spend is excluded from both totals and tracked separately in the token usage breakdown (`tokenUsage.attacker` and `tokenUsage.assertions`). If no target probe reports a cost, `cost` stays unset.
+
 ## Related Concepts
 
 - [Iterative Jailbreaks](iterative.md) – Baseline single-turn optimization strategy

@@ -13,7 +13,10 @@ import invariant from '../../../util/invariant';
 import { sleep } from '../../../util/time';
 import {
   accumulateAttackerTokenUsage,
+  accumulatedCostFields,
+  accumulateResponseCost,
   accumulateResponseTokenUsage,
+  createCostAccumulator,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
 import { getTargetConversation } from '../../grading/storedResult';
@@ -346,6 +349,7 @@ export class HydraProvider implements ApiProvider {
     const successfulAttacks: NonNullable<HydraMetadata['successfulAttacks']> = [];
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
+    const totalCost = createCostAccumulator();
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
     let vulnerabilityAchieved = false;
@@ -431,6 +435,8 @@ export class HydraProvider implements ApiProvider {
       );
 
       // Agent coordination calls are internal and should not count as target probes.
+      // Their spend also stays out of the target cost total, matching the
+      // token accounting and the target-only ProviderResponse cost contract.
       accumulateAttackerTokenUsage(totalTokenUsage, agentResp);
 
       if (this.agentProvider.delay) {
@@ -680,6 +686,7 @@ export class HydraProvider implements ApiProvider {
         { role: 'assistant', content: targetResponse.output || '' },
       ];
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+      accumulateResponseCost(totalCost, targetResponse);
       if (targetResponse.error && options?.abortSignal?.aborted) {
         break;
       }
@@ -1028,7 +1035,8 @@ export class HydraProvider implements ApiProvider {
           },
           options,
         );
-        // Learning update is an internal cloud call, not a target probe.
+        // Learning update is an internal cloud call, not a target probe. Its
+        // spend stays out of the target cost total for the same reason.
         accumulateAttackerTokenUsage(totalTokenUsage, learningResponse);
 
         logger.debug(`${this.logPrefix} Scan learnings updated`, { scanId, testRunId });
@@ -1089,6 +1097,7 @@ export class HydraProvider implements ApiProvider {
           redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
         },
         tokenUsage: totalTokenUsage,
+        ...accumulatedCostFields(totalCost),
         guardrails: lastTargetResponse?.guardrails,
       },
       failClosedError ? undefined : lastTargetResponse,

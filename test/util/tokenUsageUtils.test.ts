@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   accumulateAssertionTokenUsage,
   accumulateAttackerTokenUsage,
+  accumulatedCostFields,
   accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateGradingResponseTokenUsage,
+  accumulateResponseCost,
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
+  createCostAccumulator,
   createEmptyAssertions,
   createEmptyTokenUsage,
   getErrorTokenUsage,
@@ -498,6 +501,81 @@ describe('tokenUsageUtils', () => {
 
       expect(target.total).toBe(0);
       expect(target.numRequests).toBe(0);
+    });
+  });
+
+  describe('accumulateResponseCost', () => {
+    it('sums reported costs across responses', () => {
+      const costs = createCostAccumulator();
+
+      accumulateResponseCost(costs, { cost: 0.01 });
+      accumulateResponseCost(costs, { cost: 0.02 });
+      accumulateResponseCost(costs, { cost: 0.03 });
+
+      expect(costs.cost).toBeCloseTo(0.06);
+      expect(costs.incurredCost).toBeCloseTo(0.06);
+    });
+
+    it('keeps cost undefined when no response reports one', () => {
+      const costs = createCostAccumulator();
+
+      accumulateResponseCost(costs, {});
+      accumulateResponseCost(costs, undefined);
+
+      expect(costs.cost).toBeUndefined();
+      expect(costs.incurredCost).toBeUndefined();
+      expect(accumulatedCostFields(costs)).toEqual({});
+    });
+
+    it('treats a cached replay as free for incurred cost', () => {
+      const costs = createCostAccumulator();
+
+      accumulateResponseCost(costs, { cost: 0.01 });
+      accumulateResponseCost(costs, { cached: true, cost: 0.01 });
+
+      expect(costs.cost).toBeCloseTo(0.02);
+      expect(costs.incurredCost).toBeCloseTo(0.01);
+    });
+
+    it('prefers an explicit incurredCost over the reported cost', () => {
+      const costs = createCostAccumulator();
+
+      accumulateResponseCost(costs, { cost: 0.05, incurredCost: 0.02 });
+
+      expect(costs.cost).toBeCloseTo(0.05);
+      expect(costs.incurredCost).toBeCloseTo(0.02);
+    });
+
+    it('accumulates incurredCost even when cost is not reported', () => {
+      const costs = createCostAccumulator();
+
+      accumulateResponseCost(costs, { incurredCost: 0.04 });
+
+      expect(costs.cost).toBeUndefined();
+      expect(costs.incurredCost).toBeCloseTo(0.04);
+      expect(accumulatedCostFields(costs)).toEqual({ incurredCost: 0.04 });
+    });
+
+    it('omits incurredCost from response fields when it matches cost', () => {
+      const costs = createCostAccumulator();
+
+      accumulateResponseCost(costs, { cost: 0.01 });
+      accumulateResponseCost(costs, { cost: 0.01 });
+
+      const fields = accumulatedCostFields(costs);
+      expect(fields.cost).toBeCloseTo(0.02);
+      expect(fields.incurredCost).toBeUndefined();
+    });
+
+    it('includes incurredCost in response fields when it differs from cost', () => {
+      const costs = createCostAccumulator();
+
+      accumulateResponseCost(costs, { cost: 0.01 });
+      accumulateResponseCost(costs, { cached: true, cost: 0.01 });
+
+      const fields = accumulatedCostFields(costs);
+      expect(fields.cost).toBeCloseTo(0.02);
+      expect(fields.incurredCost).toBeCloseTo(0.01);
     });
   });
 
