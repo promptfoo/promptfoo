@@ -115,6 +115,7 @@ export async function testProviderConnectivity({
       maxConcurrency: 1,
       showProgressBar: false,
       silent: true,
+      skipStrictAssertionValidation: true,
     });
 
     // Get results

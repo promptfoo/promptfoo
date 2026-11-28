@@ -50,6 +50,7 @@ describe('optimize command', () => {
         tests: [{}],
       },
       basePath: '',
+      strictConfigEnabled: false,
     } as any);
     vi.mocked(optimizePromptTestSuite).mockResolvedValue({
       baselinePrompt: { label: 'Prompt', raw: 'Prompt', metrics: { score: 0.5 } },
@@ -71,11 +72,15 @@ describe('optimize command', () => {
     });
 
     expect(setupEnv).toHaveBeenCalledWith(undefined);
-    expect(resolveConfigs).toHaveBeenCalledWith({ config: ['promptfooconfig.yaml'] }, {});
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      { config: ['promptfooconfig.yaml'], envPath: undefined },
+      {},
+    );
     expect(optimizePromptTestSuite).toHaveBeenCalledTimes(1);
     expect(optimizePromptTestSuite).toHaveBeenCalledWith({}, expect.any(Object), {
       promptIndex: 0,
       providerIndex: 0,
+      strictConfigEnabled: false,
       validationSplit: undefined,
     });
     expect(telemetry.record).toHaveBeenCalledWith(
@@ -84,7 +89,7 @@ describe('optimize command', () => {
     );
   });
 
-  it('loads config-defined env files when the CLI does not override them', async () => {
+  it('loads the config-defined env before running the optimizer', async () => {
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: {},
       testSuite: {
@@ -103,8 +108,16 @@ describe('optimize command', () => {
       defaultConfigPath: 'promptfooconfig.yaml',
     });
 
+    expect(setupEnv).toHaveBeenCalledTimes(2);
     expect(setupEnv).toHaveBeenNthCalledWith(1, undefined);
     expect(setupEnv).toHaveBeenNthCalledWith(2, '.env.optimize');
+    expect(vi.mocked(setupEnv).mock.invocationCallOrder[1]).toBeLessThan(
+      vi.mocked(optimizePromptTestSuite).mock.invocationCallOrder[0],
+    );
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      { config: ['promptfooconfig.yaml'], envPath: undefined },
+      {},
+    );
   });
 
   it('keeps explicit CLI env files ahead of config-defined env files', async () => {
@@ -129,6 +142,10 @@ describe('optimize command', () => {
 
     expect(setupEnv).toHaveBeenCalledTimes(1);
     expect(setupEnv).toHaveBeenCalledWith('.env.cli');
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      { config: ['promptfooconfig.yaml'], envPath: '.env.cli' },
+      {},
+    );
   });
 
   it('passes validation split through to the optimizer', async () => {
@@ -141,6 +158,7 @@ describe('optimize command', () => {
     expect(optimizePromptTestSuite).toHaveBeenCalledWith({}, expect.any(Object), {
       promptIndex: 0,
       providerIndex: 0,
+      strictConfigEnabled: false,
       validationSplit: 0.2,
     });
   });
@@ -156,6 +174,7 @@ describe('optimize command', () => {
     expect(optimizePromptTestSuite).toHaveBeenCalledWith({}, expect.any(Object), {
       promptIndex: 2,
       providerIndex: 1,
+      strictConfigEnabled: false,
       validationSplit: undefined,
     });
   });
@@ -222,6 +241,7 @@ describe('optimize command', () => {
     expect(optimizePromptTestSuite).toHaveBeenCalledWith({}, expect.any(Object), {
       promptIndex: 2,
       providerIndex: 1,
+      strictConfigEnabled: false,
       validationSplit: 0.3,
     });
   });

@@ -2,19 +2,12 @@ import fs from 'fs';
 import * as path from 'path';
 
 import dedent from 'dedent';
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  type MockedFunction,
-  vi,
-} from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { doEval } from '../../src/node/doEval';
 import { loadApiProviders } from '../../src/providers/index';
-import { setupEnv } from '../../src/util/index';
+import { loadDefaultConfig } from '../../src/util/config/default';
+import { resolveConfigs } from '../../src/util/config/load';
+import { setExplicitCliEnvPath, setupEnv } from '../../src/util/env';
 
 vi.mock('../../src/cache');
 vi.mock('../../src/evaluator');
@@ -51,15 +44,25 @@ vi.mock('../../src/util/cloud', () => ({
   checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
   getOrgContext: vi.fn().mockResolvedValue(null),
 }));
-vi.mock('../../src/util', async () => {
-  const actual = await vi.importActual('../../src/util');
-  return {
-    ...(actual as any),
-    setupEnv: vi.fn(),
-  };
+vi.unmock('../../src/util/envFile');
+vi.mock('../../src/util/env', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/util/env')>();
+  return { ...actual, setupEnv: vi.fn(actual.setupEnv) };
 });
 
-const mockSetupEnv = setupEnv as MockedFunction<typeof setupEnv>;
+const mockSetupEnv = vi.mocked(setupEnv);
+
+function expectExplicitEnvPath(expected: string | string[], vars: NodeJS.ProcessEnv = {}) {
+  const calls = mockSetupEnv.mock.calls.filter(([file]) =>
+    Array.isArray(file) ? file.length > 0 : Boolean(file),
+  );
+  expect(calls.length).toBeGreaterThan(0);
+  for (const [file, options] of calls) {
+    expect(file).toEqual(expected);
+    expect(options?.processEnv).toEqual(expect.objectContaining(vars));
+  }
+}
+
 const dedentYaml = dedent.withOptions({ escapeSpecialCharacters: false });
 
 describe('Integration: commandLineOptions.envPath', () => {
@@ -75,6 +78,11 @@ describe('Integration: commandLineOptions.envPath', () => {
 
   afterAll(() => {
     fs.rmSync(tempDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    setExplicitCliEnvPath(undefined);
   });
 
   beforeEach(() => {
@@ -114,11 +122,241 @@ tests:
       // Expected to fail due to mocked dependencies
     }
 
-    expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, tempEnvFile, { processEnv: {} });
-    expect(mockSetupEnv.mock.calls[1][1]?.processEnv).toBe(
-      mockSetupEnv.mock.calls[0][1]?.processEnv,
+    expectExplicitEnvPath(tempEnvFile, { TEST_VAR: 'from_config_env' });
+  });
+
+  it('should recheck unknown config keys after loading a config-specified envPath', async () => {
+    fs.writeFileSync(tempEnvFile, 'PROMPTFOO_STRICT_CONFIG=true');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        commandLineOptions:
+          envPath: ${tempEnvFile}
+        prompts:
+          - hello
+        providers:
+          - echo
+        defaultTest:
+          assert:
+            - type: contains
+              value: hello
+        assert:
+          - type: contains
+            value: hello
+        tests:
+          - vars:
+              case: env-path
+      `,
+    );
+
+    await expect(doEval({ config: [tempConfigFile] }, {}, undefined, {})).rejects.toThrow(
+      /Unknown top-level config key\(s\) "assert"/,
+    );
+  });
+
+  it('should let a config-specified envPath disable ambient strict key validation', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    fs.writeFileSync(tempEnvFile, 'PROMPTFOO_STRICT_CONFIG=false');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        commandLineOptions:
+          envPath: ${tempEnvFile}
+        prompts:
+          - hello
+        providers:
+          - echo
+        defaultTest:
+          assert:
+            - type: contains
+              value: hello
+        assert:
+          - type: contains
+            value: hello
+        tests:
+          - vars:
+              case: env-path-opt-out
+      `,
+    );
+
+    let thrown: unknown;
+    try {
+      await doEval({ config: [tempConfigFile] }, {}, undefined, {});
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown instanceof Error ? thrown.message : '').not.toMatch(
+      /Unknown top-level config key/,
+    );
+    expectExplicitEnvPath(tempEnvFile, { PROMPTFOO_STRICT_CONFIG: 'false' });
+    expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('true');
+  });
+
+  it('should honor config-specified strictness on fresh and cached default-config reads', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    vi.stubEnv('PR9449_SENTINEL', 'ambient');
+    fs.writeFileSync(tempEnvFile, 'PROMPTFOO_STRICT_CONFIG=false\nPR9449_SENTINEL=from-config');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        commandLineOptions:
+          envPath: ${tempEnvFile}
+        prompts:
+          - hello
+        providers:
+          - echo
+        assert:
+          - type: contains
+            value: hello
+        tests:
+          - vars:
+              case: default-config-env-path
+      `,
+    );
+
+    await expect(loadDefaultConfig(tempDir)).resolves.toMatchObject({
+      defaultConfigPath: tempConfigFile,
+    });
+    await expect(loadDefaultConfig(tempDir)).resolves.toMatchObject({
+      defaultConfigPath: tempConfigFile,
+    });
+
+    expectExplicitEnvPath(tempEnvFile, {
+      PROMPTFOO_STRICT_CONFIG: 'false',
+      PR9449_SENTINEL: 'from-config',
+    });
+    expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('true');
+    expect(process.env.PR9449_SENTINEL).toBe('ambient');
+  });
+
+  it('resolves the diagnostics env file against the normalized config basePath', async () => {
+    const inputs = path.join(tempDir, 'inputs');
+    fs.mkdirSync(inputs);
+    fs.writeFileSync(path.join(tempDir, 'settings.env'), 'PROMPTFOO_STRICT_CONFIG=false');
+    fs.writeFileSync(path.join(inputs, 'settings.env'), 'PROMPTFOO_STRICT_CONFIG=true');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        basePath: inputs
+        commandLineOptions:
+          envPath: settings.env
+        prompts: [hello]
+        providers: [echo]
+        typoField: true
+      `,
+    );
+
+    await expect(loadDefaultConfig(tempDir)).rejects.toThrow(
+      /Unknown top-level config key.*typoField/,
+    );
+  });
+
+  it('should preserve explicit CLI env precedence on fresh and cached default-config reads', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+    vi.stubEnv('PR9449_SENTINEL', 'from-cli');
+    const cliEnvFile = path.join(tempDir, '.env.explicit');
+    fs.writeFileSync(cliEnvFile, 'PROMPTFOO_STRICT_CONFIG=false\nPR9449_SENTINEL=from-cli');
+    setExplicitCliEnvPath([cliEnvFile]);
+    fs.writeFileSync(tempEnvFile, 'PROMPTFOO_STRICT_CONFIG=true\nPR9449_SENTINEL=from-config');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        commandLineOptions:
+          envPath: ${tempEnvFile}
+        prompts:
+          - hello
+        providers:
+          - echo
+        outptPath: ignored.json
+        tests:
+          - vars:
+              case: explicit-cli-precedence
+      `,
+    );
+
+    await expect(loadDefaultConfig(tempDir)).resolves.toMatchObject({
+      defaultConfigPath: tempConfigFile,
+    });
+    await expect(loadDefaultConfig(tempDir)).resolves.toMatchObject({
+      defaultConfigPath: tempConfigFile,
+    });
+
+    expectExplicitEnvPath([cliEnvFile], {
+      PROMPTFOO_STRICT_CONFIG: 'false',
+      PR9449_SENTINEL: 'from-cli',
+    });
+    expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('false');
+    expect(process.env.PR9449_SENTINEL).toBe('from-cli');
+  });
+
+  it('should not leak config-specified strictness into later resolutions', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    fs.writeFileSync(tempEnvFile, 'PROMPTFOO_STRICT_CONFIG=false');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        commandLineOptions:
+          envPath: ${tempEnvFile}
+        prompts:
+          - hello
+        providers:
+          - echo
+        tests:
+          - assert:
+              - type: contains
+                value: hello
+      `,
+    );
+
+    const firstResolution = await resolveConfigs({ config: [tempConfigFile] }, {});
+    expect(firstResolution.strictConfigEnabled).toBe(false);
+    expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('true');
+
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        prompts:
+          - hello
+        providers:
+          - echo
+        tests:
+          - assert:
+              - type: contains
+                value: hello
+      `,
+    );
+    const secondResolution = await resolveConfigs({ config: [tempConfigFile] }, {});
+    expect(secondResolution.strictConfigEnabled).toBe(true);
+    expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('true');
+  });
+
+  it('should retain diagnostics for an auto-discovered cached default config', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        prompts:
+          - hello
+        providers:
+          - echo
+        defaultTest:
+          assert:
+            - type: contains
+              value: hello
+        assert:
+          - type: contains
+            value: hello
+        tests:
+          - vars:
+              case: default-config
+      `,
+    );
+    const { defaultConfig, defaultConfigPath } = await loadDefaultConfig(tempDir);
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      /Unknown top-level config key\(s\) "assert"/,
     );
   });
 
@@ -156,9 +394,7 @@ tests:
       // Expected to fail due to mocked dependencies
     }
 
-    // Should only call setupEnv once with CLI envPath (config envPath ignored)
-    expect(mockSetupEnv).toHaveBeenCalledTimes(1);
-    expect(mockSetupEnv).toHaveBeenCalledWith(cliEnvFile, { processEnv: {} });
+    expectExplicitEnvPath(cliEnvFile, { CLI_VAR: 'from_cli' });
   });
 
   it('should handle missing commandLineOptions section gracefully', async () => {
@@ -194,6 +430,7 @@ tests:
     const config1File = path.join(tempDir, 'config1.yaml');
     const config2File = path.join(tempDir, 'config2.yaml');
     const envFile2 = path.join(tempDir, '.env2');
+    fs.writeFileSync(envFile2, 'CONFIG_VAR=from_config');
 
     fs.writeFileSync(
       config1File,
@@ -229,10 +466,7 @@ tests:
       // Expected to fail due to mocked dependencies
     }
 
-    // Should call setupEnv twice: CLI + first envPath found (from config2)
-    expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, envFile2, { processEnv: {} });
+    expectExplicitEnvPath(envFile2, { CONFIG_VAR: 'from_config' });
   });
 
   it('should resolve relative envPath against the config file directory', async () => {
@@ -262,9 +496,7 @@ tests:
       await doEval({ config: [subConfig] }, {}, undefined, {});
     } catch {}
 
-    expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, relEnvAbs, { processEnv: {} });
+    expectExplicitEnvPath(relEnvAbs, { REL: 'ok' });
   });
 
   describe('multi-file envPath support', () => {
@@ -303,10 +535,7 @@ tests:
         // Expected to fail due to mocked dependencies
       }
 
-      // Should call setupEnv twice: CLI (undefined), then config with array
-      expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile1, envFile2], { processEnv: {} });
+      expectExplicitEnvPath([envFile1, envFile2], { BASE_VAR: 'base', LOCAL_VAR: 'local' });
     });
 
     it('should resolve relative paths in envPath array against config directory', async () => {
@@ -341,9 +570,7 @@ tests:
         await doEval({ config: [subConfig] }, {}, undefined, {});
       } catch {}
 
-      expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile1, envFile2], { processEnv: {} });
+      expectExplicitEnvPath([envFile1, envFile2], { VAR1: 'val1', VAR2: 'val2' });
     });
 
     it('should pass CLI envPath array when provided', async () => {
@@ -375,9 +602,7 @@ tests:
         await doEval(cmdObj, {}, undefined, {});
       } catch {}
 
-      // CLI envPath should be called once (no config envPath)
-      expect(mockSetupEnv).toHaveBeenCalledTimes(1);
-      expect(mockSetupEnv).toHaveBeenCalledWith([envFile1, envFile2], { processEnv: {} });
+      expectExplicitEnvPath([envFile1, envFile2], { CLI_VAR1: 'cli1', CLI_VAR2: 'cli2' });
     });
 
     it('should load config envPath when CLI envPath defaults to an empty array', async () => {
@@ -411,9 +636,10 @@ tests:
         await doEval({ config: [tempConfigFile], envPath: [] }, {}, undefined, {});
       } catch {}
 
-      expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, [], { processEnv: {} });
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile1, envFile2], { processEnv: {} });
+      expectExplicitEnvPath([envFile1, envFile2], {
+        CONFIG_VAR1: 'config1',
+        CONFIG_VAR2: 'config2',
+      });
     });
   });
 });
