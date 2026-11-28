@@ -494,13 +494,16 @@ export async function matchesContextFaithfulness(
   let parsedVerdict = false;
   if (verdicts.includes(finalAnswer)) {
     verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
-    const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
+    const parsedVerdicts = verdicts
+      .split(/(?:\r?\n|\.(?!\d))/)
+      .map((answer) => answer.replace(/^\s*(?:\d+[.)]|[-*])\s*/, '').trim())
+      .filter((answer) => answer !== '' && !/^\d+$/.test(answer));
     if (
       parsedVerdicts.length > 0 &&
       parsedVerdicts.every((answer) => /\b(?:yes|no)\b/.test(answer))
     ) {
       parsedVerdict = true;
-      const unsupportedVerdicts = parsedVerdicts.filter((answer) => !answer.includes('yes')).length;
+      const unsupportedVerdicts = parsedVerdicts.filter((answer) => !/\byes\b/.test(answer)).length;
       const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
       score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
     }
