@@ -12,6 +12,7 @@ import './setup';
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
+import { RateLimitRegistry, wrapProviderWithRateLimiting } from '../../../../src/scheduler';
 import * as createHash from '../../../../src/util/createHash';
 import { HttpRateLimitError } from '../../../../src/util/fetch/errors';
 import { fetchWithRetries } from '../../../../src/util/fetch/index';
@@ -621,6 +622,121 @@ describe('OpenAiResponsesProvider request building', () => {
       undefined,
     );
   });
+
+  it.each([
+    ['2h', 2 * 60 * 60 * 1000],
+    ['8h', 8 * 60 * 60 * 1000],
+  ] as const)(
+    'polls through the %s target with bounded HTTP requests',
+    async (window, duration) => {
+      vi.useFakeTimers();
+      try {
+        const pending = createMockFetchResponse({ id: 'resp_window', status: 'queued' });
+        vi.mocked(cache.fetchWithCache)
+          .mockResolvedValueOnce(pending)
+          .mockImplementationOnce(async () => {
+            vi.setSystemTime(Date.now() + duration);
+            return pending;
+          })
+          .mockResolvedValueOnce(
+            createMockFetchResponse({
+              id: 'resp_window',
+              status: 'completed',
+              output: [createResponseMessage('Finished after the target')],
+            }),
+          );
+        const provider = new OpenAiResponsesProvider('gpt-6.2-sol', {
+          config: {
+            ...createBackgroundOptions().config,
+            background_options: { completion_window: window },
+          },
+        });
+
+        const result = provider.callApi('Run a long task');
+        await vi.advanceTimersByTimeAsync(1_000);
+
+        expect((await result).output).toBe('Finished after the target');
+        expect(
+          vi
+            .mocked(cache.fetchWithCache)
+            .mock.calls.map(([, options, timeout]) => [options?.method, timeout]),
+        ).toEqual([
+          ['POST', 600_000],
+          ['GET', 600_000],
+          ['GET', 599_000],
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('backs off windowed polls to a bounded interval and cancels during a wait', async () => {
+    vi.useFakeTimers();
+    try {
+      const startedAt = Date.now();
+      const pollTimes: number[] = [];
+      vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
+        if (options?.method === 'GET') {
+          pollTimes.push(Date.now() - startedAt);
+        }
+        return createMockFetchResponse({ id: 'resp_backoff', status: 'queued' });
+      });
+      const provider = new OpenAiResponsesProvider('gpt-6.2-sol', {
+        config: {
+          ...createBackgroundOptions().config,
+          passthrough: { background_options: { completion_window: '8h' } },
+        },
+      });
+      const controller = new AbortController();
+      const result = provider.callApi('Interrupt a long task', undefined, {
+        abortSignal: controller.signal,
+      });
+      await vi.advanceTimersByTimeAsync(62_000);
+      expect(pollTimes).toEqual([0, 1_000, 3_000, 7_000, 15_000, 31_000, 61_000]);
+      controller.abort();
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[0]).toMatch(
+        /resp_backoff\/cancel$/,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    { window: 'soonest', timeout: 600_000, override: undefined },
+    { window: '8h', timeout: 300_000, override: '300000' },
+  ] as const)(
+    'honors the $timeout ms deadline before replacing a stale $window job',
+    async ({ window, timeout, override }) => {
+      setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: override });
+      vi.useFakeTimers();
+      try {
+        vi.mocked(cache.fetchWithCache)
+          .mockResolvedValueOnce({
+            ...createMockFetchResponse({ id: 'resp_expired', status: 'queued' }),
+            cached: true,
+          })
+          .mockImplementationOnce(async () => {
+            vi.setSystemTime(Date.now() + timeout);
+            return { ...createMockFetchResponse({}), status: 404 };
+          });
+        const provider = new OpenAiResponsesProvider('gpt-6.2-sol', {
+          config: {
+            ...createProjectBackgroundOptions().config,
+            background_options: { completion_window: window },
+          },
+        });
+
+        const result = await provider.callApi('Resume the cached job');
+        expect(result.error).toBe(`Background response resp_expired timed out after ${timeout}ms.`);
+        expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('should persist a usable incomplete background response in the cache', async () => {
     const updateCache = vi.fn().mockResolvedValue(undefined);
@@ -2763,12 +2879,12 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(deleteFromCache).not.toHaveBeenCalled();
   });
 
-  it('should preserve Retry-After metadata when background polling exhausts retries', async () => {
+  it('keeps a rate-limited poll from resubmitting an accepted background response', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
     vi.mocked(cache.fetchWithCache)
       .mockResolvedValueOnce({
         data: { id: 'resp_rate_limited', status: 'queued', output: [], usage: null },
-        cached: true,
+        cached: false,
         status: 200,
         statusText: 'OK',
         deleteFromCache,
@@ -2778,21 +2894,29 @@ describe('OpenAiResponsesProvider request building', () => {
           status: 429,
           statusText: 'Too Many Requests',
           code: 'rate_limit_exceeded',
-          retryAfterMs: 120000,
-          headers: { 'retry-after': '120' },
+          retryAfterMs: 0,
+          headers: { 'retry-after': '0' },
         }),
       );
-    const provider = new OpenAiResponsesProvider('gpt-4.1', createBackgroundOptions());
+    const provider = wrapProviderWithRateLimiting(
+      new OpenAiResponsesProvider('gpt-4.1', createBackgroundOptions()),
+      new RateLimitRegistry({ maxConcurrency: 1 }),
+    );
 
     const result = await provider.callApi('Poll later');
 
+    expect(
+      vi.mocked(cache.fetchWithCache).mock.calls.map(([, options]) => options?.method),
+    ).toEqual(['POST', 'GET']);
     expect(result.error).toContain('Rate limit exceeded');
     expect(result.metadata).toEqual({
       rateLimitKind: 'rate_limit',
+      rateLimitRetryable: false,
+      responseId: 'resp_rate_limited',
       http: {
         status: 429,
         statusText: 'Too Many Requests',
-        headers: { 'retry-after': '120' },
+        headers: { 'retry-after': '0' },
       },
     });
     expect(deleteFromCache).not.toHaveBeenCalled();
@@ -3472,6 +3596,62 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(body.prompt_cache_retention).toBe('24h');
     expect(body.include).toEqual(['web_search_call.results', 'reasoning.encrypted_content']);
     expect(gpt56Body.prompt_cache_options).toEqual({ mode: 'explicit', ttl: '12h' });
+  });
+
+  it('renders the same background options for a workflow and its linked follow-up', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-6.2-sol', {
+      config: {
+        background: true,
+        background_options: {
+          completion_window: '{{ window }}',
+          continuation_id: '{{ workflow_id }}',
+        },
+        previous_response_id: '{{ prior }}',
+      },
+    });
+    const prompt = { raw: 'Review document', label: 'Review document' };
+    const vars = { window: '8h', workflow_id: 'review-17' };
+    const initial = await provider.getOpenAiBody(prompt.raw, { prompt, vars });
+    const followUp = await provider.getOpenAiBody('Summarize findings', {
+      prompt,
+      vars: { ...vars, prior: 'resp_review' },
+    });
+
+    for (const { body, config } of [initial, followUp]) {
+      expect(body.background).toBe(true);
+      expect(body.background_options).toEqual({
+        completion_window: '8h',
+        continuation_id: 'review-17',
+      });
+      expect(config.backgroundCompletionWindow).toBe('8h');
+    }
+    expect(initial.body).not.toHaveProperty('previous_response_id');
+    expect(followUp.body.previous_response_id).toBe('resp_review');
+  });
+
+  it('uses prompt background options over provider options and honors passthrough within each', async () => {
+    const legacy = { completion_window: '8h', continuation_id: '{{ literal }}' };
+    const soonest = { completion_window: 'soonest' };
+    const twoHour = { completion_window: '2h' } as const;
+    const provider = new OpenAiResponsesProvider('gpt-6.2-sol', {
+      config: {
+        background: true,
+        background_options: twoHour,
+        passthrough: { background_options: legacy },
+      },
+    });
+
+    for (const [config, expected] of [
+      [{}, legacy],
+      [{ background_options: soonest }, soonest],
+      [{ background_options: soonest, passthrough: { background_options: twoHour } }, twoHour],
+    ] as const) {
+      const { body } = await provider.getOpenAiBody('Review', {
+        prompt: { raw: 'Review', label: 'Review', config },
+        vars: { literal: 'rendered' },
+      });
+      expect(body.background_options).toEqual(expected);
+    }
   });
 
   it('should handle store parameter correctly', async () => {
