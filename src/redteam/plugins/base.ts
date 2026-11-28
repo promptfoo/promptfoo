@@ -19,6 +19,7 @@ import {
 import {
   extractInputVarsFromPrompt,
   getShortPluginId,
+  hasImagePayload,
   isBasicRefusal,
   isEmptyResponse,
 } from '../util';
@@ -467,6 +468,7 @@ export abstract class RedteamGraderBase {
     const {
       providerResponse: gradingProviderResponse,
       imageOutputs,
+      inputImage,
       ...templateGradingContext
     } = gradingContext ?? {};
 
@@ -557,10 +559,13 @@ export abstract class RedteamGraderBase {
       gradingGuidanceString +
       graderExamplesString +
       timestampString;
-    const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
+    const imagesForGrading = (imageOutputs ?? gradingProviderResponse?.images)?.filter(
+      hasImagePayload,
+    );
 
     if (
       !skipRefusalCheck &&
+      !inputImage &&
       !imagesForGrading?.length &&
       (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))
     ) {
@@ -575,11 +580,18 @@ export abstract class RedteamGraderBase {
         ? (cliState.config.defaultTest as TestCase)
         : undefined;
     const hasConfiguredGradingProvider = Boolean(
-      cliState.config?.redteam?.provider || defaultTest?.options?.provider,
+      cliState.config?.redteam?.provider ||
+        defaultTest?.options?.provider ||
+        (inputImage && (test.options?.provider || defaultTest?.provider)),
     );
+    if (inputImage && !hasConfiguredGradingProvider) {
+      throw new Error('Configure a multimodal grading provider before grading a safe input image.');
+    }
     const grading = {
       ...test.options,
-      provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
+      provider:
+        (inputImage && test.options?.provider) ||
+        (await redteamProviderManager.getGradingProvider({ jsonOnly: true })),
     };
     if (!hasConfiguredGradingProvider) {
       Object.defineProperty(grading, '__promptfooPreferRemote', {
@@ -588,8 +600,9 @@ export abstract class RedteamGraderBase {
       logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
     const grade = (
-      imagesForGrading?.length
+      inputImage || imagesForGrading?.length
         ? await matchesLlmRubric(finalRubric, llmOutput, grading, undefined, undefined, {
+            ...(inputImage && { inputImage }),
             providerResponse: {
               output: llmOutput,
               images: imagesForGrading,

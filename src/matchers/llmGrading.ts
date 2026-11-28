@@ -187,6 +187,7 @@ export async function matchesLlmRubric(
   options?: {
     throwOnError?: boolean;
     preferRemote?: boolean;
+    inputImage?: string;
     providerResponse?: ProviderResponse;
   },
   providerCallContext?: CallApiContextParams,
@@ -199,6 +200,9 @@ export async function matchesLlmRubric(
 
   // Use remote grading when no provider is explicitly configured, or when a
   // caller injected an implicit default provider but still prefers remote.
+  if (options?.inputImage && !grading.provider) {
+    throw new Error('Configure a multimodal grading provider before grading a safe input image.');
+  }
   const shouldPreferRemote =
     options?.preferRemote ||
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
@@ -211,6 +215,7 @@ export async function matchesLlmRubric(
   );
   if (
     !grading.rubricPrompt &&
+    !options?.inputImage &&
     shouldPreferRemote &&
     !cliState.config?.redteam?.provider &&
     cliState.config?.redteam &&
@@ -246,6 +251,7 @@ export async function matchesLlmRubric(
       providerCallContext,
       throwOnError: options?.throwOnError,
       images: imageOutputs,
+      inputImage: options?.inputImage,
       audio,
       vars: {
         ...(vars || {}),
