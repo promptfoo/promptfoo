@@ -22,6 +22,7 @@ const cases = [
     model: 'command-r',
     create: () => new CohereChatCompletionProvider('command-r'),
     system: 'cohere',
+    finishReason: true,
   },
   {
     name: 'vertex',
