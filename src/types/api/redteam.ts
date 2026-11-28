@@ -3,6 +3,7 @@ import { ALL_PLUGINS, ALL_STRATEGIES } from '../../redteam/constants';
 import {
   ConversationMessageSchema,
   PluginConfigSchema,
+  ReactPreviewStateSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
 import { BaseTokenUsageSchema } from '../shared';
@@ -59,6 +60,7 @@ export const TestCaseGenerationSchema = z.object({
   turn: z.int().min(0).prefault(0),
   maxTurns: z.int().min(1).optional(),
   history: z.array(ConversationMessageSchema).prefault([]),
+  reactPreviewState: ReactPreviewStateSchema.optional(),
   goal: z.string().optional(),
   stateful: z.boolean().optional(),
   // Batch generation: number of test cases to generate (1-10, default 1)

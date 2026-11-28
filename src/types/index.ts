@@ -10,6 +10,19 @@ import {
 import { hasTraceCredentialPath } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
+import {
+  ConversationMessageSchema,
+  InputsSchema,
+  PartialGenerationError,
+  type PluginConfig,
+  PluginConfigSchema,
+  PolicyObjectSchema,
+  ProbeLimitExceededError,
+  type RedteamAssertionTypes,
+  type RedteamFileConfig,
+  type StrategyConfig,
+  StrategyConfigSchema,
+} from '../redteam/types';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../validation/fileExtensions';
 import { parseFilterRange } from '../validation/filterRange';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
@@ -34,12 +47,6 @@ export {
 
 import type { EnvOverrides } from '../contracts/env';
 import type { Prompt, PromptFunction } from '../contracts/prompts';
-import type {
-  PluginConfig,
-  RedteamAssertionTypes,
-  RedteamFileConfig,
-  StrategyConfig,
-} from '../redteam/types';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -76,14 +83,23 @@ export interface ProviderCallQueueRef {
   enqueue: <T>(providerId: string, call: () => Promise<T>, abortSignal?: AbortSignal) => Promise<T>;
 }
 
-export * from '../redteam/types';
 export * from './agent';
 export * from './prompts';
 export * from './providers';
 export * from './shared';
 export * from './tracing';
 
+export type * from '../redteam/types';
 export type { EnvOverrides };
+export {
+  ConversationMessageSchema,
+  InputsSchema,
+  PartialGenerationError,
+  PluginConfigSchema,
+  PolicyObjectSchema,
+  ProbeLimitExceededError,
+  StrategyConfigSchema,
+};
 
 const FilterRangeSchema = z
   .string()

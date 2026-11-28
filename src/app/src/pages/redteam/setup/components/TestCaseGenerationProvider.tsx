@@ -17,11 +17,15 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
+import {
+  type ConversationMessage,
+  type ReactPreviewState,
+  ReactPreviewStateSchema,
+} from '@promptfoo/redteam/types';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
 import { normalizeLocalProviders } from './Targets/helpers';
 import { TestCaseDialog } from './TestCaseDialog';
-import type { ConversationMessage } from '@promptfoo/redteam/types';
 
 import type {
   GeneratedTestCase,
@@ -122,6 +126,7 @@ async function callTestGenerationApi(
   maxTurns: number = 1,
   count: number = 1,
   provider: Config['provider'] = undefined,
+  reactPreviewState?: ReactPreviewState,
 ) {
   const previewLanguage = getPreviewLanguage(language);
   const pluginLanguage = getPreviewLanguage(plugin.config.language);
@@ -149,6 +154,7 @@ async function callTestGenerationApi(
       config: { applicationDefinition: { purpose } },
       provider: normalizeLocalProviders(provider, { forRuntime: true }),
       history,
+      ...(reactPreviewState && { reactPreviewState }),
       turn,
       maxTurns,
       count,
@@ -290,6 +296,14 @@ export const TestCaseGenerationProvider: React.FC<{
         });
 
         const history = getHistory(generatedTestCases, targetResponses);
+        const lastMetadata = generatedTestCases[generatedTestCases.length - 1]?.metadata;
+        const previewState =
+          strategy.id === 'react-crescendo' &&
+          typeof lastMetadata === 'object' &&
+          lastMetadata !== null &&
+          'reactPreviewState' in lastMetadata
+            ? ReactPreviewStateSchema.safeParse(lastMetadata.reactPreviewState)
+            : undefined;
 
         const response = await callTestGenerationApi(
           plugin,
@@ -302,6 +316,7 @@ export const TestCaseGenerationProvider: React.FC<{
           maxTurns,
           1,
           redTeamConfig.provider,
+          previewState?.data,
         );
 
         const data = await response.json();
