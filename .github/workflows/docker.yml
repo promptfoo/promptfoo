@@ -168,7 +168,8 @@ jobs:
       - name: Run Docker containers for testing
         run: |
           docker run -d --name promptfoo-container -p 3000:3000 local-test-image:official
-          docker run -d --name promptfoo-custom-container -p 3001:3000 local-test-image:custom
+          # A non-default port: the image's health check has to follow API_PORT.
+          docker run -d --name promptfoo-custom-container -e API_PORT=3100 -p 3001:3100 local-test-image:custom
 
       - name: Run health check
         run: |
@@ -191,6 +192,21 @@ jobs:
               echo -e "\nHealth check on port ${port} failed after multiple attempts" >&2
               exit 1
             fi
+          done
+
+      - name: Verify Docker health checks
+        run: |
+          for container in promptfoo-container promptfoo-custom-container; do
+            status=
+            for ((retry=1; retry<=30; retry++)); do
+              status="$(docker inspect --format '{{.State.Health.Status}}' "$container")"
+              if [ "$status" = healthy ]; then
+                break
+              fi
+              sleep 2
+            done
+            echo "${container}: ${status}"
+            [ "$status" = healthy ]
           done
 
       - name: Verify Python and promptfoo
@@ -218,6 +234,9 @@ jobs:
           test "$(docker exec promptfoo-container printenv PROMPTFOO_OFFICIAL_DOCKER_IMAGE)" = "1"
           test "$(docker exec promptfoo-custom-container printenv PROMPTFOO_RUNNING_IN_DOCKER)" = "1"
           test "$(docker exec promptfoo-custom-container printenv PROMPTFOO_OFFICIAL_DOCKER_IMAGE)" = "0"
+
+          echo "Checking the image user is numeric:"
+          test "$(docker image inspect --format '{{.Config.User}}' local-test-image:official)" = "100:101"
 
           curl -fsS http://localhost:3000/api/version | jq -e '
             .commandType == "docker" and
