@@ -11,7 +11,9 @@ A **pass** score means that the output did not violate your application's intend
 
 Pass and fail scores are separate from **errors**, where the output could not be parsed. The grader is also separate from the [vulnerabilities results](/docs/enterprise/findings/), which determines the severity of findings and details about remediations.
 
-A provider response with a missing, `null`, or `undefined` `output` field is an integration error, including in red team scans. Check your response parser if you see `No output` or a malformed-response error. The literal strings `"null"` and `"undefined"` are response content and are graded normally; an intentional empty string retains the existing refusal handling.
+For Harmful, Aegis, Beavertails, FERPA, COPPA, and Wordplay, text-only refusals can pass without a model call. Output images and requests to grade the complete response require a grader call, even when the text starts with a refusal. [VLSU safe controls](/docs/red-team/plugins/vlsu/) require grading for helpfulness.
+
+A provider response with a missing, `null`, or `undefined` `output` field and no supported output images is an integration error, including in red team scans. Check your response parser if you see `No output` or a malformed-response error. The literal strings `"null"` and `"undefined"` are response content and are graded normally; an intentional empty string retains the existing refusal handling.
 
 ## Configuring the Grader
 

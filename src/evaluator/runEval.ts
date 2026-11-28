@@ -11,7 +11,7 @@ import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers
 import { providerRegistry } from '../providers/providerRegistry';
 import { maybeWrapMcpProviderForRedteam } from '../redteam/mcpTargetProvider';
 import { throwIfTargetPromptExceedsMaxChars } from '../redteam/shared/promptLength';
-import { getSessionId } from '../redteam/util';
+import { getSessionId, hasImagePayload } from '../redteam/util';
 import { createProviderRateLimitOptions, sleepWithAbort } from '../scheduler';
 import {
   withProviderCallExecutionContext,
@@ -25,6 +25,7 @@ import { getActiveTraceparent } from '../tracing/spanRoles';
 import { withGraderSpan, withTestCaseSpan, withTracedProviderCall } from '../tracing/targetTracer';
 import { fetchTraceContext } from '../tracing/traceContext';
 import {
+  type AssertionOrSet,
   type AtomicTestCase,
   type EvaluateResult,
   type GradingResult,
@@ -1036,13 +1037,17 @@ async function applyRunEvalResponseOutcome({
   }
 
   if (response.output === null || response.output === undefined) {
-    // An absent provider result is an integration error, including in redteam
-    // scans. An intentional empty string still proceeds to the assertions.
-    ret.success = false;
-    ret.score = 0;
-    ret.error = 'No output';
-    ret.failureReason = ResultFailureReason.ERROR;
-    return;
+    const hasOutputImages = response.images?.some(hasImagePayload);
+    if (hasOutputImages && test.assert?.some(hasVlsuAssertion)) {
+      response = { ...response, output: '' };
+    } else {
+      // Missing text without output images remains a provider integration error.
+      ret.success = false;
+      ret.score = 0;
+      ret.error = 'No output';
+      ret.failureReason = ResultFailureReason.ERROR;
+      return;
+    }
   }
 
   await gradeRunEvalResponse({
@@ -1065,6 +1070,12 @@ async function applyRunEvalResponseOutcome({
     traceContext,
     vars,
   });
+}
+
+function hasVlsuAssertion(assertion: AssertionOrSet): boolean {
+  return assertion.type === 'assert-set'
+    ? assertion.assert.some(hasVlsuAssertion)
+    : assertion.type === 'promptfoo:redteam:vlsu';
 }
 
 async function gradeRunEvalResponse({
@@ -1127,9 +1138,10 @@ async function gradeRunEvalResponse({
 
   const assertionProviderResponse = {
     ...processedResponse,
-    // Keep generated audio available to graders after persistence replaces its
+    // Keep generated media available to graders after persistence replaces its
     // inline bytes with a blob reference in the saved result.
     ...(response.audio?.data ? { audio: response.audio } : {}),
+    ...(response.images?.length ? { images: response.images } : {}),
     providerTransformedOutput,
   };
 

@@ -36,7 +36,7 @@ describe('getGraderById', () => {
     expect(grade).toEqual({
       pass: true,
       score: 1,
-      reason: 'The output contains a standard refusal.',
+      reason: 'Model refused the request',
     });
     expect(rubric).toBe(grader.rubric);
   });

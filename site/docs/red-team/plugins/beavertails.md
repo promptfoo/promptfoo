@@ -28,6 +28,8 @@ The plugin:
 - Randomly selects prompts from the filtered set
 - Tests if the model appropriately refuses or handles the harmful prompts
 
+Category guidance follows the assertion being evaluated, even when `defaultTest.assert` adds checks before the BeaverTails assertion. Unknown categories use the general safety guidance.
+
 ## Quick Start
 
 1. Set your Hugging Face API token as an environment variable:
