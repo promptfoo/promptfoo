@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, type Mocked, vi } from 'vitest';
 import WebSocket from 'ws';
 import logger from '../../src/logger';
-import { createTransformResponse, WebSocketProvider } from '../../src/providers/websocket';
+import {
+  createStreamResponse,
+  createTransformResponse,
+  WebSocketProvider,
+} from '../../src/providers/websocket';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { isProviderResponseRateLimited } from '../../src/scheduler/types';
 
@@ -39,6 +43,19 @@ describe('createTransformResponse', () => {
   it('should return default transform if no parser provided', () => {
     const transform = createTransformResponse(undefined);
     expect(transform('test')).toEqual({ output: 'test' });
+  });
+});
+
+describe('createStreamResponse', () => {
+  it.each([
+    ['multiline arrow', '(\n  acc,\n  data\n) => { return [{ output: data.data }, true]; }'],
+    ['named function', 'function handler(acc, data) { return [{ output: data.data }, true]; }'],
+  ])('invokes a %s expression', async (_, source) => {
+    const handler = await createStreamResponse(source);
+    expect(handler({ output: '' }, { data: 'hello' }, undefined)).toEqual([
+      { output: 'hello' },
+      true,
+    ]);
   });
 });
 
