@@ -96,7 +96,7 @@ promptfoo eval --output results.csv
 
 - Test variables
 - Prompt used
-- Model outputs
+- Model outputs, with booleans written as `true` or `false` and numeric zero as `0`
 - Pass/fail status
 - Latency
 - Token usage

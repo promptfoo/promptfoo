@@ -275,7 +275,7 @@ function batchToStreamRows(
     testIdx: number;
     promptIdx: number;
     testCase?: { vars?: Record<string, unknown>; description?: string };
-    response?: { output?: string };
+    response?: { output?: unknown };
     success: boolean;
     score?: number;
     namedScores?: Record<string, number>;
@@ -300,8 +300,9 @@ function batchToStreamRows(
       };
       rowsByTestIdx.set(result.testIdx, row);
     }
+    const output = result.response?.output ?? '';
     row.outputs[result.promptIdx] = {
-      text: result.response?.output ?? '',
+      text: typeof output === 'object' ? JSON.stringify(output) : String(output),
       pass: result.success,
       score: result.score,
       namedScores: result.namedScores,
