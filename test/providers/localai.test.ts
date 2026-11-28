@@ -1,5 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LocalAiChatProvider, LocalAiCompletionProvider } from '../../src/providers/localai';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  LocalAiChatProvider,
+  LocalAiCompletionProvider,
+  LocalAiEmbeddingProvider,
+} from '../../src/providers/localai';
 
 const createChatResponseData = () => ({
   data: { choices: [{ message: { content: 'Test output' } }] },
@@ -11,11 +15,11 @@ vi.mock('../../src/cache', () => ({
 
 import { fetchWithCache } from '../../src/cache';
 
-describe('LocalAI temperature handling', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
+describe('LocalAI temperature handling', () => {
   it('should send temperature: 0 to the API when explicitly configured (chat)', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue(createChatResponseData() as any);
 
@@ -113,10 +117,6 @@ describe('LocalAI temperature handling', () => {
 });
 
 describe('LocalAI empty choices handling', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
   it('returns a clean malformed-response error on empty choices (chat)', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({ data: { choices: [] } } as any);
 
@@ -152,4 +152,36 @@ describe('LocalAI empty choices handling', () => {
 
     expect(result.error).toContain('Malformed response data');
   });
+});
+
+it.each([
+  {
+    endpoint: 'chat/completions',
+    call: () =>
+      new LocalAiChatProvider('test-model', {
+        config: { apiBaseUrl: 'http://localai.example/v1/' },
+      }).callApi('Test prompt'),
+    data: { choices: [{ message: { content: 'Test output' } }] },
+  },
+  {
+    endpoint: 'completions',
+    call: () =>
+      new LocalAiCompletionProvider('test-model', {
+        env: { LOCALAI_BASE_URL: 'http://localai.example/v1' },
+      }).callApi('Test prompt'),
+    data: { choices: [{ text: 'Test output' }] },
+  },
+  {
+    endpoint: 'embeddings',
+    call: () =>
+      new LocalAiEmbeddingProvider('test-model', {
+        env: { LOCALAI_BASE_URL: 'http://localai.example/v1///' },
+      }).callEmbeddingApi('Test'),
+    data: { data: [{ embedding: [0.1, 0.2] }] },
+  },
+])('requests $endpoint without a doubled slash', async ({ endpoint, call, data }) => {
+  vi.mocked(fetchWithCache).mockResolvedValue({ data } as any);
+  const result = await call();
+  expect(result.error).toBeUndefined();
+  expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(`http://localai.example/v1/${endpoint}`);
 });
