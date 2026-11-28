@@ -507,8 +507,6 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     options: { skipExecutableToolFiles?: boolean } = {},
   ): Promise<Tool[]> {
     await this.initializeMCP();
-    // Get MCP tools if client is available
-    const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
 
     // Get tools from prompt-level config first, fall back to provider config
     // This allows per-prompt tool overrides in test cases
@@ -516,10 +514,16 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     const configTools = promptConfig?.tools ?? this.config.tools;
     const normalizedTools = await loadGoogleTools(configTools, context?.vars, options);
 
-    // Combine all tools
-    const allTools = [...mcpTools, ...normalizedTools];
-
-    return allTools;
+    const mcpTools = this.mcpClient
+      ? transformMCPToolsToGoogle(
+          this.mcpClient.getAllTools(
+            normalizedTools.flatMap(
+              (tool) => tool.functionDeclarations?.map(({ name }) => name) ?? [],
+            ),
+          ),
+        )
+      : [];
+    return [...mcpTools, ...normalizedTools];
   }
 
   /**

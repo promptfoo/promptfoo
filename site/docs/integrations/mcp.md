@@ -150,6 +150,21 @@ providers:
 
 This configuration connects a single provider to multiple MCP servers, giving it access to memory storage, filesystem operations, and GitHub integration simultaneously.
 
+If two servers expose a tool with the same name (for example, both expose
+`search`), Promptfoo keeps the **first** server's name (`search`) for existing
+configurations. It exposes later tools as `mcp_2_search`, `mcp_3_search`, and so
+on, using each server's position in the configured `servers` list. Those aliases
+are used in the model-facing tool definitions and are automatically routed to
+the original tool name on the right server. Unique model-compatible tool names
+stay unchanged. MCP also permits dotted names (such as `admin.tools.list`) and
+names longer than 64 characters; those receive aliases for model APIs that do
+not accept them. Direct MCP calls can still use a unique original name.
+Aliases use safe ASCII characters and are at most 64 characters long; an alias
+that would conflict with another real tool name gets a numeric suffix. A server
+that advertises the same name twice is rejected because those definitions cannot
+be routed unambiguously. This only applies to tools managed by Promptfoo's local
+MCP client, not provider-hosted MCP tools such as the OpenAI Responses API.
+
 ## Using Multiple MCP Servers
 
 You can configure multiple MCP servers by assigning different MCP server configurations to different providers in your `promptfooconfig.yaml`. Each provider can have its own `mcp.server` block, allowing you to run separate memory/tool servers for different models or use cases.

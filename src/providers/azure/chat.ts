@@ -21,7 +21,7 @@ import {
 } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { McpClientSession } from '../mcp/session';
-import { transformMCPToolsToOpenAi } from '../mcp/transform';
+import { getConfiguredOpenAiToolName, transformMCPToolsToOpenAi } from '../mcp/transform';
 import {
   applyGpt6RequestRules,
   getGpt6ChatReasoningEffort,
@@ -275,12 +275,16 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       : undefined;
 
     // --- MCP tool injection logic ---
-    const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
     const loadedTools = config.tools
       ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
     // Transform tools to OpenAI format if needed
     const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
+    const mcpTools = this.mcpClient
+      ? transformMCPToolsToOpenAi(
+          this.mcpClient.getAllTools(fileTools.map(getConfiguredOpenAiToolName)),
+        )
+      : [];
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
 

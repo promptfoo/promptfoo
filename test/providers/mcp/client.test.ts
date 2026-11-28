@@ -429,6 +429,190 @@ describe('MCPClient', () => {
       expect(mockClient.close).toHaveBeenCalledTimes(2);
     });
 
+    it('exposes colliding tool names uniquely and sends each call to its original MCP name', async () => {
+      // Separate SDK instances: checking only the physical name would pass even if
+      // both model-facing aliases were incorrectly routed to the first server.
+      const firstClient = {
+        ...mockClient,
+        listTools: vi.fn().mockResolvedValue({
+          tools: [{ name: 'echo', description: 'A echo', inputSchema: {} }],
+        }),
+        callTool: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'A' }] }),
+      };
+      const secondClient = {
+        ...mockClient,
+        listTools: vi.fn().mockResolvedValue({
+          tools: [{ name: 'echo', description: 'B echo', inputSchema: {} }],
+        }),
+        callTool: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'B' }] }),
+      };
+      mcpMocks.MockClient.mockImplementationOnce(function FirstServerClient() {
+        return firstClient;
+      }).mockImplementationOnce(function SecondServerClient() {
+        return secondClient;
+      });
+      mcpClient = new MCPClient(createMultipleServerOptions());
+
+      await mcpClient.initialize();
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual(['echo', 'mcp_2_echo']);
+      const a = await mcpClient.callTool('echo', { source: 1 });
+      const b = await mcpClient.callTool('mcp_2_echo', { source: 2 });
+      expect(a.content).toContain('A');
+      expect(b.content).toContain('B');
+      expect(firstClient.callTool).toHaveBeenCalledExactlyOnceWith(
+        { name: 'echo', arguments: { source: 1 } },
+        undefined,
+        undefined,
+      );
+      expect(secondClient.callTool).toHaveBeenCalledExactlyOnceWith(
+        { name: 'echo', arguments: { source: 2 } },
+        undefined,
+        undefined,
+      );
+      await mcpClient.cleanup();
+    });
+
+    it('keeps truncated aliases bound to physical names when a server reorders tools', async () => {
+      // Long names share the same model-safe 64-character alias stem.
+      const firstName = `${'x'.repeat(58)}alpha`;
+      const secondName = `${'x'.repeat(58)}beta`;
+      const physicalNames = [firstName, secondName];
+      const results: Array<Record<string, string>> = [];
+
+      for (const reverse of [false, true]) {
+        const firstClient = {
+          ...mockClient,
+          listTools: vi.fn().mockResolvedValue({
+            tools: physicalNames.map((name) => ({ name, description: name, inputSchema: {} })),
+          }),
+          callTool: vi.fn(),
+        };
+        const secondClient = {
+          ...mockClient,
+          listTools: vi.fn().mockResolvedValue({
+            tools: (reverse ? [...physicalNames].reverse() : physicalNames).map((name) => ({
+              name,
+              description: name,
+              inputSchema: {},
+            })),
+          }),
+          callTool: vi.fn().mockResolvedValue({ content: [] }),
+        };
+        mcpMocks.MockClient.mockImplementationOnce(function FirstClient() {
+          return firstClient;
+        }).mockImplementationOnce(function SecondClient() {
+          return secondClient;
+        });
+        mcpClient = new MCPClient(createMultipleServerOptions());
+        await mcpClient.initialize();
+
+        const aliases = mcpClient.getAllTools().filter((tool) => tool.name.startsWith('mcp_2_'));
+        expect(aliases).toHaveLength(2);
+        const physicalToPublic: Record<string, string> = {};
+        for (const alias of aliases) {
+          await mcpClient.callTool(alias.name, {});
+          const call = secondClient.callTool.mock.lastCall?.[0] as { name: string };
+          physicalToPublic[call.name] = alias.name;
+        }
+        expect(secondClient.callTool).toHaveBeenCalledTimes(2);
+        results.push(physicalToPublic);
+        await mcpClient.cleanup();
+      }
+      expect(results[1]).toEqual(results[0]);
+    });
+
+    it('exposes OpenAI-safe names for spec-valid dotted and long MCP tools without misrouting calls', async () => {
+      const physicalNames = [
+        'admin.tools.list',
+        'admin_tools_list',
+        'admin/tools/list',
+        `long_${'x'.repeat(80)}`,
+      ];
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: physicalNames.map((name) => ({ name, description: name, inputSchema: {} })),
+      });
+      mockClient.callTool.mockResolvedValue({ content: [] });
+      mcpClient = new MCPClient(createMcpServerOptions());
+      await mcpClient.initialize();
+
+      const advertised = mcpClient.getAllTools().map((tool) => tool.name);
+      expect(advertised).toHaveLength(physicalNames.length);
+      expect(new Set(advertised).size).toBe(physicalNames.length);
+      expect(advertised).toContain('admin_tools_list');
+      for (const advertisedName of advertised) {
+        expect(advertisedName).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+      }
+      for (let i = 0; i < physicalNames.length; i++) {
+        await mcpClient.callTool(advertised[i], { caller: 'test' });
+        expect(mockClient.callTool).toHaveBeenNthCalledWith(
+          i + 1,
+          { name: physicalNames[i], arguments: { caller: 'test' } },
+          undefined,
+          undefined,
+        );
+      }
+      await mcpClient.callTool('admin.tools.list', { caller: 'legacy' });
+      expect(mockClient.callTool).toHaveBeenNthCalledWith(
+        physicalNames.length + 1,
+        { name: 'admin.tools.list', arguments: { caller: 'legacy' } },
+        undefined,
+        undefined,
+      );
+      await mcpClient.cleanup();
+    });
+
+    it('rejects ambiguous direct calls to duplicated physical names when only aliases distinguish them', async () => {
+      mockClient.listTools.mockResolvedValue({
+        tools: [{ name: 'admin.tools.list', description: 'Dotted MCP tool', inputSchema: {} }],
+      });
+      mcpClient = new MCPClient(createMultipleServerOptions());
+      await mcpClient.initialize();
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual([
+        'mcp_1_admin_tools_list',
+        'mcp_2_admin_tools_list',
+      ]);
+      await expect(mcpClient.callTool('admin.tools.list', {})).rejects.toThrow(/ambiguous/i);
+      await mcpClient.cleanup();
+    });
+
+    it('reserves existing tool names and keeps non-colliding tools unchanged', async () => {
+      mockClient.listTools
+        .mockResolvedValueOnce({
+          tools: [
+            { name: 'echo', description: 'A', inputSchema: {} },
+            { name: 'mcp_2_echo', description: 'already has alias-like name', inputSchema: {} },
+          ],
+        })
+        .mockResolvedValueOnce({
+          tools: [
+            { name: 'echo', description: 'B', inputSchema: {} },
+            { name: 'unique', description: 'B unique', inputSchema: {} },
+          ],
+        });
+      mcpClient = new MCPClient(createMultipleServerOptions());
+      await mcpClient.initialize();
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual([
+        'echo',
+        'mcp_2_echo',
+        'mcp_2_echo_2',
+        'unique',
+      ]);
+      await mcpClient.cleanup();
+    });
+
+    it('fails startup on duplicate names within the same MCP server', async () => {
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [
+          { name: 'same', description: 'A', inputSchema: {} },
+          { name: 'same', description: 'B', inputSchema: {} },
+        ],
+      });
+      mcpClient = new MCPClient(createMcpServerOptions());
+      await expect(mcpClient.initialize()).rejects.toThrow(/duplicate.*tool.*same/i);
+      expect(mcpClient.getAllTools()).toEqual([]);
+      await mcpClient.cleanup();
+    });
+
     it('does not overwrite an explicitly named server with a generated command key', async () => {
       mcpClient = new MCPClient({
         enabled: true,

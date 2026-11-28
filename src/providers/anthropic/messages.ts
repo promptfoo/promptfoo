@@ -917,11 +917,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const { system, extractedMessages, thinking } = parseMessages(prompt);
 
     // Get MCP tools if client is initialized
-    let mcpTools: Anthropic.Tool[] = [];
-    if (this.mcpClient) {
-      mcpTools = transformMCPToolsToAnthropic(this.mcpClient.getAllTools());
-    }
-
     // Load and process tools from config (handles both external files and inline tool definitions)
     const loadedTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
     // Transform tools to Anthropic format if needed
@@ -929,6 +924,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const { processedTools: processedConfigTools, requiredBetaFeatures } =
       processAnthropicTools(configTools);
 
+    const mcpTools = this.mcpClient
+      ? transformMCPToolsToAnthropic(
+          this.mcpClient.getAllTools(
+            processedConfigTools.map((tool) => ('name' in tool ? tool.name : undefined)),
+          ),
+        )
+      : [];
     // Combine all tools
     const allTools = [...mcpTools, ...processedConfigTools];
 
