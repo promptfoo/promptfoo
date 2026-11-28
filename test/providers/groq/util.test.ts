@@ -15,12 +15,18 @@ describe('Groq utility functions', () => {
     });
 
     it('should identify qwen models as reasoning', () => {
+      expect(isGroqReasoningModel('qwen/qwen3.8-27b')).toBe(true);
       expect(isGroqReasoningModel('qwen/qwen3.6-27b')).toBe(true);
       expect(isGroqReasoningModel('qwen-2.5')).toBe(true);
       expect(isGroqReasoningModel('deepseek-r1-distill-qwen-32b')).toBe(true);
     });
 
+    it('should identify Muse Spark Open as reasoning', () => {
+      expect(isGroqReasoningModel('meta-models/muse-spark-open')).toBe(true);
+    });
+
     it('should not identify regular models as reasoning', () => {
+      expect(isGroqReasoningModel('allam-2-7b')).toBe(false);
       expect(isGroqReasoningModel('llama-3.3-70b-versatile')).toBe(false);
       expect(isGroqReasoningModel('mixtral-8x7b-32768')).toBe(false);
       expect(isGroqReasoningModel('gemma2-9b-it')).toBe(false);
@@ -30,7 +36,8 @@ describe('Groq utility functions', () => {
   describe('groqSupportsTemperature', () => {
     it('should return true for groq reasoning models', () => {
       expect(groqSupportsTemperature('openai/gpt-oss-120b')).toBe(true);
-      expect(groqSupportsTemperature('qwen/qwen3.6-27b')).toBe(true);
+      expect(groqSupportsTemperature('qwen/qwen3.8-27b')).toBe(true);
+      expect(groqSupportsTemperature('meta-models/muse-spark-open')).toBe(true);
     });
 
     it('should return false for non-reasoning models', () => {

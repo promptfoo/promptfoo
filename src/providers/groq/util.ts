@@ -7,10 +7,10 @@ import type { GroqProviderOptions } from './types';
 const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
 
 /**
- * Groq reasoning models that support extended thinking capabilities.
- * These models include OpenAI GPT-OSS and current Qwen-based models.
+ * Groq reasoning models: OpenAI GPT-OSS, Qwen, and Meta's Muse Spark Open. Requests to these
+ * models use `max_completion_tokens` and forward `reasoning_effort`.
  */
-const GROQ_REASONING_MODEL_PATTERNS = ['gpt-oss', 'qwen'] as const;
+const GROQ_REASONING_MODEL_PATTERNS = ['gpt-oss', 'qwen', 'muse-spark'] as const;
 
 const GROQ_CHAT_SERVICE_TIERS = new Set(['auto', 'on_demand', 'flex', 'performance', null]);
 const GROQ_RESPONSES_SERVICE_TIERS = new Set(['auto', 'default', 'flex', null]);
@@ -38,7 +38,7 @@ export function assertGroqResponsesServiceTier(serviceTier: unknown): void {
 
 /**
  * Check if a model name corresponds to a Groq reasoning model.
- * Groq's reasoning models include GPT-OSS and current Qwen variants.
+ * Groq's reasoning models include GPT-OSS, Qwen, and Muse Spark Open variants.
  */
 export function isGroqReasoningModel(modelName: string): boolean {
   return GROQ_REASONING_MODEL_PATTERNS.some((pattern) => modelName.includes(pattern));

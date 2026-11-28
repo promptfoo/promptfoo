@@ -107,7 +107,12 @@ describe('GroqResponsesProvider', () => {
     });
 
     it('should identify qwen as reasoning model', () => {
-      const provider = new GroqResponsesProvider('qwen/qwen3.6-27b', {});
+      const provider = new GroqResponsesProvider('qwen/qwen3.8-27b', {});
+      expect(provider['isReasoningModel']()).toBe(true);
+    });
+
+    it('should identify Muse Spark Open as reasoning model', () => {
+      const provider = new GroqResponsesProvider('meta-models/muse-spark-open', {});
       expect(provider['isReasoningModel']()).toBe(true);
     });
 
@@ -124,7 +129,7 @@ describe('GroqResponsesProvider', () => {
     });
 
     it('should support temperature for qwen models', () => {
-      const provider = new GroqResponsesProvider('qwen/qwen3.6-27b', {});
+      const provider = new GroqResponsesProvider('qwen/qwen3.8-27b', {});
       expect(provider['supportsTemperature']()).toBe(true);
     });
   });
@@ -193,6 +198,19 @@ describe('GroqResponsesProvider', () => {
       expect(body.reasoning).toEqual({ effort: 'medium' });
       expect(body.temperature).toBe(0.7);
       expect(body.max_output_tokens).toBeUndefined();
+    });
+
+    it.each([
+      ['qwen/qwen3.8-27b', 'low'],
+      ['meta-models/muse-spark-open', 'xhigh'],
+    ] as const)('forwards reasoning effort for %s', async (model, effort) => {
+      const provider = new GroqResponsesProvider(model, {
+        config: { reasoning_effort: effort, max_output_tokens: 1500 },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body).toMatchObject({ model, reasoning: { effort }, max_output_tokens: 1500 });
     });
 
     it('preserves temperature for Groq reasoning models', async () => {

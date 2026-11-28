@@ -219,6 +219,9 @@ describe('GroqProvider', () => {
     describe.each([
       { model: 'qwen/qwen3.6-27b', reasoningEffort: 'none', reasoning: true },
       { model: 'openai/gpt-oss-120b', reasoningEffort: 'high', reasoning: true },
+      { model: 'qwen/qwen3.8-27b', reasoningEffort: 'low', reasoning: true },
+      { model: 'meta-models/muse-spark-open', reasoningEffort: 'xhigh', reasoning: true },
+      { model: 'allam-2-7b', reasoningEffort: 'low', reasoning: false },
       { model: 'llama-3.3-70b-versatile', reasoningEffort: 'high', reasoning: false },
     ] as const)('effective model $model', ({ model, reasoningEffort, reasoning }) => {
       it.each(['direct', 'provider passthrough', 'prompt passthrough', 'unchanged passthrough'])(
