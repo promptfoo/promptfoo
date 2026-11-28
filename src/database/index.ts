@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
-import { getEnvBool } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
 import { sleep } from '../util/time';
@@ -152,6 +152,31 @@ export function getDbPath() {
 
 export function getDbSignalPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'evalLastWritten');
+}
+
+export interface DatabaseCredentials {
+  url: string;
+  authToken?: string;
+  isRemote: boolean;
+}
+
+/**
+ * Resolve the libSQL connection details. A hosted Turso/libSQL database is used
+ * when TURSO_CONNECTION_URL is set; otherwise the local promptfoo.db is used.
+ * Tests always use the shared in-memory database, even when a remote URL is set.
+ */
+export function getDatabaseCredentials(isTesting: boolean): DatabaseCredentials {
+  if (isTesting) {
+    return { url: 'file::memory:?cache=shared', isRemote: false };
+  }
+
+  const remoteUrl = getEnvString('TURSO_CONNECTION_URL');
+  if (remoteUrl) {
+    const authToken = getEnvString('TURSO_AUTH_TOKEN');
+    return { url: remoteUrl, ...(authToken ? { authToken } : {}), isRemote: true };
+  }
+
+  return { url: pathToFileURL(getDbPath()).href, isRemote: false };
 }
 
 async function configureConnection(
@@ -390,17 +415,26 @@ export async function getDb() {
       ]);
       const isTesting = getEnvBool('IS_TESTING');
       // Keep one shared schema across test clients from separate module graphs.
-      const dbUrl = isTesting ? 'file::memory:?cache=shared' : pathToFileURL(getDbPath()).href;
+      const { url: dbUrl, authToken, isRemote } = getDatabaseCredentials(isTesting);
       // Operations are already serialized. Reuse the configured connection so
       // every statement and transaction retains its connection-local PRAGMAs.
-      const client = createClient({ url: dbUrl, concurrency: 1 });
+      const client = createClient({
+        url: dbUrl,
+        ...(authToken ? { authToken } : {}),
+        concurrency: 1,
+      });
       sqliteInstance = client;
       sqliteInstanceIsTesting = isTesting;
       if (isTesting) {
         await registerTestDatabaseClient(client);
       }
 
-      await configureConnection(client.execute.bind(client), 5000, isTesting ? 'skip' : 'enable');
+      // WAL pragmas are local-file settings and fail on hosted databases.
+      await configureConnection(
+        client.execute.bind(client),
+        5000,
+        isTesting || isRemote ? 'skip' : 'enable',
+      );
 
       const drizzleLogger = new DefaultLogger({ writer: new DrizzleLogWriter() });
       dbInstance = serializeTopLevelOperations(client, drizzle(client, { logger: drizzleLogger }), {

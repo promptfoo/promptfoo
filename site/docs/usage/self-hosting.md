@@ -399,6 +399,22 @@ docker run -d --name promptfoo_container -p 3000:3000 \
   ghcr.io/promptfoo/promptfoo:latest
 ```
 
+### Hosted libSQL/Turso Database
+
+By default, promptfoo stores eval data in a local SQLite file. To use a hosted [Turso](https://turso.tech/) (libSQL) database instead, set:
+
+- `TURSO_CONNECTION_URL`: the `libsql://...` URL of your database
+- `TURSO_AUTH_TOKEN`: the auth token for that database (optional for unauthenticated URLs)
+
+Both the running application and Drizzle migrations (`npm run db:migrate`, `npm run db:generate`) use these values. When `TURSO_CONNECTION_URL` is unset, promptfoo keeps using the local `promptfoo.db` described above. Keep the token out of your config file and supply it through your container's secret management:
+
+```bash
+docker run -d --name promptfoo_container -p 3000:3000 \
+  -e TURSO_CONNECTION_URL=libsql://your-db.turso.io \
+  -e TURSO_AUTH_TOKEN=your-token \
+  ghcr.io/promptfoo/promptfoo:latest
+```
+
 ### Provider Customization
 
 Customize which LLM providers appear in the eval creator UI for cost control, compliance, or routing through internal gateways.

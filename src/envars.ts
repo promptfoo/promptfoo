@@ -163,6 +163,14 @@ type EnvVars = {
   PROMPTFOO_JKS_ALIAS?: string;
 
   //=========================================================================
+  // Database configuration
+  //=========================================================================
+  /** libSQL/Turso URL for the shared eval database. Falls back to the local promptfoo.db. */
+  TURSO_CONNECTION_URL?: string;
+  /** Auth token used together with TURSO_CONNECTION_URL. */
+  TURSO_AUTH_TOKEN?: string;
+
+  //=========================================================================
   // Server security
   //=========================================================================
   /**
