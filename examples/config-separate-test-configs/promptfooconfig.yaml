@@ -35,4 +35,4 @@ tests:
       content_type: Youtube intro
     assert:
       - type: javascript
-        value: file://asserts/assert.js
+        value: file://asserts/assert.mjs
