@@ -105,7 +105,11 @@ vi.mock('fs/promises', () => {
     // Delegate to fs.readFileSync mock for shared test data
     readFile: vi.fn((...args: unknown[]) => {
       try {
-        return Promise.resolve(mockReadFileSync(...args));
+        const content = mockReadFileSync(...args);
+        // Like fs/promises, resolve to a Buffer when no encoding is given
+        return Promise.resolve(
+          args[1] === undefined && typeof content === 'string' ? Buffer.from(content) : content,
+        );
       } catch (error) {
         return Promise.reject(error);
       }
@@ -214,7 +218,7 @@ describe('readStandaloneTestsFile', () => {
     );
     const result = await readStandaloneTestsFile('test.csv');
 
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'), 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'));
     expect(result).toEqual([
       {
         assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
@@ -249,7 +253,7 @@ describe('readStandaloneTestsFile', () => {
     );
     const result = await readStandaloneTestsFile('test.csv');
 
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'), 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'));
     expect(result).toEqual([
       {
         assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
@@ -264,6 +268,44 @@ describe('readStandaloneTestsFile', () => {
         vars: { var1: 'value3', var2: 'value4' },
       },
     ]);
+  });
+
+  it('should reject a CSV file that is not valid UTF-8', async () => {
+    // "Is café open?" in cp1252, which Excel's "CSV (Comma delimited)" uses on Western-European Windows
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      Buffer.concat([
+        Buffer.from('question,__expected\nIs caf'),
+        Buffer.from([0xe9]),
+        Buffer.from(' open?,contains:caf'),
+        Buffer.from([0xe9]),
+      ]),
+    );
+
+    await expect(readStandaloneTestsFile('test.csv')).rejects.toThrow(
+      /test\.csv is not valid UTF-8/,
+    );
+  });
+
+  it('should read non-ASCII text from a UTF-8 CSV file', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      Buffer.from('question,__expected\n대한민국의 수도는?,contains:서울'),
+    );
+
+    const result = await readStandaloneTestsFile('test.csv');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].vars).toEqual({ question: '대한민국의 수도는?' });
+    expect(result[0].assert).toEqual([{ metric: undefined, type: 'contains', value: '서울' }]);
+  });
+
+  it('should strip the BOM from a UTF-8 CSV file read as bytes', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('question\n수도는?')]),
+    );
+
+    const result = await readStandaloneTestsFile('test.csv');
+
+    expect(result[0].vars).toEqual({ question: '수도는?' });
   });
 
   it('should read JSON file and return test cases', async () => {
@@ -630,7 +672,7 @@ not valid json`,
     vi.mocked(fs.readFileSync).mockReturnValue('var1,var2\nvalue1,value2');
     await readStandaloneTestsFile('file://test.csv');
 
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.not.stringContaining('file://'), 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.not.stringContaining('file://'));
   });
 
   it('should return an empty array for unsupported file types', async () => {
@@ -646,7 +688,7 @@ not valid json`,
     const result = await readStandaloneTestsFile('test.csv');
 
     expect(getEnvString).toHaveBeenCalledWith('PROMPTFOO_CSV_DELIMITER', ',');
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'), 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'));
     expect(result).toEqual([
       {
         assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
@@ -672,7 +714,7 @@ not valid json`,
     const result = await readStandaloneTestsFile('test.csv');
 
     expect(getEnvString).toHaveBeenCalledWith('PROMPTFOO_CSV_DELIMITER', ',');
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'), 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'));
     expect(result).toEqual([
       {
         assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
