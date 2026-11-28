@@ -7,7 +7,6 @@ import {
   HYPERBOLIC_REASONING_MODELS,
   HyperbolicProvider,
 } from '../../../src/providers/hyperbolic/chat';
-import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/cache')>()),
@@ -42,6 +41,108 @@ describe('HyperbolicProvider', () => {
     expect(provider.toString()).toBe(`[Hyperbolic Provider ${modelName}]`);
   });
 
+  it.each(['flat', 'nested'] as const)(
+    'uses %s credentials, endpoint, request settings, and cost overrides',
+    async (shape) => {
+      const config = {
+        apiKey: 'configured-test-key',
+        apiBaseUrl: 'http://localhost:1234/v1',
+        temperature: 0.25,
+        inputCost: 0.001,
+        outputCost: 0.003,
+      };
+      provider = new HyperbolicProvider(modelName, {
+        config: shape === 'nested' ? { config } : config,
+        env: { HYPERBOLIC_API_KEY: 'env-test-key' },
+      });
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('answer');
+      expect(result.cost).toBeCloseTo(0.07);
+      const [url, request] = mockFetchWithCache.mock.calls[0];
+      expect(url).toBe('http://localhost:1234/v1/chat/completions');
+      expect(request?.headers).toMatchObject({ Authorization: 'Bearer configured-test-key' });
+      expect(JSON.parse(request?.body as string)).toMatchObject({ temperature: 0.25 });
+    },
+  );
+
+  it.each([
+    { shape: 'flat', config: { apiBaseUrl: '' } },
+    { shape: 'nested', config: { config: { apiBaseUrl: '' } } },
+    { shape: 'both', config: { apiBaseUrl: '', config: { apiBaseUrl: '' } } },
+  ])('keeps the Hyperbolic endpoint for an empty $shape URL', async ({ config }) => {
+    provider = new HyperbolicProvider(modelName, {
+      config: { ...config, apiKey: 'hyperbolic-test-key' },
+      env: { OPENAI_API_BASE_URL: 'https://unrelated-openai.invalid/v1' },
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        choices: [{ message: { content: 'answer' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    expect((await provider.callApi('test prompt')).error).toBeUndefined();
+    const [url, request] = mockFetchWithCache.mock.calls[0];
+    expect(url).toBe('https://api.hyperbolic.xyz/v1/chat/completions');
+    expect(request?.headers).toMatchObject({ Authorization: 'Bearer hyperbolic-test-key' });
+  });
+
+  it('uses the flat endpoint when the nested URL is empty', () => {
+    provider = new HyperbolicProvider(modelName, {
+      config: {
+        apiBaseUrl: 'http://localhost:1234/v1',
+        config: { apiBaseUrl: '' },
+      },
+    });
+
+    expect(provider.getApiUrl()).toBe('http://localhost:1234/v1');
+  });
+
+  it.each([
+    { apiBaseUrl: 'https://gateway.example/v1', config: { apiKey: 'private-key' } },
+    { apiKey: 'private-key', config: { apiHost: 'gateway.example' } },
+    { apiHost: 'gateway.example', config: { headers: { Authorization: 'private-key' } } },
+  ])('rejects credentials split across endpoint layers (%#)', (config) => {
+    expect(() => new HyperbolicProvider(modelName, { config })).toThrow('same config layer');
+  });
+
+  it('prefers nested settings over flat settings', () => {
+    provider = new HyperbolicProvider(modelName, {
+      config: {
+        apiKey: 'flat-test-key',
+        apiHost: 'other-gateway.example',
+        apiBaseUrl: 'http://localhost:1234/v1',
+        temperature: 0.5,
+        config: {
+          apiKey: 'nested-test-key',
+          apiBaseUrl: 'http://localhost:5678/v1',
+          temperature: 0,
+        },
+      },
+    });
+
+    expect(provider.getApiKey()).toBe('nested-test-key');
+    expect(provider.getApiUrl()).toBe('http://localhost:5678/v1');
+    expect(provider.config.temperature).toBe(0);
+  });
+
   it('should convert to JSON correctly', () => {
     const json = provider.toJSON();
     expect(json).toEqual({
@@ -50,7 +151,7 @@ describe('HyperbolicProvider', () => {
       config: {
         apiKeyEnvar: 'HYPERBOLIC_API_KEY',
         apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
-        config: expect.any(Object),
+        useDefaultApiKey: false,
       },
     });
   });
@@ -100,31 +201,43 @@ describe('HyperbolicProvider', () => {
     expect(result.cost).toBe((0.5 / 1e6) * 200 + (2.18 / 1e6) * 150);
   });
 
-  it('should handle error response', async () => {
-    const mockResponse = { error: 'API error' };
-    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
-
-    const result = await provider.callApi('test prompt');
-    expect(result.error).toBe('API error');
-  });
-
-  it('should calculate cost for non-cached response', async () => {
-    const mockResponse = {
-      tokenUsage: {
-        prompt: 1000,
-        completion: 500,
-      },
-      cached: false,
-    };
-
-    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
-
-    const result = await provider.callApi('test prompt');
-    expect(result.cost).toBe((0.5 / 1e6) * 1000 + (2.18 / 1e6) * 500);
-  });
+  it.each([{ total_tokens: 1 }, { prompt_tokens: 1 }, { completion_tokens: 1 }])(
+    'keeps cost unknown if either raw usage component is missing (%j)',
+    async (usage) => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: { choices: [{ message: { content: 'answer' }, finish_reason: 'stop' }], usage },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toBe('answer');
+      expect(result.cost).toBeUndefined();
+    },
+  );
 });
 
 describe('calculateHyperbolicCost', () => {
+  it.each([
+    { prompt: 1000, completion: 0, cost: 0.0005 },
+    { prompt: 0, completion: 500, cost: 0.00109 },
+    { prompt: 0, completion: 0, cost: 0 },
+  ])('bills zero-valued token categories (%j)', ({ prompt, completion, cost }) => {
+    expect(calculateHyperbolicCost('deepseek-ai/DeepSeek-R1', {}, prompt, completion)).toBeCloseTo(
+      cost,
+      10,
+    );
+  });
+
+  it.each([undefined, -1, Number.NaN, Infinity, -Infinity])(
+    'rejects missing or invalid token counts (%s)',
+    (tokens) => {
+      expect(calculateHyperbolicCost('deepseek-ai/DeepSeek-R1', {}, tokens, 500)).toBeUndefined();
+      expect(calculateHyperbolicCost('deepseek-ai/DeepSeek-R1', {}, 1000, tokens)).toBeUndefined();
+    },
+  );
+
   it('should calculate cost correctly for known model', () => {
     const cost = calculateHyperbolicCost('deepseek-ai/DeepSeek-R1', {}, 1000, 500);
     expect(cost).toBe((0.5 / 1e6) * 1000 + (2.18 / 1e6) * 500);

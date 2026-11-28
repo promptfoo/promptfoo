@@ -229,6 +229,24 @@ describe('renderEnvOnlyInObject', () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
   });
 
+  it('renders callback paths without evaluating functions or inherited getters', () => {
+    const callback = vi.fn();
+    const inherited = vi.fn();
+    const prototype = Object.defineProperty({}, 'inherited', { enumerable: true, get: inherited });
+    const input = {
+      functionToolCallbacks: Object.assign(Object.create(prototype), {
+        path: 'file://{{ env.TEST_ENV_VAR }}/{{ name }}.js',
+        callback,
+      }),
+    };
+    const rendered = renderEnvOnlyInObject(input, { TEST_ENV_VAR: 'tools' });
+    expect(renderVarsInObject(rendered, { name: 'lookup' })).toEqual({
+      functionToolCallbacks: { path: 'file://tools/lookup.js', callback },
+    });
+    expect(callback).not.toHaveBeenCalled();
+    expect(inherited).not.toHaveBeenCalled();
+  });
+
   describe('Basic rendering', () => {
     it('should render simple dot notation env vars', async () => {
       mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
