@@ -381,7 +381,10 @@ export function tableRowToCsvValues(
   const rowValues: (string | number | boolean)[] = [
     ...(options.hasDescriptions ? [row.test.description || ''] : []),
     ...row.vars,
-    ...row.outputs.flatMap((output, outputIndex) => {
+    ...Array.from(
+      { length: Math.max(options.namedScoreNamesByPrompt?.length ?? 0, row.outputs.length) },
+      (_, index) => row.outputs[index],
+    ).flatMap((output, outputIndex) => {
       const namedScoreNames = options.namedScoreNamesByPrompt?.[outputIndex] || [];
       if (!output) {
         return ['', '', '', '', ...namedScoreNames.map(() => ''), '', ''];
@@ -409,7 +412,7 @@ export function tableRowToCsvValues(
   // Add redteam metadata once per row (using first output's metadata)
   if (options.isRedteam) {
     const redteamKeys = Object.keys(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
-    const firstOutputMetadata = row.outputs[0]?.metadata;
+    const firstOutputMetadata = row.outputs.find(Boolean)?.metadata;
     for (const key of redteamKeys) {
       let value = firstOutputMetadata?.[key];
       if (key === 'strategyId' && (value === null || value === undefined)) {
@@ -631,15 +634,16 @@ export function mergeComparisonTables(
     },
     body: mainTable.body.map((row) => {
       const testIdx = row.testIdx;
-      // Find matching rows in comparison tables by test index
-      const matchingRows = comparisonData
-        .map(({ table }) => table.body.find((compRow) => compRow.testIdx === testIdx))
-        .filter((r): r is EvaluateTableRow => r !== undefined);
-
-      return {
-        ...row,
-        outputs: [...row.outputs, ...matchingRows.flatMap((r) => r.outputs)],
-      };
+      const outputs = mainTable.head.prompts.map((_, index) => row.outputs[index]);
+      for (const { table } of comparisonData) {
+        const match = table.body.find((other) => other.testIdx === testIdx);
+        const offset = outputs.length;
+        outputs.length += table.head.prompts.length;
+        match?.outputs.forEach((cell, index) => {
+          outputs[offset + index] = cell;
+        });
+      }
+      return { ...row, outputs };
     }),
   };
 }

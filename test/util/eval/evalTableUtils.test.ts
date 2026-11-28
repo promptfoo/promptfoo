@@ -8,6 +8,7 @@ import {
   generateEvalCsv,
   getEvalTableOutputPromptLocationsBySize,
   getEvalTablePromptStrippedPayload,
+  mergeComparisonTables,
   STRIPPED_TABLE_CELL_PROMPT,
   streamEvalCsv,
 } from '../../../src/util/eval/evalTableUtils';
@@ -104,6 +105,19 @@ describe('evalTableUtils', () => {
         },
       ],
     };
+  });
+
+  it('keeps later comparison cells aligned when a comparison has no matching test', () => {
+    const [row] = mockTable.body;
+    const merged = mergeComparisonTables('main', mockTable, [
+      { evalId: 'missing', table: { ...mockTable, body: [] } },
+      { evalId: 'present', table: mockTable },
+    ]);
+
+    expect(merged.body[0].outputs).toHaveLength(6);
+    expect(merged.body[0].outputs[2]).toBeUndefined();
+    expect(merged.body[0].outputs[3]).toBeUndefined();
+    expect(merged.body[0].outputs.slice(4)).toEqual(row.outputs);
   });
 
   describe('evalTableToCsv', () => {

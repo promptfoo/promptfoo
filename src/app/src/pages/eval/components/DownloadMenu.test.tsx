@@ -273,6 +273,24 @@ describe('DownloadMenu', () => {
     ]);
   });
 
+  it('uses the first surviving result when exporting a row with a deleted cell', async () => {
+    const row = createPassingTableRow();
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: { ...mockTable, body: [{ ...row, outputs: [null, ...row.outputs] }] },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('Human Eval YAML'));
+    expect(yaml.load(await readDownloadedBlob())).toEqual([
+      {
+        vars: { testVar: 'value2', output: 'passed output' },
+        assert: [{ type: 'javascript', value: 'JSON.parse(output).pass' }],
+      },
+    ]);
+  });
+
   it('handles malformed output structures in DPO JSON export without crashing', async () => {
     vi.mocked(useResultsViewStore).mockReturnValue({
       table: {
