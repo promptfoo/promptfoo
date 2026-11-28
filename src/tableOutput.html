@@ -259,6 +259,14 @@
         border-right: 0;
       }
 
+      /* Error payloads live in the interactive detail drawer; this duplicate copy in the
+         cell is print/PDF-only so exported reports keep the information. The element also
+         carries `.output-section` (display: grid), declared later at equal specificity, so
+         this rule must match both classes to win on screen. */
+      .output-section.output-error-print {
+        display: none;
+      }
+
       tbody tr:nth-child(even) {
         background: #fbfcff;
       }
@@ -640,6 +648,42 @@
           grid-template-columns: 1fr;
         }
       }
+
+      /* Keep this print block last in the stylesheet: the overrides rely on source order
+         to win over the base rules at equal specificity. */
+      @media print {
+        .table-shell {
+          max-height: none;
+          overflow: visible;
+        }
+
+        .toolbar,
+        .detail-button {
+          display: none;
+        }
+
+        .output-section.output-error-print {
+          display: block;
+        }
+
+        table {
+          min-width: 0;
+          /* Auto layout still honours min-content width, so wide tables overflow the
+             page box and Chromium clips the trailing columns out of the PDF. Fixed
+             layout distributes columns evenly so every prompt fits on the page. */
+          table-layout: fixed;
+        }
+
+        thead {
+          position: static;
+        }
+
+        th,
+        td {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+      }
     </style>
   </head>
   <body>
@@ -767,6 +811,11 @@
                     <div class="output-section">
                       <span class="output-section-label">Reason</span>
                       <p class="output-reason">{{ cell.reason | escape }}</p>
+                    </div>
+                    {% endif %} {% if cell.error %}
+                    <div class="output-section output-error-print">
+                      <span class="output-section-label">Error</span>
+                      <p class="output-reason">{{ cell.error | escape }}</p>
                     </div>
                     {% endif %}
                     <div>
