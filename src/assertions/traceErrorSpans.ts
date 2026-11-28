@@ -1,3 +1,4 @@
+import { traceErrorSpansConfigError } from '../contracts/validators/traceAssertionConfig';
 import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -9,6 +10,47 @@ interface TraceErrorSpansValue {
   max_percentage?: number;
   pattern?: string;
   attributes?: TraceSpanAttributeFilter;
+  requirePresence?: boolean;
+}
+
+interface ResolvedTraceErrorSpansValue {
+  maxCount?: number;
+  maxPercentage?: number;
+  pattern: string;
+  requirePresence: boolean;
+  attributes?: TraceSpanAttributeFilter;
+}
+
+function resolveTraceErrorSpansValue(value: unknown): ResolvedTraceErrorSpansValue {
+  const configError = traceErrorSpansConfigError(value);
+  if (configError) {
+    throw new Error(configError);
+  }
+
+  let maxCount: number | undefined;
+  let maxPercentage: number | undefined;
+  let pattern = '*';
+  let requirePresence = false;
+  let attributes: TraceSpanAttributeFilter | undefined;
+
+  if (typeof value === 'number') {
+    maxCount = value;
+  } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const objValue = value as TraceErrorSpansValue;
+    attributes = objValue.attributes;
+    maxCount = objValue.max_count;
+    maxPercentage = objValue.max_percentage;
+    if (objValue.pattern !== undefined) {
+      pattern = objValue.pattern;
+    }
+    requirePresence = objValue.requirePresence === true;
+  }
+
+  if (maxCount === undefined && maxPercentage === undefined) {
+    maxCount = 0;
+  }
+
+  return { maxCount, maxPercentage, pattern, requirePresence, attributes };
 }
 
 function isErrorSpan(span: TraceSpan): boolean {
@@ -67,31 +109,15 @@ function isErrorSpan(span: TraceSpan): boolean {
 export const handleTraceErrorSpans = ({
   assertion,
   assertionValueContext,
+  inverse,
+  renderedValue,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-error-spans assertion');
   }
 
-  const value = assertion.value;
-  let maxCount: number | undefined;
-  let maxPercentage: number | undefined;
-  let pattern = '*';
-  let attributes: TraceSpanAttributeFilter | undefined;
-
-  // Handle simple number value for backwards compatibility
-  if (typeof value === 'number') {
-    maxCount = value;
-  } else if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const objValue = value as TraceErrorSpansValue;
-    maxCount = objValue.max_count;
-    maxPercentage = objValue.max_percentage;
-    pattern = objValue.pattern || '*';
-    attributes = objValue.attributes;
-  }
-
-  if (maxCount === undefined && maxPercentage === undefined) {
-    maxCount = 0; // Default to no errors allowed
-  }
+  const { maxCount, maxPercentage, pattern, requirePresence, attributes } =
+    resolveTraceErrorSpansValue(renderedValue ?? assertion.value);
 
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
@@ -99,13 +125,16 @@ export const handleTraceErrorSpans = ({
   const matchingSpans = filterTraceSpans(spans, pattern, attributes);
 
   if (matchingSpans.length === 0) {
+    const pass = !inverse && !requirePresence;
+    const reason = inverse
+      ? requirePresence
+        ? `not-trace-error-spans: no spans matched pattern "${pattern}" while requirePresence is true`
+        : `not-trace-error-spans: no spans matched pattern "${pattern}", so the error budget was satisfied`
+      : `No spans found matching pattern "${pattern}"${requirePresence ? ' (requirePresence: true)' : ''}`;
     return {
-      pass: true,
-      score: 1,
-      reason: withTraceAttributeFilterContext(
-        `No spans found matching pattern "${pattern}"`,
-        attributes,
-      ),
+      pass,
+      score: pass ? 1 : 0,
+      reason: withTraceAttributeFilterContext(reason, attributes),
       assertion,
     };
   }
@@ -115,11 +144,11 @@ export const handleTraceErrorSpans = ({
   const errorCount = errorSpans.length;
   const errorPercentage = (errorCount / matchingSpans.length) * 100;
 
-  let pass = true;
+  let basePass = true;
   let reason = '';
 
   if (maxCount !== undefined && errorCount > maxCount) {
-    pass = false;
+    basePass = false;
     const errorDetails = errorSpans.slice(0, 3).map((span) => {
       let detail = span.name;
       if (span.statusMessage) {
@@ -136,7 +165,7 @@ export const handleTraceErrorSpans = ({
       reason += ` and ${errorSpans.length - 3} more`;
     }
   } else if (maxPercentage !== undefined && errorPercentage > maxPercentage) {
-    pass = false;
+    basePass = false;
     reason = `Error rate ${errorPercentage.toFixed(1)}% exceeds threshold ${maxPercentage}% `;
     reason += `(${errorCount} errors out of ${matchingSpans.length} spans)`;
   } else if (errorCount === 0) {
@@ -149,6 +178,13 @@ export const handleTraceErrorSpans = ({
     if (maxPercentage !== undefined) {
       reason += `, within threshold of ${maxPercentage}%`;
     }
+  }
+
+  const pass = inverse ? !basePass : basePass;
+  if (inverse) {
+    reason = basePass
+      ? `not-trace-error-spans: error budget was satisfied for pattern "${pattern}" (${errorCount} errors), which violates the inverse assertion`
+      : `not-trace-error-spans: error budget was not satisfied for pattern "${pattern}" (${errorCount} errors), which is the expected outcome for the inverse assertion`;
   }
 
   return {

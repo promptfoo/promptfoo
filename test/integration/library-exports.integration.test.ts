@@ -14,6 +14,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -144,6 +145,27 @@ describeIfBuildExists('Library Exports', () => {
     });
   });
 
+  it.each(['esm', 'cjs'])(
+    'exports trace assertion validators through %s contracts',
+    async (format) => {
+      const contractsModule =
+        format === 'esm'
+          ? await import(pathToFileURL(path.join(distDir, 'contracts.js')).href)
+          : require(path.join(distDir, 'contracts.cjs'));
+
+      expect(contractsModule.traceSpanCountBoundsError({ min: 0, max: 0 })).toBeUndefined();
+      expect(contractsModule.traceSpanCountBoundsError({ min: 2, max: 1 })).toContain(
+        'greater than or equal to min',
+      );
+      expect(contractsModule.traceSpanDurationConfigError({ max: 0 })).toBeUndefined();
+      expect(contractsModule.traceSpanDurationConfigError({ max: -1 })).toContain('non-negative');
+      expect(contractsModule.traceErrorSpansConfigError({ max_count: 0 })).toBeUndefined();
+      expect(contractsModule.traceErrorSpansConfigError({ max_percentage: 101 })).toContain(
+        'between 0 and 100',
+      );
+    },
+  );
+
   describe('CJS contracts import', () => {
     it('should export portable contract schemas', () => {
       const contractsModule = require(path.join(distDir, 'contracts.cjs'));
@@ -172,7 +194,7 @@ describeIfBuildExists('Library Exports', () => {
 
   describe('ESM library import', () => {
     it('should be importable via dynamic import', async () => {
-      const esmPath = `file://${path.join(distDir, 'index.js')}`;
+      const esmPath = pathToFileURL(path.join(distDir, 'index.js')).href;
       const esmModule = await import(esmPath);
 
       // Check for Zod schemas (common exports)
@@ -181,7 +203,7 @@ describeIfBuildExists('Library Exports', () => {
     });
 
     it('should export the same keys in ESM and CJS', async () => {
-      const esmPath = `file://${path.join(distDir, 'index.js')}`;
+      const esmPath = pathToFileURL(path.join(distDir, 'index.js')).href;
       const cjsPath = path.join(distDir, 'index.cjs');
 
       const esmModule = await import(esmPath);
@@ -208,7 +230,7 @@ describeIfBuildExists('Library Exports', () => {
 
   describe('ESM contracts import', () => {
     it('should export portable contract schemas', async () => {
-      const contractsModule = await import(`file://${path.join(distDir, 'contracts.js')}`);
+      const contractsModule = await import(pathToFileURL(path.join(distDir, 'contracts.js')).href);
       expect(contractsModule.EmailSchema).toBeDefined();
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();

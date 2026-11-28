@@ -1,6 +1,9 @@
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import yaml from 'yaml';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -135,6 +138,64 @@ describe('trace assertions', () => {
       },
     ],
   };
+
+  describe.each(['json', 'yaml'])('external %s assertion configs', (extension) => {
+    const filters = { pattern: '{{ operation }}', attributes: { 'http.method': '{{method}}' } };
+    it.each([
+      ['trace-error-spans', { ...filters, requirePresence: true, max_count: 1 }],
+      ['trace-span-count', { ...filters, min: 1, max: 1 }],
+      ['trace-span-duration', { ...filters, requirePresence: true, max: 500 }],
+    ] as const)('loads structured %s values', async (type, value) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-trace-assertions-'));
+      mockTraceStore.getTrace.mockResolvedValue({
+        ...mockTraceData,
+        spans: [{ ...mockTraceData.spans[0], statusCode: 500 }],
+      });
+      try {
+        const filename = path.join(directory, `${type}.${extension}`);
+        fs.writeFileSync(
+          filename,
+          extension === 'json' ? JSON.stringify(value) : yaml.stringify(value),
+        );
+        const result = await runAssertion({
+          assertion: { type, value: `file://${filename}` },
+          test: { ...mockTest, vars: { operation: 'http.*', method: 'GET' } },
+          providerResponse: mockProviderResponse,
+          traceId: mockTraceData.traceId,
+        });
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it('rejects a string budget instead of silently using zero', async () => {
+    mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+    await expect(
+      runAssertion({
+        assertion: { type: 'not-trace-error-spans', value: '{{budget}}' },
+        test: { vars: { budget: 2 } },
+        providerResponse: mockProviderResponse,
+        traceId: mockTraceData.traceId,
+      }),
+    ).rejects.toThrow('requires a number');
+  });
+
+  it('reports the nonzero duration that exceeded the threshold', async () => {
+    mockTraceStore.getTrace.mockResolvedValue({
+      ...mockTraceData,
+      spans: [{ name: 'lookup', spanId: '1', startTime: 0, endTime: 0.001 }],
+    });
+    const result = await runAssertion({
+      assertion: { type: 'trace-span-duration', value: { max: 0, percentile: 99 } },
+      test: mockTest,
+      providerResponse: mockProviderResponse,
+      traceId: mockTraceData.traceId,
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('0.001ms');
+  });
 
   describe('deterministic assertions with span attribute filters', () => {
     it.each<{ assertion: Assertion; pass: boolean }>([
