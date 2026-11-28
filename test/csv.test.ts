@@ -496,6 +496,19 @@ describe('assertionFromString', () => {
     expect(result.value).toBe(expected);
   });
 
+  it.each([
+    ['levenshtein(1e1):hello', { type: 'levenshtein', value: 'hello', threshold: 10 }],
+    ['rouge-n(.5):hello', { type: 'rouge-n', value: 'hello', threshold: 0.5 }],
+    ['not-similar(5e-1):hello', { type: 'not-similar', value: 'hello', threshold: 0.5 }],
+    ['similar( 0.5 ):hello', { type: 'similar', value: 'hello', threshold: 0.5 }],
+    [
+      'javascript(.5):output.length',
+      { type: 'javascript', value: 'output.length', threshold: 0.5 },
+    ],
+  ])('should parse the numeric threshold in %s', (expected, assertion) => {
+    expect(assertionFromString(expected)).toEqual(assertion);
+  });
+
   it('should create an is-json assertion', () => {
     const expected = 'is-json';
 
