@@ -50,7 +50,8 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY . .
 
 WORKDIR /app
-RUN npm run build
+# Serialize type checks, bundling, and the app build to reduce peak memory.
+RUN CONCURRENTLY_MAX_PROCESSES=1 npm run build
 
 # Install production dependencies separately so the runtime image excludes
 # the app and docs build tools. Keep optional native packages, peers, and tsx.
