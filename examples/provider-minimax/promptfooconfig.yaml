@@ -5,12 +5,11 @@ prompts:
 providers:
   - id: minimax:MiniMax-M3
     config:
-      temperature: 0.7
-      max_completion_tokens: 256
-  - id: minimax:MiniMax-M2.7
+      max_completion_tokens: 2048
+  - id: minimax:MiniMax-M3.1-Flash
     config:
-      temperature: 0.7
-      max_completion_tokens: 256
+      reasoning_effort: low
+      max_completion_tokens: 2048
 tests:
   - vars:
       question: What is the capital of France?

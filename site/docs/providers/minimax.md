@@ -2,7 +2,7 @@
 title: MiniMax Provider
 sidebar_label: MiniMax
 sidebar_position: 50
-description: Configure MiniMax's OpenAI-compatible API with the flagship M3 model and prior M2.7 routes, featuring large context windows and prompt caching for LLM testing.
+description: Configure MiniMax's OpenAI-compatible API with the M3 and M3.1 Flash models, featuring 1M-token context windows, tunable thinking, and prompt caching.
 ---
 
 # MiniMax
@@ -22,24 +22,27 @@ Basic configuration example:
 providers:
   - id: minimax:MiniMax-M3
     config:
-      temperature: 0.7
       max_completion_tokens: 2048
       apiKey: YOUR_MINIMAX_API_KEY
 
-  - id: minimax:MiniMax-M2.7
+  - id: minimax:MiniMax-M3.1-Flash
     config:
+      reasoning_effort: medium
       max_completion_tokens: 2048
 ```
 
 ### Configuration Options
 
-- `temperature` - Range `[0, 2]`, with a vendor default of `1` when omitted
-- `max_completion_tokens` - Maximum completion tokens. Legacy `max_tokens` config is translated to this field for compatibility. Limits depend on the model; see the [MiniMax API reference](https://platform.minimax.io/docs/api-reference/text-openai-api).
+- `temperature` - Accepted, but M3 and M3.1 Flash ignore it and always sample at `1`
+- `max_completion_tokens` - Maximum completion tokens, including thinking tokens. A low limit can end with `finish_reason: length` and empty content. Legacy `max_tokens` config is translated to this field for compatibility. Limits depend on the model; see the [MiniMax API reference](https://platform.minimax.io/docs/api-reference/text-openai-api).
+- `reasoning_effort` - Thinking depth for M3.1 Flash: `low`, `medium`, `high`, `xhigh`, or `max` (the vendor default). Other MiniMax models ignore it.
 - `apiBaseUrl` - Optional custom MiniMax-compatible proxy endpoint
-- `top_p`
+- `top_p` - Must be within `(0, 1]`; M3 and M3.1 Flash ignore it and use `0.95`
 - `tools` and `tool_choice` - Use these for tool calling. MiniMax rejects the deprecated `function_call` parameter.
 
 When MiniMax reports prompt-cache reads, promptfoo calculates cost using the returned cached token count and the model's cache-read rate.
+
+M3 and M3.1 Flash return thinking in `reasoning_content`, which promptfoo prepends to the output as `Thinking: ...`. Set `showThinking: false` to return only the final answer.
 
 ## Available Models
 
@@ -57,19 +60,16 @@ M3 is the default. Compare the [current API prices](https://platform.minimax.io/
 
 :::
 
-### MiniMax-M2.7
+### MiniMax-M3.1-Flash
 
-- Previous-generation flagship model
-- 204,800 token context window
-- Input: $0.06/1M (cache hit), $0.3/1M (cache miss)
-- Output: $1.2/1M
+- Lower-cost model for agentic tasks, coding, computer use, and cybersecurity
+- 1,000,000 token context window
+- Multimodal: supports text, image, and video input
+- Always thinks: `thinking: { type: disabled }` and `reasoning_effort: none` return a 400 error. Lower `reasoning_effort` to reduce thinking tokens and latency.
+- Flat pricing: $0.015/1M cached input, $0.15/1M uncached input, and $0.60/1M output
+- No priority tier: M3.1 Flash does not support `service_tier`
 
-### MiniMax-M2.7-highspeed
-
-- High-speed version of M2.7 for low-latency scenarios
-- 204,800 token context window
-- Input: $0.06/1M (cache hit), $0.6/1M (cache miss)
-- Output: $2.4/1M
+MiniMax has retired the M2.x models; see the [MiniMax model list](https://platform.minimax.io/docs/faq/models).
 
 ## Example Usage
 
@@ -80,7 +80,6 @@ Here's an example comparing MiniMax with OpenAI:
 providers:
   - id: minimax:MiniMax-M3
     config:
-      temperature: 0.7
       max_completion_tokens: 2048
   - id: openai:gpt-4o
     config:
