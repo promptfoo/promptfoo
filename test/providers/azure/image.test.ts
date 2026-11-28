@@ -55,10 +55,11 @@ describe('validateMaiImageDimensions', () => {
     expect(result.message).toMatch(/at least 768/);
   });
 
-  it('rejects images whose pixel count exceeds the maximum', () => {
-    const result = validateMaiImageDimensions(2048, 2048);
-    expect(result.valid).toBe(false);
-    expect(result.message).toMatch(/must not exceed/);
+  it('leaves the model-specific pixel maximum to the API', () => {
+    // MAI-Image-2.6 accepts up to 1536x1536 and MAI-Image-2.7 up to 2048x2048, while
+    // MAI-Image-2.5 stops near 1024x1024. The deployment name can't tell these apart.
+    expect(validateMaiImageDimensions(1536, 1536)).toEqual({ valid: true });
+    expect(validateMaiImageDimensions(2048, 2048)).toEqual({ valid: true });
   });
 
   it('rejects non-integer / non-positive dimensions', () => {
@@ -162,8 +163,8 @@ describe('AzureImageProvider', () => {
     mockSuccess();
     const provider = makeProvider({ model: 'MAI-Image-2.5' });
     const result = await provider.callApi('a red cube');
-    // 1024 tokens * $33 / 1,000,000 output tokens
-    expect(result.cost).toBeCloseTo(0.033792, 6);
+    // 1024 tokens * $47 / 1,000,000 output tokens
+    expect(result.cost).toBeCloseTo(0.048128, 6);
   });
 
   it('omits cost when the deployment name is not a known model id', async () => {
@@ -180,14 +181,14 @@ describe('AzureImageProvider', () => {
     });
   });
 
-  it('prices input (text + image) tokens from the usage object', async () => {
+  it('prices text input tokens from the usage object', async () => {
     mockSuccess({
       usage: { num_output_tokens: 1024, num_input_text_tokens: 100, num_input_image_tokens: 0 },
     });
     const provider = makeProvider({ model: 'MAI-Image-2.5' });
     const result = await provider.callApi('a red cube');
-    // 100 input * $5/1M + 1024 output * $33/1M
-    expect(result.cost).toBeCloseTo(100 * (5 / 1e6) + 1024 * (33 / 1e6), 9);
+    // 100 input * $5/1M + 1024 output * $47/1M
+    expect(result.cost).toBeCloseTo(100 * (5 / 1e6) + 1024 * (47 / 1e6), 9);
     expect(result.tokenUsage).toEqual({
       prompt: 100,
       completion: 1024,
@@ -196,12 +197,71 @@ describe('AzureImageProvider', () => {
     });
   });
 
+  it('prices reference-image input tokens at the image input rate', async () => {
+    mockSuccess({
+      usage: { num_output_tokens: 1024, num_input_text_tokens: 20, num_input_image_tokens: 500 },
+    });
+    const provider = makeProvider({ model: 'MAI-Image-2.7' });
+    const result = await provider.callApi('replace the sky');
+    // 20 text * $5/1M + 500 image * $8/1M + 1024 output * $34/1M
+    expect(result.cost).toBeCloseTo(20 * (5 / 1e6) + 500 * (8 / 1e6) + 1024 * (34 / 1e6), 9);
+    expect(result.tokenUsage).toMatchObject({ prompt: 520, completion: 1024, total: 1544 });
+  });
+
+  it.each([
+    // Global Standard meters: [model, text input, image output] per 1M tokens.
+    ['MAI-Image-2.5-Flash', 1.75, 19.5],
+    ['MAI-Image-2.5-Pro', 5, 106],
+    ['MAI-Image-2.6', 5, 38],
+    ['MAI-Image-2.6-Flash', 1.75, 19],
+    ['MAI-Image-2.7', 5, 34],
+    ['MAI-Image-2.7-Flash', 1.75, 10],
+  ])('prices %s generations', async (model, inputRate, outputRate) => {
+    mockSuccess({
+      usage: { num_output_tokens: 4096, num_input_text_tokens: 19, num_input_image_tokens: 0 },
+    });
+    const provider = makeProvider({ model });
+    const result = await provider.callApi('a cheerful orange toy robot');
+    expect(result.cost).toBeCloseTo(19 * (inputRate / 1e6) + 4096 * (outputRate / 1e6), 9);
+  });
+
+  it('sends sizes above 1MP and surfaces the API error for an oversized request', async () => {
+    mockSuccess({ size: '2048x2048' });
+    const provider = makeProvider({ width: 2048, height: 2048, model: 'MAI-Image-2.7' });
+    const result = await provider.callApi('a poster');
+    expect(result.error).toBeUndefined();
+    const body = JSON.parse((vi.mocked(fetchWithCache).mock.calls[0][1] as any).body);
+    expect(body).toMatchObject({ width: 2048, height: 2048 });
+
+    const deleteFromCache = vi.fn();
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        error: {
+          code: 'unsupported_request_value',
+          message:
+            'Model does not support request parameter value supplied: Invalid dimensions 2560x2560: total pixel count (6553600) exceeds the maximum of 4194304.',
+        },
+      },
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+      deleteFromCache,
+    } as any);
+    const tooLarge = makeProvider({ width: 2560, height: 2560, model: 'MAI-Image-2.7' });
+    const errorResult = await tooLarge.callApi('a poster');
+    expect(errorResult.error).toBe(
+      'API response error: unsupported_request_value Model does not support request parameter value supplied: Invalid dimensions 2560x2560: total pixel count (6553600) exceeds the maximum of 4194304.',
+    );
+    expect(errorResult.cost).toBeUndefined();
+    expect(deleteFromCache).toHaveBeenCalledTimes(1);
+  });
+
   it('supports the legacy top-level num_output_tokens shape', async () => {
     // Older API responses reported tokens at the top level without a usage object.
     mockSuccess({ usage: undefined, num_output_tokens: 512 });
     const provider = makeProvider({ model: 'MAI-Image-2.5' });
     const result = await provider.callApi('a red cube');
-    expect(result.cost).toBeCloseTo(512 * (33 / 1e6), 9);
+    expect(result.cost).toBeCloseTo(512 * (47 / 1e6), 9);
     expect(result.tokenUsage).toEqual({
       prompt: 0,
       completion: 512,

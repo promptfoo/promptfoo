@@ -19,7 +19,7 @@ import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
-import { calculateAzureCost } from './util';
+import { calculateAzureCost, isMaiReasoningModel } from './util';
 
 import type {
   CallApiContextParams,
@@ -120,6 +120,8 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       // Microsoft Phi reasoning models
       lowerName.includes('phi-4-reasoning') ||
       lowerName.includes('phi-4-mini-reasoning') ||
+      // Microsoft MAI reasoning models (MAI-Code-2 family is Responses-only on Foundry)
+      isMaiReasoningModel(lowerName) ||
       // xAI Grok reasoning models
       (lowerName.includes('grok') && lowerName.includes('reasoning'))
     );

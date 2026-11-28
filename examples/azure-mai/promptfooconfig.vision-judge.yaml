@@ -15,9 +15,9 @@ prompts:
   - '{{prompt}}'
 
 providers:
-  - id: azure:image:mai-image-2-5
+  - id: azure:image:mai-image-2-7-flash
     config:
-      model: MAI-Image-2.5
+      model: MAI-Image-2.7-Flash
       width: 1024
       height: 1024
 
