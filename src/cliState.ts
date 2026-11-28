@@ -93,7 +93,12 @@ const globalConfigState: ConfigState = {};
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
 const safeModeContext = new AsyncLocalStorage<{ enabled: boolean }>();
 let globalSafeMode: boolean | undefined;
-const basePathContext = new AsyncLocalStorage<{ basePath: string | undefined }>();
+// Extensions can import a separate copy of the public API from the CLI bundle.
+const BASE_PATH_CONTEXT = Symbol.for('promptfoo.cliState.basePathContext.v1');
+const basePathGlobal = globalThis as typeof globalThis & {
+  [BASE_PATH_CONTEXT]?: AsyncLocalStorage<{ basePath: string | undefined }>;
+};
+const basePathContext = (basePathGlobal[BASE_PATH_CONTEXT] ??= new AsyncLocalStorage());
 let globalBasePath: string | undefined;
 const envContext = new AsyncLocalStorage<{
   scope: object;
