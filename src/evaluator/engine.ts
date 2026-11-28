@@ -115,10 +115,12 @@ import {
   ABORTED_GRADING_PREFIX,
   applyGradingError,
   CONVERSATION_VAR_NAME,
+  type CompletedRunWork,
   deferredGradingPromises,
   getRepeatCacheNamespace,
   isGradingAbort,
   promptUsesConversationVariable,
+  retainTimedOutWork,
   runEvalInternal,
 } from './runEval';
 
@@ -1864,6 +1866,7 @@ function adjustConcurrencyForSerialFeatures({
 }
 
 interface ProcessEvalStepOptions {
+  completedWork?: CompletedRunWork;
   deferGrading?: boolean;
   onRowsReady?: () => void;
   precomputedRows?: EvaluateResult[];
@@ -2401,6 +2404,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     {
       deferGrading = false,
       onRowsReady,
+      completedWork,
       precomputedRows,
       providerCallQueue,
       shouldSkipStaleRows,
@@ -2416,6 +2420,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             deferGrading,
             deferredGradingAbortSignal: context.deferredGradingAbortSignal,
             onRowsReady,
+            completedWork,
             providerCallQueue,
             testSuite: context.testSuite,
           }));
@@ -2434,12 +2439,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       deferGrading,
       deferredGradingAbortSignal,
       onRowsReady,
+      completedWork,
       providerCallQueue,
       testSuite,
     }: {
       deferGrading: boolean;
       deferredGradingAbortSignal?: AbortSignal;
       onRowsReady?: () => void;
+      completedWork?: CompletedRunWork;
       providerCallQueue?: ProviderCallQueue;
       testSuite: TestSuite;
     },
@@ -2455,7 +2462,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         deferGrading,
         providerCallQueue: deferGrading ? providerCallQueue : undefined,
       },
-      { abortSignal: deferredGradingAbortSignal, pauseSignal: this.options.pauseSignal },
+      {
+        abortSignal: deferredGradingAbortSignal,
+        pauseSignal: this.options.pauseSignal,
+        completedWork,
+      },
     );
     onRowsReady?.();
     return rows;
@@ -2611,6 +2622,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     };
 
     let timeoutId: NodeJS.Timeout | undefined;
+    const completedWork: CompletedRunWork = { targets: [] };
     let didTimeout = false;
     const clearEvalStepTimeout = () => {
       if (timeoutId) {
@@ -2627,6 +2639,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           {
             deferGrading,
             onRowsReady: clearEvalStepTimeout,
+            completedWork,
             providerCallQueue,
             shouldSkipStaleRows: () => didTimeout,
           },
@@ -2644,7 +2657,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (!didTimeout) {
         throw error;
       }
-      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      await this.addEvalStepTimeoutResult(
+        evalStepWithSignal,
+        index,
+        timeoutMs,
+        error,
+        context,
+        completedWork,
+      );
     } finally {
       evalStep.test = evalStepWithSignal.test;
       clearEvalStepTimeout();
@@ -2657,6 +2677,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     timeoutMs: number,
     error: unknown,
     context: EvalProcessingContext,
+    completedWork: CompletedRunWork,
   ) {
     const sanitizedTestCase = { ...evalStep.test };
     delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
@@ -2667,14 +2688,29 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       timeoutMs,
       error,
     );
+    // A pending transform or extension may redact provider output. Never persist
+    // raw payloads if their normal publication path has unfinished processing.
+    const preservePayload = !(
+      evalStep.provider.transform ||
+      (isApiProvider(evalStep.test.provider) && evalStep.test.provider.transform) ||
+      evalStep.test.options?.transform ||
+      evalStep.test.options?.postprocess ||
+      context.testSuite.extensions?.length
+    );
+    retainTimedOutWork(timeoutResult, completedWork, preservePayload);
     this.trackFinalJsonlResult(timeoutResult);
     await this.store.appendResult(timeoutResult);
-    this.stats.errors++;
+    this.trackRowStats(timeoutResult);
 
     const { metrics } = context.prompts[evalStep.promptIdx];
     if (metrics) {
-      metrics.testErrorCount += 1;
-      metrics.totalLatencyMs += timeoutMs;
+      this.updatePromptMetricsForRow({
+        derivedMetrics: context.derivedMetrics,
+        evalStep,
+        metrics,
+        row: timeoutResult,
+        promptEvalCount: reservePromptEvalCount(context, timeoutResult.promptIdx),
+      });
     }
 
     context.numComplete++;

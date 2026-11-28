@@ -451,9 +451,77 @@ function isCliPauseCancellation(
   );
 }
 
+// The deadline and pause handlers observe the same completed work. Take a
+// snapshot only if interrupted, instead of copying cumulative media every turn.
+export interface CompletedRunWork {
+  response?: ProviderResponse;
+  targets: { prompt: string; response: ProviderResponse }[];
+}
+
+function summarizeCompletedTargets(
+  completedTargets: CompletedRunWork['targets'],
+): ProviderResponse {
+  const last = completedTargets[completedTargets.length - 1].response;
+  const tokenUsage = createEmptyTokenUsage();
+  let cost: number | undefined;
+  let incurredCost: number | undefined;
+  for (const { response: target } of completedTargets) {
+    accumulateResponseTokenUsage(tokenUsage, target);
+    if (target.cost !== undefined) {
+      cost = (cost ?? 0) + target.cost;
+    }
+    const targetIncurredCost = target.incurredCost ?? (target.cached ? 0 : target.cost);
+    if (targetIncurredCost !== undefined) {
+      incurredCost = (incurredCost ?? 0) + targetIncurredCost;
+    }
+  }
+  return {
+    ...last,
+    tokenUsage,
+    cost,
+    incurredCost,
+    cached: completedTargets.every(({ response }) => response.cached === true),
+  };
+}
+
+export function retainTimedOutWork(
+  row: EvaluateResult,
+  work: CompletedRunWork,
+  preservePayload: boolean,
+) {
+  const partial = work.targets.length ? summarizeCompletedTargets(work.targets) : undefined;
+  const completed = work.response ? normalizeCachedTargetResponse(work.response) : partial;
+  if (!completed) {
+    return;
+  }
+  // Keep media and output in their normal, strippable fields. A deadline
+  // doesn't authorize copying private prompts or arbitrary strategy metadata.
+  row.response = {
+    ...(preservePayload && {
+      output: completed.output,
+      audio: completed.audio,
+      images: completed.images,
+      video: completed.video,
+    }),
+    cached: completed.cached,
+    tokenUsage: completed.tokenUsage ?? partial?.tokenUsage,
+    cost: completed.cost ?? partial?.cost,
+    incurredCost: completed.incurredCost ?? partial?.incurredCost,
+    ...(partial &&
+      !work.response && {
+        metadata: { interruptedStrategy: true, completedTargetCount: work.targets.length },
+      }),
+  };
+  row.cost = row.response.cost;
+  row.incurredCost = row.response.incurredCost;
+  row.tokenUsage = createEmptyTokenUsage();
+  accumulateResponseTokenUsage(row.tokenUsage, row.response);
+}
+
 async function callProviderForRunEval({
   abortSignal,
   pauseSignal,
+  completedWork,
   evalId,
   filters,
   promptForRender,
@@ -479,6 +547,7 @@ async function callProviderForRunEval({
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
+  completedWork?: CompletedRunWork;
   promptForRender: Prompt;
   renderedPrompt: string;
   testIndex: number;
@@ -502,6 +571,7 @@ async function callProviderForRunEval({
       response = await callActiveProvider({
         abortSignal,
         pauseSignal,
+        completedWork,
         evalId,
         filters,
         onProviderInvoked: () => {
@@ -629,6 +699,7 @@ async function collectExternalTraceAfterProviderCall({
 async function callActiveProvider({
   abortSignal,
   pauseSignal,
+  completedWork,
   evalId,
   filters,
   onProviderInvoked,
@@ -648,6 +719,7 @@ async function callActiveProvider({
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
+  completedWork?: CompletedRunWork;
   onProviderInvoked: () => void;
   promptForRender: Prompt;
   renderedPrompt: string;
@@ -674,11 +746,11 @@ async function callActiveProvider({
     traceContext,
     vars,
   });
-  let completedResponse: ProviderResponse | undefined;
-  const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
+  const work: CompletedRunWork = completedWork ?? { targets: [] };
+  const completedTargets = work.targets;
   const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
     // A previous response belongs only to backoff until the next attempt starts.
-    completedResponse = undefined;
+    work.response = undefined;
     const callApiOptions =
       abortSignal || onResponseHeaders ? { abortSignal, onResponseHeaders } : undefined;
     const invoke = () =>
@@ -698,7 +770,7 @@ async function callActiveProvider({
                 async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
               )
             : await activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-          completedResponse = result;
+          work.response = result;
           return result;
         },
         abortSignal,
@@ -731,37 +803,20 @@ async function callActiveProvider({
     if (!isCliPauseCancellation(error, abortSignal, pauseSignal)) {
       throw error;
     }
-    if (completedResponse) {
-      response = completedResponse;
+    if (work.response) {
+      response = work.response;
     } else if (completedTargets.length > 0) {
       // A strategy may still be tracing/grading after a billable or stateful
       // target call completes. Persist its partial work as an error, so resume
       // cannot silently replay it. Explicit retry-errors remains available.
-      const last = completedTargets[completedTargets.length - 1].response;
-      const tokenUsage = createEmptyTokenUsage();
-      let cost: number | undefined;
-      let incurredCost: number | undefined;
-      for (const { response: target } of completedTargets) {
-        accumulateResponseTokenUsage(tokenUsage, target);
-        if (target.cost !== undefined) {
-          cost = (cost ?? 0) + target.cost;
-        }
-        const targetIncurredCost = target.incurredCost ?? (target.cached ? 0 : target.cost);
-        if (targetIncurredCost !== undefined) {
-          incurredCost = (incurredCost ?? 0) + targetIncurredCost;
-        }
-      }
+      const partial = summarizeCompletedTargets(completedTargets);
       response = {
-        ...last,
+        ...partial,
         error:
-          last.error ??
+          partial.error ??
           'Evaluation paused before the strategy completed. Completed target responses were retained; use --retry-errors to run this case again.',
-        tokenUsage,
-        cost,
-        incurredCost,
-        cached: completedTargets.every(({ response: target }) => target.cached === true),
         metadata: {
-          ...last.metadata,
+          ...partial.metadata,
           interruptedStrategy: true,
           completedTargetResponses: completedTargets,
         },
@@ -1325,7 +1380,9 @@ export async function runEvalInternal(
     providerCallQueue,
     rateLimitRegistry,
   }: RunEvalOptions,
-  orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> = {
+  orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> & {
+    completedWork?: CompletedRunWork;
+  } = {
     abortSignal,
   },
 ): Promise<EvaluateResult[]> {
@@ -1404,6 +1461,7 @@ export async function runEvalInternal(
           const providerCall = await callProviderForRunEval({
             abortSignal,
             pauseSignal: orchestrationOptions.pauseSignal,
+            completedWork: orchestrationOptions.completedWork,
             evalId,
             filters,
             promptForRender: {
