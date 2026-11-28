@@ -3,9 +3,11 @@ import {
   ADDITIONAL_STRATEGIES,
   AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
+  findUnicodeNormalizationConfigIssues,
   getDefaultNFanout,
   isCustomStrategy,
   isFanoutStrategy,
+  isUnicodeNormalizationForm,
   STRATEGY_COLLECTIONS,
 } from '../../../src/redteam/constants/strategies';
 
@@ -39,4 +41,21 @@ describe('strategies constants', () => {
 
     expect(isFanoutStrategy('base64')).toBe(false);
   });
+
+  it('should identify supported Unicode normalization forms', () => {
+    expect(isUnicodeNormalizationForm('NFC')).toBe(true);
+    expect(isUnicodeNormalizationForm('NFKD')).toBe(true);
+    expect(isUnicodeNormalizationForm('nfkd')).toBe(false);
+    expect(isUnicodeNormalizationForm(undefined)).toBe(false);
+  });
+});
+
+it('rejects excessively nested Layer config without overflowing the stack', () => {
+  let config: Record<string, unknown> = { steps: ['unicode-normalization'] };
+  for (let depth = 0; depth < 4000; depth++) {
+    config = { steps: [{ id: 'layer', config }] };
+  }
+  expect(findUnicodeNormalizationConfigIssues('layer', config)[0]?.message).toBe(
+    'Layer nesting exceeds 64 levels',
+  );
 });
