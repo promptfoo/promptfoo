@@ -9,12 +9,12 @@ import type { FourthwallBundle, FourthwallProduct } from './types';
 
 const mockProduct: FourthwallProduct = {
   type: 'PRODUCT',
-  state: { type: 'AVAILABLE' },
-  access: { type: 'PUBLIC' },
   id: 'prod-1',
   slug: 'test-product',
   name: 'Test Product',
   description: '<p>A test product description</p>',
+  state: { type: 'AVAILABLE' },
+  access: { type: 'PUBLIC' },
   images: [
     { url: 'https://example.com/image1.jpg', width: 800, height: 800 },
     { url: 'https://example.com/image2.jpg', width: 800, height: 800 },
@@ -68,6 +68,22 @@ describe('ProductCard', () => {
 
     const button = screen.getByRole('button', { name: `View ${mockProduct.name}` });
     expect(button).toBeInTheDocument();
+  });
+
+  it('marks sold-out products in the accessible label and image overlay', () => {
+    const soldOutProduct: FourthwallProduct = {
+      ...mockProduct,
+      state: { type: 'SOLD_OUT' },
+    };
+
+    render(<ProductCard product={soldOutProduct} onClick={vi.fn()} />);
+
+    const button = screen.getByRole('button', { name: `View ${mockProduct.name} (Sold Out)` });
+    expect(button).toBeInTheDocument();
+    expect(screen.getByText('Sold Out')).toBeInTheDocument();
+    for (const image of screen.getAllByRole('img')) {
+      expect(image).toHaveStyle({ filter: 'grayscale(1)' });
+    }
   });
 
   it('calls onClick when clicked', async () => {
@@ -145,6 +161,33 @@ describe('ProductCard', () => {
 
     render(<ProductCard product={multiVariantProduct} onClick={vi.fn()} />);
     expect(screen.getByText('$19.99')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['AVAILABLE', 1, '$20.00'],
+    ['AVAILABLE', 0, '$10.00'],
+    ['SOLD_OUT', 1, '$10.00'],
+  ] as const)('prices %s products with %i available units', (state, inStock, price) => {
+    const product: FourthwallProduct = {
+      ...mockProduct,
+      state: { type: state },
+      variants: [
+        {
+          ...mockProduct.variants[0],
+          id: 'unavailable',
+          unitPrice: { value: 10, currency: 'USD' },
+          stock: { type: 'LIMITED', inStock: 0 },
+        },
+        {
+          ...mockProduct.variants[0],
+          id: 'available',
+          unitPrice: { value: 20, currency: 'USD' },
+          stock: { type: 'LIMITED', inStock },
+        },
+      ],
+    };
+    render(<ProductCard product={product} onClick={vi.fn()} />);
+    expect(screen.getByText(price)).toBeInTheDocument();
   });
 
   it('handles product with single image', () => {

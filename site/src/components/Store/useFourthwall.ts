@@ -6,6 +6,7 @@ import type {
   FourthwallCartItem,
   FourthwallCartRequestItem,
   FourthwallCatalogItem,
+  FourthwallStock,
 } from './types';
 
 // Public storefront token - this is INTENTIONALLY public and client-facing.
@@ -364,15 +365,22 @@ export function stripHtml(html: string): string {
   return doc.body.textContent || '';
 }
 
-// Check if variant is in stock
-export function isInStock(stock: { type: string; quantity?: number; inStock?: number }): boolean {
-  if (stock.type === 'UNLIMITED') {
+export function isInStock(stock?: FourthwallStock): boolean {
+  if (stock?.type !== 'LIMITED') {
+    return stock?.type === 'UNLIMITED';
+  }
+  const available = stock.inStock ?? stock.quantity ?? 0;
+  return Number.isSafeInteger(available) && available > 0;
+}
+
+export function isProductSoldOut(product: FourthwallCatalogItem): boolean {
+  if (product.state?.type !== 'AVAILABLE') {
     return true;
   }
-  if (stock.type === 'LIMITED') {
-    return (stock.inStock ?? stock.quantity ?? 0) > 0;
+  if (product.type === 'BUNDLE') {
+    return !product.offers.length || product.offers.some(isProductSoldOut);
   }
-  return false;
+  return !product.variants.some((variant) => isInStock(variant.stock));
 }
 
 // Get display name from attribute value (handles both string and object formats)

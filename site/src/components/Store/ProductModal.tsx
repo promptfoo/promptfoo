@@ -20,6 +20,7 @@ import {
   getAttributeName,
   getAttributeSwatch,
   isInStock,
+  isProductSoldOut,
   stripHtml,
 } from './useFourthwall';
 
@@ -48,7 +49,10 @@ function SingleProductModal() {
   useEffect(() => {
     if (selectedProduct) {
       setCurrentImageIndex(0);
-      setSelectedVariantId(selectedProduct.variants[0]?.id || '');
+      const firstPurchasableVariant = selectedProduct.variants.find((variant) =>
+        isInStock(variant.stock),
+      );
+      setSelectedVariantId((firstPurchasableVariant ?? selectedProduct.variants[0])?.id || '');
     }
   }, [selectedProduct]);
 
@@ -85,6 +89,8 @@ function SingleProductModal() {
   const selectedVariant = useMemo(() => {
     return selectedProduct?.variants.find((v) => v.id === selectedVariantId);
   }, [selectedProduct, selectedVariantId]);
+  const soldOut = selectedProduct ? isProductSoldOut(selectedProduct) : false;
+  const canAddToCart = !!selectedVariant && !soldOut && isInStock(selectedVariant.stock);
 
   // Images to show (variant-specific or product-level)
   const images = useMemo(() => {
@@ -153,7 +159,9 @@ function SingleProductModal() {
   }, [handleNextImage, handlePrevImage]);
 
   const handleAddToCart = async () => {
-    if (!selectedVariantId) return;
+    if (!canAddToCart || isAdding || isLoading) {
+      return;
+    }
 
     setIsAdding(true);
     try {
@@ -475,9 +483,9 @@ function SingleProductModal() {
           </Box>
 
           {/* Stock status */}
-          {selectedVariant && !isInStock(selectedVariant.stock) && (
+          {selectedVariant && (soldOut || !isInStock(selectedVariant.stock)) && (
             <Typography variant="body2" sx={{ color: 'error.main', mb: 2 }}>
-              Out of stock
+              {soldOut ? 'Sold out' : 'Out of stock'}
             </Typography>
           )}
 
@@ -486,9 +494,7 @@ function SingleProductModal() {
             variant="contained"
             size="large"
             onClick={handleAddToCart}
-            disabled={
-              !selectedVariant || !isInStock(selectedVariant.stock) || isAdding || isLoading
-            }
+            disabled={!canAddToCart || isAdding || isLoading}
             sx={{
               mt: 'auto',
               py: { xs: 1.75, sm: 1.5 },
@@ -510,8 +516,10 @@ function SingleProductModal() {
           >
             {isAdding ? (
               <CircularProgress size={24} sx={{ color: 'var(--ifm-button-color, #fff)' }} />
-            ) : selectedVariant && isInStock(selectedVariant.stock) ? (
+            ) : canAddToCart ? (
               'Add to Cart'
+            ) : soldOut ? (
+              'Sold Out'
             ) : (
               'Out of Stock'
             )}
