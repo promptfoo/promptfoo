@@ -47,6 +47,30 @@ export class SequenceProvider implements ApiProvider {
     const nunjucks = getNunjucksEngine();
     const responses: string[] = [];
     const accumulatedTokenUsage = createEmptyTokenUsage();
+    let cost: number | undefined;
+    let incurredCost: number | undefined;
+    // incurredCost can only differ from cost when a step was cached or reported its own.
+    let reportIncurredCost = false;
+    let everyStepCached = this.sequenceInputs.length > 0;
+
+    // Totals across every step sent so far, so a failure keeps what earlier steps cost.
+    // The step's own cost and cache fields are replaced, never left beside the totals:
+    // the sequence counts as cached only when every step it sent was a cache replay.
+    const withTotals = (response: ProviderResponse): ProviderResponse => {
+      const {
+        cost: _stepCost,
+        incurredCost: _stepIncurredCost,
+        cached: _stepCached,
+        ...rest
+      } = response;
+      return {
+        ...rest,
+        tokenUsage: accumulatedTokenUsage,
+        ...(everyStepCached && { cached: true }),
+        ...(cost !== undefined && { cost }),
+        ...(incurredCost !== undefined && reportIncurredCost && { incurredCost }),
+      };
+    };
 
     // Send each input to the original provider
     for (const input of this.sequenceInputs) {
@@ -59,19 +83,27 @@ export class SequenceProvider implements ApiProvider {
 
       const response = await context.originalProvider.callApi(renderedInput, context, options);
 
+      accumulateResponseTokenUsage(accumulatedTokenUsage, response);
+      everyStepCached &&= response.cached === true;
+      reportIncurredCost ||= response.cached === true || response.incurredCost !== undefined;
+      if (response.cost !== undefined) {
+        cost = (cost ?? 0) + response.cost;
+      }
+      const stepIncurredCost =
+        response.incurredCost ??
+        (response.cost === undefined || response.cached ? 0 : response.cost);
+      if (response.incurredCost !== undefined || response.cost !== undefined) {
+        incurredCost = (incurredCost ?? 0) + stepIncurredCost;
+      }
+
       if (response.error) {
-        return response;
+        return withTotals(response);
       }
 
       responses.push(response.output);
-
-      accumulateResponseTokenUsage(accumulatedTokenUsage, response);
     }
 
-    return {
-      output: responses.join(this.separator),
-      tokenUsage: accumulatedTokenUsage,
-    };
+    return withTotals({ output: responses.join(this.separator) });
   }
 
   toString() {
